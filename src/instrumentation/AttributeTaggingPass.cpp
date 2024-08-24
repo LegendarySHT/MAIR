@@ -1,0 +1,37 @@
+//===----------------------------------------------------------------------===//
+//
+// This file is to define a transformation pass that adds attribute tags to
+// functions and instructions. Because the sanitizer passes only instrument 
+// those functions with appropriate attribute.
+// - AddressSanitizer: attribute `sanitize_address`
+// - ThreadSanitizer: attribute `sanitize_address`
+//
+//===----------------------------------------------------------------------===//
+
+#include "AttributeTaggingPass.hpp"
+#include "llvm/IR/Attributes.h"
+
+using namespace llvm;
+
+
+AttributeTaggingPass::AttributeTaggingPass(SanitizerType sanTy): _sanTy(sanTy) {}
+
+PreservedAnalyses AttributeTaggingPass::run(Module &M, ModuleAnalysisManager &_) {
+    for (auto &F : M) {
+        switch (_sanTy) {
+        case ASan:
+            F.addFnAttr(Attribute::SanitizeAddress);   
+          break;
+        case TSan:
+            F.addFnAttr(Attribute::SanitizeThread);
+          break;
+        case XSan:
+            // FIXME: do not hard code embedding!
+            F.addFnAttr(Attribute::SanitizeAddress);   
+            F.addFnAttr(Attribute::SanitizeThread);
+          break;
+        }
+    }
+    
+    return PreservedAnalyses::all();
+}
