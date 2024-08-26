@@ -54,33 +54,33 @@ using namespace llvm;
 #define DEBUG_TYPE "tsan"
 
 static cl::opt<bool> ClInstrumentMemoryAccesses(
-    "tsan-instrument-memory-accesses", cl::init(true),
+    "ts-instrument-memory-accesses", cl::init(true),
     cl::desc("Instrument memory accesses"), cl::Hidden);
 static cl::opt<bool>
-    ClInstrumentFuncEntryExit("tsan-instrument-func-entry-exit", cl::init(true),
+    ClInstrumentFuncEntryExit("ts-instrument-func-entry-exit", cl::init(true),
                               cl::desc("Instrument function entry and exit"),
                               cl::Hidden);
 static cl::opt<bool> ClHandleCxxExceptions(
-    "tsan-handle-cxx-exceptions", cl::init(true),
+    "ts-handle-cxx-exceptions", cl::init(true),
     cl::desc("Handle C++ exceptions (insert cleanup blocks for unwinding)"),
     cl::Hidden);
-static cl::opt<bool> ClInstrumentAtomics("tsan-instrument-atomics",
+static cl::opt<bool> ClInstrumentAtomics("ts-instrument-atomics",
                                          cl::init(true),
                                          cl::desc("Instrument atomics"),
                                          cl::Hidden);
 static cl::opt<bool> ClInstrumentMemIntrinsics(
-    "tsan-instrument-memintrinsics", cl::init(true),
+    "ts-instrument-memintrinsics", cl::init(true),
     cl::desc("Instrument memintrinsics (memset/memcpy/memmove)"), cl::Hidden);
 static cl::opt<bool> ClDistinguishVolatile(
-    "tsan-distinguish-volatile", cl::init(false),
+    "ts-distinguish-volatile", cl::init(false),
     cl::desc("Emit special instrumentation for accesses to volatiles"),
     cl::Hidden);
 static cl::opt<bool> ClInstrumentReadBeforeWrite(
-    "tsan-instrument-read-before-write", cl::init(false),
+    "ts-instrument-read-before-write", cl::init(false),
     cl::desc("Do not eliminate read instrumentation for read-before-writes"),
     cl::Hidden);
 static cl::opt<bool> ClCompoundReadBeforeWrite(
-    "tsan-compound-read-before-write", cl::init(false),
+    "ts-compound-read-before-write", cl::init(false),
     cl::desc("Emit special compound instrumentation for reads-before-writes"),
     cl::Hidden);
 
@@ -112,8 +112,8 @@ struct ThreadSanitizer {
     // Check options and warn user.
     if (ClInstrumentReadBeforeWrite && ClCompoundReadBeforeWrite) {
       errs()
-          << "warning: Option -tsan-compound-read-before-write has no effect "
-             "when -tsan-instrument-read-before-write is set.\n";
+          << "warning: Option -ts-compound-read-before-write has no effect "
+             "when -ts-instrument-read-before-write is set.\n";
     }
   }
 
@@ -833,4 +833,56 @@ int ThreadSanitizer::getMemoryAccessFuncIndex(Type *OrigTy, Value *Addr,
   size_t Idx = countTrailingZeros(TypeSize / 8);
   assert(Idx < kNumberOfAccessSizes);
   return Idx;
+}
+
+
+#include "llvm/Passes/PassPlugin.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "AttributeTaggingPass.hpp"
+
+
+using PassBuilderCallBackTy = function_ref<void(PassBuilder &)>;
+// TODO: select proper extention point
+static void passBuilderCallBack(PassBuilder &PB) {
+    // 这里注册 clang plugin extension point
+    // FIXME: what if LTO? this EP is not suitable for LTO.
+    PB.registerPipelineStartEPCallback(
+      [](ModulePassManager &MPM, auto _) {
+        MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+      }
+    );
+  
+    PB.registerOptimizerLastEPCallback(
+      [=](ModulePassManager &MPM, OptimizationLevel level) {
+        // Create ctor and init functions.
+        MPM.addPass(ModuleThreadSanitizerPass());
+        // Function Pass to Module Pass. Instruments functions to detect race conditions reads.
+        MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+      }
+    );
+        
+    // 这里注册opt回调的名称
+    PB.registerPipelineParsingCallback(
+      [=](StringRef Name, ModulePassManager &MPM,
+          ArrayRef<PassBuilder::PipelineElement>) {
+        if (Name == "tsan") {
+          MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+          // Create ctor and init functions.
+          MPM.addPass(ModuleThreadSanitizerPass());
+          // Function Pass to Module Pass. Instruments functions to detect race conditions reads.
+          MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+          return true;
+        }
+        return false;
+      });
+}
+
+extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo 
+llvmGetPassPluginInfo() {
+  return {
+    LLVM_PLUGIN_API_VERSION, 
+    "TSan Pass", 
+    LLVM_VERSION_STRING,
+    passBuilderCallBack
+  };
 }
