@@ -8,155 +8,236 @@
 #include "include/types.h"
 #include "include/debug.h"
 #include "include/alloc-inl.h"
+#include "common-enum.h"
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+
 
 static u8*  obj_path;               /* Path to runtime libraries         */
 static u8** cc_params;              /* Parameters passed to the real CC  */
 static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
 
+#ifndef XSAN_PATH
+  #define XSAN_PATH ""
+#endif
+
+/* MODIFIED FROM AFL++。 TODO: Don't hard code embed linux */
+/* Try to find a specific runtime we need, returns NULL on fail. */
+
+/*
+  in find_object() we look here:
+
+  1. if obj_path is already set we look there first
+  2. then we check the $XSAN_PATH environment variable location if set
+  3. next we check argv[0] if it has path information and use it
+    a) we also check ../lib/linux
+  4. if 3. failed we check /proc (only Linux, Android, NetBSD, DragonFly, and
+     FreeBSD with procfs)
+    a) and check here in ../lib/linux too
+  5. we look into the XSAN_PATH define (usually /usr/local/lib/afl)
+  6. we finally try the current directory
+
+  if all these attempts fail - we return NULL and the caller has to decide
+  what to do.
+*/
+
+static u8 *find_object(u8 *obj, u8 *argv0) {
+
+  u8 *xsan_path = getenv("XSAN_PATH");
+  u8 *slash = NULL, *tmp;
+
+  if (xsan_path) {
+    tmp = alloc_printf("%s/%s", xsan_path, obj);
+    if (!access(tmp, R_OK)) {
+      obj_path = xsan_path;
+      return tmp;
+    }
+    ck_free(tmp);
+  }
+
+  if (argv0) {
+
+    slash = strrchr(argv0, '/');
+    if (slash) {
+
+      u8 *dir = ck_strdup(argv0);
+
+      slash = strrchr(dir, '/');
+      *slash = 0;
+
+      tmp = alloc_printf("%s/%s", dir, obj);
+      if (!access(tmp, R_OK)) {
+        obj_path = dir;
+        return tmp;
+      }
+
+      ck_free(tmp);
+      tmp = alloc_printf("%s/../lib/linux/%s", dir, obj);
+      if (!access(tmp, R_OK)) {
+        u8 *dir2 = alloc_printf("%s/../lib/linux", dir);
+        obj_path = dir2;
+        ck_free(dir);
+        return tmp;
+      }
+
+      ck_free(tmp);
+      ck_free(dir);
+
+    }
+
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__linux__) || \
+    defined(__ANDROID__) || defined(__NetBSD__)
+  #define HAS_PROC_FS 1
+#endif
+#ifdef HAS_PROC_FS
+    else {
+      char *procname = NULL;
+  #if defined(__FreeBSD__) || defined(__DragonFly__)
+      procname = "/proc/curproc/file";
+  #elif defined(__linux__) || defined(__ANDROID__)
+      procname = "/proc/self/exe";
+  #elif defined(__NetBSD__)
+      procname = "/proc/curproc/exe";
+  #endif
+      if (procname) {
+        char    exepath[PATH_MAX];
+        ssize_t exepath_len = readlink(procname, exepath, sizeof(exepath));
+        if (exepath_len > 0 && exepath_len < PATH_MAX) {
+
+          exepath[exepath_len] = 0;
+          slash = strrchr(exepath, '/');
+
+          if (slash) {
+
+            *slash = 0;
+            tmp = alloc_printf("%s/%s", exepath, obj);
+            if (!access(tmp, R_OK)) {
+              u8 *dir = alloc_printf("%s", exepath);
+              obj_path = dir;
+              return tmp;
+            }
+            ck_free(tmp);
+            tmp = alloc_printf("%s/../lib/linux/%s", exepath, obj);
+            if (!access(tmp, R_OK)) {
+              u8 *dir = alloc_printf("%s/../lib/linux/", exepath);
+              obj_path = dir;
+              return tmp;
+            }
+          }
+        }
+      }
+    }
+
+#endif
+#undef HAS_PROC_FS
+  }
+
+  tmp = alloc_printf("%s/%s", XSAN_PATH, obj);
+  if (!access(tmp, R_OK)) {
+    obj_path = XSAN_PATH;
+    return tmp;
+  }
+  ck_free(tmp);
+
+  tmp = alloc_printf("./%s", obj);
+  if (!access(tmp, R_OK)) {
+    obj_path = ".";
+    return tmp;
+  }
+  ck_free(tmp);
+
+  return NULL;
+
+}
+
 /* Try to find the runtime libraries. If that fails, abort. */
 
 static void find_obj(u8* argv0) {
 
-  u8 *slash, *tmp;
+  obj_path = find_object("", argv0);
 
-  slash = strrchr(argv0, '/');
-
-  if (slash) {
-
-    u8 *dir;
-
-    *slash = 0;
-    dir = ck_strdup(argv0);
-    *slash = '/';
-
-    tmp = alloc_printf("%s/pass/libDFSanPass.so", dir);
-
-    if (!access(tmp, R_OK)) {
-      obj_path = dir;
-      ck_free(tmp);
-      return;
-    }
-
-    ck_free(tmp);
-    ck_free(dir);
-
+  if (!obj_path) {
+    FATAL("Unable to find object path. Please set XSAN_PATH");
   }
 
-  FATAL("Unable to find 'afl-llvm-rt.o' or 'afl-llvm-pass.so'. Please set AFL_PATH");
-
 }
 
-static void memlog_pass() {
-  
+static void regist_pass_plugin(enum SanitizerType sanTy) {
   /**
    * Need to enable corresponding llvm optimization level, 
    * where your pass is registed.
    */
-  cc_params[cc_par_cnt++] = "-Xclang";
-  cc_params[cc_par_cnt++] = "-load";
-  cc_params[cc_par_cnt++] = "-Xclang";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/pass/libMemlogPass.so", obj_path);
+  u8* opt= "";
+  switch (sanTy) {
+  case ASan:
+    opt = alloc_printf("-fpass-plugin=%s/pass/ASanInstPass.so", obj_path);
+    break;
+  case TSan:
+    opt = alloc_printf("-fpass-plugin=%s/pass/TSanInstPass.so", obj_path);
+    break;
+  case XSan:
+    break;
+  }
 
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
-       
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = 
-        alloc_printf("-memlog-hook-abilist=%s/lib/share/hook_abilist.txt", obj_path);
-  
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = 
-        alloc_printf("-memlog-debug=0", obj_path);
+  cc_params[cc_par_cnt++] = opt;
+
+  /**
+   * Transfer the option to pass by `-mllvm -<opt>`
+   */
+  // cc_params[cc_par_cnt++] = "-mllvm";
+  // cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
 
 }
 
-static void dfsan_pass() {
-
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx) {
   /**
    * Need to enable corresponding llvm optimization level, 
    * where your pass is registed.
    */
-  cc_params[cc_par_cnt++] = "-Xclang";
-  cc_params[cc_par_cnt++] = "-load";
-  cc_params[cc_par_cnt++] = "-Xclang";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/pass/libDFSanPass.so", obj_path);
-  
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] =  
-        alloc_printf("-dtaint-dfsan-abilist=%s/lib/share/dfsan_abilist.txt", obj_path);
+  u8* san = "";
+  switch (sanTy) {
+  case ASan:
+    san = "asan";
+    break;
+  case TSan:
+    san = "tsan";
+    break;
+  case XSan:
+    return;
+  }
 
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] =  
-        alloc_printf("-dtaint-dfsan-abilist=%s/lib/share/target_abilist.txt", obj_path);
-  
-  /*cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] =  
-        alloc_printf("-dtaint-dfsan-abilist=%s/lib/share/libexif_abilist.txt", obj_path);*/
-  /**
-   * After llvm-10, DFSan supports callback for load, store, mem transfer, and cmp.
-   * Enable with argument -taint-dfsan-event-callbacks. 
-   */
-  //cc_params[cc_par_cnt++] = "-mllvm";
-  //cc_params[cc_par_cnt++] = "-taint-dfsan-event-callbacks=1";
-  /*cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] =  
-        alloc_printf("-dtaint-dfsan-abilist=%s/lib/share/openjpeg_abilist.txt", obj_path);*/
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = "-dtaint-dfsan-combine-pointer-labels-on-store=1";
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = "-dtaint-dfsan-hook-inst=1";
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = 
-        alloc_printf("-dtaint-dfsan-hook-abilist=%s/lib/share/hook_abilist.txt", obj_path);
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = 
-        alloc_printf("-dtaint-dfsan-hook-debug=1", obj_path);
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] =
-        alloc_printf("-dtaint-dfsan-debug-nonzero-labels=0", obj_path);
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = 
-        alloc_printf("-dtaint-dfsan-combine-pointer-labels-on-load=1", obj_path);
-
-  cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = 
-        alloc_printf("-dtaint-dfsan-event-callbacks=0", obj_path);
-}
-
-static void memlog_runtime() {
-    //TO DO
-    /**
-     * --whole-archive will force compiler to link static library, even if
-     * function in library is not used. This is useful for regist function
-     * into __libc_csu_init.
-     */
-    cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libmemlog_rt.a", obj_path);
-    cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
-}
-
-static void dfsan_runtime() {
+  // Link all contents in *.a, rather than only link symbols in demands.
   cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libclang_rt.dfsan-x86_64.a", obj_path);
+  // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
+  cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.a", obj_path, san);
+  if (is_cxx) {
+    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.%s_cxx-x86_64.a", obj_path, san);
+  }
+  // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
   cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
   cc_params[cc_par_cnt++] =
-        alloc_printf("-Wl,--dynamic-list=%s/lib/libclang_rt.dfsan-x86_64.a.syms", obj_path);
-
+        alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s-x86_64.a.syms", obj_path, san);
+  if (is_cxx) {
+  cc_params[cc_par_cnt++] =
+        alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms", obj_path, san);
+  }
   cc_params[cc_par_cnt++] = "-ldl";
   cc_params[cc_par_cnt++] = "-lpthread";    
   cc_params[cc_par_cnt++] = "-lstdc++";
+
+  /**
+   * Transfer the option to pass by `-mllvm -<opt>`
+   */
+  // cc_params[cc_par_cnt++] = "-mllvm";
+  // cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
+
 }
+
+
 
 static void afl_runtime() {
   cc_params[cc_par_cnt++] = "-lrt";
@@ -195,17 +276,20 @@ static void edit_params(u32 argc, char** argv) {
 
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0;
   u8 *name;
+  enum SanitizerType xsanTy = XSan;
+  u8 is_cxx = 0;
 
   cc_params = ck_alloc((argc + 128) * sizeof(u8*));
 
   name = strrchr(argv[0], '/');
   if (!name) name = argv[0]; else name++;
 
-  if (!strncmp(name, "clang-wrapper++", 15)) {
-    u8* alt_cxx = getenv("TAINT_CXX");
+  if (!strncmp(name, "xclang++", strlen("xclang++"))) {
+    is_cxx = 1;
+    u8* alt_cxx = getenv("X_CXX");
     cc_params[0] = alt_cxx ? alt_cxx : (u8*)"clang++";
   } else {
-    u8* alt_cc = getenv("TAINT_CC");
+    u8* alt_cc = getenv("X_CC");
     cc_params[0] = alt_cc ? alt_cc : (u8*)"clang";
   }
 
@@ -248,11 +332,20 @@ static void edit_params(u32 argc, char** argv) {
     if (!strcmp(cur, "-Wl,-z,defs") ||
         !strcmp(cur, "-Wl,--no-undefined")) continue;
 
+    if (!strcmp(cur, "-tsan")) {
+      xsanTy = TSan;
+      continue;
+    } else if (!strcmp(cur, "-asan")) {
+      xsanTy = ASan;
+      continue;
+    } else {
+    }
+
     cc_params[cc_par_cnt++] = cur;
 
   }
 
-  if (getenv("TAINT_HARDEN")) {
+  if (getenv("X_HARDEN")) {
 
     cc_params[cc_par_cnt++] = "-fstack-protector-all";
 
@@ -263,24 +356,24 @@ static void edit_params(u32 argc, char** argv) {
 
   if (!asan_set) {
 
-    if (getenv("TAINT_USE_ASAN")) {
+    if (getenv("X_USE_ASAN")) {
 
-      if (getenv("TAINT_USE_MSAN"))
+      if (getenv("X_USE_MSAN"))
         FATAL("ASAN and MSAN are mutually exclusive");
 
-      if (getenv("TAINT_HARDEN"))
-        FATAL("ASAN and TAINT_HARDEN are mutually exclusive");
+      if (getenv("X_HARDEN"))
+        FATAL("ASAN and X_HARDEN are mutually exclusive");
 
       cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
       cc_params[cc_par_cnt++] = "-fsanitize=address";
 
-    } else if (getenv("TAINT_USE_MSAN")) {
+    } else if (getenv("X_USE_MSAN")) {
 
-      if (getenv("TAINT_USE_ASAN"))
+      if (getenv("X_USE_ASAN"))
         FATAL("ASAN and MSAN are mutually exclusive");
 
-      if (getenv("TAINT_HARDEN"))
-        FATAL("MSAN and TAINT_HARDEN are mutually exclusive");
+      if (getenv("X_HARDEN"))
+        FATAL("MSAN and X_HARDEN are mutually exclusive");
 
       cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
       cc_params[cc_par_cnt++] = "-fsanitize=memory";
@@ -291,46 +384,39 @@ static void edit_params(u32 argc, char** argv) {
 
 #ifdef USE_TRACE_PC
 
-  if (getenv("TAINT_INST_RATIO"))
-    FATAL("TAINT_INST_RATIO not available at compile time with 'trace-pc'.");
+  if (getenv("X_INST_RATIO"))
+    FATAL("X_INST_RATIO not available at compile time with 'trace-pc'.");
 
 #endif /* USE_TRACE_PC */
 
    /**
-   * Turn off builtin functions, otherwise llvm will treat these functions
-   * as llvm intrinsic, DFSan does not support instrumentation for intrinsic
-   * functions.
-   * Not always useful.
-   * 
-   * memset in llvm always be transformed as llvm.memset.*, will this
-   * affect taint analysis ?
+   * Turn off builtin functions.
+   * TODO: support LTO
    */
-  //cc_params[cc_par_cnt++] = "-ffreestanding";
-  cc_params[cc_par_cnt++] = "-fno-builtin-memcpy";
-  //cc_params[cc_par_cnt++] = "-fno-builtin-memset";
-  //cc_params[cc_par_cnt++] = "-fno-builtin-memmove";
+  if (getenv("X_NO_BUILTIN") /* || lto_mode */) {
 
-  if (!getenv("TAINT_DONT_OPTIMIZE")) {
+    cc_params[cc_par_cnt++] = "-fno-builtin-strcmp";
+    cc_params[cc_par_cnt++] = "-fno-builtin-strncmp";
+    cc_params[cc_par_cnt++] = "-fno-builtin-strcasecmp";
+    cc_params[cc_par_cnt++] = "-fno-builtin-strncasecmp";
+    cc_params[cc_par_cnt++] = "-fno-builtin-memcmp";
+    cc_params[cc_par_cnt++] = "-fno-builtin-bcmp";
+    cc_params[cc_par_cnt++] = "-fno-builtin-strstr";
+    cc_params[cc_par_cnt++] = "-fno-builtin-strcasestr";
 
-    cc_params[cc_par_cnt++] = "-g";
+  }
+
+  cc_params[cc_par_cnt++] = "-g";
+  if (!getenv("X_DONT_OPTIMIZE")) {
     cc_params[cc_par_cnt++] = "-O3";
     cc_params[cc_par_cnt++] = "-funroll-loops";
   }
   
-  if (getenv("DTAINT_MODE")) {
-    
-    dfsan_pass();
-    dfsan_runtime();
+  regist_pass_plugin(xsanTy);
+  add_sanitizer_runtime(xsanTy, is_cxx);
 
-  }
-  else {
-    
-    memlog_pass(); 
-    memlog_runtime();
-  
-  }
 
-  afl_runtime();
+  // afl_runtime();
   
   /*if (getenv("SYNC_HOOK_ID")) {
     fprintf(stderr, "sync_hook_id\n");
@@ -351,7 +437,7 @@ static void edit_params(u32 argc, char** argv) {
   cc_params[cc_par_cnt++] = "-fPIC";
   cc_params[cc_par_cnt++] = "-pie";
   
-  /*if (getenv("TAINT_NO_BUILTIN")) {
+  /*if (getenv("X_NO_BUILTIN")) {
 
     cc_params[cc_par_cnt++] = "-fno-builtin-strcmp";
     cc_params[cc_par_cnt++] = "-fno-builtin-strncmp";
@@ -450,7 +536,8 @@ static void print_cmdline(int argc) {
     if(cc_params[i] == NULL)
       break;
     printf("%s ", cc_params[i]);
-  }printf("\n");
+  }
+  printf("\n");
 }
 /* Main entry point */
 
@@ -493,7 +580,9 @@ int main(int argc, char** argv) {
 
   edit_params(argc, argv);
 
-  print_cmdline(argc);
+  if (!!getenv("XCLANG_DEBUG")) {
+    print_cmdline(argc);
+  }
 
   
   execvp(cc_params[0], (char**)cc_params);
