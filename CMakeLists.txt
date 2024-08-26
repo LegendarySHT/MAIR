@@ -6,6 +6,18 @@ enable_language(C CXX ASM)
 
 project(xsan)
 
+find_program(CLANG_C_COMPILER clang)
+if (CLANG_C_COMPILER)
+    set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE STRING "C compiler" FORCE)
+    set(CMAKE_CXX_COMPILER ${CLANG_C_COMPILER}++ CACHE STRING "C++ compiler" FORCE)
+    message(STATUS "Clang found and set as default compiler: ${CLANG_C_COMPILER}")
+else()
+    message(STATUS "No Clang not found, using system default compiler (cc).")
+endif()
+
+message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
+message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+
 # export compile_commands.json for clangd
 set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
