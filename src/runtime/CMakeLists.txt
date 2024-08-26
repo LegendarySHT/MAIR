@@ -745,4 +745,4 @@ if(COMPILER_RT_INCLUDE_TESTS)
   endif()
 endif()
 
-add_subdirectory(tools)
+# add_subdirectory(tools)

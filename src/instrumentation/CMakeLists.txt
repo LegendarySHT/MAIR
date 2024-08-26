@@ -9,6 +9,8 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
 
+# TODO: all pass into 1 so
+
 add_llvm_pass_plugin(ASanInstPass
   PARTIAL_SOURCES_INTENDED # Skip checking for else files 
   AddressSanitizer.cpp
