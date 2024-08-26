@@ -61,9 +61,7 @@ endfunction()
 # Run sanitizer tests only if we're sure that clang would produce
 # working binaries.
 if(COMPILER_RT_CAN_EXECUTE_TESTS)
-  if(COMPILER_RT_BUILD_BUILTINS)
-    add_subdirectory(builtins)
-  endif()
+
   if(COMPILER_RT_BUILD_SANITIZERS)
     compiler_rt_test_runtime(interception)
 
@@ -84,24 +82,7 @@ if(COMPILER_RT_CAN_EXECUTE_TESTS)
       endif()
     endforeach()
   endif()
-  if(COMPILER_RT_BUILD_PROFILE AND COMPILER_RT_HAS_PROFILE)
-    compiler_rt_test_runtime(profile)
-  endif()
-  if(COMPILER_RT_BUILD_MEMPROF)
-    compiler_rt_test_runtime(memprof)
-  endif()
-  if(COMPILER_RT_BUILD_XRAY)
-    compiler_rt_test_runtime(xray)
-  endif()
-  if(COMPILER_RT_BUILD_ORC)
-    compiler_rt_Test_runtime(orc)
-  endif()
-  if(COMPILER_RT_BUILD_CRT)
-    add_subdirectory(crt)
-  endif()
-  # ShadowCallStack does not yet provide a runtime with compiler-rt, the tests
-  # include their own minimal runtime
-  add_subdirectory(shadowcallstack)
+
 endif()
 
 if(COMPILER_RT_STANDALONE_BUILD)

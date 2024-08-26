@@ -3,7 +3,6 @@
 import os
 import platform
 import re
-
 import lit.formats
 
 # Get shlex.quote if available (added in 3.3), and fall back to pipes.quote if
