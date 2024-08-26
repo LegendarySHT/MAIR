@@ -3452,68 +3452,69 @@ bool AddressSanitizer::isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis,
 #include "AttributeTaggingPass.hpp"
 
 // TODO: select proper extention point
-// 新Pass中，Transformation Pass和Analysis Pass分离，
-// 这里只需要注册Trans Pass，Analysis Pass在run里面注册即可
-PassPluginLibraryInfo getSymbolizePluginInfo() {
-  return {
-          LLVM_PLUGIN_API_VERSION, 
-          "Symbolization Pass", 
-          LLVM_VERSION_STRING,
-          [](PassBuilder &PB) {
-            // bool UseGlobalGC = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
-            // bool UseOdrIndicator = CodeGenOpts.SanitizeAddressUseOdrIndicator;
-            // llvm::AsanDtorKind DestructorKind =
-            //     CodeGenOpts.getSanitizeAddressDtor();
-            // AddressSanitizerOptions Opts;
-            // Opts.CompileKernel = CompileKernel;
-            // Opts.Recover = CodeGenOpts.SanitizeRecover.has(Mask);
-            // Opts.UseAfterScope = CodeGenOpts.SanitizeAddressUseAfterScope;
-            // Opts.UseAfterReturn = CodeGenOpts.getSanitizeAddressUseAfterReturn();
-            AddressSanitizerOptions Opts;
-            // Here set the default value for each setting, but you can set them by
-            // their cl::opt version.
-            Opts.CompileKernel = false;
-            Opts.Recover = false;
-            // The default value of UseAfterScope is true
-            Opts.UseAfterScope = true;
-            Opts.UseAfterReturn = AsanDetectStackUseAfterReturnMode::Runtime;
+void passBuilderCallBack(PassBuilder& PB) {
+    /*
+     The relevant code in clang BackendUtil.cpp::addSanitizer
+      ```cpp
+      bool UseGlobalGC = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
+      bool UseOdrIndicator = CodeGenOpts.SanitizeAddressUseOdrIndicator;
+      llvm::AsanDtorKind DestructorKind =
+          CodeGenOpts.getSanitizeAddressDtor();
+      AddressSanitizerOptions Opts;
+      Opts.CompileKernel = CompileKernel;
+      Opts.Recover = CodeGenOpts.SanitizeRecover.has(Mask);
+      Opts.UseAfterScope = CodeGenOpts.SanitizeAddressUseAfterScope;
+      Opts.UseAfterReturn = CodeGenOpts.getSanitizeAddressUseAfterReturn();
+      ```
+    */
+    AddressSanitizerOptions Opts;
+    // Here set the default value for each setting, but you can set them by
+    // their cl::opt version.
+    Opts.CompileKernel = false;
+    Opts.Recover = false;
+    // The default value of UseAfterScope is true
+    Opts.UseAfterScope = true;
+    Opts.UseAfterReturn = AsanDetectStackUseAfterReturnMode::Runtime;
 
-            llvm::AsanDtorKind DestructorKind = llvm::AsanDtorKind::Global;
-            bool UseOdrIndicator = false;
-            bool UseGlobalGC = false;
+    llvm::AsanDtorKind DestructorKind = llvm::AsanDtorKind::Global;
+    bool UseOdrIndicator = false;
+    bool UseGlobalGC = false;
 
-            // 这里注册 clang plugin extension point
-            // FIXME: what if LTO? this EP is not suitable for LTO.
-            PB.registerPipelineStartEPCallback(
-              [](ModulePassManager &MPM, auto _) {
-                MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-              }
-            );
-          
-            PB.registerOptimizerLastEPCallback(
-              [=](ModulePassManager &MPM, OptimizationLevel level) {
-
-                MPM.addPass(ModuleAddressSanitizerPass(
-                    Opts, UseGlobalGC, UseOdrIndicator, DestructorKind));
-              }
-            );
-                
-            // 这里注册opt回调的名称
-            PB.registerPipelineParsingCallback(
-              [=](StringRef Name, ModulePassManager &MPM,
-                 ArrayRef<PassBuilder::PipelineElement>) {
-                if (Name == "asan") {
-                  MPM.addPass(ModuleAddressSanitizerPass(
-                    Opts, UseGlobalGC, UseOdrIndicator, DestructorKind));
-                  return true;
-                }
-                return false;
-              });
-          }
-        };
+    // 这里注册 clang plugin extension point
+    // FIXME: what if LTO? this EP is not suitable for LTO.
+    PB.registerPipelineStartEPCallback(
+      [](ModulePassManager &MPM, auto _) {
+        MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
+      }
+    );
+  
+    PB.registerOptimizerLastEPCallback(
+      [=](ModulePassManager &MPM, OptimizationLevel level) {
+        MPM.addPass(ModuleAddressSanitizerPass(
+            Opts, UseGlobalGC, UseOdrIndicator, DestructorKind));
+      }
+    );
+        
+    // 这里注册opt回调的名称
+    PB.registerPipelineParsingCallback(
+      [=](StringRef Name, ModulePassManager &MPM,
+          ArrayRef<PassBuilder::PipelineElement>) {
+        if (Name == "asan") {
+          MPM.addPass(ModuleAddressSanitizerPass(
+            Opts, UseGlobalGC, UseOdrIndicator, DestructorKind));
+          return true;
+        }
+        return false;
+      });
 }
+
 
 extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo 
 llvmGetPassPluginInfo() {
-  return getSymbolizePluginInfo();
+  return {
+    LLVM_PLUGIN_API_VERSION, 
+    "ASan Pass", 
+    LLVM_VERSION_STRING,
+    passBuilderCallBack
+  };
 }
