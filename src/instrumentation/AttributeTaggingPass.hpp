@@ -11,15 +11,12 @@
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
+#include "common-enum.h"
 
 namespace llvm {
 class Module;
 class raw_ostream;
 
-
-enum SanitizerType {
-    ASan, TSan, XSan
-};
 
 
 

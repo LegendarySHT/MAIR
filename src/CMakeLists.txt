@@ -6,6 +6,9 @@ set(XSAN_BIN_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
 
+include_directories(include)
+
+
 add_subdirectory(runtime)
 add_subdirectory(compiler)
 add_subdirectory(instrumentation)
