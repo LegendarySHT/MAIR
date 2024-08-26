@@ -3500,6 +3500,7 @@ void passBuilderCallBack(PassBuilder& PB) {
       [=](StringRef Name, ModulePassManager &MPM,
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "asan") {
+          MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
           MPM.addPass(ModuleAddressSanitizerPass(
             Opts, UseGlobalGC, UseOdrIndicator, DestructorKind));
           return true;
