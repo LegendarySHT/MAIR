@@ -90,6 +90,7 @@
 
 using namespace llvm;
 
+// TODO: duplicate macro
 #define DEBUG_TYPE "asan"
 
 static const uint64_t kDefaultShadowScale = 3;
