@@ -31,5 +31,22 @@ find_package(LLVM REQUIRED CONFIG)
 #include_directories(${LLVM_INCLUDE_DIRS})
 #link_directories(${LLVM_LIBRARY_DIRS})
 
+# For AllSupportedArchDefs.cmake
+list(INSERT CMAKE_MODULE_PATH 0
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake/Modules"
+)
+include(AllSupportedArchDefs)
+set(XSAN_SUPPORTED_ARCH ${X86_64})
+
+message(STATUS "XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
+
+set(XSAN_BIN_DIR "${CMAKE_BINARY_DIR}")
+set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
+set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
+# TODO: de-hardcode this
+set(XSAN_COMMON_LIT_CONFIGURE_PATH
+${CMAKE_BINARY_DIR}/test/lit.common.configured)
+
 add_subdirectory(src)
+add_subdirectory(test)
 

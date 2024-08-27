@@ -4,7 +4,8 @@
 # based on the ability of the host toolchain to target various platforms.
 
 cmake_minimum_required(VERSION 3.13.4)
-
+# We build runtime standalone but not adhere monorepo building, so we need to set this variable to true.
+set(COMPILER_RT_STANDALONE_BUILD TRUE)
 # Check if compiler-rt is built as a standalone project.
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR COMPILER_RT_STANDALONE_BUILD)
   project(CompilerRT C CXX ASM)
@@ -726,9 +727,9 @@ pythonize_bool(COMPILER_RT_TEST_USE_LLD)
 
 add_subdirectory(lib)
 
+add_subdirectory(test)
 if(COMPILER_RT_INCLUDE_TESTS)
-  add_subdirectory(unittests)
-  add_subdirectory(test)
+# add_subdirectory(unittests)
   # Don't build llvm-lit for runtimes-build, it will clean up map_config.
   if (COMPILER_RT_STANDALONE_BUILD AND NOT LLVM_RUNTIMES_BUILD)
     # If we have a valid source tree, generate llvm-lit into the bin directory.

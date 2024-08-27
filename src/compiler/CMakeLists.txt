@@ -16,3 +16,4 @@ set_target_properties(xclang
 
 add_custom_command(TARGET xclang POST_BUILD
     COMMAND ln -sf "xclang" "${XSAN_BIN_DIR}/xclang++")
+
