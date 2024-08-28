@@ -2,7 +2,7 @@
 // If you're changing this file, please also change
 // ../Darwin/interface_symbols_darwin.cpp
 
-// RUN: %clangxx -x c++-header -o - -E %p/../../../../lib/asan/asan_interface.inc  \
+// RUN: %clangxx -x c++-header -o - -E %p/../../../src/runtime/lib/asan/asan_interface.inc  \
 // RUN:  | sed "s/INTERFACE_FUNCTION/\nINTERFACE_FUNCTION/g" >  %t.asan_interface.inc
 // RUN: %clangxx_asan -O2 %s -o %t.exe
 // RUN: nm -D %t.exe | grep " [TWw] "                                          \
@@ -15,10 +15,10 @@
 //
 // RUN: grep -e "INTERFACE_\(WEAK_\)\?FUNCTION"                                \
 // RUN:  %t.asan_interface.inc                                                 \
-// RUN:  %p/../../../../lib/ubsan/ubsan_interface.inc                          \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_common_interface.inc    \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_common_interface_posix.inc \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_coverage_interface.inc  \
+// RUN:  %p/../../../src/runtime/lib/ubsan/ubsan_interface.inc                          \
+// RUN:  %p/../../../src/runtime/lib/sanitizer_common/sanitizer_common_interface.inc    \
+// RUN:  %p/../../../src/runtime/lib/sanitizer_common/sanitizer_common_interface_posix.inc \
+// RUN:  %p/../../../src/runtime/lib/sanitizer_common/sanitizer_coverage_interface.inc  \
 // RUN:  | grep -v "__sanitizer_weak_hook"                                     \
 // RUN:  | sed -e "s/.*(//" -e "s/).*//" > %t.imports
 //
