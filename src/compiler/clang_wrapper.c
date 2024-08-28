@@ -406,14 +406,15 @@ static void edit_params(u32 argc, char** argv) {
 
   }
 
-  cc_params[cc_par_cnt++] = "-g";
   if (!getenv("X_DONT_OPTIMIZE")) {
+    cc_params[cc_par_cnt++] = "-g";
     cc_params[cc_par_cnt++] = "-O3";
     cc_params[cc_par_cnt++] = "-funroll-loops";
   }
   
   regist_pass_plugin(xsanTy);
   add_sanitizer_runtime(xsanTy, is_cxx);
+  cc_params[cc_par_cnt++] = "-fuse-ld=lld";
 
 
   // afl_runtime();
@@ -429,13 +430,13 @@ static void edit_params(u32 argc, char** argv) {
     unsetenv("SYNC_HOOK_ID");
   }*/
   
-  /**
-   * Enable pie since dfsan maps shadow memory at 0x10000-0x200200000000, 
-   * pie is needed to prevent overlapped.
-   */
-  cc_params[cc_par_cnt++] = "-fPIE";
-  cc_params[cc_par_cnt++] = "-fPIC";
-  cc_params[cc_par_cnt++] = "-pie";
+  // /**
+  //  * Enable pie since dfsan maps shadow memory at 0x10000-0x200200000000, 
+  //  * pie is needed to prevent overlapped.
+  //  */
+  // cc_params[cc_par_cnt++] = "-fPIE";
+  // cc_params[cc_par_cnt++] = "-fPIC";
+  // cc_params[cc_par_cnt++] = "-pie";
   
   /*if (getenv("X_NO_BUILTIN")) {
 

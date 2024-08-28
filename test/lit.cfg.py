@@ -64,6 +64,8 @@ if config.host_os == 'Darwin' and config.apple_platform == 'osx':
   default_asan_opts += ['detect_leaks=1']
 
 default_asan_opts_str = ':'.join(default_asan_opts)
+# make the clang wrapper not optimize the test binaries
+config.environment['X_DONT_OPTIMIZE'] = '1'
 if default_asan_opts_str:
   config.environment['ASAN_OPTIONS'] = default_asan_opts_str
   default_asan_opts_str += ':'
@@ -90,8 +92,8 @@ else:
 target_cflags = [get_required_attr(config, "target_cflags")] + extra_link_flags
 target_cxxflags = config.cxx_mode_flags + target_cflags
 clang_asan_static_cflags = ([
-                            # "-fsanitize=address",
-                            "-asan",
+                            "-fsanitize=address",
+                            # "-asan",
                             "-mno-omit-leaf-frame-pointer",
                             "-fno-omit-frame-pointer",
                             "-fno-optimize-sibling-calls"] +
