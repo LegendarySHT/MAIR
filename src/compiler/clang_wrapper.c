@@ -1,6 +1,8 @@
 /**
  * Modified from AFL afl-clang-fast.c and Angora angora-clang.c,
  * as a wrapper for clang. 
+ *
+ * TODO: use AFLplusplus's afl-cc.c as base, which is more powerful, supporting LTO.
  */
 #define AFL_MAIN
 
@@ -166,24 +168,100 @@ static void find_obj(u8* argv0) {
 
 }
 
+/*
+ Handle the following options about ASan:
+  -fsanitize-address-field-padding=<value>
+  -fsanitize-address-globals-dead-stripping
+  -fsanitize-address-poison-custom-array-cookie
+  -fsanitize-address-use-after-return=<mode>
+  -fsanitize-address-use-after-scope
+  -fsanitize-address-use-odr-indicator
+  -fsanitize-recover=address|all
+ Replace with 
+   -mllvm -xxx
+ */
+static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
+  if (!strncmp(opt, "-fsanitize-address-field-padding=", 33)) {
+    // TODO
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
+    // TODO
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-address-poison-custom-array-cookie")) {
+    // TODO
+    return 1;
+  } else if (!strncmp(opt, "-fsanitize-address-use-after-return=", 36)) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = alloc_printf("-as-use-after-return=%s", opt + 36);
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-address-use-after-scope")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-as-use-after-scope";
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-address-use-odr-indicator")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-as-use-odr-indicator";
+    return 1;
+  } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
+    u8* val = opt + 19;
+    if (!strcmp(val, "address") || !strcmp(val, "all")) {
+      cc_params[cc_par_cnt++] = "-mllvm";
+      cc_params[cc_par_cnt++] = "-as-recover";
+      return 1;
+    }
+  }
+
+  if (is_mllvm_arg && !strncmp(opt, "-asan-", 6)) {
+    cc_params[cc_par_cnt++] = alloc_printf("-as-%s", opt + 6);
+    return 1;
+  }
+  return 0;
+}
+
+
+static u8 handle_tsan_options(u8* opt) {
+  return 0;
+}
+
+static u8 handle_ubsan_options(u8* opt) {
+  return 0;
+}
+
 static void regist_pass_plugin(enum SanitizerType sanTy) {
   /**
    * Need to enable corresponding llvm optimization level, 
    * where your pass is registed.
    */
-  u8* opt= "";
+  u8* san_pass= "";
   switch (sanTy) {
   case ASan:
-    opt = alloc_printf("-fpass-plugin=%s/pass/ASanInstPass.so", obj_path);
+    san_pass = "ASanInstPass.so";
+    cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
+    cc_params[cc_par_cnt++] = "-D__SANITIZE_ADDRESS__";
     break;
   case TSan:
-    opt = alloc_printf("-fpass-plugin=%s/pass/TSanInstPass.so", obj_path);
+    san_pass = "TSanInstPass.so";
     break;
   case XSan:
-    break;
+  case SanNone:
+    return;
   }
 
-  cc_params[cc_par_cnt++] = opt;
+  san_pass = alloc_printf("%s/pass/%s", obj_path, san_pass);
+
+  /* 
+    From this issue https://github.com/llvm/llvm-project/issues/56137 
+    To pass the option to plugin pass, we need add extra options
+  */
+  // cc_params[cc_par_cnt++] = "-Xclang";
+  // cc_params[cc_par_cnt++] = "-load";
+  // cc_params[cc_par_cnt++] = "-Xclang";
+  // cc_params[cc_par_cnt++] = san_pass;
+  // cc_params[cc_par_cnt++] = "-Xclang";
+  cc_params[cc_par_cnt++] = alloc_printf("-fplugin=%s", san_pass);
+  cc_params[cc_par_cnt++] = alloc_printf("-fpass-plugin=%s", san_pass);
+
+
 
   /**
    * Transfer the option to pass by `-mllvm -<opt>`
@@ -193,7 +271,31 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
 
 }
 
-static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx) {
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso) {
+  /**
+    // Always link the static runtime regardless of DSO or executable.
+    if (SanArgs.needsAsanRt())
+      HelperStaticRuntimes.push_back("asan_static");
+
+    // Collect static runtimes.
+    if (Args.hasArg(options::OPT_shared)) {
+      // Don't link static runtimes into DSOs.
+      return;
+    }
+   */
+  
+  if (sanTy == ASan) {
+    // Link all contents in *.a, rather than only link symbols in demands.
+    cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
+    // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
+    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.asan_static-x86_64.a", obj_path);
+    // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
+    cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
+  }
+
+  if (is_dso) {
+    return;
+  }
   /**
    * Need to enable corresponding llvm optimization level, 
    * where your pass is registed.
@@ -207,6 +309,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx) {
     san = "tsan";
     break;
   case XSan:
+  case SanNone:
     return;
   }
 
@@ -225,6 +328,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx) {
   cc_params[cc_par_cnt++] =
         alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms", obj_path, san);
   }
+  cc_params[cc_par_cnt++] = "-lm";
   cc_params[cc_par_cnt++] = "-ldl";
   cc_params[cc_par_cnt++] = "-lpthread";    
   cc_params[cc_par_cnt++] = "-lstdc++";
@@ -274,12 +378,14 @@ static void sync_hook_id(char *dst, char *src) {
 
 static void edit_params(u32 argc, char** argv) {
 
-  u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0;
+  u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
+     preprocessor_only = 0, have_unroll = 0, have_o = 0, have_pic = 0,
+     have_c = 0, partial_linking = 0;
   u8 *name;
-  enum SanitizerType xsanTy = XSan;
+  enum SanitizerType xsanTy = SanNone;
   u8 is_cxx = 0;
 
-  cc_params = ck_alloc((argc + 128) * sizeof(u8*));
+  cc_params = ck_alloc((argc + 256) * sizeof(u8*));
 
   name = strrchr(argv[0], '/');
   if (!name) name = argv[0]; else name++;
@@ -315,6 +421,22 @@ static void edit_params(u32 argc, char** argv) {
 
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
+  for (u32 i = 1; i < argc; i++) {
+    u8* cur = argv[i];
+    if (!strcmp(cur, "-tsan")) {
+      if (xsanTy != SanNone)
+        FATAL("'-tsan' could not be used with '-asan'");
+      xsanTy = TSan;
+      continue;
+    } else if (!strcmp(cur, "-asan")) {
+      if (xsanTy != SanNone)
+        FATAL("'-asan' could not be used with '-tsan'");
+      xsanTy = ASan;
+      continue;
+    } else {
+    }
+  }
+
   while (--argc) {
     u8* cur = *(++argv);
 
@@ -332,13 +454,29 @@ static void edit_params(u32 argc, char** argv) {
     if (!strcmp(cur, "-Wl,-z,defs") ||
         !strcmp(cur, "-Wl,--no-undefined")) continue;
 
-    if (!strcmp(cur, "-tsan")) {
-      xsanTy = TSan;
-      continue;
-    } else if (!strcmp(cur, "-asan")) {
-      xsanTy = ASan;
-      continue;
-    } else {
+    if (!strcmp(cur, "-E")) preprocessor_only = 1;
+    if (!strcmp(cur, "-shared")) shared_linking = 1;
+    if (!strcmp(cur, "-dynamiclib")) shared_linking = 1;
+    if (!strcmp(cur, "-Wl,-r")) partial_linking = 1;
+    if (!strcmp(cur, "-Wl,-i")) partial_linking = 1;
+    if (!strcmp(cur, "-Wl,--relocatable")) partial_linking = 1;
+    if (!strcmp(cur, "-r")) partial_linking = 1;
+    if (!strcmp(cur, "--relocatable")) partial_linking = 1;
+    if (!strcmp(cur, "-c")) have_c = 1;
+
+    if (!strncmp(cur, "-O", 2)) have_o = 1;
+    if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
+    if (xsanTy != SanNone) {
+      if (xsanTy == ASan && 
+        handle_asan_options(cur,  !strcmp(argv[-1], "-mllvm"))) {
+        continue;
+      }
+      if (handle_tsan_options(cur)) {
+        continue;
+      }
+      if (handle_ubsan_options(cur)) {
+        continue;
+      }
     }
 
     cc_params[cc_par_cnt++] = cur;
@@ -408,12 +546,12 @@ static void edit_params(u32 argc, char** argv) {
 
   if (!getenv("X_DONT_OPTIMIZE")) {
     cc_params[cc_par_cnt++] = "-g";
-    cc_params[cc_par_cnt++] = "-O3";
-    cc_params[cc_par_cnt++] = "-funroll-loops";
+    if (!have_o) cc_params[cc_par_cnt++] = "-O3";
+    if (!have_unroll) cc_params[cc_par_cnt++] = "-funroll-loops";
   }
   
   regist_pass_plugin(xsanTy);
-  add_sanitizer_runtime(xsanTy, is_cxx);
+  add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
   cc_params[cc_par_cnt++] = "-fuse-ld=lld";
 
 

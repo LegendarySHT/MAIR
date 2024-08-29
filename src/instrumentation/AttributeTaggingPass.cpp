@@ -30,6 +30,8 @@ PreservedAnalyses AttributeTaggingPass::run(Module &M, ModuleAnalysisManager &_)
             F.addFnAttr(Attribute::SanitizeAddress);   
             F.addFnAttr(Attribute::SanitizeThread);
           break;
+        case SanNone:
+          break;
         }
     }
     
