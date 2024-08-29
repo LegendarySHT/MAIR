@@ -181,6 +181,9 @@ static void find_obj(u8* argv0) {
    -mllvm -xxx
  */
 static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
+  if (!strcmp(opt, "-asan")) {
+    return 1;
+  }
   if (!strncmp(opt, "-fsanitize-address-field-padding=", 33)) {
     // TODO
     return 1;
@@ -444,6 +447,8 @@ static void edit_params(u32 argc, char** argv) {
     if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
     if (!strcmp(cur, "-m64")) bit_mode = 64;
 
+    if (!strcmp(cur, "-xc++")) x_set = 1;
+    if (!strcmp(cur, "-xc")) x_set = 1;
     if (!strcmp(cur, "-x")) x_set = 1;
 
     if (!strcmp(cur, "-fsanitize=address") ||
@@ -550,10 +555,6 @@ static void edit_params(u32 argc, char** argv) {
     if (!have_unroll) cc_params[cc_par_cnt++] = "-funroll-loops";
   }
   
-  regist_pass_plugin(xsanTy);
-  add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
-  cc_params[cc_par_cnt++] = "-fuse-ld=lld";
-
 
   // afl_runtime();
   
@@ -638,6 +639,10 @@ static void edit_params(u32 argc, char** argv) {
     cc_params[cc_par_cnt++] = "-x";
     cc_params[cc_par_cnt++] = "none";
   }
+
+  regist_pass_plugin(xsanTy);
+  add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+  cc_params[cc_par_cnt++] = "-fuse-ld=lld";
 
 /*#ifndef __ANDROID__
   switch (bit_mode) {
