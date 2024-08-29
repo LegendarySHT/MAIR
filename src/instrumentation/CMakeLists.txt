@@ -8,6 +8,8 @@ include(AddLLVM)
 add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
+# -Wl,-Bsymbolic : force local symbols to be used in shared library
+add_link_options(-Wl,-Bsymbolic)
 
 # TODO: all pass into 1 so
 
