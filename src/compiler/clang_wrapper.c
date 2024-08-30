@@ -201,9 +201,17 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-after-scope";
     return 1;
+  } else if (!strcmp(opt, "-fno-sanitize-address-use-after-scope")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-no-as-use-after-scope";
+    return 1;
   } else if (!strcmp(opt, "-fsanitize-address-use-odr-indicator")) {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-odr-indicator";
+    return 1;
+  } else if (!strcmp(opt, "-fno-sanitize-address-use-odr-indicator")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-no-as-use-odr-indicator";
     return 1;
   } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
     u8* val = opt + 19;
