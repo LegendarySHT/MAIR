@@ -250,6 +250,19 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
     return;
   }
 
+  /* The relevant code in Frontend/CompilerInvocation.cpp:CreateFromArgsImpl
+    // FIXME: Override value name discarding when asan or msan is used because the
+    // backend passes depend on the name of the alloca in order to print out
+    // names.
+    Res.getCodeGenOpts().DiscardValueNames &=
+        !LangOpts.Sanitize.has(SanitizerKind::Address) &&
+        !LangOpts.Sanitize.has(SanitizerKind::KernelAddress) &&
+        !LangOpts.Sanitize.has(SanitizerKind::Memory) &&
+        !LangOpts.Sanitize.has(SanitizerKind::KernelMemory)
+   */
+  cc_params[cc_par_cnt++] = "-fno-discard-value-names";
+
+
   san_pass = alloc_printf("%s/pass/%s", obj_path, san_pass);
 
   /* 
@@ -443,6 +456,8 @@ static void edit_params(u32 argc, char** argv) {
   while (--argc) {
     u8* cur = *(++argv);
 
+    if (!strcmp(cur, "--driver-mode=g++")) is_cxx = 1;
+
     if (!strcmp(cur, "-m32")) bit_mode = 32;
     if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
     if (!strcmp(cur, "-m64")) bit_mode = 64;
@@ -552,7 +567,7 @@ static void edit_params(u32 argc, char** argv) {
   if (!getenv("X_DONT_OPTIMIZE")) {
     cc_params[cc_par_cnt++] = "-g";
     if (!have_o) cc_params[cc_par_cnt++] = "-O3";
-    if (!have_unroll) cc_params[cc_par_cnt++] = "-funroll-loops";
+    if (!have_unroll && !have_o) cc_params[cc_par_cnt++] = "-funroll-loops";
   }
   
 
