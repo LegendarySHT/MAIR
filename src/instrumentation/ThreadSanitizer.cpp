@@ -844,13 +844,13 @@ int ThreadSanitizer::getMemoryAccessFuncIndex(Type *OrigTy, Value *Addr,
 using PassBuilderCallBackTy = function_ref<void(PassBuilder &)>;
 // TODO: select proper extention point
 static void passBuilderCallBack(PassBuilder &PB) {
-    // 这里注册 clang plugin extension point
-    // FIXME: what if LTO? this EP is not suitable for LTO.
-    PB.registerPipelineStartEPCallback(
-      [](ModulePassManager &MPM, auto _) {
-        MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-      }
-    );
+    // // 这里注册 clang plugin extension point
+    // // FIXME: what if LTO? this EP is not suitable for LTO.
+    // PB.registerPipelineStartEPCallback(
+    //   [](ModulePassManager &MPM, auto _) {
+    //     MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+    //   }
+    // );
   
     PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {

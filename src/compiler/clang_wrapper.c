@@ -184,10 +184,7 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
   if (!strcmp(opt, "-asan")) {
     return 1;
   }
-  if (!strncmp(opt, "-fsanitize-address-field-padding=", 33)) {
-    // TODO
-    return 1;
-  } else if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
+  if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
     // TODO
     return 1;
   } else if (!strcmp(opt, "-fsanitize-address-poison-custom-array-cookie")) {
@@ -236,6 +233,26 @@ static u8 handle_tsan_options(u8* opt) {
 
 static u8 handle_ubsan_options(u8* opt) {
   return 0;
+}
+
+static void init_sanitizer_setting(enum SanitizerType sanTy) {
+  switch (sanTy) {
+  case ASan:
+    cc_params[cc_par_cnt++] = "-fsanitize=address";
+    // Use env var to control clang only perform frontend 
+    // transformation for sanitizers.
+    setenv("XSAN_ONLY_FRONTEND", "1", 1);
+    break;
+  case TSan:
+    cc_params[cc_par_cnt++] = "-fsanitize=thread";
+    // Use env var to control clang only perform frontend 
+    // transformation for sanitizers.
+    setenv("XSAN_ONLY_FRONTEND", "1", 1);
+    break;
+  case XSan:
+  case SanNone:
+    return;
+  }
 }
 
 static void regist_pass_plugin(enum SanitizerType sanTy) {
@@ -663,6 +680,7 @@ static void edit_params(u32 argc, char** argv) {
     cc_params[cc_par_cnt++] = "none";
   }
 
+  init_sanitizer_setting(xsanTy);
   regist_pass_plugin(xsanTy);
   add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
   cc_params[cc_par_cnt++] = "-fuse-ld=lld";

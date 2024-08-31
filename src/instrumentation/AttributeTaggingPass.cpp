@@ -21,13 +21,15 @@ PreservedAnalyses AttributeTaggingPass::run(Module &M, ModuleAnalysisManager &_)
       if (F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation)) {
           continue;
       }
+
+      const auto &MD = F.getSanitizerMetadata();
       
       switch (_sanTy) {
       case ASan:
           // check whether the function has attribute 'no_sanitize_address'
-          // if (F.hasFnAttribute(Attribute::NoSanitizeAddress)) {
-          //     break;
-          // }
+          if (F.hasSanitizerMetadata() && MD.NoAddress) {
+              break;
+          }
           F.addFnAttr(Attribute::SanitizeAddress);   
         break;
       case TSan:

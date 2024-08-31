@@ -3481,13 +3481,13 @@ void passBuilderCallBack(PassBuilder& PB) {
     bool UseOdrIndicator = false;
     bool UseGlobalGC = false;
 
-    // 这里注册 clang plugin extension point
-    // FIXME: what if LTO? this EP is not suitable for LTO.
-    PB.registerPipelineStartEPCallback(
-      [](ModulePassManager &MPM, auto _) {
-        MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-      }
-    );
+    // // 这里注册 clang plugin extension point
+    // // FIXME: what if LTO? this EP is not suitable for LTO.
+    // PB.registerPipelineStartEPCallback(
+    //   [](ModulePassManager &MPM, auto _) {
+    //     MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
+    //   }
+    // );
   
     PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
