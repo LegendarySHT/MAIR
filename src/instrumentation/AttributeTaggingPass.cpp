@@ -18,21 +18,29 @@ AttributeTaggingPass::AttributeTaggingPass(SanitizerType sanTy): _sanTy(sanTy) {
 
 PreservedAnalyses AttributeTaggingPass::run(Module &M, ModuleAnalysisManager &_) {
     for (auto &F : M) {
-        switch (_sanTy) {
-        case ASan:
-            F.addFnAttr(Attribute::SanitizeAddress);   
-          break;
-        case TSan:
-            F.addFnAttr(Attribute::SanitizeThread);
-          break;
-        case XSan:
-            // FIXME: do not hard code embedding!
-            F.addFnAttr(Attribute::SanitizeAddress);   
-            F.addFnAttr(Attribute::SanitizeThread);
-          break;
-        case SanNone:
-          break;
-        }
+      if (F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation)) {
+          continue;
+      }
+      
+      switch (_sanTy) {
+      case ASan:
+          // check whether the function has attribute 'no_sanitize_address'
+          // if (F.hasFnAttribute(Attribute::NoSanitizeAddress)) {
+          //     break;
+          // }
+          F.addFnAttr(Attribute::SanitizeAddress);   
+        break;
+      case TSan:
+          F.addFnAttr(Attribute::SanitizeThread);
+        break;
+      case XSan:
+          // FIXME: do not hard code embedding!
+          F.addFnAttr(Attribute::SanitizeAddress);   
+          F.addFnAttr(Attribute::SanitizeThread);
+        break;
+      case SanNone:
+        break;
+      }
     }
     
     return PreservedAnalyses::all();
