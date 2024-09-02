@@ -80,6 +80,7 @@ set(XSAN_LIT_TEST_TARGETS)
 # OpenBSD not supporting asan, cannot run the tests
 add_subdirectory(asan)
 add_subdirectory(tsan)
+add_subdirectory(ubsan)
 
 
 
