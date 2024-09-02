@@ -371,8 +371,10 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
   }
   cc_params[cc_par_cnt++] = "-lm";
   cc_params[cc_par_cnt++] = "-ldl";
-  cc_params[cc_par_cnt++] = "-lpthread";    
-  cc_params[cc_par_cnt++] = "-lstdc++";
+  cc_params[cc_par_cnt++] = "-lpthread"; 
+  if (is_cxx) {
+    cc_params[cc_par_cnt++] = "-lstdc++";
+  }
 
   /**
    * Transfer the option to pass by `-mllvm -<opt>`
