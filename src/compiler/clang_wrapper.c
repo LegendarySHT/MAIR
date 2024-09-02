@@ -168,6 +168,37 @@ static void find_obj(u8* argv0) {
 
 }
 
+
+static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
+  enum SanitizerType xsanTy = SanNone;
+  for (u32 i = 1; i < argc; i++) {
+    u8* cur = argv[i];
+    if (!strcmp(cur, "-tsan")) {
+      if (xsanTy != SanNone)
+        FATAL("'-tsan' could not be used with '-asan'");
+      // Reuse the frontend code relevant to sanitizer
+      cc_params[cc_par_cnt++] = "-fsanitize=thread";
+      xsanTy = TSan;
+      continue;
+    } else if (!strcmp(cur, "-asan")) {
+      if (xsanTy != SanNone)
+        FATAL("'-asan' could not be used with '-tsan'");
+      // Reuse the frontend code relevant to sanitizer
+      cc_params[cc_par_cnt++] = "-fsanitize=address";xsanTy = ASan;
+      continue;
+    } else if (!strncmp(cur, "-fno-sanitize=", 14)){
+      u8 *val = cur + 14;
+      if (!strcmp(val, "all") 
+        || (xsanTy == ASan && !strcmp(val, "address"))
+        || (xsanTy == TSan && !strcmp(val, "thread"))
+      ) {
+        xsanTy = SanNone;
+      }
+    }
+  }
+  return xsanTy;
+}
+
 /*
  Handle the following options about ASan:
   -fsanitize-address-field-padding=<value>
@@ -179,11 +210,9 @@ static void find_obj(u8* argv0) {
   -fsanitize-recover=address|all
  Replace with 
    -mllvm -xxx
+  TODO: refer to SanitizerArgs.cpp:1193
  */
 static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
-  if (!strcmp(opt, "-asan")) {
-    return 1;
-  }
   if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
     // TODO
     return 1;
@@ -226,11 +255,17 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
   return 0;
 }
 
-
+/*
+ Handle the following options about ASan:
+  -fsanitize-thread-atomics
+  -fsanitize-thread-func-entry-exit
+  -fsanitize-thread-memory-access
+  -fsanitize-recover=address|all
+ Replace with 
+   -mllvm -xxx
+ Refer to SanitizerArgs.cpp:1142~1155
+ */
 static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
-  if (!strcmp(opt, "-tsan")) {
-    return 1;
-  }
   if (!strcmp(opt, "-fsanitize-thread-atomics")) {
     return 1;
   } else if (!strcmp(opt, "-fno-sanitize-thread-atomics")) {
@@ -271,16 +306,36 @@ static u8 handle_ubsan_options(u8* opt) {
   return 0;
 }
 
+
+
+/* 
+  Ports the arguments for sanitizers to our plugin sanitizers
+  Dicards the original argument if return 1.
+*/
+static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
+  if (!strcmp(opt, "-asan") || !strcmp(opt, "-tsan") || !strcmp(opt, "-ubsan")) {
+    return 1;
+  }
+
+  switch (sanTy) {
+  case ASan:
+    return handle_asan_options(opt, is_mllvm_arg);
+  case TSan:
+    return handle_tsan_options(opt, is_mllvm_arg);
+  case XSan:
+    break;
+  case SanNone:
+    break;
+  }
+
+  return 0;
+}
+
+
 static void init_sanitizer_setting(enum SanitizerType sanTy) {
   switch (sanTy) {
   case ASan:
-    cc_params[cc_par_cnt++] = "-fsanitize=address";
-    // Use env var to control clang only perform frontend 
-    // transformation for sanitizers.
-    setenv("XSAN_ONLY_FRONTEND", "1", 1);
-    break;
   case TSan:
-    cc_params[cc_par_cnt++] = "-fsanitize=thread";
     // Use env var to control clang only perform frontend 
     // transformation for sanitizers.
     setenv("XSAN_ONLY_FRONTEND", "1", 1);
@@ -500,22 +555,7 @@ static void edit_params(u32 argc, char** argv) {
 
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
-  for (u32 i = 1; i < argc; i++) {
-    u8* cur = argv[i];
-    if (!strcmp(cur, "-tsan")) {
-      if (xsanTy != SanNone)
-        FATAL("'-tsan' could not be used with '-asan'");
-      xsanTy = TSan;
-      continue;
-    } else if (!strcmp(cur, "-asan")) {
-      if (xsanTy != SanNone)
-        FATAL("'-asan' could not be used with '-tsan'");
-      xsanTy = ASan;
-      continue;
-    } else {
-    }
-  }
-
+  detect_san_type(argc, argv);
   while (--argc) {
     u8* cur = *(++argv);
 
@@ -549,17 +589,9 @@ static void edit_params(u32 argc, char** argv) {
 
     if (!strncmp(cur, "-O", 2)) have_o = 1;
     if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
-    if (xsanTy != SanNone) {
-      u8 is_mllvm_arg = !strcmp(argv[-1], "-mllvm");
-      if (xsanTy == ASan && handle_asan_options(cur, is_mllvm_arg)) {
-        continue;
-      }
-      if (xsanTy == TSan && handle_tsan_options(cur, is_mllvm_arg)) {
-        continue;
-      }
-      if (handle_ubsan_options(cur)) {
-        continue;
-      }
+    if (handle_sanitizer_options(cur, 
+        !strcmp(argv[-1], "-mllvm"), xsanTy)) {
+      continue;
     }
 
     cc_params[cc_par_cnt++] = cur;
