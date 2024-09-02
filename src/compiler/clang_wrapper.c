@@ -207,10 +207,13 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
   -fsanitize-address-use-after-return=<mode>
   -fsanitize-address-use-after-scope
   -fsanitize-address-use-odr-indicator
+  "-fsanitize-address-outline-instrumentation
   -fsanitize-recover=address|all
  Replace with 
    -mllvm -xxx
-  TODO: refer to SanitizerArgs.cpp:1193
+  TODO: refer to SanitizerArgs.cpp:1193, to support 
+    1. -fsanitize=address,pointer-compare
+    2. -fsanitize=address,pointer-subtract
  */
 static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
   if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
@@ -238,6 +241,10 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
   } else if (!strcmp(opt, "-fno-sanitize-address-use-odr-indicator")) {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-odr-indicator=0";
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-address-outline-instrumentation")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-as-instrumentation-with-call-threshold=0";
     return 1;
   } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
     u8* val = opt + 19;
@@ -311,6 +318,9 @@ static u8 handle_ubsan_options(u8* opt) {
 /* 
   Ports the arguments for sanitizers to our plugin sanitizers
   Dicards the original argument if return 1.
+
+  TODO: handle those -fno-sanitize-xxx properly, which could cancel the 
+        corresponding argument -fsanitize-xxx theoretically.
 */
 static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
   if (!strcmp(opt, "-asan") || !strcmp(opt, "-tsan") || !strcmp(opt, "-ubsan")) {
