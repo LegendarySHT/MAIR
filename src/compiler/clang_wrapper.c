@@ -763,6 +763,7 @@ static void edit_params(u32 argc, char** argv) {
   init_sanitizer_setting(xsanTy);
   regist_pass_plugin(xsanTy);
   add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+
   cc_params[cc_par_cnt++] = "-fuse-ld=lld";
 
 /*#ifndef __ANDROID__
@@ -797,7 +798,7 @@ static void edit_params(u32 argc, char** argv) {
 
 static void print_cmdline(int argc) {
 
-  for(int i = 0; i < argc + 128; i++) {
+  for(int i = 0; i < argc + cc_par_cnt; i++) {
     if(cc_params[i] == NULL)
       break;
     printf("%s ", cc_params[i]);

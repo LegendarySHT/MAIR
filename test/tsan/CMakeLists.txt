@@ -3,7 +3,7 @@ set(TSAN_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 include(AddTsanTestVar)
 
 
-# set(TSAN_TEST_DEPS ${SANITIZER_COMMON_LIT_TEST_DEPS})
+set(TSAN_TEST_DEPS ${XSAN_TEST_DEPS})
 # if(${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "(x86_64|s390x)")
 #   list(APPEND TSAN_TEST_DEPS GotsanRuntimeCheck)
 # endif()
@@ -134,7 +134,7 @@ if(COMPILER_RT_INCLUDE_TESTS)
   endif()
 endif()
 
-add_lit_testsuite(check-tsan "Running ThreadSanitizer tests"
+add_lit_testsuite(check-tsan "Running the XSan-tsan tests"
   ${TSAN_TESTSUITES}
   DEPENDS ${TSAN_TEST_DEPS})
 set_target_properties(check-tsan PROPERTIES FOLDER "Compiler-RT Tests")
