@@ -42,7 +42,6 @@ if config.compiler_id == 'GNU':
   extra_cflags = ["-fPIE", "-pthread", "-ldl", "-lrt", "-pie"]
 else:
   extra_cflags = []
-
 tsan_incdir = config.test_source_root + "/../"
 # Setup default compiler flags used with -fsanitize=thread option.
 clang_tsan_cflags = (["-fsanitize=thread",

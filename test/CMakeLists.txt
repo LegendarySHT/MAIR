@@ -1,6 +1,12 @@
 # This file is modified from src/runtime/test/asan/CMakeLists.txt
 set(XSAN_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SANITIZER_COMMON_LIT_TEST_DEPS)
+
+
+list(INSERT CMAKE_MODULE_PATH 0
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+)
+
 # When ANDROID, we build tests with the host compiler (i.e. CMAKE_C_COMPILER),
 # and run tests with tools from the host toolchain.
 if(NOT ANDROID)
