@@ -200,7 +200,7 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
     return 1;
   } else if (!strcmp(opt, "-fno-sanitize-address-use-after-scope")) {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-no-as-use-after-scope";
+    cc_params[cc_par_cnt++] = "-as-use-after-scope=0";
     return 1;
   } else if (!strcmp(opt, "-fsanitize-address-use-odr-indicator")) {
     cc_params[cc_par_cnt++] = "-mllvm";
@@ -208,7 +208,7 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
     return 1;
   } else if (!strcmp(opt, "-fno-sanitize-address-use-odr-indicator")) {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-no-as-use-odr-indicator";
+    cc_params[cc_par_cnt++] = "-as-use-odr-indicator=0";
     return 1;
   } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
     u8* val = opt + 19;
@@ -227,7 +227,43 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
 }
 
 
-static u8 handle_tsan_options(u8* opt) {
+static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
+  if (!strcmp(opt, "-tsan")) {
+    return 1;
+  }
+  if (!strcmp(opt, "-fsanitize-thread-atomics")) {
+    return 1;
+  } else if (!strcmp(opt, "-fno-sanitize-thread-atomics")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-ts-instrument-atomics=0";
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-thread-func-entry-exit")) {
+    return 1;
+  } else if (!strcmp(opt, "-fno-sanitize-thread-func-entry-exit")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-ts-instrument-func-entry-exit=0";
+    return 1;
+  } else if (!strcmp(opt, "-fsanitize-thread-memory-access")) {
+    return 1;
+  } else if (!strcmp(opt, "-fno-sanitize-thread-memory-access")) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-ts-instrument-memory-accesses=0";
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-ts-instrument-memintrinsics=0";
+    return 1;
+  } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
+    u8* val = opt + 19;
+    if (!strcmp(val, "thread") || !strcmp(val, "all")) {
+      cc_params[cc_par_cnt++] = "-mllvm";
+      cc_params[cc_par_cnt++] = "-as-recover";
+      return 1;
+    }
+  }
+
+  if (is_mllvm_arg && !strncmp(opt, "-tsan-", 6)) {
+    cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", opt + 6);
+    return 1;
+  }
   return 0;
 }
 
@@ -514,11 +550,11 @@ static void edit_params(u32 argc, char** argv) {
     if (!strncmp(cur, "-O", 2)) have_o = 1;
     if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
     if (xsanTy != SanNone) {
-      if (xsanTy == ASan && 
-        handle_asan_options(cur,  !strcmp(argv[-1], "-mllvm"))) {
+      u8 is_mllvm_arg = !strcmp(argv[-1], "-mllvm");
+      if (xsanTy == ASan && handle_asan_options(cur, is_mllvm_arg)) {
         continue;
       }
-      if (handle_tsan_options(cur)) {
+      if (xsanTy == TSan && handle_tsan_options(cur, is_mllvm_arg)) {
         continue;
       }
       if (handle_ubsan_options(cur)) {
