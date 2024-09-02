@@ -1,19 +1,21 @@
 set(ASAN_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(ASAN_TEST_DEPS ${XSAN_TEST_DEPS})
+set(ASAN_TEST_ARCH ${XSAN_TEST_ARCH})
 
 
-foreach(arch ${XSAN_TEST_ARCH})
-  set(XSAN_TEST_TARGET_ARCH ${arch})
-  set(XSAN_TEST_APPLE_PLATFORM "osx")
-  set(XSAN_TEST_MIN_DEPLOYMENT_TARGET_FLAG "${DARWIN_osx_MIN_VER_FLAG}")
-  string(TOLOWER "-${arch}-${OS_NAME}" XSAN_TEST_CONFIG_SUFFIX)
-  get_bits_for_arch(${arch} XSAN_TEST_BITS)
+foreach(arch ${ASAN_TEST_ARCH})
+  set(ASAN_TEST_TARGET_ARCH ${arch})
+  set(ASAN_TEST_APPLE_PLATFORM "osx")
+  set(ASAN_TEST_MIN_DEPLOYMENT_TARGET_FLAG "${DARWIN_osx_MIN_VER_FLAG}")
+  string(TOLOWER "-${arch}-${OS_NAME}" ASAN_TEST_CONFIG_SUFFIX)
+  get_bits_for_arch(${arch} ASAN_TEST_BITS)
   # For cross-compiling, we need to set the target compiler and flags.
   # TODO: support different architectures
-  # get_test_cc_for_arch(${arch} XSAN_TEST_TARGET_CC XSAN_TEST_TARGET_CFLAGS)
+  # get_test_cc_for_arch(${arch} ASAN_TEST_TARGET_CC ASAN_TEST_TARGET_CFLAGS)
   if(ANDROID OR APPLE)
-    set(XSAN_TEST_DYNAMIC True)
+    set(ASAN_TEST_DYNAMIC True)
   else()
-    set(XSAN_TEST_DYNAMIC False)
+    set(ASAN_TEST_DYNAMIC False)
   endif()
   string(TOUPPER ${arch} ARCH_UPPER_CASE)
   set(CONFIG_NAME ${ARCH_UPPER_CASE}${OS_NAME}Config)
@@ -21,11 +23,11 @@ foreach(arch ${XSAN_TEST_ARCH})
     ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
     ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME}/lit.site.cfg.py
     )
-  list(APPEND XSAN_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME})
+  list(APPEND ASAN_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME})
 
   if(COMPILER_RT_XSAN_HAS_STATIC_RUNTIME)
-    string(TOLOWER "-${arch}-${OS_NAME}-dynamic" XSAN_TEST_CONFIG_SUFFIX)
-    set(XSAN_TEST_DYNAMIC True)
+    string(TOLOWER "-${arch}-${OS_NAME}-dynamic" ASAN_TEST_CONFIG_SUFFIX)
+    set(ASAN_TEST_DYNAMIC True)
     set(CONFIG_NAME ${ARCH_UPPER_CASE}${OS_NAME}DynamicConfig)
     configure_lit_site_cfg(
       ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
@@ -37,7 +39,7 @@ foreach(arch ${XSAN_TEST_ARCH})
   # ARM on Linux may include thumb code, where fast unwinding does not work.
   # Enable unwind tables so that we do not end up falling back to it in tests.
   if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux" AND NOT ANDROID AND ${arch} MATCHES "arm")
-    set(XSAN_TEST_TARGET_CFLAGS "${XSAN_TEST_TARGET_CFLAGS} -funwind-tables")
+    set(ASAN_TEST_TARGET_CFLAGS "${ASAN_TEST_TARGET_CFLAGS} -funwind-tables")
   endif()
 endforeach()
 
@@ -47,8 +49,8 @@ endforeach()
 # variable to select which iOS device or simulator to use, e.g.:
 # SANITIZER_IOSSIM_TEST_DEVICE_IDENTIFIER="iPhone 6"
 if(APPLE)
-  set(XSAN_TEST_TARGET_CC ${COMPILER_RT_TEST_COMPILER})
-  set(XSAN_TEST_DYNAMIC True)
+  set(ASAN_TEST_TARGET_CC ${COMPILER_RT_TEST_COMPILER})
+  set(ASAN_TEST_DYNAMIC True)
   set(XSAN_APPLE_PLATFORMS ${SANITIZER_COMMON_SUPPORTED_OS})
 
   foreach(platform ${XSAN_APPLE_PLATFORMS})
@@ -57,24 +59,24 @@ if(APPLE)
       continue()
     endif()
     list_intersect(
-      XSAN_TEST_${platform}_ARCHS
+      ASAN_TEST_${platform}_ARCHS
       XSAN_SUPPORTED_ARCH
       DARWIN_${platform}_ARCHS
     )
-    foreach(arch ${XSAN_TEST_${platform}_ARCHS})
+    foreach(arch ${ASAN_TEST_${platform}_ARCHS})
       get_test_cflags_for_apple_platform(
         "${platform}"
         "${arch}"
-        XSAN_TEST_TARGET_CFLAGS
+        ASAN_TEST_TARGET_CFLAGS
         )
       string(TOUPPER "${arch}" ARCH_UPPER_CASE)
       get_capitalized_apple_platform("${platform}" PLATFORM_CAPITALIZED)
       set(CONFIG_NAME "${PLATFORM_CAPITALIZED}${ARCH_UPPER_CASE}Config")
-      set(XSAN_TEST_CONFIG_SUFFIX "-${arch}-${platform}")
-      set(XSAN_TEST_APPLE_PLATFORM "${platform}")
-      set(XSAN_TEST_TARGET_ARCH "${arch}")
-      set(XSAN_TEST_MIN_DEPLOYMENT_TARGET_FLAG "${DARWIN_${platform}_MIN_VER_FLAG}")
-      get_bits_for_arch(${arch} XSAN_TEST_BITS)
+      set(ASAN_TEST_CONFIG_SUFFIX "-${arch}-${platform}")
+      set(ASAN_TEST_APPLE_PLATFORM "${platform}")
+      set(ASAN_TEST_TARGET_ARCH "${arch}")
+      set(ASAN_TEST_MIN_DEPLOYMENT_TARGET_FLAG "${DARWIN_${platform}_MIN_VER_FLAG}")
+      get_bits_for_arch(${arch} ASAN_TEST_BITS)
       configure_lit_site_cfg(
         ${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in
         ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME}/lit.site.cfg.py
@@ -82,16 +84,16 @@ if(APPLE)
       add_lit_testsuite(check-asan-${platform}-${arch} "XSan ${platform} ${arch} tests"
         ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME}/
         EXCLUDE_FROM_CHECK_ALL
-        DEPENDS ${XSAN_TEST_DEPS})
+        DEPENDS ${ASAN_TEST_DEPS})
     endforeach()
   endforeach()
 endif()
 
 
 add_lit_testsuite(check-asan "Running the XSan-asan tests"
-  ${XSAN_TESTSUITES}
+  ${ASAN_TESTSUITES}
   ${exclude_from_check_all}
-  DEPENDS ${XSAN_TEST_DEPS})
+  DEPENDS ${ASAN_TEST_DEPS})
 set_target_properties(check-asan PROPERTIES FOLDER "Compiler-RT Misc")
 
 
