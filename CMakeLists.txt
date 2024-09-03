@@ -45,12 +45,18 @@ find_package(LLVM REQUIRED CONFIG)
 #include_directories(${LLVM_INCLUDE_DIRS})
 #link_directories(${LLVM_LIBRARY_DIRS})
 
-# For AllSupportedArchDefs.cmake
+# To find *.cmake
 list(INSERT CMAKE_MODULE_PATH 0
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake/Modules"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
 )
+
 include(AllSupportedArchDefs)
 set(XSAN_SUPPORTED_ARCH ${X86_64})
+
+
 
 message(STATUS "XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
 

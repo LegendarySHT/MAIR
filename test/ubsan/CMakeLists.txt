@@ -2,7 +2,7 @@ set(UBSAN_LIT_TESTS_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 set(UBSAN_TESTSUITES)
 set(UBSAN_TEST_DEPS ${XSAN_TEST_DEPS})
-set(UBSAN_SUPPORTED_ARCH ${XSAN_TEST_ARCH})
+
 
 macro(add_ubsan_testsuite test_mode sanitizer arch lld thinlto)
   set(UBSAN_LIT_TEST_MODE "${test_mode}")
@@ -52,7 +52,6 @@ foreach(arch ${UBSAN_TEST_ARCH})
   # get_test_cc_for_arch(${arch} UBSAN_TEST_TARGET_CC UBSAN_TEST_TARGET_CFLAGS)
   add_ubsan_testsuites("Standalone" ubsan ${arch})
 
-  # TODO: test integrate UBSan with other sanitizers
   if(COMPILER_RT_HAS_ASAN AND ";${ASAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
     # TODO(wwchrome): Re-enable ubsan for asan win 64-bit when ready.
     # Disable ubsan with AddressSanitizer tests for Windows 64-bit,

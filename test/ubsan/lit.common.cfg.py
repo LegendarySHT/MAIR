@@ -28,14 +28,16 @@ elif ubsan_lit_test_mode == "StandaloneStatic":
   clang_ubsan_cflags = ['-static-libsan']
 elif ubsan_lit_test_mode == "AddressSanitizer":
   config.available_features.add("ubsan-asan")
-  clang_ubsan_cflags = ["-fsanitize=address"]
+  # clang_ubsan_cflags = ["-fsanitize=address"]
+  clang_ubsan_cflags = ["-asan"]
   default_ubsan_opts += ['detect_leaks=0']
 elif ubsan_lit_test_mode == "MemorySanitizer":
   config.available_features.add("ubsan-msan")
   clang_ubsan_cflags = ["-fsanitize=memory"]
 elif ubsan_lit_test_mode == "ThreadSanitizer":
   config.available_features.add("ubsan-tsan")
-  clang_ubsan_cflags = ["-fsanitize=thread"]
+  # clang_ubsan_cflags = ["-fsanitize=thread"]
+  clang_ubsan_cflags = ["-tsan"]
 else:
   lit_config.fatal("Unknown UBSan test mode: %r" % ubsan_lit_test_mode)
 

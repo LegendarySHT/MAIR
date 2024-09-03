@@ -16,12 +16,12 @@ endif()
 set(LLVM_COMMON_CMAKE_UTILS "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
 
 # Add path for custom compiler-rt modules.
-list(INSERT CMAKE_MODULE_PATH 0
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
-  "${LLVM_COMMON_CMAKE_UTILS}"
-  "${LLVM_COMMON_CMAKE_UTILS}/Modules"
-  )
+# list(INSERT CMAKE_MODULE_PATH 0
+#   "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
+#   "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules"
+#   "${LLVM_COMMON_CMAKE_UTILS}"
+#   "${LLVM_COMMON_CMAKE_UTILS}/Modules"
+#   )
 
 ############ Change the output/install directories #############
 set(COMPILER_RT_OUTPUT_DIR ${XSAN_LIB_DIR} CACHE PATH

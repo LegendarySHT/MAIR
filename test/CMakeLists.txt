@@ -2,6 +2,16 @@
 set(XSAN_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SANITIZER_COMMON_LIT_TEST_DEPS)
 
+# For enable UBSan-ASan， UBSan-TSan test
+set(COMPILER_RT_HAS_ASAN True)
+set(COMPILER_RT_HAS_TSAN True)
+set(COMPILER_RT_HAS_UBSAN True)
+
+set(UBSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
+set(ASAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
+set(TSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
+# set(MSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
+
 
 list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
@@ -67,6 +77,8 @@ endif()
 
 
 set(XSAN_LIT_TEST_TARGETS)
+
+
 
 # Run sanitizer tests only if we're sure that clang would produce
 # working binaries.
