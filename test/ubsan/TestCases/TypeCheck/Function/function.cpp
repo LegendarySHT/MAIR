@@ -12,7 +12,7 @@
 
 #include <iostream>
 
-#include "../../../../../lib/sanitizer_common/sanitizer_platform.h"
+#include "../../../../../src/runtime/lib/sanitizer_common/sanitizer_platform.h"
 
 int main(int, char **argv) {
   if (!SANITIZER_NON_UNIQUE_TYPEINFO)

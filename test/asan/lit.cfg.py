@@ -65,7 +65,6 @@ if config.host_os == 'Darwin' and config.apple_platform == 'osx':
 
 default_asan_opts_str = ':'.join(default_asan_opts)
 # make the clang wrapper not optimize the test binaries
-config.environment['X_DONT_OPTIMIZE'] = '1'
 if default_asan_opts_str:
   config.environment['ASAN_OPTIONS'] = default_asan_opts_str
   default_asan_opts_str += ':'

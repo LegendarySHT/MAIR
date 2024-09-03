@@ -173,6 +173,8 @@ if config.memprof_shadow_scale != '':
   config.target_cflags += " -mllvm -memprof-mapping-scale=" + config.memprof_shadow_scale
 
 config.environment = dict(os.environ)
+# Maintain the original parameters as much as possible
+config.environment['X_DONT_OPTIMIZE'] = '1'
 
 # Clear some environment variables that might affect Clang.
 possibly_dangerous_env_vars = ['ASAN_OPTIONS', 'DFSAN_OPTIONS', 'LSAN_OPTIONS',
