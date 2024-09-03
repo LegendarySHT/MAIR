@@ -3,13 +3,29 @@ cmake_minimum_required(VERSION 3.13.4)
 
 # To compile *.S in runtime
 enable_language(C CXX ASM)
+# export compile_commands.json for clangd
+set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
 project(xsan)
+
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(FATAL_ERROR "
+No build type selected. You need to pass -DCMAKE_BUILD_TYPE=<type> in order to configure LLVM.
+Available options are:
+  * -DCMAKE_BUILD_TYPE=Release - For an optimized build with no assertions or debug info.
+  * -DCMAKE_BUILD_TYPE=Debug - For an unoptimized build with assertions and debug info.
+  * -DCMAKE_BUILD_TYPE=RelWithDebInfo - For an optimized build with no assertions but with debug info.
+  * -DCMAKE_BUILD_TYPE=MinSizeRel - For a build optimized for size instead of speed.
+Learn more about these options in our documentation at https://llvm.org/docs/CMake.html#cmake-build-type
+")
+endif()
+
 
 find_program(CLANG_C_COMPILER clang)
 if (CLANG_C_COMPILER)
     set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE STRING "C compiler" FORCE)
     set(CMAKE_CXX_COMPILER ${CLANG_C_COMPILER}++ CACHE STRING "C++ compiler" FORCE)
+
     message(STATUS "Clang found and set as default compiler: ${CLANG_C_COMPILER}")
 else()
     message(STATUS "No Clang not found, using system default compiler (cc).")
@@ -18,8 +34,6 @@ endif()
 message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 
-# export compile_commands.json for clangd
-set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
 # LLVM 15 requires C++14
 set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")

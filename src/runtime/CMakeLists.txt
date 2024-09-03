@@ -143,6 +143,9 @@ else()
 endif()
 
 option(COMPILER_RT_DEBUG "Build runtimes with full debug info" OFF)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(COMPILER_RT_DEBUG ON CACHE BOOL "Build runtimes with full debug info" FORCE)
+endif()
 option(COMPILER_RT_EXTERNALIZE_DEBUGINFO
   "Generate dSYM files and strip executables and libraries (Darwin Only)" OFF)
 # COMPILER_RT_DEBUG_PYBOOL is used by lit.common.configured.in.
