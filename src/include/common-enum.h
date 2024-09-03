@@ -2,5 +2,5 @@
 
 enum SanitizerType {
     SanNone,
-    ASan, TSan, XSan
+    ASan, TSan, UBSan, XSan
 };

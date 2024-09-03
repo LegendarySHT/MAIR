@@ -168,23 +168,29 @@ static void find_obj(u8* argv0) {
 
 }
 
-
+// TODO: support sanitizer composition
 static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     u8* cur = argv[i];
     if (!strcmp(cur, "-tsan")) {
-      if (xsanTy != SanNone)
+      if (xsanTy != SanNone && xsanTy != UBSan)
         FATAL("'-tsan' could not be used with '-asan'");
       // Reuse the frontend code relevant to sanitizer
       cc_params[cc_par_cnt++] = "-fsanitize=thread";
       xsanTy = TSan;
       continue;
     } else if (!strcmp(cur, "-asan")) {
-      if (xsanTy != SanNone)
+      if (xsanTy != SanNone && xsanTy != UBSan)
         FATAL("'-asan' could not be used with '-tsan'");
       // Reuse the frontend code relevant to sanitizer
-      cc_params[cc_par_cnt++] = "-fsanitize=address";xsanTy = ASan;
+      cc_params[cc_par_cnt++] = "-fsanitize=address";
+      xsanTy = ASan;
+      continue;
+    } else if (!strcmp(cur, "-ubsan")) {
+      // Reuse the frontend code relevant to sanitizer
+      cc_params[cc_par_cnt++] = "-fsanitize=undefined";
+      xsanTy = UBSan;
       continue;
     } else if (!strncmp(cur, "-fno-sanitize=", 14)){
       u8 *val = cur + 14;
@@ -207,7 +213,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
   -fsanitize-address-use-after-return=<mode>
   -fsanitize-address-use-after-scope
   -fsanitize-address-use-odr-indicator
-  "-fsanitize-address-outline-instrumentation
+  -fsanitize-address-outline-instrumentation
   -fsanitize-recover=address|all
  Replace with 
    -mllvm -xxx
@@ -332,6 +338,8 @@ static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType 
     return handle_asan_options(opt, is_mllvm_arg);
   case TSan:
     return handle_tsan_options(opt, is_mllvm_arg);
+  case UBSan:
+    return handle_ubsan_options(opt);
   case XSan:
     break;
   case SanNone:
@@ -346,6 +354,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   switch (sanTy) {
   case ASan:
   case TSan:
+  case UBSan:
     // Use env var to control clang only perform frontend 
     // transformation for sanitizers.
     setenv("XSAN_ONLY_FRONTEND", "1", 1);
@@ -371,6 +380,7 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   case TSan:
     san_pass = "TSanInstPass.so";
     break;
+  case UBSan:
   case XSan:
   case SanNone:
     return;
@@ -449,6 +459,9 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     break;
   case TSan:
     san = "tsan";
+    break;
+  case UBSan:
+    san = "ubsan_standalone";
     break;
   case XSan:
   case SanNone:
@@ -565,7 +578,7 @@ static void edit_params(u32 argc, char** argv) {
 
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
-  detect_san_type(argc, argv);
+  xsanTy = detect_san_type(argc, argv);
   while (--argc) {
     u8* cur = *(++argv);
 
