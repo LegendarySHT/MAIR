@@ -480,4 +480,7 @@ namespace __memprof {
 using namespace __sanitizer;
 }
 
+namespace __xsan {
+using namespace __sanitizer;
+}
 #endif  // SANITIZER_DEFS_H
