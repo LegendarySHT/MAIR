@@ -1,4 +1,5 @@
 #include "xsan_activation.h"
+#include "xsan_interface_internal.h"
 
 // ---------------------- Interface ---------------- {{{1
 using namespace __xsan;

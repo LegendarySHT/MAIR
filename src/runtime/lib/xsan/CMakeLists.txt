@@ -42,7 +42,7 @@ set(XSAN_COMMON_RUNTIME_OBJECT_LIBS
   RTSanitizerCommonLibc
   RTSanitizerCommonCoverage
   RTSanitizerCommonSymbolizer
-  RTLSanCommon
+  # RTLSanCommon
   RTUbsan)
 
 
@@ -113,5 +113,13 @@ if(NOT APPLE)
       OBJECT_LIBS RTXsan_static
       CFLAGS ${XSAN_CFLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
+      PARENT_TARGET xsan)
+  
+  add_compiler_rt_runtime(clang_rt.xsan-preinit
+      STATIC
+      ARCHS ${ASAN_SUPPORTED_ARCH}
+      OBJECT_LIBS RTXsan_preinit
+      CFLAGS ${ASAN_CFLAGS}
+      DEFS ${ASAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
 endif()

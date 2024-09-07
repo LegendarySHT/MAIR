@@ -438,6 +438,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
   
   if (sanTy == ASan) {
     // Link all contents in *.a, rather than only link symbols in demands.
+    // e.g., link preinit_array symbol, which is not used in user program.
     cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
     // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
     cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.asan_static-x86_64.a", obj_path);
