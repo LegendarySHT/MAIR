@@ -564,9 +564,9 @@ DEFINE_REAL(int, vfork)
 DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork)
 #endif
 
-// ---------------------- InitializeAsanInterceptors ---------------- {{{1
+// ---------------------- InitializeXsanInterceptors ---------------- {{{1
 namespace __xsan {
-void InitializeAsanInterceptors() {
+void InitializeXsanInterceptors() {
   static bool was_called_once;
   CHECK(!was_called_once);
   was_called_once = true;
