@@ -1,4 +1,35 @@
 # Build for the XSan runtime support library.
+set(XSAN_ASAN_SOURCES
+  ../asan/asan_allocator.cpp
+  ../asan/asan_activation.cpp
+  ../asan/asan_debugging.cpp
+  ../asan/asan_descriptions.cpp
+  ../asan/asan_errors.cpp
+  ../asan/asan_fake_stack.cpp
+  ../asan/asan_flags.cpp
+  ../asan/asan_fuchsia.cpp
+  ../asan/asan_globals.cpp
+  ../asan/asan_globals_win.cpp
+  # ../asan/asan_interceptors.cpp
+  # ../asan/asan_interceptors_memintrinsics.cpp
+  # ../asan/asan_malloc_linux.cpp
+  # ../asan/asan_malloc_mac.cpp
+  ../asan/asan_linux.cpp
+  ../asan/asan_mac.cpp
+  ../asan/asan_malloc_win.cpp
+  ../asan/asan_memory_profile.cpp
+  ../asan/asan_poisoning.cpp
+  ../asan/asan_posix.cpp
+  ../asan/asan_premap_shadow.cpp
+  ../asan/asan_report.cpp
+  ../asan/asan_rtl.cpp
+  ../asan/asan_shadow_setup.cpp
+  ../asan/asan_stack.cpp
+  ../asan/asan_stats.cpp
+  ../asan/asan_suppressions.cpp
+  ../asan/asan_thread.cpp
+  ../asan/asan_win.cpp
+)
 set(XSAN_SOURCES
   xsan_activation.cpp
   xsan_disability_dummy.cpp
@@ -7,11 +38,15 @@ set(XSAN_SOURCES
   xsan_linux.cpp
   xsan_malloc_linux.cpp
   xsan_rtl.cpp
+  ${XSAN_ASAN_SOURCES}
   )
+
+
 
 if (NOT WIN32 AND NOT APPLE)
   list(APPEND XSAN_SOURCES
     # xsan_interceptors_vfork.S
+    ../asan/asan_interceptors_vfork.S
     )
 endif()
 set(XSAN_CXX_SOURCES
@@ -32,12 +67,40 @@ set(XSAN_PREINIT_SOURCES
   xsan_preinit.cpp
   )
 
+set(XSAN_ASAN_HEADERS
+  ../asan/asan_activation.h
+  ../asan/asan_activation_flags.inc
+  ../asan/asan_allocator.h
+  ../asan/asan_descriptions.h
+  ../asan/asan_errors.h
+  ../asan/asan_fake_stack.h
+  ../asan/asan_flags.h
+  ../asan/asan_flags.inc
+  ../asan/asan_init_version.h
+  ../asan/asan_interceptors.h
+  ../asan/asan_interceptors_memintrinsics.h
+  ../asan/asan_interface.inc
+  ../asan/asan_interface_internal.h
+  ../asan/asan_internal.h
+  ../asan/asan_lock.h
+  ../asan/asan_mapping.h
+  ../asan/asan_poisoning.h
+  ../asan/asan_premap_shadow.h
+  ../asan/asan_report.h
+  ../asan/asan_scariness_score.h
+  ../asan/asan_stack.h
+  ../asan/asan_stats.h
+  ../asan/asan_suppressions.h
+  ../asan/asan_thread.h
+)
+
 SET(XSAN_HEADERS
   xsan_activation.h
   xsan_interceptors.h
   xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h
   xsan_internal.h
+  ${XSAN_ASAN_HEADERS}
   )
 
 include_directories(..)
@@ -49,7 +112,7 @@ set(XSAN_COMMON_RUNTIME_OBJECT_LIBS
   RTSanitizerCommonLibc
   RTSanitizerCommonCoverage
   RTSanitizerCommonSymbolizer
-  # RTLSanCommon
+  RTLSanCommon
   RTUbsan)
 
 
