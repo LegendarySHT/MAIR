@@ -12,6 +12,40 @@
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 
+// #if defined(__SANITIZE_ADDRESS__)
+// #  error \
+//       "The AddressSanitizer run-time should not be instrumented by AddressSanitizer"
+// #endif
+
+// Build-time configuration options.
+
+// If set, asan will intercept C++ exception api call(s).
+#ifndef XSAN_HAS_EXCEPTIONS
+#  define XSAN_HAS_EXCEPTIONS 1
+#endif
+
+// If set, values like allocator chunk size, as well as defaults for some flags
+// will be changed towards less memory overhead.
+#ifndef XSAN_LOW_MEMORY
+#  if SANITIZER_IOS || SANITIZER_ANDROID
+#    define XSAN_LOW_MEMORY 1
+#  else
+#    define XSAN_LOW_MEMORY 0
+#  endif
+#endif
+
+#ifndef XSAN_DYNAMIC
+#  ifdef PIC
+#    define XSAN_DYNAMIC 1
+#  else
+#    define XSAN_DYNAMIC 0
+#  endif
+#endif
+
+namespace __asan {
+void StopInitOrderChecking();
+}
+
 // All internal functions in xsan reside inside the __xsan namespace
 // to avoid namespace collisions with the user programs.
 // Separate namespace also makes it simpler to distinguish the xsan run-time
@@ -61,7 +95,7 @@ AsanThread *CreateMainThread();
 
 void ReadContextStack(void *context, uptr *stack, uptr *ssize);
 void ResetContextStack(void *context);
-void StopInitOrderChecking();
+// void StopInitOrderChecking();
 
 // Wrapper for TLS/TSD.
 void XsanTSDInit(void (*destructor)(void *tsd));

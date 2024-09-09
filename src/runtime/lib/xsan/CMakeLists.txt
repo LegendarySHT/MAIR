@@ -1,8 +1,11 @@
 # Build for the XSan runtime support library.
 set(XSAN_SOURCES
   xsan_activation.cpp
+  xsan_disability_dummy.cpp
   xsan_interceptors.cpp
   xsan_interceptors_memintrinsics.cpp
+  xsan_linux.cpp
+  xsan_malloc_linux.cpp
   xsan_rtl.cpp
   )
 

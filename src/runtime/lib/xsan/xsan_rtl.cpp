@@ -20,7 +20,7 @@ static void XsanInitInternal() {
 
 // Initialize as requested from some part of ASan runtime library (interceptors,
 // allocator, etc).
-void AsanInitFromRtl() {
+void XsanInitFromRtl() {
     XsanInitInternal();
 }
 

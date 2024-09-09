@@ -509,7 +509,8 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
 #if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
 static void AtCxaAtexit(void *unused) {
   (void)unused;
-  StopInitOrderChecking();
+  /// TODO: do ASan's check in a more generic way
+  __asan::StopInitOrderChecking();
 }
 #endif
 
