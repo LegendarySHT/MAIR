@@ -192,6 +192,9 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       cc_params[cc_par_cnt++] = "-fsanitize=undefined";
       xsanTy = UBSan;
       continue;
+    } else if (!strcmp(cur, "-xsan")) {
+      xsanTy = XSan;
+      continue;
     } else if (!strncmp(cur, "-fno-sanitize=", 14)){
       u8 *val = cur + 14;
       if (!strcmp(val, "all") 
@@ -329,7 +332,8 @@ static u8 handle_ubsan_options(u8* opt) {
         corresponding argument -fsanitize-xxx theoretically.
 */
 static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
-  if (!strcmp(opt, "-asan") || !strcmp(opt, "-tsan") || !strcmp(opt, "-ubsan")) {
+  if (!strcmp(opt, "-asan") || !strcmp(opt, "-tsan") 
+      || !strcmp(opt, "-ubsan") || !strcmp(opt, "-xsan")) {
     return 1;
   }
 
@@ -424,31 +428,7 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
 }
 
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso) {
-  /**
-    // Always link the static runtime regardless of DSO or executable.
-    if (SanArgs.needsAsanRt())
-      HelperStaticRuntimes.push_back("asan_static");
 
-    // Collect static runtimes.
-    if (Args.hasArg(options::OPT_shared)) {
-      // Don't link static runtimes into DSOs.
-      return;
-    }
-   */
-  
-  if (sanTy == ASan) {
-    // Link all contents in *.a, rather than only link symbols in demands.
-    // e.g., link preinit_array symbol, which is not used in user program.
-    cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-    // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
-    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.asan_static-x86_64.a", obj_path);
-    // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
-    cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
-  }
-
-  if (is_dso) {
-    return;
-  }
   /**
    * Need to enable corresponding llvm optimization level, 
    * where your pass is registed.
@@ -465,7 +445,35 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     san = "ubsan_standalone";
     break;
   case XSan:
+    san = "xsan";
+    break;
   case SanNone:
+    return;
+  }
+
+  /**
+    // Always link the static runtime regardless of DSO or executable.
+    if (SanArgs.needsAsanRt())
+      HelperStaticRuntimes.push_back("asan_static");
+
+    // Collect static runtimes.
+    if (Args.hasArg(options::OPT_shared)) {
+      // Don't link static runtimes into DSOs.
+      return;
+    }
+  */
+  
+  if (sanTy == ASan || sanTy == XSan) {
+    // Link all contents in *.a, rather than only link symbols in demands.
+    // e.g., link preinit_array symbol, which is not used in user program.
+    cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
+    // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
+    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.%s_static-x86_64.a", obj_path, san);
+    // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
+    cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
+  }
+
+  if (is_dso) {
     return;
   }
 
@@ -478,11 +486,12 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
   }
   // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
   cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
+  // Customize the exported symbols
   cc_params[cc_par_cnt++] =
         alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s-x86_64.a.syms", obj_path, san);
   if (is_cxx) {
-  cc_params[cc_par_cnt++] =
-        alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms", obj_path, san);
+    cc_params[cc_par_cnt++] =
+          alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms", obj_path, san);
   }
   cc_params[cc_par_cnt++] = "-lm";
   cc_params[cc_par_cnt++] = "-ldl";
