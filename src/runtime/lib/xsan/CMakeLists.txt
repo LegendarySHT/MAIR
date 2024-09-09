@@ -1,6 +1,8 @@
 # Build for the XSan runtime support library.
 set(XSAN_SOURCES
   xsan_activation.cpp
+  xsan_interceptors.cpp
+  xsan_interceptors_memintrinsics.cpp
   xsan_rtl.cpp
   )
 
@@ -29,6 +31,8 @@ set(XSAN_PREINIT_SOURCES
 
 SET(XSAN_HEADERS
   xsan_activation.h
+  xsan_interceptors.h
+  xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h
   xsan_internal.h
   )
@@ -117,9 +121,22 @@ if(NOT APPLE)
   
   add_compiler_rt_runtime(clang_rt.xsan-preinit
       STATIC
-      ARCHS ${ASAN_SUPPORTED_ARCH}
+      ARCHS ${XSAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTXsan_preinit
-      CFLAGS ${ASAN_CFLAGS}
-      DEFS ${ASAN_COMMON_DEFINITIONS}
+      CFLAGS ${XSAN_CFLAGS}
+      DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
+
+  foreach(arch ${XSAN_SUPPORTED_ARCH})
+    if (SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
+      # add_sanitizer_rt_symbols(clang_rt.xsan_cxx
+      #   ARCHS ${arch})
+      # add_dependencies(xsan clang_rt.xsan_cxx-${arch}-symbols)
+      add_sanitizer_rt_symbols(clang_rt.xsan
+        ARCHS ${arch}
+        EXTRA xsan.syms.extra)
+      add_dependencies(xsan clang_rt.xsan-${arch}-symbols)
+    endif()
+
+  endforeach()
 endif()
