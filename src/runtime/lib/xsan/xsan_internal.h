@@ -6,6 +6,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "xsan_flags.h"
 #include "xsan_interface_internal.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"

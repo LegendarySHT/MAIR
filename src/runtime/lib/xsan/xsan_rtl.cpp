@@ -1,6 +1,7 @@
 #include "xsan_activation.h"
 #include "xsan_interface_internal.h"
 #include "xsan_interceptors.h"
+#include "xsan_internal.h"
 
 namespace __xsan {
 
@@ -15,13 +16,14 @@ uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
 // -------------------------- Run-time entry ------------------- {{{1
 
 static void XsanInitInternal() {
+  InitializeFlags();
   InitializeXsanInterceptors();
 }
 
 // Initialize as requested from some part of ASan runtime library (interceptors,
 // allocator, etc).
 void XsanInitFromRtl() {
-    XsanInitInternal();
+  XsanInitInternal();
 }
 
 

@@ -2,6 +2,7 @@
 /target/*
 /build/*
 /exprs/
+/scripts/
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).

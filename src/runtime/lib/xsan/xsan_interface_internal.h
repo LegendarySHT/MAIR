@@ -16,4 +16,7 @@ extern "C" {
   // like _exit and execl to avoid false positives on stack.
   SANITIZER_INTERFACE_ATTRIBUTE void __xsan_handle_no_return();
 
+
+  SANITIZER_INTERFACE_ATTRIBUTE
+  const char *__xsan_default_options();
 }
