@@ -452,6 +452,12 @@ inline constexpr uptr RoundDownTo(uptr x, uptr boundary) {
   return x & ~(boundary - 1);
 }
 
+template<typename T>
+T RoundDown(T p, u64 align) {
+  DCHECK_EQ(align & (align - 1), 0);
+  return (T)((u64)p & ~(align - 1));
+}
+
 inline constexpr bool IsAligned(uptr a, uptr alignment) {
   return (a & (alignment - 1)) == 0;
 }
