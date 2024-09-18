@@ -53,7 +53,7 @@ void StopInitOrderChecking();
 // functions from the instrumented user code in a profile.
 namespace __xsan {
 
-class AsanThread;
+class XsanThread;
 using __sanitizer::StackTrace;
 
 void XsanInitFromRtl();
@@ -91,7 +91,7 @@ bool PlatformUnpoisonStacks();
 void UnpoisonStack(uptr bottom, uptr top, const char *type);
 
 // xsan_thread.cpp
-AsanThread *CreateMainThread();
+XsanThread *CreateMainThread();
 
 
 void ReadContextStack(void *context, uptr *stack, uptr *ssize);

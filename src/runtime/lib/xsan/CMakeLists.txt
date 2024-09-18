@@ -1,6 +1,6 @@
 # Build for the XSan runtime support library.
-set(XSAN_ASAN_SOURCES
-  ../asan/asan_allocator.cpp
+set(ASAN_SOURCES
+  # ../asan/asan_allocator.cpp
   ../asan/asan_activation.cpp
   ../asan/asan_debugging.cpp
   ../asan/asan_descriptions.cpp
@@ -30,6 +30,12 @@ set(XSAN_ASAN_SOURCES
   ../asan/asan_thread.cpp
   ../asan/asan_win.cpp
 )
+
+set(XSAN_ASAN_SOURCES
+  asan/asan_allocator.cpp
+  ${ASAN_SOURCES}
+)
+
 set(XSAN_SOURCES
   xsan_activation.cpp
   xsan_disability_dummy.cpp
@@ -68,7 +74,7 @@ set(XSAN_PREINIT_SOURCES
   xsan_preinit.cpp
   )
 
-set(XSAN_ASAN_HEADERS
+set(ASAN_HEADERS
   ../asan/asan_activation.h
   ../asan/asan_activation_flags.inc
   ../asan/asan_allocator.h
@@ -94,9 +100,14 @@ set(XSAN_ASAN_HEADERS
   ../asan/asan_suppressions.h
   ../asan/asan_thread.h
 )
+set(XSAN_ASAN_HEADERS
+  asan/asan_mapping.h
+  ${ASAN_HEADERS}
+)
 
 SET(XSAN_HEADERS
   xsan_activation.h
+  xsan_allocator.h
   xsan_flags.h
   xsan_interceptors.h
   xsan_interceptors_memintrinsics.h
@@ -106,6 +117,7 @@ SET(XSAN_HEADERS
   )
 
 include_directories(..)
+
 
 
 set(XSAN_COMMON_RUNTIME_OBJECT_LIBS
