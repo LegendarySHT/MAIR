@@ -33,6 +33,7 @@ set(ASAN_SOURCES
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
+  asan/asan_thread.cpp
   ${ASAN_SOURCES}
 )
 
@@ -45,6 +46,7 @@ set(XSAN_SOURCES
   xsan_linux.cpp
   xsan_malloc_linux.cpp
   xsan_rtl.cpp
+  xsan_thread.cpp
   ${XSAN_ASAN_SOURCES}
   )
 
@@ -77,7 +79,6 @@ set(XSAN_PREINIT_SOURCES
 set(ASAN_HEADERS
   ../asan/asan_activation.h
   ../asan/asan_activation_flags.inc
-  ../asan/asan_allocator.h
   ../asan/asan_descriptions.h
   ../asan/asan_errors.h
   ../asan/asan_fake_stack.h
@@ -99,9 +100,11 @@ set(ASAN_HEADERS
   ../asan/asan_stats.h
   ../asan/asan_suppressions.h
   ../asan/asan_thread.h
-)
+  )
 set(XSAN_ASAN_HEADERS
+  asan/asan_allocator.h
   asan/asan_mapping.h
+  asan/asan_thread.h
   ${ASAN_HEADERS}
 )
 
@@ -113,10 +116,17 @@ SET(XSAN_HEADERS
   xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h
   xsan_internal.h
+  xsan_thread.h
   ${XSAN_ASAN_HEADERS}
   )
 
-include_directories(..)
+# include_directories(..)
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/asan
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../
+    ${CMAKE_CURRENT_SOURCE_DIR}/../asan
+)
 
 
 
