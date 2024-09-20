@@ -1,20 +1,7 @@
-//===-- xsan_thread.h -------------------------------------------*- C++ -*-===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This file is a part of AddressSanitizer, an address sanity checker.
-//
-// ASan-private header for xsan_thread.cpp.
-//===----------------------------------------------------------------------===//
-
-#ifndef ASAN_THREAD_H
-#define ASAN_THREAD_H
+#pragma once
 
 #include "asan/asan_thread.h"
+#include "asan_internal.h"
 #include "xsan_allocator.h"
 #include "xsan_internal.h"
 #include "sanitizer_common/sanitizer_common.h"
@@ -25,14 +12,13 @@ namespace __sanitizer {
 struct DTLS;
 }  // namespace __sanitizer
 
-namespace __asan {
-  class AsanThread;
-}
-
 namespace __xsan {
 
 // XsanThread are stored in TSD and destroyed when the thread dies.
 class XsanThread {
+ public:
+  using StackFrameAccess = __asan::AsanThread::StackFrameAccess;
+  
  public:
   static XsanThread *Create(thread_callback_t start_routine, void *arg,
                             u32 parent_tid, StackTrace *stack, bool detached);
@@ -50,13 +36,9 @@ class XsanThread {
   uptr tls_begin() { return tls_begin_; }
   uptr tls_end() { return tls_end_; }
   DTLS *dtls() { return dtls_; }
-  // u32 tid() { return asan_thread_->tid(); }
+  u32 tid() { return asan_thread_->tid(); }
 
-  struct StackFrameAccess {
-    uptr offset;
-    uptr frame_pc;
-    const char *frame_descr;
-  };
+
   bool GetStackFrameAccessByAddr(uptr addr, StackFrameAccess *access);
 
   // Returns a pointer to the start of the stack variable's shadow memory.
@@ -75,6 +57,9 @@ class XsanThread {
   void *extra_spill_area() { return &extra_spill_area_; }
 
   void *get_arg() { return arg_; }
+
+  int destructor_iterations_;
+
 
  private:
   // NOTE: There is no XsanThread constructor. It is allocated
@@ -125,5 +110,3 @@ XsanThread *FindThreadByStackAddress(uptr addr);
 // Used to handle fork().
 void EnsureMainThreadIDIsCorrect();
 } // namespace __xsan
-
-#endif // ASAN_THREAD_H
