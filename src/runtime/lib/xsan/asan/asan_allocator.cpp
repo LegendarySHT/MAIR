@@ -249,14 +249,18 @@ void AsanMapUnmapCallback::OnUnmap(uptr p, uptr size) const {
 // platforms we care about (OSX 10.6, Android).
 // static THREADLOCAL XAllocatorCache cache;
 XAllocatorCache *GetAllocatorCache(AsanThreadLocalMallocStorage *ms) {
-  CHECK(ms);
-  return &ms->allocator_cache;
+  // CHECK(ms);
+  // return &ms->allocator_cache;
+  /// TODO: Remove this
+  UNIMPLEMENTED();
 }
 
 QuarantineCache *GetQuarantineCache(AsanThreadLocalMallocStorage *ms) {
-  CHECK(ms);
-  CHECK_LE(sizeof(QuarantineCache), sizeof(ms->quarantine_cache));
-  return reinterpret_cast<QuarantineCache *>(ms->quarantine_cache);
+  /// TODO: Remove this
+  UNIMPLEMENTED();
+  // CHECK(ms);
+  // CHECK_LE(sizeof(QuarantineCache), sizeof(ms->quarantine_cache));
+  // return reinterpret_cast<QuarantineCache *>(ms->quarantine_cache);
 }
 
 void AllocatorOptions::SetFrom(const Flags *f, const CommonFlags *cf) {
