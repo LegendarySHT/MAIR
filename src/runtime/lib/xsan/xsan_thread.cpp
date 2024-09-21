@@ -1,6 +1,8 @@
+#include "asan_internal.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "xsan_allocator.h"
 #include "xsan_interceptors.h"
+#include "xsan_internal.h"
 #include "xsan_thread.h"
 #include "xsan_stack.h"
 #include "sanitizer_common/sanitizer_common.h"
@@ -21,7 +23,7 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->start_routine_ = start_routine;
   thread->arg_ = arg;
   thread->destructor_iterations_ = GetPthreadDestructorIterations();
-
+  
   return thread;
 }
 
@@ -131,9 +133,19 @@ XsanThread *CreateMainThread() {
   XsanThread *main_thread = XsanThread::Create(
       /* start_routine */ nullptr, /* arg */ nullptr, /* parent_tid */ kMainTid,
       /* stack */ nullptr, /* detached */ true);
+  
+  /// TODO: add TSan thread support.
+  auto *asan_thread = __asan::CreateMainThread();
+  main_thread->asan_thread_ = asan_thread;
+
   SetCurrentThread(main_thread);
   main_thread->ThreadStart(internal_getpid());
   return main_thread;
+}
+
+void InitializeMainThread() {
+  XsanThread *main_thread = CreateMainThread();
+  CHECK_EQ(0, main_thread->tid());
 }
 
 // This implementation doesn't use the argument, which is just passed down

@@ -16,8 +16,33 @@ uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
 // -------------------------- Run-time entry ------------------- {{{1
 
 static void XsanInitInternal() {
+  if (LIKELY(xsan_inited)) return;
+  SanitizerToolName = "XSan";
+  CHECK(!xsan_init_is_running && "XSan init calls itself!");
+  xsan_init_is_running = true;
+
+  CacheBinaryName();
+
   InitializeFlags();
   InitializeXsanInterceptors();
+
+  XsanTSDInit(XsanTSDDtor);
+
+  InstallDeadlySignalHandlers(XsanOnDeadlySignal);
+
+  // On Linux AsanThread::ThreadStart() calls malloc() that's why xsan_inited
+  // should be set to 1 prior to initializing the threads.
+  xsan_inited = 1;
+  xsan_init_is_running = false;
+
+  InitTlsSize();
+  InitializeMainThread();
+
+  /// TODO: this is registed in ASan's initialization
+  // InstallAtExitCheckLeaks();
+
+  InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
+
 }
 
 // Initialize as requested from some part of ASan runtime library (interceptors,

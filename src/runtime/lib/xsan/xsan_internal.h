@@ -92,7 +92,10 @@ void UnpoisonStack(uptr bottom, uptr top, const char *type);
 
 // xsan_thread.cpp
 XsanThread *CreateMainThread();
+// Initialize the main thread.
+void InitializeMainThread();
 
+void XsanOnDeadlySignal(int, void *siginfo, void *context);
 
 void ReadContextStack(void *context, uptr *stack, uptr *ssize);
 void ResetContextStack(void *context);
@@ -102,6 +105,7 @@ void ResetContextStack(void *context);
 void XsanTSDInit(void (*destructor)(void *tsd));
 void *XsanTSDGet();
 void XsanTSDSet(void *tsd);
+void XsanTSDDtor(void *tsd);
 void PlatformTSDDtor(void *tsd);
 
 void AppendToErrorMessageBuffer(const char *buffer);

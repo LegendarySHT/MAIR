@@ -59,7 +59,7 @@ class XsanThread {
   void *get_arg() { return arg_; }
 
   int destructor_iterations_;
-
+  __asan::AsanThread *asan_thread_;
 
  private:
   // NOTE: There is no XsanThread constructor. It is allocated
@@ -95,7 +95,6 @@ class XsanThread {
   bool unwinding_;
   uptr extra_spill_area_;
 
-  __asan::AsanThread *asan_thread_;
 };
 
 // Returns a single instance of registry.
