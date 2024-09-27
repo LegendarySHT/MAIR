@@ -36,7 +36,7 @@ class XsanThread {
   uptr tls_begin() { return tls_begin_; }
   uptr tls_end() { return tls_end_; }
   DTLS *dtls() { return dtls_; }
-  u32 tid() { return asan_thread_->tid(); }
+  u32 tid() { return 0; }
 
 
   bool GetStackFrameAccessByAddr(uptr addr, StackFrameAccess *access);

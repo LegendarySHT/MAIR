@@ -27,13 +27,14 @@ set(ASAN_SOURCES
   ../asan/asan_stack.cpp
   ../asan/asan_stats.cpp
   ../asan/asan_suppressions.cpp
-  ../asan/asan_thread.cpp
+  # ../asan/asan_thread.cpp
   ../asan/asan_win.cpp
 )
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
   asan/asan_thread.cpp
+  asan/asan_init.cpp
   ${ASAN_SOURCES}
 )
 
@@ -105,6 +106,7 @@ set(XSAN_ASAN_HEADERS
   asan/asan_allocator.h
   asan/asan_mapping.h
   asan/asan_thread.h
+  asan/asan_init.h
   ${ASAN_HEADERS}
 )
 

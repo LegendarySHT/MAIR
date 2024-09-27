@@ -2,7 +2,7 @@
 #include "xsan_interface_internal.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
-
+#include "asan/asan_init.h"
 namespace __xsan {
 
 // -------------------------- Globals --------------------- {{{1
@@ -28,7 +28,8 @@ static void XsanInitInternal() {
 
   XsanTSDInit(XsanTSDDtor);
 
-  InstallDeadlySignalHandlers(XsanOnDeadlySignal);
+  /// TODO: figure out whether we need to replace the callback with XSan's
+  InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
 
   // On Linux AsanThread::ThreadStart() calls malloc() that's why xsan_inited
   // should be set to 1 prior to initializing the threads.
@@ -42,7 +43,7 @@ static void XsanInitInternal() {
   // InstallAtExitCheckLeaks();
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
-
+  __asan::AsanInitFromXsan();
 }
 
 // Initialize as requested from some part of ASan runtime library (interceptors,

@@ -45,6 +45,7 @@
 
 namespace __asan {
 void StopInitOrderChecking();
+void AsanOnDeadlySignal(int, void *siginfo, void *context);
 }
 
 // All internal functions in xsan reside inside the __xsan namespace
@@ -95,7 +96,7 @@ XsanThread *CreateMainThread();
 // Initialize the main thread.
 void InitializeMainThread();
 
-void XsanOnDeadlySignal(int, void *siginfo, void *context);
+// void XsanOnDeadlySignal(int, void *siginfo, void *context);
 
 void ReadContextStack(void *context, uptr *stack, uptr *ssize);
 void ResetContextStack(void *context);

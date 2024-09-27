@@ -17,6 +17,8 @@
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_flags.h"
 
+#include "asan/asan_activation.h"
+
 namespace __xsan {
 
 
@@ -32,6 +34,8 @@ void XsanDeactivate() {
 }
 
 void XsanActivate() {
+  __asan::AsanActivate();
+  
   Printf("XSAN Activating. Just for test, pending to be removed.");
   /// FIXME: xsan_is_deactivated is always false, 
   //        so the following code is never executed in preinit.
@@ -40,7 +44,6 @@ void XsanActivate() {
   VReport(1, "Activating ASan\n");
 
   xsan_is_deactivated = false;
-
 }
 
 }  // namespace __xsan
