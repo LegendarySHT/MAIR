@@ -1,7 +1,7 @@
-#include "../xsan_allocator.h"
-#include "../xsan_stack.h"
+// #include "../xsan_allocator.h"
 
 // #include "asan_mapping.h"
+#include "asan_stack.h"
 #include "asan/asan_poisoning.h"
 #include "asan/asan_report.h"
 #include "asan/asan_thread.h"
@@ -16,8 +16,8 @@
 #include "sanitizer_common/sanitizer_stackdepot.h"
 
 namespace __asan {
-using XAsanAllocator = __xsan::XsanAllocator;
-using XAllocatorCache = __xsan::AllocatorCache;
+// using XAsanAllocator = __xsan::XsanAllocator;
+// using XAllocatorCache = __xsan::AllocatorCache;
 
 // Valid redzone sizes are 16, 32, 64, ... 2048, so we encode them in 3 bits.
 // We use adaptive redzones: for larger allocation larger redzones are used.
@@ -35,7 +35,7 @@ static u32 RZSize2Log(u32 rz_size) {
   return res;
 }
 
-static XAsanAllocator &get_allocator();
+static AsanAllocator &get_allocator();
 
 static void AtomicContextStore(volatile atomic_uint64_t *atomic_context,
                                u32 tid, u32 stack) {
@@ -177,7 +177,7 @@ class LargeChunkHeader {
 };
 
 struct QuarantineCallback {
-  QuarantineCallback(XAllocatorCache *cache, BufferedStackTrace *stack)
+  QuarantineCallback(AllocatorCache *cache, BufferedStackTrace *stack)
       : cache_(cache),
         stack_(stack) {
   }
@@ -220,7 +220,7 @@ struct QuarantineCallback {
   }
 
  private:
-  XAllocatorCache* const cache_;
+  AllocatorCache* const cache_;
   BufferedStackTrace* const stack_;
 };
 
@@ -247,8 +247,8 @@ void AsanMapUnmapCallback::OnUnmap(uptr p, uptr size) const {
 
 // We can not use THREADLOCAL because it is not supported on some of the
 // platforms we care about (OSX 10.6, Android).
-// static THREADLOCAL XAllocatorCache cache;
-XAllocatorCache *GetAllocatorCache(AsanThreadLocalMallocStorage *ms) {
+// static THREADLOCAL AllocatorCache cache;
+AllocatorCache *GetAllocatorCache(AsanThreadLocalMallocStorage *ms) {
   // CHECK(ms);
   // return &ms->allocator_cache;
   /// TODO: Remove this
@@ -287,10 +287,10 @@ struct Allocator {
   static const uptr kMaxAllowedMallocSize =
       FIRST_32_SECOND_64(3UL << 30, 1ULL << 40);
 
-  XAsanAllocator allocator;
+  AsanAllocator allocator;
   AsanQuarantine quarantine;
   StaticSpinMutex fallback_mutex;
-  XAllocatorCache fallback_allocator_cache;
+  AllocatorCache fallback_allocator_cache;
   QuarantineCache fallback_quarantine_cache;
 
   uptr max_user_defined_malloc_size;
@@ -512,11 +512,11 @@ struct Allocator {
     AsanThread *t = GetCurrentThread();
     void *allocated;
     if (t) {
-      XAllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
+      AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
       allocated = allocator.Allocate(cache, needed_size, 8);
     } else {
       SpinMutexLock l(&fallback_mutex);
-      XAllocatorCache *cache = &fallback_allocator_cache;
+      AllocatorCache *cache = &fallback_allocator_cache;
       allocated = allocator.Allocate(cache, needed_size, 8);
     }
     if (UNLIKELY(!allocated)) {
@@ -640,12 +640,12 @@ struct Allocator {
     // Push into quarantine.
     if (t) {
       AsanThreadLocalMallocStorage *ms = &t->malloc_storage();
-      XAllocatorCache *ac = GetAllocatorCache(ms);
+      AllocatorCache *ac = GetAllocatorCache(ms);
       quarantine.Put(GetQuarantineCache(ms), QuarantineCallback(ac, stack), m,
                      m->UsedSize());
     } else {
       SpinMutexLock l(&fallback_mutex);
-      XAllocatorCache *ac = &fallback_allocator_cache;
+      AllocatorCache *ac = &fallback_allocator_cache;
       quarantine.Put(&fallback_quarantine_cache, QuarantineCallback(ac, stack),
                      m, m->UsedSize());
     }
@@ -739,7 +739,7 @@ struct Allocator {
   }
 
   void CommitBack(AsanThreadLocalMallocStorage *ms, BufferedStackTrace *stack) {
-    XAllocatorCache *ac = GetAllocatorCache(ms);
+    AllocatorCache *ac = GetAllocatorCache(ms);
     quarantine.Drain(GetQuarantineCache(ms), QuarantineCallback(ac, stack));
     allocator.SwallowCache(ac);
   }
@@ -843,7 +843,7 @@ struct Allocator {
 
 static Allocator instance(LINKER_INITIALIZED);
 
-static XAsanAllocator &get_allocator() {
+static AsanAllocator &get_allocator() {
   return instance.allocator;
 }
 

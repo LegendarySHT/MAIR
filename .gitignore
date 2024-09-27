@@ -17,3 +17,4 @@ pythonenv*
 .cache
 
 TODO.md
+compile_commands.json

@@ -79,7 +79,8 @@ void XsanThread::Destroy() {
   int tid = this->tid();
   VReport(1, "T%d exited\n", tid);
 
-  malloc_storage().CommitBack();
+  /// TODO: now use ASanThread to manage malloc
+  // malloc_storage().CommitBack();
 
  
   if (XsanThread *thread = GetCurrentThread())
@@ -104,7 +105,8 @@ void XsanThread::Destroy() {
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id) {
   Init();
-  xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
+  // XSanThread doesn't have a registry.
+  // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
 
   if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
 
@@ -135,8 +137,8 @@ XsanThread *CreateMainThread() {
       /* stack */ nullptr, /* detached */ true);
   
   /// TODO: add TSan thread support.
-  auto *asan_thread = __asan::CreateMainThread();
-  main_thread->asan_thread_ = asan_thread;
+  // auto *asan_thread = __asan::CreateMainThread();
+  // main_thread->asan_thread_ = asan_thread;
 
   SetCurrentThread(main_thread);
   main_thread->ThreadStart(internal_getpid());

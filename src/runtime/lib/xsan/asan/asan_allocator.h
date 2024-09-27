@@ -150,8 +150,17 @@ const uptr kAllocatorSpace = ~(uptr)0;
 const uptr kAllocatorSize  =  0x8000000000ULL;  // 500G
 typedef DefaultSizeClassMap SizeClassMap;
 # else
-const uptr kAllocatorSpace = 0x600000000000ULL;
-const uptr kAllocatorSize  =  0x40000000000ULL;  // 4T.
+// const uptr kAllocatorSpace = 0x600000000000ULL;
+// const uptr kAllocatorSize  =  0x40000000000ULL;  // 4T.
+/* 
+  Modify the heap section to avoid the confliction
+  with TSan's shadow memory.
+
+  Note that the heap allocator requires a address space to 
+  be the power of 2, so we set it to 2T.
+ */
+const uptr kAllocatorSpace = 0x610000000000ULL;
+const uptr kAllocatorSize  =  0x20000000000ULL;  // 2T.
 typedef DefaultSizeClassMap SizeClassMap;
 # endif
 template <typename AddressSpaceViewTy>
