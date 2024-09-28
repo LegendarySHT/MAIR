@@ -52,7 +52,7 @@ class XsanThread {
   bool isUnwinding() const { return unwinding_; }
   void setUnwinding(bool b) { unwinding_ = b; }
 
-  XsanThreadLocalMallocStorage &malloc_storage() { return malloc_storage_; }
+  // XsanThreadLocalMallocStorage &malloc_storage() { return malloc_storage_; }
 
   void *extra_spill_area() { return &extra_spill_area_; }
 
@@ -91,7 +91,7 @@ class XsanThread {
   uptr tls_end_;
   DTLS *dtls_;
 
-  XsanThreadLocalMallocStorage malloc_storage_;
+  // XsanThreadLocalMallocStorage malloc_storage_;
   bool unwinding_;
   uptr extra_spill_area_;
 

@@ -40,6 +40,7 @@ set(XSAN_ASAN_SOURCES
 
 set(XSAN_SOURCES
   xsan_activation.cpp
+  xsan_allocator.cpp
   xsan_disability_dummy.cpp
   xsan_flags.cpp
   xsan_interceptors.cpp

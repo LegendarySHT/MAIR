@@ -9,7 +9,7 @@ namespace __xsan {
 
 static const u32 kDefaultMallocContextSize = 30;
 
-void SetMallocContextSize(u32 size);
-u32 GetMallocContextSize();
+using __asan::GetMallocContextSize;
+using __asan::SetMallocContextSize;
 
 } // namespace __xsan
