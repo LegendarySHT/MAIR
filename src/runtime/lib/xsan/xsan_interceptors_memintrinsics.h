@@ -1,5 +1,8 @@
 #pragma once
 
+#include "asan_internal.h"
+#include "asan/asan_mapping.h"
+
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
 #include "interception/interception.h"
@@ -10,6 +13,35 @@
 DECLARE_REAL(void*, memcpy, void *to, const void *from, uptr size)
 DECLARE_REAL(void*, memset, void *block, int c, uptr size)
 
+namespace __asan {
+
+// Return true if we can quickly decide that the region is unpoisoned.
+// We assume that a redzone is at least 16 bytes.
+static inline bool AsanQuickCheckForUnpoisonedRegion(uptr beg, uptr size) {
+  if (size == 0) return true;
+  if (size <= 32)
+    return !AddressIsPoisoned(beg) &&
+           !AddressIsPoisoned(beg + size - 1) &&
+           !AddressIsPoisoned(beg + size / 2);
+  if (size <= 64)
+    return !AddressIsPoisoned(beg) &&
+           !AddressIsPoisoned(beg + size / 4) &&
+           !AddressIsPoisoned(beg + size - 1) &&
+           !AddressIsPoisoned(beg + 3 * size / 4) &&
+           !AddressIsPoisoned(beg + size / 2);
+  return false;
+}
+
+// Behavior of functions like "memcpy" or "strcpy" is undefined
+// if memory intervals overlap. We report error in this case.
+// Macro is used to avoid creation of new frames.
+static inline bool AsanRangesOverlap(const char *offset1, uptr length1,
+                                 const char *offset2, uptr length2) {
+  return !((offset1 + length1 <= offset2) || (offset2 + length2 <= offset1));
+}
+
+}
+
 namespace __xsan {
 
 
@@ -17,9 +49,59 @@ struct XsanInterceptorContext {
   const char *interceptor_name;
 };
 
+#define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2)   \
+  do {                                                                     \
+    const char *offset1 = (const char *)_offset1;                          \
+    const char *offset2 = (const char *)_offset2;                          \
+    if (__asan::AsanRangesOverlap(offset1, length1, offset2, length2)) {               \
+      GET_STACK_TRACE_FATAL_HERE;                                          \
+      bool suppressed = __asan::IsInterceptorSuppressed(name);                     \
+      if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {              \
+        suppressed = __asan::IsStackTraceSuppressed(&stack);                       \
+      }                                                                    \
+      if (!suppressed) {                                                   \
+        __asan::ReportStringFunctionMemoryRangesOverlap(name, offset1, length1,    \
+                                                offset2, length2, &stack); \
+      }                                                                    \
+    }                                                                      \
+  } while (0)
+
+// We implement ACCESS_MEMORY_RANGE, ASAN_READ_RANGE,
+// and ASAN_WRITE_RANGE as macro instead of function so
+// that no extra frames are created, and stack trace contains
+// relevant information only.
+// We check all shadow bytes.
+#define ASAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite) do {            \
+    uptr __offset = (uptr)(offset);                                     \
+    uptr __size = (uptr)(size);                                         \
+    uptr __bad = 0;                                                     \
+    if (__offset > __offset + __size) {                                 \
+      GET_STACK_TRACE_FATAL_HERE;                                       \
+      __asan::ReportStringFunctionSizeOverflow(__offset, __size, &stack);       \
+    }                                                                   \
+    if (!__asan::AsanQuickCheckForUnpoisonedRegion(__offset, __size) &&             \
+        (__bad = __asan_region_is_poisoned(__offset, __size))) {        \
+      XsanInterceptorContext *_ctx = (XsanInterceptorContext *)ctx;     \
+      bool suppressed = false;                                          \
+      if (_ctx) {                                                       \
+        suppressed = __asan::IsInterceptorSuppressed(_ctx->interceptor_name);   \
+        if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {         \
+          GET_STACK_TRACE_FATAL_HERE;                                   \
+          suppressed = __asan::IsStackTraceSuppressed(&stack);                  \
+        }                                                               \
+      }                                                                 \
+      if (!suppressed) {                                                \
+        GET_CURRENT_PC_BP_SP;                                           \
+        __asan::ReportGenericError(pc, bp, sp, __bad, isWrite, __size, 0, false);\
+      }                                                                 \
+    }                                                                   \
+  } while (0)
+
+
+
 /// TODO: Implement this
-#define ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite) do {            \
-    (void)ctx;                                                          \
+#define XSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite) do {       \
+    ASAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite);               \
   } while (0)
 
 // memcpy is called during __xsan_init() from the internals of printf(...).
@@ -62,23 +144,10 @@ struct XsanInterceptorContext {
   } while (0)
 
 #define XSAN_READ_RANGE(ctx, offset, size) \
-  ACCESS_MEMORY_RANGE(ctx, offset, size, false)
+  XSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, false)
 #define XSAN_WRITE_RANGE(ctx, offset, size) \
-  ACCESS_MEMORY_RANGE(ctx, offset, size, true)
+  XSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, true)
 
-// Behavior of functions like "memcpy" or "strcpy" is undefined
-// if memory intervals overlap. We report error in this case.
-// Macro is used to avoid creation of new frames.
-static inline bool RangesOverlap(const char *offset1, uptr length1,
-                                 const char *offset2, uptr length2) {
-  return !((offset1 + length1 <= offset2) || (offset2 + length2 <= offset1));
-}
-
-/// TODO: Implement this
-#define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2)   \
-  do {                                                                     \
-    (void)name;                                                            \
-  } while (0)
 
 }  // namespace __xsan
 

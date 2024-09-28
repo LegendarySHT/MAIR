@@ -1,4 +1,10 @@
+#include "asan_internal.h"
+#include "asan_report.h"
+#include "asan_suppressions.h"
+
 #include "xsan_interceptors.h"
+#include "xsan_internal.h"
+#include "xsan_stack.h"
 #include "lsan/lsan_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
 

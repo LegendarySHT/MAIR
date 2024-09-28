@@ -1,3 +1,7 @@
+#include "asan_report.h"
+#include "asan_stack.h"
+#include "asan_suppressions.h"
+
 #include "xsan_interceptors.h"
 
 
