@@ -308,10 +308,10 @@ void AsanInitFromXsan() {
   // interceptors
 //   InitTlsSize();
 
-  /// TODO: use unified XSanThread! Now we use ASanThread temporarily
   // Create main thread.
-  AsanThread *main_thread = CreateMainThread();
-  CHECK_EQ(0, main_thread->tid());
+  // AsanThread *main_thread = CreateMainThread();
+  // CHECK_EQ(0, main_thread->tid());
+  
   force_interface_symbols();  // no-op.
   SanitizerInitializeUnwinder();
 

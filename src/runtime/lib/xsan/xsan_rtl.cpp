@@ -31,10 +31,6 @@ static void XsanInitInternal() {
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
 
-  // We need to initialize ASan before xsan::InitializeMainThread() because
-  // the latter call asan::GetCurrentThread to get the main thread of ASan.
-  __asan::AsanInitFromXsan();
-
   // On Linux AsanThread::ThreadStart() calls malloc() that's why xsan_inited
   // should be set to 1 prior to initializing the threads.
   xsan_inited = 1;
@@ -42,6 +38,11 @@ static void XsanInitInternal() {
 
   InitTlsSize();
   InitializeMainThread();
+
+  // We need to initialize ASan before xsan::InitializeMainThread() because
+  // the latter call asan::GetCurrentThread to get the main thread of ASan.
+  __asan::AsanInitFromXsan();
+
 
   /// TODO: this is registed in ASan's initialization
   // InstallAtExitCheckLeaks();

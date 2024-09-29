@@ -23,7 +23,13 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->start_routine_ = start_routine;
   thread->arg_ = arg;
   thread->destructor_iterations_ = GetPthreadDestructorIterations();
+
+  /// TODO: add TSan thread support.
+  auto *asan_thread = __asan::AsanThread::Create(  
+      /* start_routine */ nullptr, /* arg */ nullptr, 
+      /* parent_tid */ kMainTid, /* stack */ nullptr, /* detached */ true);
   
+  thread->asan_thread_ = asan_thread;
   return thread;
 }
 
@@ -63,7 +69,6 @@ void XsanThread::Init(const InitOptions *options) {
   atomic_store(&stack_switching_, false, memory_order_release);
   CHECK_EQ(this->stack_size(), 0U);
   SetThreadStackAndTls(options);
-  ClearShadowForThreadStackAndTLS();
   int local = 0;
   VReport(1, "T%d: stack [%p,%p) size 0x%zx; local=%p\n", tid(),
           (void *)stack_bottom_, (void *)stack_top_, stack_top_ - stack_bottom_,
@@ -76,26 +81,21 @@ void XsanThread::TSDDtor(void *tsd) {
 }
 
 void XsanThread::Destroy() {
-  int tid = this->tid();
-  VReport(1, "T%d exited\n", tid);
-
   /// TODO: now use ASanThread to manage malloc
   // malloc_storage().CommitBack();
 
- 
   if (XsanThread *thread = GetCurrentThread())
     CHECK_EQ(this, thread);
-  if (common_flags()->use_sigaltstack)
-    UnsetAlternateSignalStack();
 
-  // We also clear the shadow on thread destruction because
-  // some code may still be executing in later TSD destructors
-  // and we don't want it to have any poisoned stack.
-  ClearShadowForThreadStackAndTLS();
+  /// Now only ASan uses this, so let's consider it as ASan's exclusive resource. 
+  // if (common_flags()->use_sigaltstack)
+  //   UnsetAlternateSignalStack();
 
   uptr size = RoundUpTo(sizeof(XsanThread), GetPageSizeCached());
   UnmapOrDie(this, size);
 
+  this->asan_thread_->Destroy();
+  // Common resource, must be managed by the XSan
   DTLS_Destroy();
 }
 
@@ -108,7 +108,8 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id) {
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
 
-  if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
+  /// Now only ASan uses this, so let's consider it as ASan's exclusive resource. 
+  // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
 
   if (!start_routine_) {
     // start_routine_ == 0 if we're on the main thread or on one of the
@@ -136,11 +137,8 @@ XsanThread *CreateMainThread() {
       /* start_routine */ nullptr, /* arg */ nullptr, /* parent_tid */ kMainTid,
       /* stack */ nullptr, /* detached */ true);
   
-  /// TODO: add TSan thread support.
-  auto *asan_thread = __asan::GetCurrentThread();
-  main_thread->asan_thread_ = asan_thread;
-
   SetCurrentThread(main_thread);
+
   main_thread->ThreadStart(internal_getpid());
   return main_thread;
 }
@@ -171,9 +169,6 @@ void XsanThread::SetThreadStackAndTls(const InitOptions *options) {
 
 #endif  // !SANITIZER_FUCHSIA
 
-void XsanThread::ClearShadowForThreadStackAndTLS() {
-  asan_thread_->ClearShadowForThreadStackAndTLS();
-}
 
 bool XsanThread::GetStackFrameAccessByAddr(uptr addr,
                                            StackFrameAccess *access) {
@@ -220,6 +215,7 @@ XsanThread *GetCurrentThread() {
 }
 
 void SetCurrentThread(XsanThread *t) {
+  __asan::SetCurrentThread(t->asan_thread_);
   // Make sure we do not reset the current XsanThread.
   CHECK_EQ(0, xsan_current_thread);
   xsan_current_thread = t;
@@ -238,7 +234,7 @@ XsanThread *FindThreadByStackAddress(uptr addr) {
 }
 
 void EnsureMainThreadIDIsCorrect() {
-
+  __asan::EnsureMainThreadIDIsCorrect();
 }
 
 __xsan::XsanThread *GetXsanThreadByOsIDLocked(tid_t os_id) {

@@ -10,16 +10,17 @@
 
 namespace __sanitizer {
 struct DTLS;
-}  // namespace __sanitizer
+} // namespace __sanitizer
 
 namespace __xsan {
 
+/// FIXME: Should we actually need such a complex class?
 // XsanThread are stored in TSD and destroyed when the thread dies.
 class XsanThread {
- public:
+public:
   using StackFrameAccess = __asan::AsanThread::StackFrameAccess;
-  
- public:
+
+public:
   static XsanThread *Create(thread_callback_t start_routine, void *arg,
                             u32 parent_tid, StackTrace *stack, bool detached);
   static void TSDDtor(void *tsd);
@@ -36,8 +37,7 @@ class XsanThread {
   uptr tls_begin() { return tls_begin_; }
   uptr tls_end() { return tls_end_; }
   DTLS *dtls() { return dtls_; }
-  u32 tid() { return 0; }
-
+  u32 tid() { return asan_thread_->tid(); }
 
   bool GetStackFrameAccessByAddr(uptr addr, StackFrameAccess *access);
 
@@ -61,13 +61,11 @@ class XsanThread {
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
 
- private:
+private:
   // NOTE: There is no XsanThread constructor. It is allocated
   // via mmap() and *must* be valid in zero-initialized state.
 
   void SetThreadStackAndTls(const InitOptions *options);
-
-  void ClearShadowForThreadStackAndTLS();
 
   struct StackBounds {
     uptr bottom;
@@ -94,11 +92,8 @@ class XsanThread {
   // XsanThreadLocalMallocStorage malloc_storage_;
   bool unwinding_;
   uptr extra_spill_area_;
-
 };
 
-// Returns a single instance of registry.
-ThreadRegistry &xsanThreadRegistry();
 
 // Get the current thread. May return 0.
 XsanThread *GetCurrentThread();
