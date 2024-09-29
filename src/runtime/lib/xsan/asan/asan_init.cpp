@@ -279,8 +279,8 @@ void AsanInitFromXsan() {
 
   InitializeShadowMemory();
 
-//   AsanTSDInit(PlatformTSDDtor);
-  InstallDeadlySignalHandlers(AsanOnDeadlySignal);
+  AsanTSDInit(PlatformTSDDtor);
+  // InstallDeadlySignalHandlers(AsanOnDeadlySignal);
 
   /// Use Asan wrapper allocator and XSan inner allocator
   AllocatorOptions allocator_options;
@@ -311,7 +311,7 @@ void AsanInitFromXsan() {
   // Create main thread.
   // AsanThread *main_thread = CreateMainThread();
   // CHECK_EQ(0, main_thread->tid());
-  
+
   force_interface_symbols();  // no-op.
   SanitizerInitializeUnwinder();
 

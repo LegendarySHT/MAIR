@@ -36,13 +36,18 @@ static void XsanInitInternal() {
   xsan_inited = 1;
   xsan_init_is_running = false;
 
-  InitTlsSize();
-  InitializeMainThread();
 
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   __asan::AsanInitFromXsan();
 
+  // Initialize main thread after __asan::AsanInitFromXsan() because it
+  // Because we need to wait __asan::AsanTSDInit() to be called.
+  InitializeMainThread();
+
+  // This function call interceptors, so it should be called after, 
+  // waiting for __asan::AsanTSDInit() finished.
+  InitTlsSize();
 
   /// TODO: this is registed in ASan's initialization
   // InstallAtExitCheckLeaks();
