@@ -259,6 +259,17 @@ void AsanThread::Init(const InitOptions *options) {
 // asan_fuchsia.c definies CreateMainThread and SetThreadStackAndTls.
 #if !SANITIZER_FUCHSIA
 
+void AsanThread::BeforeThreadStart(tid_t os_id) {
+  Init();
+  asanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
+  
+  if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
+}
+
+
+void AsanThread::AfterThreadStart() { }
+
+
 thread_return_t AsanThread::ThreadStart(tid_t os_id) {
   Init();
   asanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);

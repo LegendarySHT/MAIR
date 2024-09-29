@@ -1,4 +1,5 @@
 #include "asan/orig/asan_internal.h"
+#include "asan/asan_thread.h"
 #include <sanitizer_common/sanitizer_internal_defs.h>
 #include "xsan_allocator.h"
 #include "xsan_interceptors.h"
@@ -107,6 +108,7 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id) {
   Init();
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
+  asan_thread_->BeforeThreadStart(os_id);
 
   /// Now only ASan uses this, so let's consider it as ASan's exclusive resource. 
   // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
@@ -120,6 +122,8 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id) {
   }
 
   thread_return_t res = start_routine_(arg_);
+
+  asan_thread_->AfterThreadStart();
 
   // On POSIX systems we defer this to the TSD destructor. LSan will consider
   // the thread's memory as non-live from the moment we call Destroy(), even

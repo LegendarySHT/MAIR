@@ -72,7 +72,11 @@ class AsanThread {
   struct InitOptions;
   void Init(const InitOptions *options = nullptr);
 
+  /// Part of ThreadStart, exposed for xsan.
+  void BeforeThreadStart(tid_t os_id);
   thread_return_t ThreadStart(tid_t os_id);
+  /// Part of ThreadStart, exposed for xsan.
+  void AfterThreadStart();
 
   uptr stack_top();
   uptr stack_bottom();

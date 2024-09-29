@@ -118,8 +118,10 @@ void AsanThread::Destroy() {
   }
   uptr size = RoundUpTo(sizeof(AsanThread), GetPageSizeCached());
   UnmapOrDie(this, size);
-  if (was_running)
-    DTLS_Destroy();
+  
+  /// DTLS is a common resource, so move its control to the XSan
+  // if (was_running)
+  //   DTLS_Destroy();
 }
 
 void AsanThread::StartSwitchFiber(FakeStack **fake_stack_save, uptr bottom,
