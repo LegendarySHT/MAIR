@@ -4,9 +4,9 @@
 #include "asan_internal.h"
 #include "xsan_allocator.h"
 #include "xsan_internal.h"
-#include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_libc.h"
-#include "sanitizer_common/sanitizer_thread_registry.h"
+#include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_libc.h>
+#include <sanitizer_common/sanitizer_thread_registry.h>
 
 namespace __sanitizer {
 struct DTLS;

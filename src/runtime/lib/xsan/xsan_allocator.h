@@ -4,9 +4,9 @@
 #include "xsan_flags.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
-#include "sanitizer_common/sanitizer_allocator.h"
-#include "sanitizer_common/sanitizer_list.h"
-#include "sanitizer_common/sanitizer_platform.h"
+#include <sanitizer_common/sanitizer_allocator.h>
+#include <sanitizer_common/sanitizer_list.h>
+#include <sanitizer_common/sanitizer_platform.h>
 
 namespace __xsan {
 

@@ -1,13 +1,13 @@
-#include "sanitizer_common/sanitizer_platform.h"
+#include <sanitizer_common/sanitizer_platform.h>
 #if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
     SANITIZER_SOLARIS
 
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
-#include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_freebsd.h"
-#include "sanitizer_common/sanitizer_libc.h"
-#include "sanitizer_common/sanitizer_procmaps.h"
+#include <sanitizer_common/sanitizer_flags.h>
+#include <sanitizer_common/sanitizer_freebsd.h>
+#include <sanitizer_common/sanitizer_libc.h>
+#include <sanitizer_common/sanitizer_procmaps.h>
 
 #include <sys/time.h>
 #include <sys/resource.h>

@@ -3,8 +3,8 @@
 #include "xsan_internal.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "interception/interception.h"
-#include "sanitizer_common/sanitizer_platform.h"
-#include "sanitizer_common/sanitizer_platform_interceptors.h"
+#include <sanitizer_common/sanitizer_platform.h>
+#include <sanitizer_common/sanitizer_platform_interceptors.h>
 
 namespace __xsan {
 

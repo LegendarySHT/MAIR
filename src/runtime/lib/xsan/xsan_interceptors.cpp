@@ -6,7 +6,7 @@
 #include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "lsan/lsan_common.h"
-#include "sanitizer_common/sanitizer_libc.h"
+#include <sanitizer_common/sanitizer_libc.h>
 
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
@@ -14,7 +14,7 @@
 #if !SANITIZER_FUCHSIA
 
 #  if SANITIZER_POSIX
-#    include "sanitizer_common/sanitizer_posix.h"
+#    include <sanitizer_common/sanitizer_posix.h>
 #  endif
 
 #  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION || \
@@ -167,8 +167,8 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
   __lsan::ScopedInterceptorDisabler disabler
 #endif
 
-#include "sanitizer_common/sanitizer_common_interceptors.inc"
-#include "sanitizer_common/sanitizer_signal_interceptors.inc"
+#include <sanitizer_common/sanitizer_common_interceptors.inc>
+#include <sanitizer_common/sanitizer_signal_interceptors.inc>
 
 // Syscall interceptors don't have contexts, we don't support suppressions
 // for them.
@@ -184,8 +184,8 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     (void)(p);                                \
     (void)(s);                                \
   } while (false)
-#include "sanitizer_common/sanitizer_common_syscalls.inc"
-#include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
+#include <sanitizer_common/sanitizer_common_syscalls.inc>
+#include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
 
 #if XSAN_INTERCEPT_PTHREAD_CREATE
 // static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {

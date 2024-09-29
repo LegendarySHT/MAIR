@@ -16,9 +16,9 @@
 #include "xsan_interface_internal.h"
 #include "xsan_stack.h"
 #include "lsan/lsan_common.h"
-#include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_flag_parser.h"
+#include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_flags.h>
+#include <sanitizer_common/sanitizer_flag_parser.h>
 #include "ubsan/ubsan_flags.h"
 #include "ubsan/ubsan_platform.h"
 

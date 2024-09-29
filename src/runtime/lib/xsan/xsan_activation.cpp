@@ -14,8 +14,8 @@
 #include "xsan_activation.h"
 #include "xsan_internal.h"
 
-#include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_flags.h"
+#include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_flags.h>
 
 #include "asan/orig/asan_activation.h"
 

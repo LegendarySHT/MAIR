@@ -4,7 +4,7 @@
 # error "Only 64-bit is supported"
 #endif
 
-#include "sanitizer_common/sanitizer_common.h"
+#include <sanitizer_common/sanitizer_common.h>
 
 namespace __xsan {
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "sanitizer_common/sanitizer_internal_defs.h"
-#include "sanitizer_common/sanitizer_flag_parser.h"
+#include <sanitizer_common/sanitizer_internal_defs.h>
+#include <sanitizer_common/sanitizer_flag_parser.h>
 
 // XSan flag values can be defined in four ways:
 // 1) initialized with default values at startup.

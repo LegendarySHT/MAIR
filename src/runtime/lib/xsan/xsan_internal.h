@@ -8,10 +8,10 @@
 
 #include "xsan_flags.h"
 #include "xsan_interface_internal.h"
-#include "sanitizer_common/sanitizer_common.h"
-#include "sanitizer_common/sanitizer_internal_defs.h"
-#include "sanitizer_common/sanitizer_libc.h"
-#include "sanitizer_common/sanitizer_stacktrace.h"
+#include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_internal_defs.h>
+#include <sanitizer_common/sanitizer_libc.h>
+#include <sanitizer_common/sanitizer_stacktrace.h>
 
 // #if defined(__SANITIZE_ADDRESS__)
 // #  error \

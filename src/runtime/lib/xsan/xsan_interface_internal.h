@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sanitizer_common/sanitizer_internal_defs.h"
+#include <sanitizer_common/sanitizer_internal_defs.h>
 
 
 using __sanitizer::uptr;

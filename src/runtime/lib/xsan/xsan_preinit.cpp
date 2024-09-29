@@ -5,7 +5,7 @@
 // Call __xsan_init at the very early stage of process startup.
 //===----------------------------------------------------------------------===//
 
-#include "sanitizer_common/sanitizer_internal_defs.h"
+#include <sanitizer_common/sanitizer_internal_defs.h>
 
 #if SANITIZER_CAN_USE_PREINIT_ARRAY
 

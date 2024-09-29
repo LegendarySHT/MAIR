@@ -1,8 +1,8 @@
 /// TODO: implement this file
 
 
-#include "sanitizer_common/sanitizer_allocator_internal.h"
-#include "sanitizer_common/sanitizer_platform.h"
+#include <sanitizer_common/sanitizer_allocator_internal.h>
+#include <sanitizer_common/sanitizer_platform.h>
 #if SANITIZER_FREEBSD || SANITIZER_FUCHSIA || SANITIZER_LINUX || \
     SANITIZER_NETBSD || SANITIZER_SOLARIS
 
@@ -12,10 +12,10 @@
 #  include "xsan_interceptors.h"
 #  include "xsan_internal.h"
 #  include "lsan/lsan_common.h"
-#  include "sanitizer_common/sanitizer_allocator_checks.h"
-#  include "sanitizer_common/sanitizer_allocator_dlsym.h"
-#  include "sanitizer_common/sanitizer_errno.h"
-#  include "sanitizer_common/sanitizer_tls_get_addr.h"
+#  include <sanitizer_common/sanitizer_allocator_checks.h>
+#  include <sanitizer_common/sanitizer_allocator_dlsym.h>
+#  include <sanitizer_common/sanitizer_errno.h>
+#  include <sanitizer_common/sanitizer_tls_get_addr.h>
 
 
 // ---------------------- Replacement functions ---------------- {{{1

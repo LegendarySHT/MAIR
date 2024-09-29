@@ -17,9 +17,9 @@
 #include "asan_flags.h"
 #include "asan_interceptors.h"
 #include "asan_internal.h"
-#include "sanitizer_common/sanitizer_allocator.h"
-#include "sanitizer_common/sanitizer_list.h"
-#include "sanitizer_common/sanitizer_platform.h"
+#include <sanitizer_common/sanitizer_allocator.h>
+#include <sanitizer_common/sanitizer_list.h>
+#include <sanitizer_common/sanitizer_platform.h>
 
 namespace __asan {
 
