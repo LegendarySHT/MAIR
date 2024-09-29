@@ -68,7 +68,7 @@ void NOINLINE __xsan_handle_no_return() {
     return;
   
   /// TODO: complete handle_no_return
-
+  __asan_handle_no_return();
 }
 
 

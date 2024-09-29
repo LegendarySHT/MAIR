@@ -1,10 +1,13 @@
+#include "asan/orig/asan_flags.h"
 #include "asan/orig/asan_internal.h"
+#include "asan/orig/asan_poisoning.h"
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
 
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
+#include "xsan_thread.h"
 #include "lsan/lsan_common.h"
 #include <sanitizer_common/sanitizer_libc.h>
 
@@ -46,11 +49,11 @@ static inline uptr MaybeRealStrnlen(const char *s, uptr maxlen) {
   return internal_strnlen(s, maxlen);
 }
 
-/// FIXME: does Xsan need this?
 void SetThreadName(const char *name) {
-//   AsanThread *t = GetCurrentThread();
-//   if (t)
-//     asanThreadRegistry().SetThreadName(t->tid(), name);
+  XsanThread *t = GetCurrentThread();
+  if (t) {
+    t->setThreadName(name);
+  }
 }
 
 int OnExit() {
@@ -74,14 +77,10 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
   XsanInterceptorContext _ctx = {#func};                                       \
   ctx = (void *)&_ctx;                                                         \
   (void) ctx;                                                                  \
-
-/// FIXME: ASan:
-//    if (flags()->strict_init_order)               
-//         StopInitOrderChecking();                    
+            
 #define XSAN_BEFORE_DLOPEN(filename, flag) \
-    ({                                              \
-        (void)filename; \
-    })
+  if (__asan::flags()->strict_init_order)      \
+    __asan::StopInitOrderChecking();           \
 
 #define COMMON_INTERCEPT_FUNCTION(name) XSAN_INTERCEPT_FUNC(name)
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
@@ -135,14 +134,13 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()
 #  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!xsan_inited)
 
-/// FIXME:
-// #  define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end) \
-//     if (AsanThread *t = GetCurrentThread()) {          \
-//       *begin = t->tls_begin();                         \
-//       *end = t->tls_end();                             \
-//     } else {                                           \
-//       *begin = *end = 0;                               \
-//     }
+#  define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end) \
+    if (XsanThread *t = GetCurrentThread()) {          \
+      *begin = t->tls_begin();                         \
+      *end = t->tls_end();                             \
+    } else {                                           \
+      *begin = *end = 0;                               \
+    }
 
 #define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
   do {                                                       \
@@ -188,19 +186,48 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
 
 #if XSAN_INTERCEPT_PTHREAD_CREATE
-// static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
-//   AsanThread *t = (AsanThread *)arg;
-//   SetCurrentThread(t);
-//   return t->ThreadStart(GetTid());
-// }
+static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
+  XsanThread *t = (XsanThread *)arg;
+  SetCurrentThread(t);
+  return t->ThreadStart(GetTid());
+}
 
 INTERCEPTOR(int, pthread_create, void *thread,
     void *attr, void *(*start_routine)(void*), void *arg) {
+  EnsureMainThreadIDIsCorrect();
+
+  /// TODO: Extract this to a separate function?
+  // Strict init-order checking is thread-hostile.
+  if (__asan::flags()->strict_init_order)
+    __asan::StopInitOrderChecking();
+
+  GET_STACK_TRACE_THREAD;
+  int detached = 0;
+  if (attr)
+    REAL(pthread_attr_getdetachstate)(attr, &detached);
+
+  u32 current_tid = GetCurrentTidOrInvalid();
+  XsanThread *t =
+      XsanThread::Create(start_routine, arg, current_tid, &stack, detached);
+
   int result;
   /// FIXME: scope needed for __lsan::ScopedInterceptorDisabler
   /// FIXME: param modified!
   {
-    result = REAL(pthread_create)(thread, attr, start_routine, arg);
+    // Ignore all allocations made by pthread_create: thread stack/TLS may be
+    // stored by pthread for future reuse even after thread destruction, and
+    // the linked list it's stored in doesn't even hold valid pointers to the
+    // objects, the latter are calculated by obscure pointer arithmetic.
+#if CAN_SANITIZE_LEAKS
+    __lsan::ScopedInterceptorDisabler disabler;
+#endif
+    result = REAL(pthread_create)(thread, attr, xsan_thread_start, t);
+  }
+  if (result != 0) {
+    // If the thread didn't start delete the AsanThread to avoid leaking it.
+    // Note AsanThreadContexts never get destroyed so the AsanThreadContext
+    // that was just created for the AsanThread is wasted.
+    t->Destroy();
   }
   return result;
 }
@@ -213,20 +240,20 @@ DEFINE_REAL_PTHREAD_FUNCTIONS
 #endif  // XSAN_INTERCEPT_PTHREAD_CREATE
 
 #if XSAN_INTERCEPT_SWAPCONTEXT
-// static void ClearShadowMemoryForContextStack(uptr stack, uptr ssize) {
-//   // Only clear if we know the stack. This should be true only for contexts
-//   // created with makecontext().
-//   if (!ssize)
-//     return;
-//   // Align to page size.
-//   uptr PageSize = GetPageSizeCached();
-//   uptr bottom = RoundDownTo(stack, PageSize);
-//   if (!AddrIsInMem(bottom))
-//     return;
-//   ssize += stack - bottom;
-//   ssize = RoundUpTo(ssize, PageSize);
-//   PoisonShadow(bottom, ssize, 0);
-// }
+static void ClearShadowMemoryForContextStack(uptr stack, uptr ssize) {
+  // Only clear if we know the stack. This should be true only for contexts
+  // created with makecontext().
+  if (!ssize)
+    return;
+  // Align to page size.
+  uptr PageSize = GetPageSizeCached();
+  uptr bottom = RoundDownTo(stack, PageSize);
+  if (!__asan::AddrIsInMem(bottom))
+    return;
+  ssize += stack - bottom;
+  ssize = RoundUpTo(ssize, PageSize);
+  __asan::PoisonShadow(bottom, ssize, 0);
+}
 
 INTERCEPTOR(int, getcontext, struct ucontext_t *ucp) {
   // API does not requires to have ucp clean, and sets only part of fields. We
@@ -238,6 +265,24 @@ INTERCEPTOR(int, getcontext, struct ucontext_t *ucp) {
 
 INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp,
             struct ucontext_t *ucp) {
+  // --------------------- ASan part ----------------------------
+  static bool reported_warning = false;
+  if (!reported_warning) {
+    Report("WARNING: ASan doesn't fully support makecontext/swapcontext "
+           "functions and may produce false positives in some cases!\n");
+    reported_warning = true;
+  }
+  // Clear shadow memory for new context (it may share stack
+  // with current context).
+  uptr stack, ssize;
+  ReadContextStack(ucp, &stack, &ssize);
+  ClearShadowMemoryForContextStack(stack, ssize);
+
+  // See getcontext interceptor.
+  ResetContextStack(oucp);
+
+  // -----------------------------------------------------------
+
 #    if __has_attribute(__indirect_return__) && \
         (defined(__x86_64__) || defined(__i386__))
   int (*real_swapcontext)(struct ucontext_t *, struct ucontext_t *)
@@ -246,6 +291,17 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp,
 #    else
   int res = REAL(swapcontext)(oucp, ucp);
 #    endif
+
+  // --------------------- ASan part ----------------------------
+
+  // swapcontext technically does not return, but program may swap context to
+  // "oucp" later, that would look as if swapcontext() returned 0.
+  // We need to clear shadow for ucp once again, as it may be in arbitrary
+  // state.
+  ClearShadowMemoryForContextStack(stack, ssize);
+
+  // -----------------------------------------------------------
+
   return res;
 }
 #endif  // XSAN_INTERCEPT_SWAPCONTEXT
@@ -335,20 +391,20 @@ INTERCEPTOR(char *, strcat, char *to, const char *from) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strcat);
   ENSURE_XSAN_INITED();  
-
-  uptr from_length = internal_strlen(from);
-  XSAN_READ_RANGE(ctx, from, from_length + 1);
-  uptr to_length = internal_strlen(to);
-  XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
-  XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
-    // If the copying actually happens, the |from| string should not overlap
-    // with the resulting string starting at |to|, which has a length of
-    // to_length + from_length + 1.
-  if (from_length > 0) {
-    CHECK_RANGES_OVERLAP("strcat", to, from_length + to_length + 1, from,
-                            from_length + 1);
+  if (__asan::flags()->replace_str) {
+    uptr from_length = internal_strlen(from);
+    XSAN_READ_RANGE(ctx, from, from_length + 1);
+    uptr to_length = internal_strlen(to);
+    XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
+    XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
+      // If the copying actually happens, the |from| string should not overlap
+      // with the resulting string starting at |to|, which has a length of
+      // to_length + from_length + 1.
+    if (from_length > 0) {
+      CHECK_RANGES_OVERLAP("strcat", to, from_length + to_length + 1, from,
+                              from_length + 1);
+    }
   }
-    
   return REAL(strcat)(to, from);
 }
 
@@ -356,15 +412,17 @@ INTERCEPTOR(char*, strncat, char *to, const char *from, uptr size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncat);
   ENSURE_XSAN_INITED();
-  uptr from_length = MaybeRealStrnlen(from, size);
-  uptr copy_length = Min(size, from_length + 1);
-  XSAN_READ_RANGE(ctx, from, copy_length);
-  uptr to_length = internal_strlen(to);
-  XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
-  XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
-  if (from_length > 0) {
-    CHECK_RANGES_OVERLAP("strncat", to, to_length + copy_length + 1,
-                           from, copy_length);
+  if (__asan::flags()->replace_str) {
+    uptr from_length = MaybeRealStrnlen(from, size);
+    uptr copy_length = Min(size, from_length + 1);
+    XSAN_READ_RANGE(ctx, from, copy_length);
+    uptr to_length = internal_strlen(to);
+    XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
+    XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
+    if (from_length > 0) {
+      CHECK_RANGES_OVERLAP("strncat", to, to_length + copy_length + 1,
+                            from, copy_length);
+    }
   }
   return REAL(strncat)(to, from, size);
 }
@@ -382,10 +440,12 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
     return REAL(strcpy)(to, from);
   }
   ENSURE_XSAN_INITED();
-  uptr from_size = internal_strlen(from) + 1;
-  CHECK_RANGES_OVERLAP("strcpy", to, from_size, from, from_size);
-  XSAN_READ_RANGE(ctx, from, from_size);
-  XSAN_WRITE_RANGE(ctx, to, from_size);
+  if (__asan::flags()->replace_str) {
+    uptr from_size = internal_strlen(from) + 1;
+    CHECK_RANGES_OVERLAP("strcpy", to, from_size, from, from_size);
+    XSAN_READ_RANGE(ctx, from, from_size);
+    XSAN_WRITE_RANGE(ctx, to, from_size);
+  }
   return REAL(strcpy)(to, from);
 }
 
@@ -395,12 +455,13 @@ INTERCEPTOR(char*, strdup, const char *s) {
   if (UNLIKELY(!xsan_inited)) return internal_strdup(s);
   ENSURE_XSAN_INITED();
   uptr length = internal_strlen(s);
-  XSAN_READ_RANGE(ctx, s, length + 1);
-  /// TODO: FIX this
-//   GET_STACK_TRACE_MALLOC;
-//   void *new_mem = xsan_malloc(length + 1, &stack);
-//   REAL(memcpy)(new_mem, s, length + 1);
-//   return reinterpret_cast<char*>(new_mem);
+  if (__asan::flags()->replace_str) {
+    XSAN_READ_RANGE(ctx, s, length + 1);
+  }
+  GET_STACK_TRACE_MALLOC;
+  void *new_mem = xsan_malloc(length + 1, &stack);
+  REAL(memcpy)(new_mem, s, length + 1);
+  return reinterpret_cast<char*>(new_mem);
   return REAL(strdup)(s);
 }
 
@@ -411,12 +472,13 @@ INTERCEPTOR(char*, __strdup, const char *s) {
   if (UNLIKELY(!xsan_inited)) return internal_strdup(s);
   ENSURE_XSAN_INITED();
   uptr length = internal_strlen(s);
-  XSAN_READ_RANGE(ctx, s, length + 1);
-  /// TODO: FIX this
-//   GET_STACK_TRACE_MALLOC;
-//   void *new_mem = xsan_malloc(length + 1, &stack);
-//   REAL(memcpy)(new_mem, s, length + 1);
-//   return reinterpret_cast<char*>(new_mem);
+  if (__asan::flags()->replace_str) {
+    XSAN_READ_RANGE(ctx, s, length + 1);
+  }
+  GET_STACK_TRACE_MALLOC;
+  void *new_mem = xsan_malloc(length + 1, &stack);
+  REAL(memcpy)(new_mem, s, length + 1);
+  return reinterpret_cast<char*>(new_mem);
   return REAL(__strdup)(s);
 }
 #endif // XSAN_INTERCEPT___STRDUP
@@ -425,10 +487,12 @@ INTERCEPTOR(char*, strncpy, char *to, const char *from, uptr size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncpy);
   ENSURE_XSAN_INITED();
-  uptr from_size = Min(size, MaybeRealStrnlen(from, size) + 1);
-  CHECK_RANGES_OVERLAP("strncpy", to, from_size, from, from_size);
-  XSAN_READ_RANGE(ctx, from, from_size);
-  XSAN_WRITE_RANGE(ctx, to, size);
+  if (__asan::flags()->replace_str) {
+    uptr from_size = Min(size, MaybeRealStrnlen(from, size) + 1);
+    CHECK_RANGES_OVERLAP("strncpy", to, from_size, from, from_size);
+    XSAN_READ_RANGE(ctx, from, from_size);
+    XSAN_WRITE_RANGE(ctx, to, size);
+  }
   return REAL(strncpy)(to, from, size);
 }
 
@@ -436,9 +500,9 @@ INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strtol);
   ENSURE_XSAN_INITED();
-//   if (!flags()->replace_str) {
-//     return REAL(strtol)(nptr, endptr, base);
-//   }
+  if (!__asan::flags()->replace_str) {
+    return REAL(strtol)(nptr, endptr, base);
+  }
   char *real_endptr;
   long result = REAL(strtol)(nptr, &real_endptr, base);
   StrtolFixAndCheck(ctx, nptr, endptr, real_endptr, base);
@@ -452,9 +516,9 @@ INTERCEPTOR(int, atoi, const char *nptr) {
   if (UNLIKELY(!xsan_inited)) return REAL(atoi)(nptr);
 #endif
   ENSURE_XSAN_INITED();
-//   if (!flags()->replace_str) {
-//     return REAL(atoi)(nptr);
-//   }
+  if (!__asan::flags()->replace_str) {
+    return REAL(atoi)(nptr);
+  }
   char *real_endptr;
   // "man atoi" tells that behavior of atoi(nptr) is the same as
   // strtol(nptr, 0, 10), i.e. it sets errno to ERANGE if the
@@ -473,9 +537,9 @@ INTERCEPTOR(long, atol, const char *nptr) {
   if (UNLIKELY(!xsan_inited)) return REAL(atol)(nptr);
 #endif
   ENSURE_XSAN_INITED();
-//   if (!flags()->replace_str) {
-//     return REAL(atol)(nptr);
-//   }
+  if (!__asan::flags()->replace_str) {
+    return REAL(atol)(nptr);
+  }
   char *real_endptr;
   long result = REAL(strtol)(nptr, &real_endptr, 10);
   FixRealStrtolEndptr(nptr, &real_endptr);
@@ -488,9 +552,9 @@ INTERCEPTOR(long long, strtoll, const char *nptr, char **endptr, int base) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strtoll);
   ENSURE_XSAN_INITED();
-//   if (!flags()->replace_str) {
-//     return REAL(strtoll)(nptr, endptr, base);
-//   }
+  if (!__asan::flags()->replace_str) {
+    return REAL(strtoll)(nptr, endptr, base);
+  }
   char *real_endptr;
   long long result = REAL(strtoll)(nptr, &real_endptr, base);
   StrtolFixAndCheck(ctx, nptr, endptr, real_endptr, base);
@@ -501,9 +565,9 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atoll);
   ENSURE_XSAN_INITED();
-//   if (!flags()->replace_str) {
-//     return REAL(atoll)(nptr);
-//   }
+  if (!__asan::flags()->replace_str) {
+    return REAL(atoll)(nptr);
+  }
   char *real_endptr;
   long long result = REAL(strtoll)(nptr, &real_endptr, 10);
   FixRealStrtolEndptr(nptr, &real_endptr);

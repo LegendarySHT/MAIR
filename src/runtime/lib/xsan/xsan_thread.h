@@ -58,6 +58,8 @@ public:
 
   void *get_arg() { return arg_; }
 
+  void setThreadName(const char *name);
+
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
 

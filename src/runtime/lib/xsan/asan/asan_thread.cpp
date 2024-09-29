@@ -306,6 +306,7 @@ AsanThread *CreateMainThread() {
   return main_thread;
 }
 
+/// TODO: Remove this function because the functionality is lifted to XSan
 // This implementation doesn't use the argument, which is just passed down
 // from the caller of Init (which see, above).  It's only there to support
 // OS-specific implementations that need more information passed through.

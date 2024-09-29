@@ -105,10 +105,11 @@ void XsanThread::Destroy() {
 #if !SANITIZER_FUCHSIA
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id) {
-  Init();
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
   asan_thread_->BeforeThreadStart(os_id);
+
+  Init();
 
   /// Now only ASan uses this, so let's consider it as ASan's exclusive resource. 
   // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
@@ -241,10 +242,25 @@ void EnsureMainThreadIDIsCorrect() {
   __asan::EnsureMainThreadIDIsCorrect();
 }
 
+/// Seems this function is not useful for XSan.
+/// ASan use threadContextRegistry to map os_id to AsanThreadContext, and futher
+/// map AsanThreadContext to AsanThread.
+/// XSan does not use such a registry. And the sole purpose of this function is
+/// used in LSan, which has been already integrated into ASan.
 __xsan::XsanThread *GetXsanThreadByOsIDLocked(tid_t os_id) {
   /// TODO: If migrate LSan to XSan, we need to implement this function.
   UNIMPLEMENTED();
 }
+
+
+void XsanThread::setThreadName(const char *name) {
+  auto *asan_thread = this->asan_thread_;
+  if (asan_thread) {
+    __asan::asanThreadRegistry().SetThreadName(asan_thread->tid(), name);
+  }
+
+}
+
 } // namespace __xsan
 
 // --- Implementation of LSan-specific functions --- {{{1
