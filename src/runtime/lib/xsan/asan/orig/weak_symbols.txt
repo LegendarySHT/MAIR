@@ -1,0 +1,1 @@
+../../../asan/weak_symbols.txt
