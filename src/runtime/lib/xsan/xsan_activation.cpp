@@ -12,15 +12,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "xsan_activation.h"
-#include "xsan_internal.h"
 
 #include <sanitizer_common/sanitizer_common.h>
 #include <sanitizer_common/sanitizer_flags.h>
 
 #include "asan/orig/asan_activation.h"
+#include "xsan_internal.h"
 
 namespace __xsan {
-
 
 static bool xsan_is_deactivated;
 
@@ -29,18 +28,18 @@ void XsanDeactivate() {
 
   VReport(1, "Deactivating XSan\n");
 
-
   xsan_is_deactivated = true;
 }
 
 void XsanActivate() {
   __asan::AsanActivate();
-  
+
   Printf("XSAN Activating. Just for test, pending to be removed.\n");
-  /// FIXME: xsan_is_deactivated is always false, 
+  /// FIXME: xsan_is_deactivated is always false,
   //        so the following code is never executed in preinit.
   //       ASan faces the same problem.
-  if (!xsan_is_deactivated) return;
+  if (!xsan_is_deactivated)
+    return;
   VReport(1, "Activating XSan\n");
 
   xsan_is_deactivated = false;

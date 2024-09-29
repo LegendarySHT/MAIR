@@ -1,17 +1,19 @@
-#include "asan/orig/asan_internal.h"
-#include "asan/asan_thread.h"
-#include <sanitizer_common/sanitizer_internal_defs.h>
-#include "xsan_allocator.h"
-#include "xsan_interceptors.h"
-#include "xsan_internal.h"
 #include "xsan_thread.h"
-#include "xsan_stack.h"
+
+#include <pthread.h>
 #include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_internal_defs.h>
 #include <sanitizer_common/sanitizer_placement_new.h>
 #include <sanitizer_common/sanitizer_stackdepot.h>
 #include <sanitizer_common/sanitizer_tls_get_addr.h>
+
+#include "asan/asan_thread.h"
+#include "asan/orig/asan_internal.h"
 #include "lsan/lsan_common.h"
-#include <pthread.h>
+#include "xsan_allocator.h"
+#include "xsan_interceptors.h"
+#include "xsan_internal.h"
+#include "xsan_stack.h"
 
 namespace __xsan {
 
@@ -20,25 +22,25 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
                                bool detached) {
   uptr PageSize = GetPageSizeCached();
   uptr size = RoundUpTo(sizeof(XsanThread), PageSize);
-  XsanThread *thread = (XsanThread*)MmapOrDie(size, __func__);
+  XsanThread *thread = (XsanThread *)MmapOrDie(size, __func__);
   thread->start_routine_ = start_routine;
   thread->arg_ = arg;
   thread->destructor_iterations_ = GetPthreadDestructorIterations();
 
   /// TODO: add TSan thread support.
-  auto *asan_thread = __asan::AsanThread::Create(  
-      /* start_routine */ nullptr, /* arg */ nullptr, 
+  auto *asan_thread = __asan::AsanThread::Create(
+      /* start_routine */ nullptr, /* arg */ nullptr,
       /* parent_tid */ kMainTid, /* stack */ nullptr, /* detached */ true);
-  
+
   thread->asan_thread_ = asan_thread;
   return thread;
 }
 
-
 inline XsanThread::StackBounds XsanThread::GetStackBounds() const {
   if (!atomic_load(&stack_switching_, memory_order_acquire)) {
     // Make sure the stack bounds are fully initialized.
-    if (stack_bottom_ >= stack_top_) return {0, 0};
+    if (stack_bottom_ >= stack_top_)
+      return {0, 0};
     return {stack_bottom_, stack_top_};
   }
   char local;
@@ -51,19 +53,14 @@ inline XsanThread::StackBounds XsanThread::GetStackBounds() const {
   return {stack_bottom_, stack_top_};
 }
 
-uptr XsanThread::stack_top() {
-  return GetStackBounds().top;
-}
+uptr XsanThread::stack_top() { return GetStackBounds().top; }
 
-uptr XsanThread::stack_bottom() {
-  return GetStackBounds().bottom;
-}
+uptr XsanThread::stack_bottom() { return GetStackBounds().bottom; }
 
 uptr XsanThread::stack_size() {
   const auto bounds = GetStackBounds();
   return bounds.top - bounds.bottom;
 }
-
 
 void XsanThread::Init(const InitOptions *options) {
   next_stack_top_ = next_stack_bottom_ = 0;
@@ -77,7 +74,7 @@ void XsanThread::Init(const InitOptions *options) {
 }
 
 void XsanThread::TSDDtor(void *tsd) {
-  XsanThread *t = (XsanThread*)tsd;
+  XsanThread *t = (XsanThread *)tsd;
   t->Destroy();
 }
 
@@ -88,7 +85,8 @@ void XsanThread::Destroy() {
   if (XsanThread *thread = GetCurrentThread())
     CHECK_EQ(this, thread);
 
-  /// Now only ASan uses this, so let's consider it as ASan's exclusive resource. 
+  /// Now only ASan uses this, so let's consider it as ASan's exclusive
+  /// resource.
   // if (common_flags()->use_sigaltstack)
   //   UnsetAlternateSignalStack();
 
@@ -106,12 +104,14 @@ void XsanThread::Destroy() {
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id) {
   // XSanThread doesn't have a registry.
-  // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);
+  // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular,
+  // nullptr);
   asan_thread_->BeforeThreadStart(os_id);
 
   Init();
 
-  /// Now only ASan uses this, so let's consider it as ASan's exclusive resource. 
+  /// Now only ASan uses this, so let's consider it as ASan's exclusive
+  /// resource.
   // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
 
   if (!start_routine_) {
@@ -141,7 +141,7 @@ XsanThread *CreateMainThread() {
   XsanThread *main_thread = XsanThread::Create(
       /* start_routine */ nullptr, /* arg */ nullptr, /* parent_tid */ kMainTid,
       /* stack */ nullptr, /* detached */ true);
-  
+
   SetCurrentThread(main_thread);
 
   main_thread->ThreadStart(internal_getpid());
@@ -174,7 +174,6 @@ void XsanThread::SetThreadStackAndTls(const InitOptions *options) {
 
 #endif  // !SANITIZER_FUCHSIA
 
-
 bool XsanThread::GetStackFrameAccessByAddr(uptr addr,
                                            StackFrameAccess *access) {
   return asan_thread_->GetStackFrameAccessByAddr(addr, access);
@@ -189,7 +188,6 @@ bool XsanThread::AddrIsInStack(uptr addr) {
   return addr >= bounds.bottom && addr < bounds.top;
 }
 
-
 static pthread_key_t tsd_key;
 static bool tsd_key_inited = false;
 
@@ -199,11 +197,10 @@ void XsanTSDInit(void (*destructor)(void *tsd)) {
   CHECK_EQ(0, pthread_key_create(&tsd_key, destructor));
 }
 
-
-static THREADLOCAL XsanThread* xsan_current_thread;
+static THREADLOCAL XsanThread *xsan_current_thread;
 
 void XsanTSDDtor(void *tsd) {
-  XsanThread *t = (XsanThread*)tsd;
+  XsanThread *t = (XsanThread *)tsd;
   if (t->destructor_iterations_ > 1) {
     t->destructor_iterations_--;
     CHECK_EQ(0, pthread_setspecific(tsd_key, tsd));
@@ -215,9 +212,7 @@ void XsanTSDDtor(void *tsd) {
   XsanThread::TSDDtor(tsd);
 }
 
-XsanThread *GetCurrentThread() {
-  return xsan_current_thread;
-}
+XsanThread *GetCurrentThread() { return xsan_current_thread; }
 
 void SetCurrentThread(XsanThread *t) {
   __asan::SetCurrentThread(t->asan_thread_);
@@ -234,13 +229,9 @@ u32 GetCurrentTidOrInvalid() {
   return t ? t->tid() : kInvalidTid;
 }
 
-XsanThread *FindThreadByStackAddress(uptr addr) {
-  UNIMPLEMENTED();
-}
+XsanThread *FindThreadByStackAddress(uptr addr) { UNIMPLEMENTED(); }
 
-void EnsureMainThreadIDIsCorrect() {
-  __asan::EnsureMainThreadIDIsCorrect();
-}
+void EnsureMainThreadIDIsCorrect() { __asan::EnsureMainThreadIDIsCorrect(); }
 
 /// Seems this function is not useful for XSan.
 /// ASan use threadContextRegistry to map os_id to AsanThreadContext, and futher
@@ -252,16 +243,14 @@ __xsan::XsanThread *GetXsanThreadByOsIDLocked(tid_t os_id) {
   UNIMPLEMENTED();
 }
 
-
 void XsanThread::setThreadName(const char *name) {
   auto *asan_thread = this->asan_thread_;
   if (asan_thread) {
     __asan::asanThreadRegistry().SetThreadName(asan_thread->tid(), name);
   }
-
 }
 
-} // namespace __xsan
+}  // namespace __xsan
 
 // --- Implementation of LSan-specific functions --- {{{1
 namespace __lsan {
@@ -312,11 +301,9 @@ namespace __lsan {
 // void EnsureMainThreadIDIsCorrect() {
 //   __xsan::EnsureMainThreadIDIsCorrect();
 // }
-} // namespace __lsan
+}  // namespace __lsan
 
 // ---------------------- Interface ---------------- {{{1
 using namespace __xsan;
 
-extern "C" {
-
-}
+extern "C" {}

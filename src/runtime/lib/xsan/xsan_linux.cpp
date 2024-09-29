@@ -2,53 +2,53 @@
 #if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
     SANITIZER_SOLARIS
 
-#include "xsan_interceptors.h"
-#include "xsan_internal.h"
-#include <sanitizer_common/sanitizer_flags.h>
-#include <sanitizer_common/sanitizer_freebsd.h>
-#include <sanitizer_common/sanitizer_libc.h>
-#include <sanitizer_common/sanitizer_procmaps.h>
+#  include <dlfcn.h>
+#  include <fcntl.h>
+#  include <limits.h>
+#  include <pthread.h>
+#  include <sanitizer_common/sanitizer_flags.h>
+#  include <sanitizer_common/sanitizer_freebsd.h>
+#  include <sanitizer_common/sanitizer_libc.h>
+#  include <sanitizer_common/sanitizer_procmaps.h>
+#  include <stdio.h>
+#  include <sys/mman.h>
+#  include <sys/resource.h>
+#  include <sys/syscall.h>
+#  include <sys/time.h>
+#  include <sys/types.h>
+#  include <unistd.h>
+#  include <unwind.h>
 
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <sys/mman.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <dlfcn.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <unwind.h>
+#  include "xsan_interceptors.h"
+#  include "xsan_internal.h"
 
-#if SANITIZER_FREEBSD
-#include <sys/link_elf.h>
-#endif
+#  if SANITIZER_FREEBSD
+#    include <sys/link_elf.h>
+#  endif
 
-#if SANITIZER_SOLARIS
-#include <link.h>
-#endif
+#  if SANITIZER_SOLARIS
+#    include <link.h>
+#  endif
 
-#if SANITIZER_ANDROID || SANITIZER_FREEBSD || SANITIZER_SOLARIS
-#include <ucontext.h>
-extern "C" void* _DYNAMIC;
-#elif SANITIZER_NETBSD
-#include <link_elf.h>
-#include <ucontext.h>
+#  if SANITIZER_ANDROID || SANITIZER_FREEBSD || SANITIZER_SOLARIS
+#    include <ucontext.h>
+extern "C" void *_DYNAMIC;
+#  elif SANITIZER_NETBSD
+#    include <link_elf.h>
+#    include <ucontext.h>
 extern Elf_Dyn _DYNAMIC;
-#else
-#include <sys/ucontext.h>
-#include <link.h>
+#  else
+#    include <link.h>
+#    include <sys/ucontext.h>
 extern ElfW(Dyn) _DYNAMIC[];
-#endif
+#  endif
 
 // x86-64 FreeBSD 9.2 and older define 'ucontext_t' incorrectly in
 // 32-bit mode.
-#if SANITIZER_FREEBSD && (SANITIZER_WORDSIZE == 32) && \
-  __FreeBSD_version <= 902001  // v9.2
-#define ucontext_t xucontext_t
-#endif
+#  if SANITIZER_FREEBSD && (SANITIZER_WORDSIZE == 32) && \
+      __FreeBSD_version <= 902001  // v9.2
+#    define ucontext_t xucontext_t
+#  endif
 
 typedef enum {
   XSAN_RT_VERSION_UNDEFINED = 0,
@@ -59,21 +59,21 @@ typedef enum {
 // FIXME: perhaps also store abi version here?
 extern "C" {
 SANITIZER_INTERFACE_ATTRIBUTE
-xsan_rt_version_t  __xsan_rt_version;
+xsan_rt_version_t __xsan_rt_version;
 }
 
 namespace __xsan {
 
 void InitializePlatformInterceptors() {}
 void InitializePlatformExceptionHandlers() {}
-bool IsSystemHeapAddress (uptr addr) { return false; }
+bool IsSystemHeapAddress(uptr addr) { return false; }
 
 void *XsanDoesNotSupportStaticLinkage() {
   // This will fail to link with -static.
   return &_DYNAMIC;
 }
 
-#if XSAN_PREMAP_SHADOW
+#  if XSAN_PREMAP_SHADOW
 uptr FindPremappedShadowStart(uptr shadow_size_bytes) {
   uptr granularity = GetMmapGranularity();
   uptr shadow_start = reinterpret_cast<uptr>(&__xsan_shadow);
@@ -83,7 +83,7 @@ uptr FindPremappedShadowStart(uptr shadow_size_bytes) {
   UnmapFromTo(shadow_start + shadow_size, shadow_start + premap_shadow_size);
   return shadow_start;
 }
-#endif
+#  endif
 
 // uptr FindDynamicShadowStart() {
 //   uptr shadow_size_bytes = MemToShadowSize(kHighMemEnd);
@@ -106,11 +106,11 @@ uptr FindPremappedShadowStart(uptr shadow_size_bytes) {
 //   ReleaseMemoryPagesToOS(MemToShadow(p), MemToShadow(p + size));
 // }
 
-#if SANITIZER_ANDROID
+#  if SANITIZER_ANDROID
 // FIXME: should we do anything for Android?
 void XsanCheckDynamicRTPrereqs() {}
 void XsanCheckIncompatibleRT() {}
-#else
+#  else
 static int FindFirstDSOCallback(struct dl_phdr_info *info, size_t size,
                                 void *data) {
   VReport(2, "info->dlpi_name = %s\tinfo->dlpi_addr = %p\n", info->dlpi_name,
@@ -139,7 +139,7 @@ static int FindFirstDSOCallback(struct dl_phdr_info *info, size_t size,
 
 static bool IsDynamicRTName(const char *libname) {
   return internal_strstr(libname, "libclang_rt.xsan") ||
-    internal_strstr(libname, "libxsan.so");
+         internal_strstr(libname, "libxsan.so");
 }
 
 static void ReportIncompatibleRT() {
@@ -148,16 +148,17 @@ static void ReportIncompatibleRT() {
 }
 
 void XsanCheckDynamicRTPrereqs() {
-//   if (!XSAN_DYNAMIC || !flags()->verify_xsan_link_order)
-//     return;
+  //   if (!XSAN_DYNAMIC || !flags()->verify_xsan_link_order)
+  //     return;
 
   // Ensure that dynamic RT is the first DSO in the list
   const char *first_dso_name = nullptr;
   dl_iterate_phdr(FindFirstDSOCallback, &first_dso_name);
   if (first_dso_name && first_dso_name[0] && !IsDynamicRTName(first_dso_name)) {
-    Report("XSan runtime does not come first in initial library list; "
-           "you should either link runtime to your application or "
-           "manually preload it with LD_PRELOAD.\n");
+    Report(
+        "XSan runtime does not come first in initial library list; "
+        "you should either link runtime to your application or "
+        "manually preload it with LD_PRELOAD.\n");
     Die();
   }
 }
@@ -175,13 +176,14 @@ void XsanCheckIncompatibleRT() {
       // as early as possible, otherwise XSan interceptors could bind to
       // the functions in dynamic XSan runtime instead of the functions in
       // system libraries, causing crashes later in XSan initialization.
-      MemoryMappingLayout proc_maps(/*cache_enabled*/true);
+      MemoryMappingLayout proc_maps(/*cache_enabled*/ true);
       char filename[PATH_MAX];
       MemoryMappedSegment segment(filename, sizeof(filename));
       while (proc_maps.Next(&segment)) {
         if (IsDynamicRTName(segment.filename)) {
-          Report("Your application is linked against "
-                 "incompatible XSan runtimes.\n");
+          Report(
+              "Your application is linked against "
+              "incompatible XSan runtimes.\n");
           Die();
         }
       }
@@ -191,11 +193,11 @@ void XsanCheckIncompatibleRT() {
     }
   }
 }
-#endif // SANITIZER_ANDROID
+#  endif  // SANITIZER_ANDROID
 
-#if !SANITIZER_ANDROID
+#  if !SANITIZER_ANDROID
 void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
-  ucontext_t *ucp = (ucontext_t*)context;
+  ucontext_t *ucp = (ucontext_t *)context;
   *stack = (uptr)ucp->uc_stack.ss_sp;
   *ssize = ucp->uc_stack.ss_size;
 }
@@ -213,9 +215,7 @@ void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
 void ResetContextStack(void *context) { UNIMPLEMENTED(); }
 #  endif
 
-void *XsanDlSymNext(const char *sym) {
-  return dlsym(RTLD_NEXT, sym);
-}
+void *XsanDlSymNext(const char *sym) { return dlsym(RTLD_NEXT, sym); }
 
 bool HandleDlopenInit() {
   // Not supported on this platform.
@@ -224,7 +224,7 @@ bool HandleDlopenInit() {
   return false;
 }
 
-} // namespace __xsan
+}  // namespace __xsan
 
 #endif  // SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD ||
         // SANITIZER_SOLARIS

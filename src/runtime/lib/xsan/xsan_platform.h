@@ -1,7 +1,7 @@
 #pragma once
 
 #if !defined(__LP64__) && !defined(_WIN64)
-# error "Only 64-bit is supported"
+#  error "Only 64-bit is supported"
 #endif
 
 #include <sanitizer_common/sanitizer_common.h>
@@ -51,18 +51,18 @@ struct Mapping48AddressSpace {
   static const uptr kMetaShadowBeg = 0x300000000000ull;
   static const uptr kMetaShadowEnd = 0x340000000000ull;
 
-  static const uptr kHeapMemBeg    = 0x7b0000000000ull;
-  static const uptr kHeapMemEnd    = 0x7c0000000000ull;
-  static const uptr kLoAppMemBeg   = 0x000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x008000000000ull;
-  static const uptr kMidAppMemBeg  = 0x550000000000ull;
-  static const uptr kMidAppMemEnd  = 0x568000000000ull;
-  static const uptr kHiAppMemBeg   = 0x7e8000000000ull;
-  static const uptr kHiAppMemEnd   = 0x800000000000ull;
+  static const uptr kHeapMemBeg = 0x7b0000000000ull;
+  static const uptr kHeapMemEnd = 0x7c0000000000ull;
+  static const uptr kLoAppMemBeg = 0x000000001000ull;
+  static const uptr kLoAppMemEnd = 0x008000000000ull;
+  static const uptr kMidAppMemBeg = 0x550000000000ull;
+  static const uptr kMidAppMemEnd = 0x568000000000ull;
+  static const uptr kHiAppMemBeg = 0x7e8000000000ull;
+  static const uptr kHiAppMemEnd = 0x800000000000ull;
   static const uptr kShadowMsk = 0x780000000000ull;
   static const uptr kShadowXor = 0x040000000000ull;
   static const uptr kShadowAdd = 0x000000000000ull;
-  static const uptr kVdsoBeg       = 0xf000000000000000ull;
+  static const uptr kVdsoBeg = 0xf000000000000000ull;
 };
 
 /*
@@ -85,18 +85,18 @@ struct MappingMips64_40 {
   static const uptr kMetaShadowEnd = 0x5000000000ull;
   static const uptr kShadowBeg = 0x1200000000ull;
   static const uptr kShadowEnd = 0x2200000000ull;
-  static const uptr kHeapMemBeg    = 0xfe00000000ull;
-  static const uptr kHeapMemEnd    = 0xff00000000ull;
-  static const uptr kLoAppMemBeg   = 0x0100000000ull;
-  static const uptr kLoAppMemEnd   = 0x0200000000ull;
-  static const uptr kMidAppMemBeg  = 0xaa00000000ull;
-  static const uptr kMidAppMemEnd  = 0xab00000000ull;
-  static const uptr kHiAppMemBeg   = 0xff80000000ull;
-  static const uptr kHiAppMemEnd   = 0xffffffffffull;
+  static const uptr kHeapMemBeg = 0xfe00000000ull;
+  static const uptr kHeapMemEnd = 0xff00000000ull;
+  static const uptr kLoAppMemBeg = 0x0100000000ull;
+  static const uptr kLoAppMemEnd = 0x0200000000ull;
+  static const uptr kMidAppMemBeg = 0xaa00000000ull;
+  static const uptr kMidAppMemEnd = 0xab00000000ull;
+  static const uptr kHiAppMemBeg = 0xff80000000ull;
+  static const uptr kHiAppMemEnd = 0xffffffffffull;
   static const uptr kShadowMsk = 0xf800000000ull;
   static const uptr kShadowXor = 0x0800000000ull;
   static const uptr kShadowAdd = 0x0000000000ull;
-  static const uptr kVdsoBeg       = 0xfffff00000ull;
+  static const uptr kVdsoBeg = 0xfffff00000ull;
 };
 
 /*
@@ -111,20 +111,20 @@ C/C++ on Darwin/iOS/ARM64 (36-bit VMA, 64 GB VM)
 0e00 0000 00 - 1000 0000 00: -
 */
 struct MappingAppleAarch64 {
-  static const uptr kLoAppMemBeg   = 0x0100000000ull;
-  static const uptr kLoAppMemEnd   = 0x0200000000ull;
-  static const uptr kHeapMemBeg    = 0x0200000000ull;
-  static const uptr kHeapMemEnd    = 0x0300000000ull;
-  static const uptr kShadowBeg     = 0x0400000000ull;
+  static const uptr kLoAppMemBeg = 0x0100000000ull;
+  static const uptr kLoAppMemEnd = 0x0200000000ull;
+  static const uptr kHeapMemBeg = 0x0200000000ull;
+  static const uptr kHeapMemEnd = 0x0300000000ull;
+  static const uptr kShadowBeg = 0x0400000000ull;
   static const uptr kShadowEnd = 0x0800000000ull;
   static const uptr kMetaShadowBeg = 0x0d00000000ull;
   static const uptr kMetaShadowEnd = 0x0e00000000ull;
-  static const uptr kHiAppMemBeg   = 0x0fc0000000ull;
-  static const uptr kHiAppMemEnd   = 0x0fc0000000ull;
+  static const uptr kHiAppMemBeg = 0x0fc0000000ull;
+  static const uptr kHiAppMemEnd = 0x0fc0000000ull;
   static const uptr kShadowMsk = 0x0ull;
   static const uptr kShadowXor = 0x0ull;
   static const uptr kShadowAdd = 0x0200000000ull;
-  static const uptr kVdsoBeg       = 0x7000000000000000ull;
+  static const uptr kVdsoBeg = 0x7000000000000000ull;
   static const uptr kMidAppMemBeg = 0;
   static const uptr kMidAppMemEnd = 0;
 };
@@ -143,22 +143,22 @@ C/C++ on linux/aarch64 (39-bit VMA)
 7d00 0000 00 - 7fff ffff ff: modules and main thread stack
 */
 struct MappingAarch64_39 {
-  static const uptr kLoAppMemBeg   = 0x0000001000ull;
-  static const uptr kLoAppMemEnd   = 0x0100000000ull;
+  static const uptr kLoAppMemBeg = 0x0000001000ull;
+  static const uptr kLoAppMemEnd = 0x0100000000ull;
   static const uptr kShadowBeg = 0x0400000000ull;
   static const uptr kShadowEnd = 0x1000000000ull;
   static const uptr kMetaShadowBeg = 0x3100000000ull;
   static const uptr kMetaShadowEnd = 0x3400000000ull;
-  static const uptr kMidAppMemBeg  = 0x5500000000ull;
+  static const uptr kMidAppMemBeg = 0x5500000000ull;
   static const uptr kMidAppMemEnd = 0x5600000000ull;
-  static const uptr kHeapMemBeg    = 0x7c00000000ull;
-  static const uptr kHeapMemEnd    = 0x7d00000000ull;
-  static const uptr kHiAppMemBeg   = 0x7e00000000ull;
-  static const uptr kHiAppMemEnd   = 0x7fffffffffull;
+  static const uptr kHeapMemBeg = 0x7c00000000ull;
+  static const uptr kHeapMemEnd = 0x7d00000000ull;
+  static const uptr kHiAppMemBeg = 0x7e00000000ull;
+  static const uptr kHiAppMemEnd = 0x7fffffffffull;
   static const uptr kShadowMsk = 0x7800000000ull;
   static const uptr kShadowXor = 0x0200000000ull;
   static const uptr kShadowAdd = 0x0000000000ull;
-  static const uptr kVdsoBeg       = 0x7f00000000ull;
+  static const uptr kVdsoBeg = 0x7f00000000ull;
 };
 
 /*
@@ -176,41 +176,41 @@ C/C++ on linux/aarch64 (42-bit VMA)
 */
 struct MappingAarch64_42 {
   static const uptr kBroken = kBrokenReverseMapping;
-  static const uptr kLoAppMemBeg   = 0x00000001000ull;
-  static const uptr kLoAppMemEnd   = 0x01000000000ull;
+  static const uptr kLoAppMemBeg = 0x00000001000ull;
+  static const uptr kLoAppMemEnd = 0x01000000000ull;
   static const uptr kShadowBeg = 0x08000000000ull;
   static const uptr kShadowEnd = 0x10000000000ull;
   static const uptr kMetaShadowBeg = 0x26000000000ull;
   static const uptr kMetaShadowEnd = 0x28000000000ull;
-  static const uptr kMidAppMemBeg  = 0x2aa00000000ull;
+  static const uptr kMidAppMemBeg = 0x2aa00000000ull;
   static const uptr kMidAppMemEnd = 0x2ab00000000ull;
-  static const uptr kHeapMemBeg    = 0x3e000000000ull;
-  static const uptr kHeapMemEnd    = 0x3f000000000ull;
-  static const uptr kHiAppMemBeg   = 0x3f000000000ull;
-  static const uptr kHiAppMemEnd   = 0x3ffffffffffull;
+  static const uptr kHeapMemBeg = 0x3e000000000ull;
+  static const uptr kHeapMemEnd = 0x3f000000000ull;
+  static const uptr kHiAppMemBeg = 0x3f000000000ull;
+  static const uptr kHiAppMemEnd = 0x3ffffffffffull;
   static const uptr kShadowMsk = 0x3c000000000ull;
   static const uptr kShadowXor = 0x04000000000ull;
   static const uptr kShadowAdd = 0x00000000000ull;
-  static const uptr kVdsoBeg       = 0x37f00000000ull;
+  static const uptr kVdsoBeg = 0x37f00000000ull;
 };
 
 struct MappingAarch64_48 {
-  static const uptr kLoAppMemBeg   = 0x0000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x0000200000000ull;
+  static const uptr kLoAppMemBeg = 0x0000000001000ull;
+  static const uptr kLoAppMemEnd = 0x0000200000000ull;
   static const uptr kShadowBeg = 0x0001000000000ull;
   static const uptr kShadowEnd = 0x0002000000000ull;
   static const uptr kMetaShadowBeg = 0x0005000000000ull;
   static const uptr kMetaShadowEnd = 0x0006000000000ull;
-  static const uptr kMidAppMemBeg  = 0x0aaaa00000000ull;
+  static const uptr kMidAppMemBeg = 0x0aaaa00000000ull;
   static const uptr kMidAppMemEnd = 0x0aaaf00000000ull;
-  static const uptr kHeapMemBeg    = 0x0ffff00000000ull;
-  static const uptr kHeapMemEnd    = 0x0ffff00000000ull;
-  static const uptr kHiAppMemBeg   = 0x0ffff00000000ull;
-  static const uptr kHiAppMemEnd   = 0x1000000000000ull;
+  static const uptr kHeapMemBeg = 0x0ffff00000000ull;
+  static const uptr kHeapMemEnd = 0x0ffff00000000ull;
+  static const uptr kHiAppMemBeg = 0x0ffff00000000ull;
+  static const uptr kHiAppMemEnd = 0x1000000000000ull;
   static const uptr kShadowMsk = 0x0fff800000000ull;
   static const uptr kShadowXor = 0x0000800000000ull;
   static const uptr kShadowAdd = 0x0000000000000ull;
-  static const uptr kVdsoBeg       = 0xffff000000000ull;
+  static const uptr kVdsoBeg = 0xffff000000000ull;
 };
 
 /*
@@ -230,18 +230,18 @@ struct MappingPPC64_44 {
       kBrokenMapping | kBrokenReverseMapping | kBrokenLinearity;
   static const uptr kMetaShadowBeg = 0x0b0000000000ull;
   static const uptr kMetaShadowEnd = 0x0d0000000000ull;
-  static const uptr kShadowBeg     = 0x000100000000ull;
-  static const uptr kShadowEnd     = 0x0b0000000000ull;
-  static const uptr kLoAppMemBeg   = 0x000000000100ull;
-  static const uptr kLoAppMemEnd   = 0x000100000000ull;
-  static const uptr kHeapMemBeg    = 0x0f0000000000ull;
-  static const uptr kHeapMemEnd    = 0x0f5000000000ull;
-  static const uptr kHiAppMemBeg   = 0x0f6000000000ull;
-  static const uptr kHiAppMemEnd   = 0x100000000000ull; // 44 bits
+  static const uptr kShadowBeg = 0x000100000000ull;
+  static const uptr kShadowEnd = 0x0b0000000000ull;
+  static const uptr kLoAppMemBeg = 0x000000000100ull;
+  static const uptr kLoAppMemEnd = 0x000100000000ull;
+  static const uptr kHeapMemBeg = 0x0f0000000000ull;
+  static const uptr kHeapMemEnd = 0x0f5000000000ull;
+  static const uptr kHiAppMemBeg = 0x0f6000000000ull;
+  static const uptr kHiAppMemEnd = 0x100000000000ull;  // 44 bits
   static const uptr kShadowMsk = 0x0f0000000000ull;
   static const uptr kShadowXor = 0x002100000000ull;
   static const uptr kShadowAdd = 0x000000000000ull;
-  static const uptr kVdsoBeg       = 0x3c0000000000000ull;
+  static const uptr kVdsoBeg = 0x3c0000000000000ull;
   static const uptr kMidAppMemBeg = 0;
   static const uptr kMidAppMemEnd = 0;
 };
@@ -261,18 +261,18 @@ C/C++ on linux/powerpc64 (46-bit VMA)
 struct MappingPPC64_46 {
   static const uptr kMetaShadowBeg = 0x100000000000ull;
   static const uptr kMetaShadowEnd = 0x120000000000ull;
-  static const uptr kShadowBeg     = 0x010000000000ull;
+  static const uptr kShadowBeg = 0x010000000000ull;
   static const uptr kShadowEnd = 0x080000000000ull;
-  static const uptr kHeapMemBeg    = 0x3d0000000000ull;
-  static const uptr kHeapMemEnd    = 0x3e0000000000ull;
-  static const uptr kLoAppMemBeg   = 0x000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x010000000000ull;
-  static const uptr kHiAppMemBeg   = 0x3e8000000000ull;
-  static const uptr kHiAppMemEnd   = 0x400000000000ull; // 46 bits
+  static const uptr kHeapMemBeg = 0x3d0000000000ull;
+  static const uptr kHeapMemEnd = 0x3e0000000000ull;
+  static const uptr kLoAppMemBeg = 0x000000001000ull;
+  static const uptr kLoAppMemEnd = 0x010000000000ull;
+  static const uptr kHiAppMemBeg = 0x3e8000000000ull;
+  static const uptr kHiAppMemEnd = 0x400000000000ull;  // 46 bits
   static const uptr kShadowMsk = 0x3c0000000000ull;
   static const uptr kShadowXor = 0x020000000000ull;
   static const uptr kShadowAdd = 0x000000000000ull;
-  static const uptr kVdsoBeg       = 0x7800000000000000ull;
+  static const uptr kVdsoBeg = 0x7800000000000000ull;
   static const uptr kMidAppMemBeg = 0;
   static const uptr kMidAppMemEnd = 0;
 };
@@ -292,18 +292,18 @@ C/C++ on linux/powerpc64 (47-bit VMA)
 struct MappingPPC64_47 {
   static const uptr kMetaShadowBeg = 0x100000000000ull;
   static const uptr kMetaShadowEnd = 0x120000000000ull;
-  static const uptr kShadowBeg     = 0x010000000000ull;
+  static const uptr kShadowBeg = 0x010000000000ull;
   static const uptr kShadowEnd = 0x080000000000ull;
-  static const uptr kHeapMemBeg    = 0x7d0000000000ull;
-  static const uptr kHeapMemEnd    = 0x7e0000000000ull;
-  static const uptr kLoAppMemBeg   = 0x000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x010000000000ull;
-  static const uptr kHiAppMemBeg   = 0x7e8000000000ull;
-  static const uptr kHiAppMemEnd   = 0x800000000000ull; // 47 bits
+  static const uptr kHeapMemBeg = 0x7d0000000000ull;
+  static const uptr kHeapMemEnd = 0x7e0000000000ull;
+  static const uptr kLoAppMemBeg = 0x000000001000ull;
+  static const uptr kLoAppMemEnd = 0x010000000000ull;
+  static const uptr kHiAppMemBeg = 0x7e8000000000ull;
+  static const uptr kHiAppMemEnd = 0x800000000000ull;  // 47 bits
   static const uptr kShadowMsk = 0x7c0000000000ull;
   static const uptr kShadowXor = 0x020000000000ull;
   static const uptr kShadowAdd = 0x000000000000ull;
-  static const uptr kVdsoBeg       = 0x7800000000000000ull;
+  static const uptr kVdsoBeg = 0x7800000000000000ull;
   static const uptr kMidAppMemBeg = 0;
   static const uptr kMidAppMemEnd = 0;
 };
@@ -325,16 +325,16 @@ struct MappingS390x {
   static const uptr kMetaShadowEnd = 0x980000000000ull;
   static const uptr kShadowBeg = 0x200000000000ull;
   static const uptr kShadowEnd = 0x400000000000ull;
-  static const uptr kHeapMemBeg    = 0xbe0000000000ull;
-  static const uptr kHeapMemEnd    = 0xc00000000000ull;
-  static const uptr kLoAppMemBeg   = 0x000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x0e0000000000ull;
-  static const uptr kHiAppMemBeg   = 0xc00000004000ull;
-  static const uptr kHiAppMemEnd   = 0xc00000004000ull;
+  static const uptr kHeapMemBeg = 0xbe0000000000ull;
+  static const uptr kHeapMemEnd = 0xc00000000000ull;
+  static const uptr kLoAppMemBeg = 0x000000001000ull;
+  static const uptr kLoAppMemEnd = 0x0e0000000000ull;
+  static const uptr kHiAppMemBeg = 0xc00000004000ull;
+  static const uptr kHiAppMemEnd = 0xc00000004000ull;
   static const uptr kShadowMsk = 0xb00000000000ull;
   static const uptr kShadowXor = 0x100000000000ull;
   static const uptr kShadowAdd = 0x000000000000ull;
-  static const uptr kVdsoBeg       = 0xfffffffff000ull;
+  static const uptr kVdsoBeg = 0xfffffffff000ull;
   static const uptr kMidAppMemBeg = 0;
   static const uptr kMidAppMemEnd = 0;
 };
@@ -353,7 +353,7 @@ struct MappingS390x {
 struct MappingGo48 {
   static const uptr kMetaShadowBeg = 0x300000000000ull;
   static const uptr kMetaShadowEnd = 0x400000000000ull;
-  static const uptr kShadowBeg     = 0x200000000000ull;
+  static const uptr kShadowBeg = 0x200000000000ull;
   static const uptr kShadowEnd = 0x21c000000000ull;
   static const uptr kLoAppMemBeg = 0x000000001000ull;
   static const uptr kLoAppMemEnd = 0x00e000000000ull;
@@ -384,7 +384,7 @@ PIE binaries currently not supported, but it should be theoretically possible.
 struct MappingGoWindows {
   static const uptr kMetaShadowBeg = 0x070000000000ull;
   static const uptr kMetaShadowEnd = 0x077000000000ull;
-  static const uptr kShadowBeg     = 0x010000000000ull;
+  static const uptr kShadowBeg = 0x010000000000ull;
   static const uptr kShadowEnd = 0x030000000000ull;
   static const uptr kLoAppMemBeg = 0x000000001000ull;
   static const uptr kLoAppMemEnd = 0x00e000000000ull;
@@ -414,7 +414,7 @@ struct MappingGoWindows {
 struct MappingGoPPC64_46 {
   static const uptr kMetaShadowBeg = 0x240000000000ull;
   static const uptr kMetaShadowEnd = 0x247000000000ull;
-  static const uptr kShadowBeg     = 0x200000000000ull;
+  static const uptr kShadowBeg = 0x200000000000ull;
   static const uptr kShadowEnd = 0x21c000000000ull;
   static const uptr kLoAppMemBeg = 0x000000001000ull;
   static const uptr kLoAppMemEnd = 0x00e000000000ull;
@@ -444,7 +444,7 @@ struct MappingGoPPC64_46 {
 struct MappingGoPPC64_47 {
   static const uptr kMetaShadowBeg = 0x300000000000ull;
   static const uptr kMetaShadowEnd = 0x320000000000ull;
-  static const uptr kShadowBeg     = 0x200000000000ull;
+  static const uptr kShadowBeg = 0x200000000000ull;
   static const uptr kShadowEnd = 0x280000000000ull;
   static const uptr kLoAppMemBeg = 0x000000001000ull;
   static const uptr kLoAppMemEnd = 0x00e000000000ull;
@@ -473,7 +473,7 @@ struct MappingGoPPC64_47 {
 struct MappingGoAarch64 {
   static const uptr kMetaShadowBeg = 0x300000000000ull;
   static const uptr kMetaShadowEnd = 0x320000000000ull;
-  static const uptr kShadowBeg     = 0x200000000000ull;
+  static const uptr kShadowBeg = 0x200000000000ull;
   static const uptr kShadowEnd = 0x280000000000ull;
   static const uptr kLoAppMemBeg = 0x000000001000ull;
   static const uptr kLoAppMemEnd = 0x00e000000000ull;
@@ -530,7 +530,7 @@ Go on linux/s390x
 struct MappingGoS390x {
   static const uptr kMetaShadowBeg = 0x900000000000ull;
   static const uptr kMetaShadowEnd = 0x980000000000ull;
-  static const uptr kShadowBeg     = 0x400000000000ull;
+  static const uptr kShadowBeg = 0x400000000000ull;
   static const uptr kShadowEnd = 0x600000000000ull;
   static const uptr kLoAppMemBeg = 0x000000001000ull;
   static const uptr kLoAppMemEnd = 0x100000000000ull;
@@ -700,9 +700,9 @@ uptr VdsoBeg(void) { return SelectMapping<MappingField>(kVdsoBeg); }
 // uptr ShadowEnd(void) { return SelectMapping<MappingField>(kShadowEnd); }
 
 // ALWAYS_INLINE
-// uptr MetaShadowBeg(void) { return SelectMapping<MappingField>(kMetaShadowBeg); }
-// ALWAYS_INLINE
-// uptr MetaShadowEnd(void) { return SelectMapping<MappingField>(kMetaShadowEnd); }
+// uptr MetaShadowBeg(void) { return
+// SelectMapping<MappingField>(kMetaShadowBeg); } ALWAYS_INLINE uptr
+// MetaShadowEnd(void) { return SelectMapping<MappingField>(kMetaShadowEnd); }
 
 // struct IsAppMemImpl {
 //   template <typename Mapping>
@@ -761,7 +761,8 @@ uptr VdsoBeg(void) { return SelectMapping<MappingField>(kVdsoBeg); }
 //   template <typename Mapping>
 //   static u32 *Apply(uptr x) {
 //     DCHECK(IsAppMemImpl::Apply<Mapping>(x));
-//     return (u32 *)(((((x) & ~(Mapping::kShadowMsk | (kMetaShadowCell - 1)))) /
+//     return (u32 *)(((((x) & ~(Mapping::kShadowMsk | (kMetaShadowCell - 1))))
+//     /
 //                     kMetaShadowCell * kMetaShadowSize) |
 //                    Mapping::kMetaShadowBeg);
 //   }
@@ -776,18 +777,22 @@ uptr VdsoBeg(void) { return SelectMapping<MappingField>(kVdsoBeg); }
 //     if (!IsShadowMemImpl::Apply<Mapping>(sp))
 //       return 0;
 //     // The shadow mapping is non-linear and we've lost some bits, so we don't
-//     // have an easy way to restore the original app address. But the mapping is
+//     // have an easy way to restore the original app address. But the mapping
+//     is
 //     // a bijection, so we try to restore the address as belonging to
-//     // low/mid/high range consecutively and see if shadow->app->shadow mapping
+//     // low/mid/high range consecutively and see if shadow->app->shadow
+//     mapping
 //     // gives us the same address.
 //     uptr p =
-//         ((sp - Mapping::kShadowAdd) / kShadowMultiplier) ^ Mapping::kShadowXor;
+//         ((sp - Mapping::kShadowAdd) / kShadowMultiplier) ^
+//         Mapping::kShadowXor;
 //     if (p >= Mapping::kLoAppMemBeg && p < Mapping::kLoAppMemEnd &&
 //         MemToShadowImpl::Apply<Mapping>(p) == sp)
 //       return p;
 //     if (Mapping::kMidAppMemBeg) {
 //       uptr p_mid = p + (Mapping::kMidAppMemBeg & Mapping::kShadowMsk);
-//       if (p_mid >= Mapping::kMidAppMemBeg && p_mid < Mapping::kMidAppMemEnd &&
+//       if (p_mid >= Mapping::kMidAppMemBeg && p_mid < Mapping::kMidAppMemEnd
+//       &&
 //           MemToShadowImpl::Apply<Mapping>(p_mid) == sp)
 //         return p_mid;
 //     }
@@ -809,14 +814,17 @@ uptr VdsoBeg(void) { return SelectMapping<MappingField>(kVdsoBeg); }
 //   typedef uptr Result;
 //   template <typename Mapping>
 //   static Result Apply(uptr addr) {
-//     // To restore the address we go over all app memory ranges and check if top
+//     // To restore the address we go over all app memory ranges and check if
+//     top
 //     // 3 bits of the compressed addr match that of the app range. If yes, we
-//     // assume that the compressed address come from that range and restore the
+//     // assume that the compressed address come from that range and restore
+//     the
 //     // missing top bits to match the app range address.
 //     const uptr ranges[] = {
-//         Mapping::kLoAppMemBeg,  Mapping::kLoAppMemEnd, Mapping::kMidAppMemBeg,
-//         Mapping::kMidAppMemEnd, Mapping::kHiAppMemBeg, Mapping::kHiAppMemEnd,
-//         Mapping::kHeapMemBeg,   Mapping::kHeapMemEnd,
+//         Mapping::kLoAppMemBeg,  Mapping::kLoAppMemEnd,
+//         Mapping::kMidAppMemBeg, Mapping::kMidAppMemEnd,
+//         Mapping::kHiAppMemBeg, Mapping::kHiAppMemEnd, Mapping::kHeapMemBeg,
+//         Mapping::kHeapMemEnd,
 //     };
 //     const uptr indicator = 0x0e0000000000ull;
 //     const uptr ind_lsb = 1ull << LeastSignificantSetBitIndex(indicator);
@@ -859,4 +867,3 @@ uptr VdsoBeg(void) { return SelectMapping<MappingField>(kVdsoBeg); }
 // void PlatformCleanUpThreadState(ThreadState *thr);
 
 }  // namespace __xsan
-

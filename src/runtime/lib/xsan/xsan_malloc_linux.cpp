@@ -1,26 +1,25 @@
 /// TODO: implement this file
 
-
 #include <sanitizer_common/sanitizer_allocator_internal.h>
 #include <sanitizer_common/sanitizer_platform.h>
 #if SANITIZER_FREEBSD || SANITIZER_FUCHSIA || SANITIZER_LINUX || \
     SANITIZER_NETBSD || SANITIZER_SOLARIS
 
-
+/// To provide SIZE_T definition, these headers should be included first
+/// Otherwise sanitizer_common/sanitizer_allocator_dlsym.h raises an error
 #  include "xsan_allocator.h"
-#  include "xsan_stack.h"
 #  include "xsan_interceptors.h"
 #  include "xsan_internal.h"
-#  include "lsan/lsan_common.h"
+#  include "xsan_stack.h"
+
+#  include <lsan/lsan_common.h>
 #  include <sanitizer_common/sanitizer_allocator_checks.h>
 #  include <sanitizer_common/sanitizer_allocator_dlsym.h>
 #  include <sanitizer_common/sanitizer_errno.h>
 #  include <sanitizer_common/sanitizer_tls_get_addr.h>
 
-
 // ---------------------- Replacement functions ---------------- {{{1
 using namespace __xsan;
-
 
 struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
   static bool UseImpl() { return xsan_init_is_running; }
@@ -43,19 +42,18 @@ INTERCEPTOR(void, free, void *ptr) {
     return DlsymAlloc::Free(ptr);
   GET_STACK_TRACE_FREE;
   xsan_free(ptr, &stack, __asan::FROM_MALLOC);
-// 
 }
 
-#if SANITIZER_INTERCEPT_CFREE
+#  if SANITIZER_INTERCEPT_CFREE
 INTERCEPTOR(void, cfree, void *ptr) {
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
   GET_STACK_TRACE_FREE;
   xsan_free(ptr, &stack, __asan::FROM_MALLOC);
 }
-#endif // SANITIZER_INTERCEPT_CFREE
+#  endif  // SANITIZER_INTERCEPT_CFREE
 
-INTERCEPTOR(void*, malloc, uptr size) {
+INTERCEPTOR(void *, malloc, uptr size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Allocate(size);
   ENSURE_XSAN_INITED();
@@ -63,7 +61,7 @@ INTERCEPTOR(void*, malloc, uptr size) {
   return xsan_malloc(size, &stack);
 }
 
-INTERCEPTOR(void*, calloc, uptr nmemb, uptr size) {
+INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(nmemb, size);
   ENSURE_XSAN_INITED();
@@ -71,7 +69,7 @@ INTERCEPTOR(void*, calloc, uptr nmemb, uptr size) {
   return xsan_calloc(nmemb, size, &stack);
 }
 
-INTERCEPTOR(void*, realloc, void *ptr, uptr size) {
+INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Realloc(ptr, size);
   ENSURE_XSAN_INITED();
@@ -79,34 +77,34 @@ INTERCEPTOR(void*, realloc, void *ptr, uptr size) {
   return xsan_realloc(ptr, size, &stack);
 }
 
-#if SANITIZER_INTERCEPT_REALLOCARRAY
-INTERCEPTOR(void*, reallocarray, void *ptr, uptr nmemb, uptr size) {
+#  if SANITIZER_INTERCEPT_REALLOCARRAY
+INTERCEPTOR(void *, reallocarray, void *ptr, uptr nmemb, uptr size) {
   ENSURE_XSAN_INITED();
   GET_STACK_TRACE_MALLOC;
   return xsan_reallocarray(ptr, nmemb, size, &stack);
 }
-#endif  // SANITIZER_INTERCEPT_REALLOCARRAY
+#  endif  // SANITIZER_INTERCEPT_REALLOCARRAY
 
-#if SANITIZER_INTERCEPT_MEMALIGN
-INTERCEPTOR(void*, memalign, uptr boundary, uptr size) {
+#  if SANITIZER_INTERCEPT_MEMALIGN
+INTERCEPTOR(void *, memalign, uptr boundary, uptr size) {
   GET_STACK_TRACE_MALLOC;
   return xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
 }
 
-INTERCEPTOR(void*, __libc_memalign, uptr boundary, uptr size) {
+INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
   GET_STACK_TRACE_MALLOC;
   void *res = xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
   DTLS_on_libc_memalign(res, size);
   return res;
 }
-#endif // SANITIZER_INTERCEPT_MEMALIGN
+#  endif  // SANITIZER_INTERCEPT_MEMALIGN
 
-#if SANITIZER_INTERCEPT_ALIGNED_ALLOC
-INTERCEPTOR(void*, aligned_alloc, uptr boundary, uptr size) {
+#  if SANITIZER_INTERCEPT_ALIGNED_ALLOC
+INTERCEPTOR(void *, aligned_alloc, uptr boundary, uptr size) {
   GET_STACK_TRACE_MALLOC;
   return xsan_aligned_alloc(boundary, size, &stack);
 }
-#endif // SANITIZER_INTERCEPT_ALIGNED_ALLOC
+#  endif  // SANITIZER_INTERCEPT_ALIGNED_ALLOC
 
 INTERCEPTOR(uptr, malloc_usable_size, void *ptr) {
   GET_CURRENT_PC_BP_SP;
@@ -114,7 +112,7 @@ INTERCEPTOR(uptr, malloc_usable_size, void *ptr) {
   return xsan_malloc_usable_size(ptr, pc, bp);
 }
 
-#if SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
+#  if SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
 // We avoid including malloc.h for portability reasons.
 // man mallinfo says the fields are "long", but the implementation uses int.
 // It doesn't matter much -- we just need to make sure that the libc's mallinfo
@@ -129,33 +127,29 @@ INTERCEPTOR(struct fake_mallinfo, mallinfo, void) {
   return res;
 }
 
-INTERCEPTOR(int, mallopt, int cmd, int value) {
-  return 0;
-}
-#endif // SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
+INTERCEPTOR(int, mallopt, int cmd, int value) { return 0; }
+#  endif  // SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
 
 INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
   GET_STACK_TRACE_MALLOC;
   return xsan_posix_memalign(memptr, alignment, size, &stack);
 }
 
-INTERCEPTOR(void*, valloc, uptr size) {
+INTERCEPTOR(void *, valloc, uptr size) {
   GET_STACK_TRACE_MALLOC;
   return xsan_valloc(size, &stack);
 }
 
-#if SANITIZER_INTERCEPT_PVALLOC
-INTERCEPTOR(void*, pvalloc, uptr size) {
+#  if SANITIZER_INTERCEPT_PVALLOC
+INTERCEPTOR(void *, pvalloc, uptr size) {
   GET_STACK_TRACE_MALLOC;
   return xsan_pvalloc(size, &stack);
 }
-#endif // SANITIZER_INTERCEPT_PVALLOC
+#  endif  // SANITIZER_INTERCEPT_PVALLOC
 
-INTERCEPTOR(void, malloc_stats, void) {
-  __asan_print_accumulated_stats();
-}
+INTERCEPTOR(void, malloc_stats, void) { __asan_print_accumulated_stats(); }
 
-#if SANITIZER_ANDROID
+#  if SANITIZER_ANDROID
 // Format of __libc_malloc_dispatch has changed in Android L.
 // While we are moving towards a solution that does not depend on bionic
 // internals, here is something to support both K* and L releases.
@@ -176,20 +170,27 @@ struct MallocDebugL {
   uptr (*malloc_usable_size)(void *mem);
   void *(*memalign)(uptr alignment, uptr bytes);
   int (*posix_memalign)(void **memptr, uptr alignment, uptr size);
-  void* (*pvalloc)(uptr size);
+  void *(*pvalloc)(uptr size);
   void *(*realloc)(void *oldMem, uptr bytes);
-  void* (*valloc)(uptr size);
+  void *(*valloc)(uptr size);
 };
 
-ALIGNED(32) const MallocDebugK xsan_malloc_dispatch_k = {
+ALIGNED(32)
+const MallocDebugK xsan_malloc_dispatch_k = {
     WRAP(malloc),  WRAP(free),     WRAP(calloc),
     WRAP(realloc), WRAP(memalign), WRAP(malloc_usable_size)};
 
-ALIGNED(32) const MallocDebugL xsan_malloc_dispatch_l = {
-    WRAP(calloc),         WRAP(free),               WRAP(mallinfo),
-    WRAP(malloc),         WRAP(malloc_usable_size), WRAP(memalign),
-    WRAP(posix_memalign), WRAP(pvalloc),            WRAP(realloc),
-    WRAP(valloc)};
+ALIGNED(32)
+const MallocDebugL xsan_malloc_dispatch_l = {WRAP(calloc),
+                                             WRAP(free),
+                                             WRAP(mallinfo),
+                                             WRAP(malloc),
+                                             WRAP(malloc_usable_size),
+                                             WRAP(memalign),
+                                             WRAP(posix_memalign),
+                                             WRAP(pvalloc),
+                                             WRAP(realloc),
+                                             WRAP(valloc)};
 
 namespace __xsan {
 void ReplaceSystemMalloc() {
@@ -207,13 +208,12 @@ void ReplaceSystemMalloc() {
 }
 }  // namespace __xsan
 
-#else  // SANITIZER_ANDROID
+#  else   // SANITIZER_ANDROID
 
 namespace __xsan {
-void ReplaceSystemMalloc() {
-}
+void ReplaceSystemMalloc() {}
 }  // namespace __xsan
-#endif  // SANITIZER_ANDROID
+#  endif  // SANITIZER_ANDROID
 
 #endif  // SANITIZER_FREEBSD || SANITIZER_FUCHSIA || SANITIZER_LINUX ||
         // SANITIZER_NETBSD || SANITIZER_SOLARIS

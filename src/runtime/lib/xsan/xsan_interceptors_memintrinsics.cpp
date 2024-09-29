@@ -1,9 +1,7 @@
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_stack.h"
 #include "asan/orig/asan_suppressions.h"
-
 #include "xsan_interceptors.h"
-
 
 using namespace __xsan;
 
@@ -25,8 +23,8 @@ void *__xsan_memmove(void *to, const void *from, uptr size) {
 // the only things there it wants are these three.  Just define them
 // as aliases here rather than repeating the contents.
 
-extern "C" decltype(__xsan_memcpy) memcpy[[gnu::alias("__xsan_memcpy")]];
-extern "C" decltype(__xsan_memmove) memmove[[gnu::alias("__xsan_memmove")]];
-extern "C" decltype(__xsan_memset) memset[[gnu::alias("__xsan_memset")]];
+extern "C" decltype(__xsan_memcpy) memcpy [[gnu::alias("__xsan_memcpy")]];
+extern "C" decltype(__xsan_memmove) memmove [[gnu::alias("__xsan_memmove")]];
+extern "C" decltype(__xsan_memset) memset [[gnu::alias("__xsan_memset")]];
 
 #endif  // SANITIZER_FUCHSIA

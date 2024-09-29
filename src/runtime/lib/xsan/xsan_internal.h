@@ -6,16 +6,18 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
-#include "xsan_flags.h"
-#include "xsan_interface_internal.h"
 #include <sanitizer_common/sanitizer_common.h>
 #include <sanitizer_common/sanitizer_internal_defs.h>
 #include <sanitizer_common/sanitizer_libc.h>
 #include <sanitizer_common/sanitizer_stacktrace.h>
 
+#include "xsan_flags.h"
+#include "xsan_interface_internal.h"
+
 // #if defined(__SANITIZE_ADDRESS__)
 // #  error \
-//       "The AddressSanitizer run-time should not be instrumented by AddressSanitizer"
+//       "The AddressSanitizer run-time should not be instrumented by
+//       AddressSanitizer"
 // #endif
 
 // Build-time configuration options.
@@ -46,7 +48,7 @@
 namespace __asan {
 void StopInitOrderChecking();
 void AsanOnDeadlySignal(int, void *siginfo, void *context);
-}
+}  // namespace __asan
 
 // All internal functions in xsan reside inside the __xsan namespace
 // to avoid namespace collisions with the user programs.
@@ -129,6 +131,4 @@ extern int xsan_inited;
 extern bool xsan_init_is_running;
 extern void (*death_callback)(void);
 
-
 }  // namespace __xsan
-

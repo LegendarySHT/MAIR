@@ -12,4 +12,4 @@ static const u32 kDefaultMallocContextSize = 30;
 using __asan::GetMallocContextSize;
 using __asan::SetMallocContextSize;
 
-} // namespace __xsan
+}  // namespace __xsan

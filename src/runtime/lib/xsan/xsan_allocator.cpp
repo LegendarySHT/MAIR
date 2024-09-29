@@ -6,7 +6,7 @@
 #include "asan_allocator.h"
 #include "xsan_stack.h"
 // #include "xsan_thread.h"
-#include "lsan/lsan_common.h"
+#include <lsan/lsan_common.h>
 #include <sanitizer_common/sanitizer_allocator_checks.h>
 #include <sanitizer_common/sanitizer_allocator_interface.h>
 #include <sanitizer_common/sanitizer_errno.h>
@@ -17,8 +17,6 @@
 #include <sanitizer_common/sanitizer_stackdepot.h>
 
 namespace __xsan {
-
-
 
 void xsan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
   __asan::asan_free(ptr, stack, alloc_type);
@@ -78,7 +76,7 @@ int xsan_posix_memalign(void **memptr, uptr alignment, uptr size,
 }
 
 uptr xsan_malloc_usable_size(const void *ptr, uptr pc, uptr bp) {
-  uptr res = __asan::asan_malloc_usable_size(ptr, pc, bp); 
+  uptr res = __asan::asan_malloc_usable_size(ptr, pc, bp);
   return res;
 }
 
@@ -97,11 +95,9 @@ void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 
 }  // namespace __xsan
 
-
 // ---------------------- Interface ---------------- {{{1
 
 /// This part now is implemented by asan/asan_allocator.cpp
-
 
 // using namespace __xsan;
 
@@ -112,7 +108,7 @@ void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 // }
 
 // int __sanitizer_get_ownership(const void *p) {
-//   return 
+//   return
 // }
 
 // uptr __sanitizer_get_allocated_size(const void *p) {

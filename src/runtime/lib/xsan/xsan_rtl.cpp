@@ -1,8 +1,8 @@
-#include "xsan_activation.h"
-#include "xsan_interface_internal.h"
-#include "xsan_interceptors.h"
-#include "xsan_internal.h"
 #include "asan/asan_init.h"
+#include "xsan_activation.h"
+#include "xsan_interceptors.h"
+#include "xsan_interface_internal.h"
+#include "xsan_internal.h"
 namespace __xsan {
 
 // -------------------------- Globals --------------------- {{{1
@@ -16,7 +16,8 @@ uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
 // -------------------------- Run-time entry ------------------- {{{1
 
 static void XsanInitInternal() {
-  if (LIKELY(xsan_inited)) return;
+  if (LIKELY(xsan_inited))
+    return;
   SanitizerToolName = "XSan";
   CHECK(!xsan_init_is_running && "XSan init calls itself!");
   xsan_init_is_running = true;
@@ -36,7 +37,6 @@ static void XsanInitInternal() {
   xsan_inited = 1;
   xsan_init_is_running = false;
 
-
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   __asan::AsanInitFromXsan();
@@ -45,7 +45,7 @@ static void XsanInitInternal() {
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-  // This function call interceptors, so it should be called after, 
+  // This function call interceptors, so it should be called after,
   // waiting for __asan::AsanTSDInit() finished.
   InitTlsSize();
 
@@ -57,11 +57,7 @@ static void XsanInitInternal() {
 
 // Initialize as requested from some part of ASan runtime library (interceptors,
 // allocator, etc).
-void XsanInitFromRtl() {
-  XsanInitInternal();
-}
-
-
+void XsanInitFromRtl() { XsanInitInternal(); }
 
 }  // namespace __xsan
 
@@ -71,11 +67,10 @@ using namespace __xsan;
 void NOINLINE __xsan_handle_no_return() {
   if (xsan_init_is_running)
     return;
-  
+
   /// TODO: complete handle_no_return
   __asan_handle_no_return();
 }
-
 
 // Initialize as requested from instrumented application code.
 // We use this call as a trigger to wake up ASan from deactivated state.

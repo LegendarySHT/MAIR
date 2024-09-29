@@ -1,15 +1,16 @@
+#include "xsan_interceptors.h"
+
+#include <lsan/lsan_common.h>
+#include <sanitizer_common/sanitizer_libc.h>
+
 #include "asan/orig/asan_flags.h"
 #include "asan/orig/asan_internal.h"
 #include "asan/orig/asan_poisoning.h"
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
-
-#include "xsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "xsan_thread.h"
-#include "lsan/lsan_common.h"
-#include <sanitizer_common/sanitizer_libc.h>
 
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
@@ -33,19 +34,19 @@
 
 namespace __xsan {
 
-#define XSAN_READ_STRING_OF_LEN(ctx, s, len, n)                 \
-  XSAN_READ_RANGE((ctx), (s),                                   \
-    common_flags()->strict_string_checks ? (len) + 1 : (n))
+#  define XSAN_READ_STRING_OF_LEN(ctx, s, len, n) \
+    XSAN_READ_RANGE((ctx), (s),                   \
+                    common_flags()->strict_string_checks ? (len) + 1 : (n))
 
 #  define XSAN_READ_STRING(ctx, s, n) \
     XSAN_READ_STRING_OF_LEN((ctx), (s), internal_strlen(s), (n))
 
 static inline uptr MaybeRealStrnlen(const char *s, uptr maxlen) {
-#if SANITIZER_INTERCEPT_STRNLEN
+#  if SANITIZER_INTERCEPT_STRNLEN
   if (REAL(strnlen)) {
     return REAL(strnlen)(s, maxlen);
   }
-#endif
+#  endif
   return internal_strnlen(s, maxlen);
 }
 
@@ -65,7 +66,7 @@ int OnExit() {
   return 0;
 }
 
-} // namespace __xsan
+}  // namespace __xsan
 
 // ---------------------- Wrappers ---------------- {{{1
 using namespace __xsan;
@@ -73,54 +74,54 @@ using namespace __xsan;
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
-#define XSAN_INTERCEPTOR_ENTER(ctx, func)                                      \
-  XsanInterceptorContext _ctx = {#func};                                       \
-  ctx = (void *)&_ctx;                                                         \
-  (void) ctx;                                                                  \
-            
-#define XSAN_BEFORE_DLOPEN(filename, flag) \
-  if (__asan::flags()->strict_init_order)      \
-    __asan::StopInitOrderChecking();           \
+#  define XSAN_INTERCEPTOR_ENTER(ctx, func) \
+    XsanInterceptorContext _ctx = {#func};  \
+    ctx = (void *)&_ctx;                    \
+    (void)ctx;
 
-#define COMMON_INTERCEPT_FUNCTION(name) XSAN_INTERCEPT_FUNC(name)
-#define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
-  XSAN_INTERCEPT_FUNC_VER(name, ver)
-#define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
-  XSAN_INTERCEPT_FUNC_VER_UNVERSIONED_FALLBACK(name, ver)
-#define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size) \
-  XSAN_WRITE_RANGE(ctx, ptr, size)
-#define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
-  XSAN_READ_RANGE(ctx, ptr, size)
-#define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)                               \
-  XSAN_INTERCEPTOR_ENTER(ctx, func);                                           \
-  do {                                                                         \
-    if (xsan_init_is_running)                                                  \
-      return REAL(func)(__VA_ARGS__);                                          \
-    if (SANITIZER_APPLE && UNLIKELY(!xsan_inited))                               \
-      return REAL(func)(__VA_ARGS__);                                          \
-    ENSURE_XSAN_INITED();                                                      \
-  } while (false)
-#define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
-  do {                                            \
-  } while (false)
-#define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
-  do {                                         \
-  } while (false)
-#define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
-  do {                                         \
-  } while (false)
-#define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
-  do {                                                      \
-  } while (false)
-#define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) SetThreadName(name)
+#  define XSAN_BEFORE_DLOPEN(filename, flag) \
+    if (__asan::flags()->strict_init_order)  \
+      __asan::StopInitOrderChecking();
+
+#  define COMMON_INTERCEPT_FUNCTION(name) XSAN_INTERCEPT_FUNC(name)
+#  define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
+    XSAN_INTERCEPT_FUNC_VER(name, ver)
+#  define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
+    XSAN_INTERCEPT_FUNC_VER_UNVERSIONED_FALLBACK(name, ver)
+#  define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size) \
+    XSAN_WRITE_RANGE(ctx, ptr, size)
+#  define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
+    XSAN_READ_RANGE(ctx, ptr, size)
+#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)   \
+    XSAN_INTERCEPTOR_ENTER(ctx, func);               \
+    do {                                             \
+      if (xsan_init_is_running)                      \
+        return REAL(func)(__VA_ARGS__);              \
+      if (SANITIZER_APPLE && UNLIKELY(!xsan_inited)) \
+        return REAL(func)(__VA_ARGS__);              \
+      ENSURE_XSAN_INITED();                          \
+    } while (false)
+#  define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
+    do {                                            \
+    } while (false)
+#  define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
+    do {                                         \
+    } while (false)
+#  define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
+    do {                                         \
+    } while (false)
+#  define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
+    do {                                                      \
+    } while (false)
+#  define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) SetThreadName(name)
 // Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
 // But asan does not remember UserId's for threads (pthread_t);
 // and remembers all ever existed threads, so the linear search by UserId
 // can be slow.
-#define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name) \
-  do {                                                         \
-  } while (false)
-#define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
+#  define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name) \
+    do {                                                         \
+    } while (false)
+#  define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
 // Strict init-order checking is dlopen-hostile:
 // https://github.com/google/sanitizers/issues/178
 #  define COMMON_INTERCEPTOR_DLOPEN(filename, flag) \
@@ -142,58 +143,58 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
       *begin = *end = 0;                               \
     }
 
-#define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
-  do {                                                       \
-    XSAN_INTERCEPTOR_ENTER(ctx, memmove);                    \
-    XSAN_MEMMOVE_IMPL(ctx, to, from, size);                  \
-  } while (false)
+#  define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
+    do {                                                       \
+      XSAN_INTERCEPTOR_ENTER(ctx, memmove);                    \
+      XSAN_MEMMOVE_IMPL(ctx, to, from, size);                  \
+    } while (false)
 
-#define COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, to, from, size) \
-  do {                                                      \
-    XSAN_INTERCEPTOR_ENTER(ctx, memcpy);                    \
-    XSAN_MEMCPY_IMPL(ctx, to, from, size);                  \
-  } while (false)
+#  define COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, to, from, size) \
+    do {                                                      \
+      XSAN_INTERCEPTOR_ENTER(ctx, memcpy);                    \
+      XSAN_MEMCPY_IMPL(ctx, to, from, size);                  \
+    } while (false)
 
-#define COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, block, c, size) \
-  do {                                                      \
-    XSAN_INTERCEPTOR_ENTER(ctx, memset);                    \
-    XSAN_MEMSET_IMPL(ctx, block, c, size);                  \
-  } while (false)
+#  define COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, block, c, size) \
+    do {                                                      \
+      XSAN_INTERCEPTOR_ENTER(ctx, memset);                    \
+      XSAN_MEMSET_IMPL(ctx, block, c, size);                  \
+    } while (false)
 
-#if CAN_SANITIZE_LEAKS
-#define COMMON_INTERCEPTOR_STRERROR()                       \
-  __lsan::ScopedInterceptorDisabler disabler
-#endif
+#  if CAN_SANITIZE_LEAKS
+#    define COMMON_INTERCEPTOR_STRERROR() \
+      __lsan::ScopedInterceptorDisabler disabler
+#  endif
 
-#include <sanitizer_common/sanitizer_common_interceptors.inc>
-#include <sanitizer_common/sanitizer_signal_interceptors.inc>
+#  include <sanitizer_common/sanitizer_common_interceptors.inc>
+#  include <sanitizer_common/sanitizer_signal_interceptors.inc>
 
 // Syscall interceptors don't have contexts, we don't support suppressions
 // for them.
-#define COMMON_SYSCALL_PRE_READ_RANGE(p, s) XSAN_READ_RANGE(nullptr, p, s)
-#define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) XSAN_WRITE_RANGE(nullptr, p, s)
-#define COMMON_SYSCALL_POST_READ_RANGE(p, s) \
-  do {                                       \
-    (void)(p);                               \
-    (void)(s);                               \
-  } while (false)
-#define COMMON_SYSCALL_POST_WRITE_RANGE(p, s) \
-  do {                                        \
-    (void)(p);                                \
-    (void)(s);                                \
-  } while (false)
-#include <sanitizer_common/sanitizer_common_syscalls.inc>
-#include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
+#  define COMMON_SYSCALL_PRE_READ_RANGE(p, s) XSAN_READ_RANGE(nullptr, p, s)
+#  define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) XSAN_WRITE_RANGE(nullptr, p, s)
+#  define COMMON_SYSCALL_POST_READ_RANGE(p, s) \
+    do {                                       \
+      (void)(p);                               \
+      (void)(s);                               \
+    } while (false)
+#  define COMMON_SYSCALL_POST_WRITE_RANGE(p, s) \
+    do {                                        \
+      (void)(p);                                \
+      (void)(s);                                \
+    } while (false)
+#  include <sanitizer_common/sanitizer_common_syscalls.inc>
+#  include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
 
-#if XSAN_INTERCEPT_PTHREAD_CREATE
+#  if XSAN_INTERCEPT_PTHREAD_CREATE
 static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   XsanThread *t = (XsanThread *)arg;
   SetCurrentThread(t);
   return t->ThreadStart(GetTid());
 }
 
-INTERCEPTOR(int, pthread_create, void *thread,
-    void *attr, void *(*start_routine)(void*), void *arg) {
+INTERCEPTOR(int, pthread_create, void *thread, void *attr,
+            void *(*start_routine)(void *), void *arg) {
   EnsureMainThreadIDIsCorrect();
 
   /// TODO: Extract this to a separate function?
@@ -218,9 +219,9 @@ INTERCEPTOR(int, pthread_create, void *thread,
     // stored by pthread for future reuse even after thread destruction, and
     // the linked list it's stored in doesn't even hold valid pointers to the
     // objects, the latter are calculated by obscure pointer arithmetic.
-#if CAN_SANITIZE_LEAKS
+#    if CAN_SANITIZE_LEAKS
     __lsan::ScopedInterceptorDisabler disabler;
-#endif
+#    endif
     result = REAL(pthread_create)(thread, attr, xsan_thread_start, t);
   }
   if (result != 0) {
@@ -237,9 +238,9 @@ INTERCEPTOR(int, pthread_join, void *t, void **arg) {
 }
 
 DEFINE_REAL_PTHREAD_FUNCTIONS
-#endif  // XSAN_INTERCEPT_PTHREAD_CREATE
+#  endif  // XSAN_INTERCEPT_PTHREAD_CREATE
 
-#if XSAN_INTERCEPT_SWAPCONTEXT
+#  if XSAN_INTERCEPT_SWAPCONTEXT
 static void ClearShadowMemoryForContextStack(uptr stack, uptr ssize) {
   // Only clear if we know the stack. This should be true only for contexts
   // created with makecontext().
@@ -263,13 +264,13 @@ INTERCEPTOR(int, getcontext, struct ucontext_t *ucp) {
   return REAL(getcontext)(ucp);
 }
 
-INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp,
-            struct ucontext_t *ucp) {
+INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
   // --------------------- ASan part ----------------------------
   static bool reported_warning = false;
   if (!reported_warning) {
-    Report("WARNING: ASan doesn't fully support makecontext/swapcontext "
-           "functions and may produce false positives in some cases!\n");
+    Report(
+        "WARNING: ASan doesn't fully support makecontext/swapcontext "
+        "functions and may produce false positives in some cases!\n");
     reported_warning = true;
   }
   // Clear shadow memory for new context (it may share stack
@@ -304,111 +305,111 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp,
 
   return res;
 }
-#endif  // XSAN_INTERCEPT_SWAPCONTEXT
+#  endif  // XSAN_INTERCEPT_SWAPCONTEXT
 
-#if SANITIZER_NETBSD
-#define longjmp __longjmp14
-#define siglongjmp __siglongjmp14
-#endif
+#  if SANITIZER_NETBSD
+#    define longjmp __longjmp14
+#    define siglongjmp __siglongjmp14
+#  endif
 
 INTERCEPTOR(void, longjmp, void *env, int val) {
   __xsan_handle_no_return();
   REAL(longjmp)(env, val);
 }
 
-#if XSAN_INTERCEPT__LONGJMP
+#  if XSAN_INTERCEPT__LONGJMP
 INTERCEPTOR(void, _longjmp, void *env, int val) {
   __xsan_handle_no_return();
   REAL(_longjmp)(env, val);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT___LONGJMP_CHK
+#  if XSAN_INTERCEPT___LONGJMP_CHK
 INTERCEPTOR(void, __longjmp_chk, void *env, int val) {
   __xsan_handle_no_return();
   REAL(__longjmp_chk)(env, val);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT_SIGLONGJMP
+#  if XSAN_INTERCEPT_SIGLONGJMP
 INTERCEPTOR(void, siglongjmp, void *env, int val) {
   __xsan_handle_no_return();
   REAL(siglongjmp)(env, val);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT___CXA_THROW
+#  if XSAN_INTERCEPT___CXA_THROW
 INTERCEPTOR(void, __cxa_throw, void *a, void *b, void *c) {
   CHECK(REAL(__cxa_throw));
   __xsan_handle_no_return();
   REAL(__cxa_throw)(a, b, c);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
+#  if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
 INTERCEPTOR(void, __cxa_rethrow_primary_exception, void *a) {
   CHECK(REAL(__cxa_rethrow_primary_exception));
   __xsan_handle_no_return();
   REAL(__cxa_rethrow_primary_exception)(a);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
+#  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
 INTERCEPTOR(_Unwind_Reason_Code, _Unwind_RaiseException,
             _Unwind_Exception *object) {
   CHECK(REAL(_Unwind_RaiseException));
   __xsan_handle_no_return();
   return REAL(_Unwind_RaiseException)(object);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT__SJLJ_UNWIND_RAISEEXCEPTION
+#  if XSAN_INTERCEPT__SJLJ_UNWIND_RAISEEXCEPTION
 INTERCEPTOR(_Unwind_Reason_Code, _Unwind_SjLj_RaiseException,
             _Unwind_Exception *object) {
   CHECK(REAL(_Unwind_SjLj_RaiseException));
   __xsan_handle_no_return();
   return REAL(_Unwind_SjLj_RaiseException)(object);
 }
-#endif
-
-#if XSAN_INTERCEPT_INDEX
-# if XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
-INTERCEPTOR(char*, index, const char *string, int c)
-  ALIAS(WRAPPER_NAME(strchr));
-# else
-#  if SANITIZER_APPLE
-DECLARE_REAL(char*, index, const char *string, int c)
-OVERRIDE_FUNCTION(index, strchr);
-#  else
-DEFINE_REAL(char*, index, const char *string, int c)
 #  endif
-# endif
-#endif  // XSAN_INTERCEPT_INDEX
+
+#  if XSAN_INTERCEPT_INDEX
+#    if XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
+INTERCEPTOR(char *, index, const char *string, int c)
+ALIAS(WRAPPER_NAME(strchr));
+#    else
+#      if SANITIZER_APPLE
+DECLARE_REAL(char *, index, const char *string, int c)
+OVERRIDE_FUNCTION(index, strchr);
+#      else
+DEFINE_REAL(char *, index, const char *string, int c)
+#      endif
+#    endif
+#  endif  // XSAN_INTERCEPT_INDEX
 
 // For both strcat() and strncat() we need to check the validity of |to|
 // argument irrespective of the |from| length.
 INTERCEPTOR(char *, strcat, char *to, const char *from) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strcat);
-  ENSURE_XSAN_INITED();  
+  ENSURE_XSAN_INITED();
   if (__asan::flags()->replace_str) {
     uptr from_length = internal_strlen(from);
     XSAN_READ_RANGE(ctx, from, from_length + 1);
     uptr to_length = internal_strlen(to);
     XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
     XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
-      // If the copying actually happens, the |from| string should not overlap
-      // with the resulting string starting at |to|, which has a length of
-      // to_length + from_length + 1.
+    // If the copying actually happens, the |from| string should not overlap
+    // with the resulting string starting at |to|, which has a length of
+    // to_length + from_length + 1.
     if (from_length > 0) {
       CHECK_RANGES_OVERLAP("strcat", to, from_length + to_length + 1, from,
-                              from_length + 1);
+                           from_length + 1);
     }
   }
   return REAL(strcat)(to, from);
 }
 
-INTERCEPTOR(char*, strncat, char *to, const char *from, uptr size) {
+INTERCEPTOR(char *, strncat, char *to, const char *from, uptr size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncat);
   ENSURE_XSAN_INITED();
@@ -420,8 +421,8 @@ INTERCEPTOR(char*, strncat, char *to, const char *from, uptr size) {
     XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
     XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
     if (from_length > 0) {
-      CHECK_RANGES_OVERLAP("strncat", to, to_length + copy_length + 1,
-                            from, copy_length);
+      CHECK_RANGES_OVERLAP("strncat", to, to_length + copy_length + 1, from,
+                           copy_length);
     }
   }
   return REAL(strncat)(to, from, size);
@@ -430,10 +431,10 @@ INTERCEPTOR(char*, strncat, char *to, const char *from, uptr size) {
 INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strcpy);
-#if SANITIZER_APPLE
+#  if SANITIZER_APPLE
   if (UNLIKELY(!xsan_inited))
     return REAL(strcpy)(to, from);
-#endif
+#  endif
   // strcpy is called from malloc_default_purgeable_zone()
   // in __xsan::ReplaceSystemAlloc() on Mac.
   if (xsan_init_is_running) {
@@ -449,10 +450,11 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   return REAL(strcpy)(to, from);
 }
 
-INTERCEPTOR(char*, strdup, const char *s) {
+INTERCEPTOR(char *, strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup);
-  if (UNLIKELY(!xsan_inited)) return internal_strdup(s);
+  if (UNLIKELY(!xsan_inited))
+    return internal_strdup(s);
   ENSURE_XSAN_INITED();
   uptr length = internal_strlen(s);
   if (__asan::flags()->replace_str) {
@@ -461,15 +463,16 @@ INTERCEPTOR(char*, strdup, const char *s) {
   GET_STACK_TRACE_MALLOC;
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
-  return reinterpret_cast<char*>(new_mem);
+  return reinterpret_cast<char *>(new_mem);
   return REAL(strdup)(s);
 }
 
-#if XSAN_INTERCEPT___STRDUP
-INTERCEPTOR(char*, __strdup, const char *s) {
+#  if XSAN_INTERCEPT___STRDUP
+INTERCEPTOR(char *, __strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup);
-  if (UNLIKELY(!xsan_inited)) return internal_strdup(s);
+  if (UNLIKELY(!xsan_inited))
+    return internal_strdup(s);
   ENSURE_XSAN_INITED();
   uptr length = internal_strlen(s);
   if (__asan::flags()->replace_str) {
@@ -478,12 +481,12 @@ INTERCEPTOR(char*, __strdup, const char *s) {
   GET_STACK_TRACE_MALLOC;
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
-  return reinterpret_cast<char*>(new_mem);
+  return reinterpret_cast<char *>(new_mem);
   return REAL(__strdup)(s);
 }
-#endif // XSAN_INTERCEPT___STRDUP
+#  endif  // XSAN_INTERCEPT___STRDUP
 
-INTERCEPTOR(char*, strncpy, char *to, const char *from, uptr size) {
+INTERCEPTOR(char *, strncpy, char *to, const char *from, uptr size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncpy);
   ENSURE_XSAN_INITED();
@@ -512,9 +515,10 @@ INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
 INTERCEPTOR(int, atoi, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atoi);
-#if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited)) return REAL(atoi)(nptr);
-#endif
+#  if SANITIZER_APPLE
+  if (UNLIKELY(!xsan_inited))
+    return REAL(atoi)(nptr);
+#  endif
   ENSURE_XSAN_INITED();
   if (!__asan::flags()->replace_str) {
     return REAL(atoi)(nptr);
@@ -533,9 +537,10 @@ INTERCEPTOR(int, atoi, const char *nptr) {
 INTERCEPTOR(long, atol, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atol);
-#if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited)) return REAL(atol)(nptr);
-#endif
+#  if SANITIZER_APPLE
+  if (UNLIKELY(!xsan_inited))
+    return REAL(atol)(nptr);
+#  endif
   ENSURE_XSAN_INITED();
   if (!__asan::flags()->replace_str) {
     return REAL(atol)(nptr);
@@ -547,7 +552,7 @@ INTERCEPTOR(long, atol, const char *nptr) {
   return result;
 }
 
-#if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
+#  if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 INTERCEPTOR(long long, strtoll, const char *nptr, char **endptr, int base) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strtoll);
@@ -574,46 +579,47 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
   XSAN_READ_STRING(ctx, nptr, (real_endptr - nptr) + 1);
   return result;
 }
-#endif  // XSAN_INTERCEPT_ATOLL_AND_STRTOLL
+#  endif  // XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 
-#if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
+#  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
 static void AtCxaAtexit(void *unused) {
   (void)unused;
   /// TODO: do ASan's check in a more generic way
   __asan::StopInitOrderChecking();
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT___CXA_ATEXIT
+#  if XSAN_INTERCEPT___CXA_ATEXIT
 INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
             void *dso_handle) {
-#if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited)) return REAL(__cxa_atexit)(func, arg, dso_handle);
-#endif
+#    if SANITIZER_APPLE
+  if (UNLIKELY(!xsan_inited))
+    return REAL(__cxa_atexit)(func, arg, dso_handle);
+#    endif
   ENSURE_XSAN_INITED();
-#if CAN_SANITIZE_LEAKS
+#    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
-#endif
+#    endif
   int res = REAL(__cxa_atexit)(func, arg, dso_handle);
   REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   return res;
 }
-#endif  // XSAN_INTERCEPT___CXA_ATEXIT
+#  endif  // XSAN_INTERCEPT___CXA_ATEXIT
 
-#if XSAN_INTERCEPT_ATEXIT
+#  if XSAN_INTERCEPT_ATEXIT
 INTERCEPTOR(int, atexit, void (*func)()) {
   ENSURE_XSAN_INITED();
-#if CAN_SANITIZE_LEAKS
+#    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
-#endif
+#    endif
   // Avoid calling real atexit as it is unreachable on at least on Linux.
   int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
   REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   return res;
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT_PTHREAD_ATFORK
+#  if XSAN_INTERCEPT_PTHREAD_ATFORK
 extern "C" {
 extern int _pthread_atfork(void (*prepare)(), void (*parent)(),
                            void (*child)());
@@ -621,19 +627,19 @@ extern int _pthread_atfork(void (*prepare)(), void (*parent)(),
 
 INTERCEPTOR(int, pthread_atfork, void (*prepare)(), void (*parent)(),
             void (*child)()) {
-#if CAN_SANITIZE_LEAKS
+#    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
-#endif
+#    endif
   // REAL(pthread_atfork) cannot be called due to symbol indirections at least
   // on NetBSD
   return _pthread_atfork(prepare, parent, child);
 }
-#endif
+#  endif
 
-#if XSAN_INTERCEPT_VFORK
+#  if XSAN_INTERCEPT_VFORK
 DEFINE_REAL(int, vfork)
 DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork)
-#endif
+#  endif
 
 // ---------------------- InitializeXsanInterceptors ---------------- {{{1
 namespace __xsan {
@@ -650,87 +656,87 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(strncat);
   XSAN_INTERCEPT_FUNC(strncpy);
   XSAN_INTERCEPT_FUNC(strdup);
-#if XSAN_INTERCEPT___STRDUP
+#  if XSAN_INTERCEPT___STRDUP
   XSAN_INTERCEPT_FUNC(__strdup);
-#endif
-#if XSAN_INTERCEPT_INDEX && XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
+#  endif
+#  if XSAN_INTERCEPT_INDEX && XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
   XSAN_INTERCEPT_FUNC(index);
-#endif
+#  endif
 
   XSAN_INTERCEPT_FUNC(atoi);
   XSAN_INTERCEPT_FUNC(atol);
   XSAN_INTERCEPT_FUNC(strtol);
-#if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
+#  if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
   XSAN_INTERCEPT_FUNC(atoll);
   XSAN_INTERCEPT_FUNC(strtoll);
-#endif
+#  endif
 
   // Intecept jump-related functions.
   XSAN_INTERCEPT_FUNC(longjmp);
 
-#if XSAN_INTERCEPT_SWAPCONTEXT
+#  if XSAN_INTERCEPT_SWAPCONTEXT
   XSAN_INTERCEPT_FUNC(getcontext);
   XSAN_INTERCEPT_FUNC(swapcontext);
-#endif
-#if XSAN_INTERCEPT__LONGJMP
+#  endif
+#  if XSAN_INTERCEPT__LONGJMP
   XSAN_INTERCEPT_FUNC(_longjmp);
-#endif
-#if XSAN_INTERCEPT___LONGJMP_CHK
+#  endif
+#  if XSAN_INTERCEPT___LONGJMP_CHK
   XSAN_INTERCEPT_FUNC(__longjmp_chk);
-#endif
-#if XSAN_INTERCEPT_SIGLONGJMP
+#  endif
+#  if XSAN_INTERCEPT_SIGLONGJMP
   XSAN_INTERCEPT_FUNC(siglongjmp);
-#endif
+#  endif
 
   // Intercept exception handling functions.
-#if XSAN_INTERCEPT___CXA_THROW
+#  if XSAN_INTERCEPT___CXA_THROW
   XSAN_INTERCEPT_FUNC(__cxa_throw);
-#endif
-#if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
+#  endif
+#  if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
   XSAN_INTERCEPT_FUNC(__cxa_rethrow_primary_exception);
-#endif
+#  endif
   // Indirectly intercept std::rethrow_exception.
-#if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
+#  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
   INTERCEPT_FUNCTION(_Unwind_RaiseException);
-#endif
+#  endif
   // Indirectly intercept std::rethrow_exception.
-#if XSAN_INTERCEPT__UNWIND_SJLJ_RAISEEXCEPTION
+#  if XSAN_INTERCEPT__UNWIND_SJLJ_RAISEEXCEPTION
   INTERCEPT_FUNCTION(_Unwind_SjLj_RaiseException);
-#endif
+#  endif
 
   // Intercept threading-related functions
-#if XSAN_INTERCEPT_PTHREAD_CREATE
+#  if XSAN_INTERCEPT_PTHREAD_CREATE
 // TODO: this should probably have an unversioned fallback for newer arches?
-#if defined(XSAN_PTHREAD_CREATE_VERSION)
+#    if defined(XSAN_PTHREAD_CREATE_VERSION)
   XSAN_INTERCEPT_FUNC_VER(pthread_create, XSAN_PTHREAD_CREATE_VERSION);
-#else
+#    else
   XSAN_INTERCEPT_FUNC(pthread_create);
-#endif
+#    endif
   XSAN_INTERCEPT_FUNC(pthread_join);
-#endif
+#  endif
 
   // Intercept atexit function.
-#if XSAN_INTERCEPT___CXA_ATEXIT
+#  if XSAN_INTERCEPT___CXA_ATEXIT
   XSAN_INTERCEPT_FUNC(__cxa_atexit);
-#endif
+#  endif
 
-#if XSAN_INTERCEPT_ATEXIT
+#  if XSAN_INTERCEPT_ATEXIT
   XSAN_INTERCEPT_FUNC(atexit);
-#endif
+#  endif
 
-#if XSAN_INTERCEPT_PTHREAD_ATFORK
+#  if XSAN_INTERCEPT_PTHREAD_ATFORK
   XSAN_INTERCEPT_FUNC(pthread_atfork);
-#endif
+#  endif
 
-#if XSAN_INTERCEPT_VFORK
+#  if XSAN_INTERCEPT_VFORK
   XSAN_INTERCEPT_FUNC(vfork);
-#endif
+#  endif
 
   InitializePlatformInterceptors();
 
   VReport(1, "AddressSanitizer: libc interceptors initialized\n");
 }
 
-} // namespace __xsan
+}  // namespace __xsan
 
 #endif  // !SANITIZER_FUCHSIA

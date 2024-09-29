@@ -11,16 +11,18 @@
 // ASan flag parsing logic.
 //===----------------------------------------------------------------------===//
 
-#include "xsan_activation.h"
 #include "xsan_flags.h"
-#include "xsan_interface_internal.h"
-#include "xsan_stack.h"
-#include "lsan/lsan_common.h"
+
 #include <sanitizer_common/sanitizer_common.h>
-#include <sanitizer_common/sanitizer_flags.h>
 #include <sanitizer_common/sanitizer_flag_parser.h>
+#include <sanitizer_common/sanitizer_flags.h>
+
+#include "lsan/lsan_common.h"
 #include "ubsan/ubsan_flags.h"
 #include "ubsan/ubsan_platform.h"
+#include "xsan_activation.h"
+#include "xsan_interface_internal.h"
+#include "xsan_stack.h"
 
 namespace __xsan {
 
@@ -67,7 +69,6 @@ void InitializeFlags() {
   RegisterXsanFlags(&xsan_parser, f);
   RegisterCommonFlags(&xsan_parser);
 
-
   // Override from ASan compile definition.
   const char *xsan_compile_def = MaybeUseXsanDefaultOptionsCompileDefinition();
   xsan_parser.ParseString(xsan_compile_def);
@@ -79,7 +80,6 @@ void InitializeFlags() {
   // Override from command line.
   xsan_parser.ParseStringFromEnv("XSAN_OPTIONS");
 
-
   InitializeCommonFlags();
 
   // Flag validation:
@@ -88,11 +88,10 @@ void InitializeFlags() {
            SanitizerToolName);
     Die();
   }
-
 }
 
 }  // namespace __xsan
 
-SANITIZER_INTERFACE_WEAK_DEF(const char*, __xsan_default_options, void) {
+SANITIZER_INTERFACE_WEAK_DEF(const char *, __xsan_default_options, void) {
   return "";
 }

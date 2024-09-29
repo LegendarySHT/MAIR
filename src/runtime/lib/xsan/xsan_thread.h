@@ -1,26 +1,27 @@
 #pragma once
 
-#include "asan/asan_thread.h"
-#include "asan_internal.h"
-#include "xsan_allocator.h"
-#include "xsan_internal.h"
 #include <sanitizer_common/sanitizer_common.h>
 #include <sanitizer_common/sanitizer_libc.h>
 #include <sanitizer_common/sanitizer_thread_registry.h>
 
+#include "asan/asan_thread.h"
+#include "asan_internal.h"
+#include "xsan_allocator.h"
+#include "xsan_internal.h"
+
 namespace __sanitizer {
 struct DTLS;
-} // namespace __sanitizer
+}  // namespace __sanitizer
 
 namespace __xsan {
 
 /// FIXME: Should we actually need such a complex class?
 // XsanThread are stored in TSD and destroyed when the thread dies.
 class XsanThread {
-public:
+ public:
   using StackFrameAccess = __asan::AsanThread::StackFrameAccess;
 
-public:
+ public:
   static XsanThread *Create(thread_callback_t start_routine, void *arg,
                             u32 parent_tid, StackTrace *stack, bool detached);
   static void TSDDtor(void *tsd);
@@ -63,7 +64,7 @@ public:
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
 
-private:
+ private:
   // NOTE: There is no XsanThread constructor. It is allocated
   // via mmap() and *must* be valid in zero-initialized state.
 
@@ -75,7 +76,6 @@ private:
   };
   StackBounds GetStackBounds() const;
 
-  
   thread_callback_t start_routine_;
   void *arg_;
 
@@ -96,7 +96,6 @@ private:
   uptr extra_spill_area_;
 };
 
-
 // Get the current thread. May return 0.
 XsanThread *GetCurrentThread();
 void SetCurrentThread(XsanThread *t);
@@ -105,4 +104,4 @@ XsanThread *FindThreadByStackAddress(uptr addr);
 
 // Used to handle fork().
 void EnsureMainThreadIDIsCorrect();
-} // namespace __xsan
+}  // namespace __xsan
