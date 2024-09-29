@@ -137,8 +137,8 @@ XsanThread *CreateMainThread() {
       /* stack */ nullptr, /* detached */ true);
   
   /// TODO: add TSan thread support.
-  // auto *asan_thread = __asan::CreateMainThread();
-  // main_thread->asan_thread_ = asan_thread;
+  auto *asan_thread = __asan::GetCurrentThread();
+  main_thread->asan_thread_ = asan_thread;
 
   SetCurrentThread(main_thread);
   main_thread->ThreadStart(internal_getpid());
