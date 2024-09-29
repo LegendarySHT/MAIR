@@ -1,6 +1,6 @@
 #pragma once
 
-#include "asan_internal.h"
+#include "asan/orig/asan_internal.h"
 #include "asan/asan_mapping.h"
 
 #include "xsan_interface_internal.h"

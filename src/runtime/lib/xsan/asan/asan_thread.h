@@ -15,9 +15,9 @@
 #define ASAN_THREAD_H
 
 #include "asan_allocator.h"
-#include "asan_internal.h"
-#include "asan_fake_stack.h"
-#include "asan_stats.h"
+#include "orig/asan_internal.h"
+#include "orig/asan_fake_stack.h"
+#include "orig/asan_stats.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_thread_registry.h"

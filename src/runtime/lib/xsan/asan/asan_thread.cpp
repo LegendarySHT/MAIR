@@ -10,11 +10,11 @@
 //
 // Thread-related code.
 //===----------------------------------------------------------------------===//
-#include "asan/asan_allocator.h"
-#include "asan/asan_poisoning.h"
-#include "asan/asan_stack.h"
-#include "asan/asan_thread.h"
-#include "asan/asan_mapping.h"
+#include "asan_mapping.h"
+#include "asan_allocator.h"
+#include "asan_thread.h"
+#include "asan/orig/asan_poisoning.h"
+#include "asan/orig/asan_stack.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"

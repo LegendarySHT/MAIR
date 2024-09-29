@@ -3,7 +3,7 @@
 #include "sanitizer_common/sanitizer_flags.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 // To reuse the macro GET_STACK_TRACE and etc.
-#include "asan/asan_stack.h"
+#include "asan/orig/asan_stack.h"
 
 namespace __xsan {
 

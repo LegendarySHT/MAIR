@@ -1,4 +1,4 @@
-#include "asan_internal.h"
+#include "asan/orig/asan_internal.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "xsan_allocator.h"
 #include "xsan_interceptors.h"

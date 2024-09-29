@@ -1,6 +1,6 @@
-#include "asan_internal.h"
-#include "asan_report.h"
-#include "asan_suppressions.h"
+#include "asan/orig/asan_internal.h"
+#include "asan/orig/asan_report.h"
+#include "asan/orig/asan_suppressions.h"
 
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
