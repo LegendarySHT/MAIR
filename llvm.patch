@@ -1,0 +1,134 @@
+diff --git a/clang/include/clang/Driver/SanitizerArgs.h b/clang/include/clang/Driver/SanitizerArgs.h
+index 1b29b1151224..753305d3d225 100644
+--- a/clang/include/clang/Driver/SanitizerArgs.h
++++ b/clang/include/clang/Driver/SanitizerArgs.h
+@@ -12,6 +12,7 @@
+ #include "clang/Driver/Types.h"
+ #include "llvm/Option/Arg.h"
+ #include "llvm/Option/ArgList.h"
++#include "llvm/Support/Process.h"
+ #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
+ #include <string>
+ #include <vector>
+@@ -71,18 +72,33 @@ public:
+   SanitizerArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
+                 bool DiagnoseErrors = true);
+ 
++  bool isXsanOnlyFrontend() const {
++    return llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
++  }
++
+   bool needsSharedRt() const { return SharedRuntime; }
+ 
+   bool needsMemProfRt() const { return NeedsMemProfRt; }
+-  bool needsAsanRt() const { return Sanitizers.has(SanitizerKind::Address); }
++  // MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
++  bool needsAsanRt() const {
++    return !isXsanOnlyFrontend() && Sanitizers.has(SanitizerKind::Address);
++  }
+   bool needsHwasanRt() const {
+     return Sanitizers.has(SanitizerKind::HWAddress);
+   }
+   bool needsHwasanAliasesRt() const {
+     return needsHwasanRt() && HwasanUseAliases;
+   }
+-  bool needsTsanRt() const { return Sanitizers.has(SanitizerKind::Thread); }
+-  bool needsMsanRt() const { return Sanitizers.has(SanitizerKind::Memory); }
++  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
++  // Rt
++  bool needsTsanRt() const {
++    return !isXsanOnlyFrontend() && Sanitizers.has(SanitizerKind::Thread);
++  }
++  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
++  // Rt
++  bool needsMsanRt() const {
++    return !isXsanOnlyFrontend() && Sanitizers.has(SanitizerKind::Memory);
++  }
+   bool needsFuzzer() const { return Sanitizers.has(SanitizerKind::Fuzzer); }
+   bool needsLsanRt() const {
+     return Sanitizers.has(SanitizerKind::Leak) &&
+diff --git a/clang/lib/CodeGen/BackendUtil.cpp b/clang/lib/CodeGen/BackendUtil.cpp
+index 7c4e35634e5d..f855909b541e 100644
+--- a/clang/lib/CodeGen/BackendUtil.cpp
++++ b/clang/lib/CodeGen/BackendUtil.cpp
+@@ -47,6 +47,7 @@
+ #include "llvm/Support/CommandLine.h"
+ #include "llvm/Support/MemoryBuffer.h"
+ #include "llvm/Support/PrettyStackTrace.h"
++#include "llvm/Support/Process.h"
+ #include "llvm/Support/TimeProfiler.h"
+ #include "llvm/Support/Timer.h"
+ #include "llvm/Support/ToolOutputFile.h"
+@@ -625,6 +626,9 @@ static void addSanitizers(const Triple &TargetTriple,
+                           const LangOptions &LangOpts, PassBuilder &PB) {
+   PB.registerOptimizerLastEPCallback([&](ModulePassManager &MPM,
+                                          OptimizationLevel Level) {
++    // XSAN-MODIFIED: add env check "XSAN_ONLY_FRONTEND" to forbid sanitizer passes
++    bool IsXSANOnlyFrontend = llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
++
+     if (CodeGenOpts.hasSanitizeCoverage()) {
+       auto SancovOpts = getSancovOptsFromCGOpts(CodeGenOpts);
+       MPM.addPass(ModuleSanitizerCoveragePass(
+@@ -633,7 +637,7 @@ static void addSanitizers(const Triple &TargetTriple,
+     }
+ 
+     auto MSanPass = [&](SanitizerMask Mask, bool CompileKernel) {
+-      if (LangOpts.Sanitize.has(Mask)) {
++      if (LangOpts.Sanitize.has(Mask) && !IsXSANOnlyFrontend) {
+         int TrackOrigins = CodeGenOpts.SanitizeMemoryTrackOrigins;
+         bool Recover = CodeGenOpts.SanitizeRecover.has(Mask);
+ 
+@@ -660,13 +664,13 @@ static void addSanitizers(const Triple &TargetTriple,
+     MSanPass(SanitizerKind::Memory, false);
+     MSanPass(SanitizerKind::KernelMemory, true);
+ 
+-    if (LangOpts.Sanitize.has(SanitizerKind::Thread)) {
++    if (LangOpts.Sanitize.has(SanitizerKind::Thread) && !IsXSANOnlyFrontend) {
+       MPM.addPass(ModuleThreadSanitizerPass());
+       MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+     }
+ 
+     auto ASanPass = [&](SanitizerMask Mask, bool CompileKernel) {
+-      if (LangOpts.Sanitize.has(Mask)) {
++      if (LangOpts.Sanitize.has(Mask) && !IsXSANOnlyFrontend) {
+         bool UseGlobalGC = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
+         bool UseOdrIndicator = CodeGenOpts.SanitizeAddressUseOdrIndicator;
+         llvm::AsanDtorKind DestructorKind =
+@@ -684,7 +688,7 @@ static void addSanitizers(const Triple &TargetTriple,
+     ASanPass(SanitizerKind::KernelAddress, true);
+ 
+     auto HWASanPass = [&](SanitizerMask Mask, bool CompileKernel) {
+-      if (LangOpts.Sanitize.has(Mask)) {
++      if (LangOpts.Sanitize.has(Mask) && !IsXSANOnlyFrontend) {
+         bool Recover = CodeGenOpts.SanitizeRecover.has(Mask);
+         MPM.addPass(HWAddressSanitizerPass(
+             {CompileKernel, Recover,
+diff --git a/clang/lib/Driver/SanitizerArgs.cpp b/clang/lib/Driver/SanitizerArgs.cpp
+index 68fe90c7a69d..1b2c692b2f74 100644
+--- a/clang/lib/Driver/SanitizerArgs.cpp
++++ b/clang/lib/Driver/SanitizerArgs.cpp
+@@ -257,10 +257,11 @@ bool SanitizerArgs::needsFuzzerInterceptors() const {
+ }
+ 
+ bool SanitizerArgs::needsUbsanRt() const {
++  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
+   // All of these include ubsan.
+   if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
+       needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||
+-      (needsScudoRt() && !requiresMinimalRuntime()))
++      (needsScudoRt() && !requiresMinimalRuntime()) || isXsanOnlyFrontend())
+     return false;
+ 
+   return (Sanitizers.Mask & NeedsUbsanRt & ~TrapSanitizers.Mask) ||
+diff --git a/clang/lib/Driver/ToolChains/CommonArgs.cpp b/clang/lib/Driver/ToolChains/CommonArgs.cpp
+index 443725f7d8a8..be6b7f50d5e8 100644
+--- a/clang/lib/Driver/ToolChains/CommonArgs.cpp
++++ b/clang/lib/Driver/ToolChains/CommonArgs.cpp
+@@ -58,6 +58,7 @@
+ #include "llvm/Support/Threading.h"
+ #include "llvm/Support/VirtualFileSystem.h"
+ #include "llvm/Support/YAMLParser.h"
++#include "llvm/Support/raw_ostream.h"
+ 
+ using namespace clang::driver;
+ using namespace clang::driver::tools;
