@@ -835,7 +835,7 @@ int ThreadSanitizer::getMemoryAccessFuncIndex(Type *OrigTy, Value *Addr,
   return Idx;
 }
 
-
+#ifndef XSAN_PASS
 #include "PassRegistry.h"
 
 
@@ -848,3 +848,4 @@ llvmGetPassPluginInfo() {
     __xsan::registerTsanForClangAndOpt
   };
 }
+#endif

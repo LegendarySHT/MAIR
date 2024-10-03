@@ -3447,7 +3447,7 @@ bool AddressSanitizer::isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis,
          Size - uint64_t(Offset) >= TypeSize / 8;
 }
 
-
+#ifndef XSAN_PASS
 #include "PassRegistry.h"
 
 extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo 
@@ -3459,3 +3459,4 @@ llvmGetPassPluginInfo() {
     __xsan::registerAsanForClangAndOpt
   };
 }
+#endif

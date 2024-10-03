@@ -38,9 +38,22 @@ add_llvm_pass_plugin(CovSanInstPass
 )
 
 
+add_llvm_pass_plugin(XSanInstPass
+  PARTIAL_SOURCES_INTENDED # Skip checking for else files 
+  ThreadSanitizer.cpp
+  AddressSanitizer.cpp
+  XSanitizerCompositor.cpp
+  ${XSAN_PASS_COMMON}
+)
+
+
+target_compile_definitions(XSanInstPass PRIVATE XSAN_PASS)
+
+
 set_target_properties(ASanInstPass
                       TSanInstPass
                       CovSanInstPass
+                      XSanInstPass
     PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${XSAN_PASS_DIR}"
 )
