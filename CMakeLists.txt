@@ -1,12 +1,12 @@
 # Aligned with LLVM 15.0.7
 cmake_minimum_required(VERSION 3.13.4)
 
+project(xsan)
 # To compile *.S in runtime
 enable_language(C CXX ASM)
 # export compile_commands.json for clangd
 set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
-project(xsan)
 
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(FATAL_ERROR "
