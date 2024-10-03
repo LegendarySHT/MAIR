@@ -34,7 +34,7 @@ void XsanDeactivate() {
 void XsanActivate() {
   __asan::AsanActivate();
 
-  Printf("XSAN Activating. Just for test, pending to be removed.\n");
+  // Printf("XSAN Activating. Just for test, pending to be removed.\n");
   /// FIXME: xsan_is_deactivated is always false,
   //        so the following code is never executed in preinit.
   //       ASan faces the same problem.

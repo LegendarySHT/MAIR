@@ -61,7 +61,7 @@ if (NOT WIN32 AND NOT APPLE)
     )
 endif()
 set(XSAN_CXX_SOURCES
-  # xsan_new_delete.cpp
+  xsan_new_delete.cpp
   )
 
 set(XSAN_STATIC_SOURCES
@@ -163,12 +163,12 @@ if(NOT APPLE)
     ADDITIONAL_HEADERS ${XSAN_HEADERS}
     CFLAGS ${XSAN_CFLAGS}
     DEFS ${XSAN_COMMON_DEFINITIONS})
-  # add_compiler_rt_object_libraries(RTXsan_cxx
-  #   ARCHS ${XSAN_SUPPORTED_ARCH}
-  #   SOURCES ${XSAN_CXX_SOURCES}
-  #   ADDITIONAL_HEADERS ${XSAN_HEADERS}
-  #   CFLAGS ${XSAN_CFLAGS}
-  #   DEFS ${XSAN_COMMON_DEFINITIONS})
+  add_compiler_rt_object_libraries(RTXsan_cxx
+    ARCHS ${XSAN_SUPPORTED_ARCH}
+    SOURCES ${XSAN_CXX_SOURCES}
+    ADDITIONAL_HEADERS ${XSAN_HEADERS}
+    CFLAGS ${XSAN_CFLAGS}
+    DEFS ${XSAN_COMMON_DEFINITIONS})
   add_compiler_rt_object_libraries(RTXsan_static
     ARCHS ${XSAN_SUPPORTED_ARCH}
     SOURCES ${XSAN_STATIC_SOURCES}
@@ -204,6 +204,15 @@ if(NOT APPLE)
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
 
+  add_compiler_rt_runtime(clang_rt.xsan_cxx
+      STATIC
+      ARCHS ${ASAN_SUPPORTED_ARCH}
+      OBJECT_LIBS RTXsan_cxx
+                  RTUbsan_cxx
+      CFLAGS ${ASAN_CFLAGS}
+      DEFS ${ASAN_COMMON_DEFINITIONS}
+      PARENT_TARGET asan)
+  
   add_compiler_rt_runtime(clang_rt.xsan_static
       STATIC
       ARCHS ${XSAN_SUPPORTED_ARCH}
@@ -222,9 +231,9 @@ if(NOT APPLE)
 
   foreach(arch ${XSAN_SUPPORTED_ARCH})
     if (SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
-      # add_sanitizer_rt_symbols(clang_rt.xsan_cxx
-      #   ARCHS ${arch})
-      # add_dependencies(xsan clang_rt.xsan_cxx-${arch}-symbols)
+      add_sanitizer_rt_symbols(clang_rt.xsan_cxx
+        ARCHS ${arch})
+      add_dependencies(xsan clang_rt.xsan_cxx-${arch}-symbols)
       add_sanitizer_rt_symbols(clang_rt.xsan
         ARCHS ${arch}
         EXTRA xsan.syms.extra)
