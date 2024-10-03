@@ -10,7 +10,7 @@
 using namespace llvm;
 
 namespace __xsan {
-void registerAsanForClangAndOpt(PassBuilder &PB) {
+static void addAsanToMPM(ModulePassManager &MPM) {
   /*
    The relevant code in clang BackendUtil.cpp::addSanitizer
     ```cpp
@@ -38,19 +38,23 @@ void registerAsanForClangAndOpt(PassBuilder &PB) {
   bool UseOdrIndicator = false;
   bool UseGlobalGC = false;
 
-  // // 这里注册 clang plugin extension point
-  // // FIXME: what if LTO? this EP is not suitable for LTO.
-  // PB.registerPipelineStartEPCallback(
-  //   [](ModulePassManager &MPM, auto _) {
-  //     MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-  //   }
-  // );
+  MPM.addPass(ModuleAddressSanitizerPass(Opts, UseGlobalGC, UseOdrIndicator,
+                                         DestructorKind));
+}
 
-  PB.registerOptimizerLastEPCallback([=](ModulePassManager &MPM,
-                                         OptimizationLevel level) {
-    MPM.addPass(ModuleAddressSanitizerPass(Opts, UseGlobalGC, UseOdrIndicator,
-                                           DestructorKind));
-  });
+static void addTsanToMPM(ModulePassManager &MPM) {
+  // Create ctor and init functions.
+  MPM.addPass(ModuleThreadSanitizerPass());
+  // Function Pass to Module Pass. Instruments functions to detect race
+  // conditions reads.
+  MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+}
+
+void registerAsanForClangAndOpt(PassBuilder &PB) {
+  PB.registerOptimizerLastEPCallback(
+      [=](ModulePassManager &MPM, OptimizationLevel level) {
+        addAsanToMPM(MPM);
+      });
 
   // 这里注册opt回调的名称
   PB.registerPipelineParsingCallback(
@@ -58,8 +62,7 @@ void registerAsanForClangAndOpt(PassBuilder &PB) {
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "asan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-          MPM.addPass(ModuleAddressSanitizerPass(
-              Opts, UseGlobalGC, UseOdrIndicator, DestructorKind));
+          addAsanToMPM(MPM);
           return true;
         }
         return false;
@@ -77,11 +80,7 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
 
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
-        // Create ctor and init functions.
-        MPM.addPass(ModuleThreadSanitizerPass());
-        // Function Pass to Module Pass. Instruments functions to detect race
-        // conditions reads.
-        MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+        addTsanToMPM(MPM);
       });
 
   // 这里注册opt回调的名称
@@ -90,11 +89,7 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "tsan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-          // Create ctor and init functions.
-          MPM.addPass(ModuleThreadSanitizerPass());
-          // Function Pass to Module Pass. Instruments functions to detect race
-          // conditions reads.
-          MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+          addTsanToMPM(MPM);
           return true;
         }
         return false;
