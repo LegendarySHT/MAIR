@@ -11,19 +11,25 @@ link_directories(${LLVM_LIBRARY_DIRS})
 # -Wl,-Bsymbolic : force local symbols to be used in shared library
 add_link_options(-Wl,-Bsymbolic)
 
+
+set(XSAN_PASS_COMMON 
+  AttributeTaggingPass.cpp
+  PassRegistry.cpp
+)
+
 # TODO: all pass into 1 so
 
 add_llvm_pass_plugin(ASanInstPass
   PARTIAL_SOURCES_INTENDED # Skip checking for else files 
   AddressSanitizer.cpp
-  AttributeTaggingPass.cpp
-)
-
-
+  ${XSAN_PASS_COMMON}
+  )
+  
+  
 add_llvm_pass_plugin(TSanInstPass
   PARTIAL_SOURCES_INTENDED # Skip checking for else files 
   ThreadSanitizer.cpp
-  AttributeTaggingPass.cpp
+  ${XSAN_PASS_COMMON}
 )
 
 add_llvm_pass_plugin(CovSanInstPass

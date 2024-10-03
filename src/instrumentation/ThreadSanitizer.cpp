@@ -836,46 +836,8 @@ int ThreadSanitizer::getMemoryAccessFuncIndex(Type *OrigTy, Value *Addr,
 }
 
 
-#include "llvm/Passes/PassPlugin.h"
-#include "llvm/Passes/PassBuilder.h"
-#include "AttributeTaggingPass.hpp"
+#include "PassRegistry.h"
 
-
-using PassBuilderCallBackTy = function_ref<void(PassBuilder &)>;
-// TODO: select proper extention point
-static void passBuilderCallBack(PassBuilder &PB) {
-    // // 这里注册 clang plugin extension point
-    // // FIXME: what if LTO? this EP is not suitable for LTO.
-    // PB.registerPipelineStartEPCallback(
-    //   [](ModulePassManager &MPM, auto _) {
-    //     MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-    //   }
-    // );
-  
-    PB.registerOptimizerLastEPCallback(
-      [=](ModulePassManager &MPM, OptimizationLevel level) {
-        // Create ctor and init functions.
-        MPM.addPass(ModuleThreadSanitizerPass());
-        // Function Pass to Module Pass. Instruments functions to detect race conditions reads.
-        MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
-      }
-    );
-        
-    // 这里注册opt回调的名称
-    PB.registerPipelineParsingCallback(
-      [=](StringRef Name, ModulePassManager &MPM,
-          ArrayRef<PassBuilder::PipelineElement>) {
-        if (Name == "tsan") {
-          MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-          // Create ctor and init functions.
-          MPM.addPass(ModuleThreadSanitizerPass());
-          // Function Pass to Module Pass. Instruments functions to detect race conditions reads.
-          MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
-          return true;
-        }
-        return false;
-      });
-}
 
 extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo 
 llvmGetPassPluginInfo() {
@@ -883,6 +845,6 @@ llvmGetPassPluginInfo() {
     LLVM_PLUGIN_API_VERSION, 
     "TSan Pass", 
     LLVM_VERSION_STRING,
-    passBuilderCallBack
+    __xsan::registerTsanForClangAndOpt
   };
 }
