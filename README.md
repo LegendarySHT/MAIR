@@ -25,7 +25,10 @@ Now, XSan supports the following sanitizers:
 ## Build
 
 ### Prerequisites
-1. To build XSan, you need to have the LLVM/Clang-15 source code. You can download the source code from the [LLVM official website](https://github.com/llvm/llvm-project/tree/llvmorg-15.0.7).
+1. To build XSan, you need to have the LLVM/Clang-15 source code. You can download the source code from the [LLVM official website](https://github.com/llvm/llvm-project/tree/llvmorg-15.0.7) as follows.
+    ```shell
+    git clone -b llvmorg-15.0.7 --depth 1 https://github.com/llvm/llvm-project.git /path/to/llvm-source
+    ```
     - Because some sanitizer needs the support of compiler frontend, which is not accessible only via the plugin interface, you need to build the whole LLVM/Clang project with some modifications. The modifications are listed in the `llvm.patch` file.
 2. Build the LLVM/Clang project with the modifications in the `llvm.patch` file.
     - Apply the patch file to the LLVM/Clang source code.
