@@ -193,6 +193,9 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       xsanTy = UBSan;
       continue;
     } else if (!strcmp(cur, "-xsan")) {
+      /// TODO: support more sanitizers
+      cc_params[cc_par_cnt++] = "-fsanitize=address";
+      // cc_params[cc_par_cnt++] = "-fsanitize=thread";
       xsanTy = XSan;
       continue;
     } else if (!strncmp(cur, "-fno-sanitize=", 14)){
@@ -337,6 +340,7 @@ static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType 
     return 1;
   }
 
+  u8 ret;
   switch (sanTy) {
   case ASan:
     return handle_asan_options(opt, is_mllvm_arg);
@@ -345,7 +349,8 @@ static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType 
   case UBSan:
     return handle_ubsan_options(opt);
   case XSan:
-    break;
+    ret = handle_asan_options(opt, is_mllvm_arg);
+    return ret;
   case SanNone:
     break;
   }
@@ -359,11 +364,11 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   case ASan:
   case TSan:
   case UBSan:
+  case XSan:
     // Use env var to control clang only perform frontend 
     // transformation for sanitizers.
     setenv("XSAN_ONLY_FRONTEND", "1", 1);
     break;
-  case XSan:
   case SanNone:
     return;
   }
@@ -384,8 +389,12 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   case TSan:
     san_pass = "TSanInstPass.so";
     break;
-  case UBSan:
   case XSan:
+    san_pass = "XSanInstPass.so";
+    cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
+    cc_params[cc_par_cnt++] = "-D__SANITIZE_ADDRESS__";
+    break;
+  case UBSan:
   case SanNone:
     return;
   }
