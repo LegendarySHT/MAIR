@@ -42,13 +42,15 @@ static void XsanInitInternal() {
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
 
+  // This function call interceptors, so it should be called after,
+  // waiting for __asan::AsanTSDInit() finished.
+  // Fix: InitTlsSize should be initialized before MainThread initialization.
+  InitTlsSize();
+
   // Initialize main thread after __asan::AsanInitFromXsan() because it
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-  // This function call interceptors, so it should be called after,
-  // waiting for __asan::AsanTSDInit() finished.
-  InitTlsSize();
 
   /// TODO: this is registed in ASan's initialization
   // InstallAtExitCheckLeaks();
