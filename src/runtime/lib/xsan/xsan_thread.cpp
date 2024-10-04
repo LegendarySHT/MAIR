@@ -29,8 +29,8 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
 
   /// TODO: add TSan thread support.
   auto *asan_thread = __asan::AsanThread::Create(
-      /* start_routine */ nullptr, /* arg */ nullptr,
-      /* parent_tid */ kMainTid, /* stack */ nullptr, /* detached */ true);
+      /* start_routine */ start_routine, /* arg */ arg,
+      /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);
 
   thread->asan_thread_ = asan_thread;
   return thread;
@@ -92,7 +92,7 @@ void XsanThread::Destroy() {
 
   uptr size = RoundUpTo(sizeof(XsanThread), GetPageSizeCached());
   this->asan_thread_->Destroy();
-  
+
   UnmapOrDie(this, size);
 
   // Common resource, must be managed by the XSan

@@ -1147,6 +1147,7 @@ void GetAdditionalThreadContextPtrs(ThreadContextBase *tctx, void *ptrs) {
   // start before returning and thus loosing the the only live reference to the
   // heap object on the stack.
 
+  /// TODO: delegate this to XSan ?
   __asan::AsanThreadContext *atctx =
       reinterpret_cast<__asan::AsanThreadContext *>(tctx);
   __asan::AsanThread *asan_thread = atctx->thread;
