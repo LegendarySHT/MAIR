@@ -17,6 +17,18 @@ void *__xsan_memmove(void *to, const void *from, uptr size) {
   XSAN_MEMMOVE_IMPL(nullptr, to, from, size);
 }
 
+void *__asan_memcpy(void *to, const void *from, uptr size) {
+  XSAN_MEMCPY_IMPL(nullptr, to, from, size);
+}
+
+void *__asan_memset(void *block, int c, uptr size) {
+  XSAN_MEMSET_IMPL(nullptr, block, c, size);
+}
+
+void *__asan_memmove(void *to, const void *from, uptr size) {
+  XSAN_MEMMOVE_IMPL(nullptr, to, from, size);
+}
+
 #if SANITIZER_FUCHSIA
 
 // Fuchsia doesn't use sanitizer_common_interceptors.inc, but
