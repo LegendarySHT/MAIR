@@ -91,9 +91,10 @@ void XsanThread::Destroy() {
   //   UnsetAlternateSignalStack();
 
   uptr size = RoundUpTo(sizeof(XsanThread), GetPageSizeCached());
+  this->asan_thread_->Destroy();
+  
   UnmapOrDie(this, size);
 
-  this->asan_thread_->Destroy();
   // Common resource, must be managed by the XSan
   DTLS_Destroy();
 }

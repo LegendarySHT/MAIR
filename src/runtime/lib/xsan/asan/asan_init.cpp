@@ -212,6 +212,7 @@ static NOINLINE void force_interface_symbols() {
   // clang-format on
 }
 
+
 void AsanInitFromXsan() {
   if (LIKELY(asan_inited)) return;
   SanitizerToolName = "AddressSanitizer";
@@ -279,6 +280,7 @@ void AsanInitFromXsan() {
 
   InitializeShadowMemory();
 
+  /// ASan Thread Destroy is delegated to XSanThread
   AsanTSDInit(PlatformTSDDtor);
   // InstallDeadlySignalHandlers(AsanOnDeadlySignal);
 
