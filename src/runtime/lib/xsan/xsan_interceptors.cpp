@@ -212,8 +212,6 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
       XsanThread::Create(start_routine, arg, current_tid, &stack, detached);
 
   int result;
-  /// FIXME: scope needed for __lsan::ScopedInterceptorDisabler
-  /// FIXME: param modified!
   {
     // Ignore all allocations made by pthread_create: thread stack/TLS may be
     // stored by pthread for future reuse even after thread destruction, and

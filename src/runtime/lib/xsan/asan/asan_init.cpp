@@ -221,10 +221,9 @@ void AsanInitFromXsan() {
 
 //   CacheBinaryName();
 
-  /// TODO: lift flags initialization to XSan
   // Initialize flags. This must be done early, because most of the
   // initialization steps look at flags().
-  InitializeFlags();
+  // InitializeFlags();
 
   WaitForDebugger(flags()->sleep_before_init, "before init");
 

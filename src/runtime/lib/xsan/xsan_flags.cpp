@@ -88,6 +88,10 @@ void InitializeFlags() {
            SanitizerToolName);
     Die();
   }
+
+  // Initialize flags. This must be done early, because most of the
+  // initialization steps look at flags().
+  __asan::InitializeFlags();
 }
 
 }  // namespace __xsan
