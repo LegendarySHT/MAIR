@@ -3,7 +3,7 @@
 //
 // RUN: { env ASAN_OPTIONS=verbosity=1 %t.out %t.so || : ; } 2>&1 | FileCheck %s
 //
-// CHECK: AddressSanitizer: failed to intercept '__cxa_throw'
+// CHECK: Sanitizer: failed to intercept '__cxa_throw'
 //
 // This tests assumes static linking of the asan runtime.
 // UNSUPPORTED: asan-dynamic-runtime
