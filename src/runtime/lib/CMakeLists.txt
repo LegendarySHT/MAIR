@@ -20,6 +20,7 @@ function(compiler_rt_build_runtime runtime)
   if(COMPILER_RT_HAS_${runtime_uppercase})
     add_subdirectory(${runtime})
     if(${runtime} STREQUAL tsan)
+      # tsan/dd is a separate runtime library so that directly being added here.
       add_subdirectory(tsan/dd)
     endif()
   endif()

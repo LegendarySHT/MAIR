@@ -38,6 +38,93 @@ set(XSAN_ASAN_SOURCES
   ${ASAN_SOURCES}
 )
 
+
+
+set(TSAN_SOURCES
+  tsan/orig/tsan_debugging.cpp
+  tsan/orig/tsan_external.cpp
+  tsan/orig/tsan_fd.cpp
+  tsan/orig/tsan_flags.cpp
+  tsan/orig/tsan_ignoreset.cpp
+  tsan/orig/tsan_interceptors_posix.cpp
+  tsan/orig/tsan_interface.cpp
+  tsan/orig/tsan_interface_ann.cpp
+  tsan/orig/tsan_interface_atomic.cpp
+  tsan/orig/tsan_interface_java.cpp
+  tsan/orig/tsan_malloc_mac.cpp
+  tsan/orig/tsan_md5.cpp
+  tsan/orig/tsan_mman.cpp
+  tsan/orig/tsan_mutexset.cpp
+  tsan/orig/tsan_report.cpp
+  tsan/orig/tsan_rtl.cpp
+  tsan/orig/tsan_rtl_access.cpp
+  tsan/orig/tsan_rtl_mutex.cpp
+  tsan/orig/tsan_rtl_proc.cpp
+  tsan/orig/tsan_rtl_report.cpp
+  tsan/orig/tsan_rtl_thread.cpp
+  tsan/orig/tsan_stack_trace.cpp
+  tsan/orig/tsan_suppressions.cpp
+  tsan/orig/tsan_symbolize.cpp
+  tsan/orig/tsan_sync.cpp
+  tsan/orig/tsan_vector_clock.cpp
+)
+
+if(APPLE)
+  list(APPEND TSAN_SOURCES
+    tsan/orig/tsan_interceptors_mac.cpp
+    tsan/orig/tsan_interceptors_mach_vm.cpp
+    tsan/orig/tsan_platform_mac.cpp
+    tsan/orig/tsan_platform_posix.cpp
+    )
+elseif(UNIX)
+  # Assume Linux
+  list(APPEND TSAN_SOURCES
+    tsan/orig/tsan_platform_linux.cpp
+    tsan/orig/tsan_platform_posix.cpp
+    )
+endif()
+
+if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
+  list(APPEND TSAN_SOURCES
+    tsan/orig/tsan_interceptors_libdispatch.cpp
+    )
+endif()
+
+
+set(TSAN_ASM_SOURCES)
+
+if (NOT APPLE)
+  foreach(arch ${TSAN_SUPPORTED_ARCH})
+    if(arch STREQUAL "x86_64")
+      add_asm_sources(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_amd64.S
+        )
+    elseif(arch STREQUAL "aarch64")
+      add_asm_sources(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_aarch64.S
+        )
+    elseif(arch MATCHES "powerpc64|powerpc64le")
+      add_asm_sources(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_ppc64.S
+        )
+    elseif(arch MATCHES "mips64|mips64le")
+      add_asm_sources(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_mips64.S
+        )
+    elseif(arch MATCHES "s390x")
+      add_asm_sources(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_s390x.S
+        )
+    else()
+    endif()
+  endforeach()
+endif()
+
+set(XSAN_TSAN_SOURCES
+  ${TSAN_SOURCES}
+  ${TSAN_ASM_SOURCES}
+)
+
 set(XSAN_SOURCES
   xsan_activation.cpp
   xsan_allocator.cpp
@@ -60,6 +147,8 @@ if (NOT WIN32 AND NOT APPLE)
     asan/orig/asan_interceptors_vfork.S
     )
 endif()
+
+
 set(XSAN_CXX_SOURCES
   xsan_new_delete.cpp
   )
@@ -93,7 +182,7 @@ set(ASAN_HEADERS
   asan/orig/asan_interface_internal.h
   asan/orig/asan_internal.h
   asan/orig/asan_lock.h
-  asan/orig/asan_mapping.h
+  # asan/orig/asan_mapping.h
   asan/orig/asan_poisoning.h
   asan/orig/asan_premap_shadow.h
   asan/orig/asan_report.h
@@ -101,7 +190,7 @@ set(ASAN_HEADERS
   asan/orig/asan_stack.h
   asan/orig/asan_stats.h
   asan/orig/asan_suppressions.h
-  asan/orig/asan_thread.h
+  # asan/orig/asan_thread.h
   )
 set(XSAN_ASAN_HEADERS
   asan/asan_allocator.h
@@ -109,6 +198,39 @@ set(XSAN_ASAN_HEADERS
   asan/asan_thread.h
   asan/asan_init.h
   ${ASAN_HEADERS}
+)
+
+
+set(TSAN_HEADERS
+  tsan/orig/tsan_defs.h
+  tsan/orig/tsan_dense_alloc.h
+  tsan/orig/tsan_fd.h
+  tsan/orig/tsan_flags.h
+  tsan/orig/tsan_flags.inc
+  tsan/orig/tsan_ignoreset.h
+  tsan/orig/tsan_ilist.h
+  tsan/orig/tsan_interceptors.h
+  tsan/orig/tsan_interface.h
+  tsan/orig/tsan_interface.inc
+  tsan/orig/tsan_interface_ann.h
+  tsan/orig/tsan_interface_java.h
+  tsan/orig/tsan_mman.h
+  tsan/orig/tsan_mutexset.h
+  tsan/orig/tsan_platform.h
+  tsan/orig/tsan_ppc_regs.h
+  tsan/orig/tsan_report.h
+  tsan/orig/tsan_rtl.h
+  tsan/orig/tsan_shadow.h
+  tsan/orig/tsan_stack_trace.h
+  tsan/orig/tsan_suppressions.h
+  tsan/orig/tsan_symbolize.h
+  tsan/orig/tsan_sync.h
+  tsan/orig/tsan_trace.h
+  tsan/orig/tsan_vector_clock.h
+  )
+
+set(XSAN_TSAN_HEADERS
+  ${TSAN_HEADERS}
 )
 
 SET(XSAN_HEADERS
@@ -126,9 +248,11 @@ SET(XSAN_HEADERS
 # include_directories(..)
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/asan
+    ${CMAKE_CURRENT_SOURCE_DIR}/tsan
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../
     ${CMAKE_CURRENT_SOURCE_DIR}/asan/orig
+    ${CMAKE_CURRENT_SOURCE_DIR}/tsan/orig
 )
 
 
@@ -142,44 +266,67 @@ set(XSAN_COMMON_RUNTIME_OBJECT_LIBS
   RTLSanCommon
   RTUbsan)
 
+set(TSAN_CFLAGS)
+# SANITIZER_COMMON_CFLAGS contains -fPIC, but it's performance-critical for
+# TSan runtime to be built with -fPIE to reduce the number of register spills.
+# On FreeBSD however it provokes linkage issue thus we disable it.
+if(NOT CMAKE_SYSTEM MATCHES "FreeBSD")
+  append_list_if(COMPILER_RT_HAS_FPIE_FLAG -fPIE TSAN_CFLAGS)
+endif()
 
-set(XSAN_CFLAGS ${SANITIZER_COMMON_CFLAGS})
+if(COMPILER_RT_TSAN_DEBUG_OUTPUT)
+  # Add extra debug information to TSan runtime. This configuration is rarely
+  # used, but we need to support it so that debug output will not bitrot.
+  list(APPEND TSAN_CFLAGS -DTSAN_DEBUG_OUTPUT=2)
+endif()
+set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
+append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
+append_list_if(SANITIZER_LIMIT_FRAME_SIZE -Wframe-larger-than=530
+                TSAN_RTL_CFLAGS)
+append_list_if(COMPILER_RT_HAS_WGLOBAL_CONSTRUCTORS_FLAG -Wglobal-constructors
+                TSAN_RTL_CFLAGS)
+
+if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
+  list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_LIBDISPATCH_CFLAGS})
+endif()
+
+set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS})
 set(XSAN_COMMON_DEFINITIONS)
 
-append_rtti_flag(OFF XSAN_CFLAGS)
+append_rtti_flag(OFF XSAN_RTL_CFLAGS)
 
 # Silence warnings in system headers with MSVC.
 if(NOT CLANG_CL)
-  append_list_if(COMPILER_RT_HAS_EXTERNAL_FLAG "/experimental:external /external:W0 /external:anglebrackets" XSAN_CFLAGS)
+  append_list_if(COMPILER_RT_HAS_EXTERNAL_FLAG "/experimental:external /external:W0 /external:anglebrackets" XSAN_RTL_CFLAGS)
 endif()
 
 # Too many existing bugs, needs cleanup.
-append_list_if(COMPILER_RT_HAS_WNO_FORMAT -Wno-format XSAN_CFLAGS)
+append_list_if(COMPILER_RT_HAS_WNO_FORMAT -Wno-format XSAN_RTL_CFLAGS)
 
 if(NOT APPLE)
   add_compiler_rt_object_libraries(RTXsan
     ARCHS ${XSAN_SUPPORTED_ARCH}
     SOURCES ${XSAN_SOURCES}
     ADDITIONAL_HEADERS ${XSAN_HEADERS}
-    CFLAGS ${XSAN_CFLAGS}
+    CFLAGS ${XSAN_RTL_CFLAGS}
     DEFS ${XSAN_COMMON_DEFINITIONS})
   add_compiler_rt_object_libraries(RTXsan_cxx
     ARCHS ${XSAN_SUPPORTED_ARCH}
     SOURCES ${XSAN_CXX_SOURCES}
     ADDITIONAL_HEADERS ${XSAN_HEADERS}
-    CFLAGS ${XSAN_CFLAGS}
+    CFLAGS ${XSAN_RTL_CFLAGS}
     DEFS ${XSAN_COMMON_DEFINITIONS})
   add_compiler_rt_object_libraries(RTXsan_static
     ARCHS ${XSAN_SUPPORTED_ARCH}
     SOURCES ${XSAN_STATIC_SOURCES}
     ADDITIONAL_HEADERS ${XSAN_HEADERS}
-    CFLAGS ${XSAN_CFLAGS}
+    CFLAGS ${XSAN_RTL_CFLAGS}
     DEFS ${XSAN_COMMON_DEFINITIONS})
   add_compiler_rt_object_libraries(RTXsan_preinit
     ARCHS ${XSAN_SUPPORTED_ARCH}
     SOURCES ${XSAN_PREINIT_SOURCES}
     ADDITIONAL_HEADERS ${XSAN_HEADERS}
-    CFLAGS ${XSAN_CFLAGS}
+    CFLAGS ${XSAN_RTL_CFLAGS}
     DEFS ${XSAN_COMMON_DEFINITIONS})
 
   # file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
@@ -200,7 +347,7 @@ if(NOT APPLE)
       OBJECT_LIBS RTXsan_preinit
                   RTXsan          
                   ${XSAN_COMMON_RUNTIME_OBJECT_LIBS}
-      CFLAGS ${XSAN_CFLAGS}
+      CFLAGS ${XSAN_RTL_CFLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
 
@@ -217,7 +364,7 @@ if(NOT APPLE)
       STATIC
       ARCHS ${XSAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTXsan_static
-      CFLAGS ${XSAN_CFLAGS}
+      CFLAGS ${XSAN_RTL_CFLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
   
@@ -225,7 +372,7 @@ if(NOT APPLE)
       STATIC
       ARCHS ${XSAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTXsan_preinit
-      CFLAGS ${XSAN_CFLAGS}
+      CFLAGS ${XSAN_RTL_CFLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
 
