@@ -356,8 +356,8 @@ if(NOT APPLE)
       ARCHS ${ASAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTXsan_cxx
                   RTUbsan_cxx
-      CFLAGS ${ASAN_CFLAGS}
-      DEFS ${ASAN_COMMON_DEFINITIONS}
+      CFLAGS ${XSAN_RTL_CFLAGS}
+      DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET asan)
   
   add_compiler_rt_runtime(clang_rt.xsan_static
