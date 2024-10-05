@@ -401,37 +401,38 @@ void FreeImpl(void *p) {
 using namespace __tsan;
 
 extern "C" {
-uptr __sanitizer_get_current_allocated_bytes() {
-  uptr stats[AllocatorStatCount];
-  allocator()->GetStats(stats);
-  return stats[AllocatorStatAllocated];
-}
+/// TODO: Delegate these interface implemantations to XSan.
+// uptr __sanitizer_get_current_allocated_bytes() {
+//   uptr stats[AllocatorStatCount];
+//   allocator()->GetStats(stats);
+//   return stats[AllocatorStatAllocated];
+// }
 
-uptr __sanitizer_get_heap_size() {
-  uptr stats[AllocatorStatCount];
-  allocator()->GetStats(stats);
-  return stats[AllocatorStatMapped];
-}
+// uptr __sanitizer_get_heap_size() {
+//   uptr stats[AllocatorStatCount];
+//   allocator()->GetStats(stats);
+//   return stats[AllocatorStatMapped];
+// }
 
-uptr __sanitizer_get_free_bytes() {
-  return 1;
-}
+// uptr __sanitizer_get_free_bytes() {
+//   return 1;
+// }
 
-uptr __sanitizer_get_unmapped_bytes() {
-  return 1;
-}
+// uptr __sanitizer_get_unmapped_bytes() {
+//   return 1;
+// }
 
-uptr __sanitizer_get_estimated_allocated_size(uptr size) {
-  return size;
-}
+// uptr __sanitizer_get_estimated_allocated_size(uptr size) {
+//   return size;
+// }
 
-int __sanitizer_get_ownership(const void *p) {
-  return allocator()->GetBlockBegin(p) != 0;
-}
+// int __sanitizer_get_ownership(const void *p) {
+//   return allocator()->GetBlockBegin(p) != 0;
+// }
 
-uptr __sanitizer_get_allocated_size(const void *p) {
-  return user_alloc_usable_size(p);
-}
+// uptr __sanitizer_get_allocated_size(const void *p) {
+//   return user_alloc_usable_size(p);
+// }
 
 void __tsan_on_thread_idle() {
   ThreadState *thr = cur_thread();

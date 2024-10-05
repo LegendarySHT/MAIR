@@ -856,8 +856,9 @@ ALWAYS_INLINE USED void PrintCurrentStackSlow(uptr pc) {
 using namespace __tsan;
 
 extern "C" {
-SANITIZER_INTERFACE_ATTRIBUTE
-void __sanitizer_print_stack_trace() {
-  PrintCurrentStackSlow(StackTrace::GetCurrentPc());
-}
+/// TODO: Delegate these interface implemantations to XSan.
+// SANITIZER_INTERFACE_ATTRIBUTE
+// void __sanitizer_print_stack_trace() {
+//   PrintCurrentStackSlow(StackTrace::GetCurrentPc());
+// }
 }  // extern "C"
