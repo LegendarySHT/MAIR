@@ -125,6 +125,7 @@ set(XSAN_TSAN_SOURCES
   tsan/tsan_init.cpp
   tsan/tsan_mman.cpp
   tsan/tsan_rtl_thread.cpp
+  tsan/tsan_rtl_extra.cpp
   ${TSAN_SOURCES}
   ${TSAN_ASM_SOURCES}
 )
