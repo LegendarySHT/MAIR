@@ -141,6 +141,7 @@ set(XSAN_SOURCES
   xsan_rtl.cpp
   xsan_thread.cpp
   ${XSAN_ASAN_SOURCES}
+  ${XSAN_TSAN_SOURCES}
   )
 
 
@@ -215,7 +216,7 @@ set(TSAN_HEADERS
   tsan/orig/tsan_ilist.h
   tsan/orig/tsan_interceptors.h
   tsan/orig/tsan_interface.h
-  tsan/orig/tsan_interface.inc
+  # tsan/orig/tsan_interface.inc
   tsan/orig/tsan_interface_ann.h
   tsan/orig/tsan_interface_java.h
   tsan/orig/tsan_mman.h
@@ -235,6 +236,7 @@ set(TSAN_HEADERS
 
 set(XSAN_TSAN_HEADERS
   tsan/tsan_init.h
+  tsan/tsan_interface.inc
   tsan/tsan_platform.h
   tsan/tsan_rtl.h
   ${TSAN_HEADERS}
@@ -250,6 +252,7 @@ SET(XSAN_HEADERS
   xsan_internal.h
   xsan_thread.h
   ${XSAN_ASAN_HEADERS}
+  ${XSAN_TSAN_HEADERS}
   )
 
 # include_directories(..)
