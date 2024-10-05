@@ -265,7 +265,7 @@ void AsanInitFromXsan() {
   SetLowLevelAllocateMinAlignment(ASAN_SHADOW_GRANULARITY);
   SetLowLevelAllocateCallback(OnLowLevelAllocate);
 
-  InitializeAsanInterceptors();
+  // InitializeAsanInterceptors();
   CheckASLR();
 
   // Enable system log ("adb logcat") on Android.
