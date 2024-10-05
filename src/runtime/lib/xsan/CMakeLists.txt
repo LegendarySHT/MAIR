@@ -271,6 +271,8 @@ set(TSAN_CFLAGS)
 # TSan runtime to be built with -fPIE to reduce the number of register spills.
 # On FreeBSD however it provokes linkage issue thus we disable it.
 if(NOT CMAKE_SYSTEM MATCHES "FreeBSD")
+  # -fPIE reduces the number of register spills in TSan runtime.
+  # This is performance-critical.
   append_list_if(COMPILER_RT_HAS_FPIE_FLAG -fPIE TSAN_CFLAGS)
 endif()
 
@@ -280,13 +282,17 @@ if(COMPILER_RT_TSAN_DEBUG_OUTPUT)
   list(APPEND TSAN_CFLAGS -DTSAN_DEBUG_OUTPUT=2)
 endif()
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
+# -mssse3 enables SIMD instructions that are used in TSan runtime.
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
+# compile-time: -Wframe-larger-than=530: limit frame size to 530. Maybe useless?
 append_list_if(SANITIZER_LIMIT_FRAME_SIZE -Wframe-larger-than=530
                 TSAN_RTL_CFLAGS)
+# compile-time: -Wglobal-constructors: warn about global constructors. Maybe useless?
 append_list_if(COMPILER_RT_HAS_WGLOBAL_CONSTRUCTORS_FLAG -Wglobal-constructors
                 TSAN_RTL_CFLAGS)
 
 if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
+  # Intercept libdispatch functions in Apple platforms (Grand Central Dispatch).
   list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_LIBDISPATCH_CFLAGS})
 endif()
 
