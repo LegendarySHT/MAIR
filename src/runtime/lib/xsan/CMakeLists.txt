@@ -46,14 +46,14 @@ set(TSAN_SOURCES
   tsan/orig/tsan_fd.cpp
   tsan/orig/tsan_flags.cpp
   tsan/orig/tsan_ignoreset.cpp
-  tsan/orig/tsan_interceptors_posix.cpp
+  # tsan/orig/tsan_interceptors_posix.cpp
   tsan/orig/tsan_interface.cpp
   tsan/orig/tsan_interface_ann.cpp
   tsan/orig/tsan_interface_atomic.cpp
   tsan/orig/tsan_interface_java.cpp
   tsan/orig/tsan_malloc_mac.cpp
   tsan/orig/tsan_md5.cpp
-  tsan/orig/tsan_mman.cpp
+  # tsan/orig/tsan_mman.cpp
   tsan/orig/tsan_mutexset.cpp
   tsan/orig/tsan_report.cpp
   tsan/orig/tsan_rtl.cpp
@@ -61,7 +61,7 @@ set(TSAN_SOURCES
   tsan/orig/tsan_rtl_mutex.cpp
   tsan/orig/tsan_rtl_proc.cpp
   tsan/orig/tsan_rtl_report.cpp
-  tsan/orig/tsan_rtl_thread.cpp
+  # tsan/orig/tsan_rtl_thread.cpp
   tsan/orig/tsan_stack_trace.cpp
   tsan/orig/tsan_suppressions.cpp
   tsan/orig/tsan_symbolize.cpp
@@ -71,8 +71,8 @@ set(TSAN_SOURCES
 
 if(APPLE)
   list(APPEND TSAN_SOURCES
-    tsan/orig/tsan_interceptors_mac.cpp
-    tsan/orig/tsan_interceptors_mach_vm.cpp
+    # tsan/orig/tsan_interceptors_mac.cpp
+    # tsan/orig/tsan_interceptors_mach_vm.cpp
     tsan/orig/tsan_platform_mac.cpp
     tsan/orig/tsan_platform_posix.cpp
     )
@@ -86,6 +86,7 @@ endif()
 
 if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
   list(APPEND TSAN_SOURCES
+    # TODO: provide uniform interceptors for libdispatch
     tsan/orig/tsan_interceptors_libdispatch.cpp
     )
 endif()
@@ -121,6 +122,9 @@ if (NOT APPLE)
 endif()
 
 set(XSAN_TSAN_SOURCES
+  tsan/tsan_init.cpp
+  tsan/tsan_mman.cpp
+  tsan/tsan_rtl_thread.cpp
   ${TSAN_SOURCES}
   ${TSAN_ASM_SOURCES}
 )
@@ -216,10 +220,10 @@ set(TSAN_HEADERS
   tsan/orig/tsan_interface_java.h
   tsan/orig/tsan_mman.h
   tsan/orig/tsan_mutexset.h
-  tsan/orig/tsan_platform.h
+  # tsan/orig/tsan_platform.h
   tsan/orig/tsan_ppc_regs.h
   tsan/orig/tsan_report.h
-  tsan/orig/tsan_rtl.h
+  # tsan/orig/tsan_rtl.h
   tsan/orig/tsan_shadow.h
   tsan/orig/tsan_stack_trace.h
   tsan/orig/tsan_suppressions.h
@@ -230,6 +234,9 @@ set(TSAN_HEADERS
   )
 
 set(XSAN_TSAN_HEADERS
+  tsan/tsan_init.h
+  tsan/tsan_platform.h
+  tsan/tsan_rtl.h
   ${TSAN_HEADERS}
 )
 

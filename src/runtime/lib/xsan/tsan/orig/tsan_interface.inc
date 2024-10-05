@@ -1,1 +1,0 @@
-../../../tsan/rtl/tsan_interface.inc
