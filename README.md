@@ -49,7 +49,7 @@ Now, XSan supports the following sanitizers:
         /path/to/llvm-source/llvm/
     make -j$(nproc)
     ```
-3. Set the relevant environment variables.
+3. Export the relevant environment variables to your dev env (e.g., in .bashrc).
     ```shell
     export LLVM_DIR=/path/to/llvm-build
     export PATH=$LLVM_DIR/bin:$PATH
@@ -59,6 +59,10 @@ Now, XSan supports the following sanitizers:
     ```shell
     git clone https://github.com/Camsyn/XSan.git /path/to/xsan
     ```
+    > Note that the above command will only clone the main branch of the XSan project. If you want to clone the development branch, you need to switch to the `dev-xsan` branch by executing the following command.
+    > ```shell
+    > cd /path/to/xsan; git checkout dev-xsan
+    > ```
 2. Build XSan.
     - Debug mode: use to develop and debug the project.
     ```shell
@@ -72,7 +76,7 @@ Now, XSan supports the following sanitizers:
     cmake -DCMAKE_BUILD_TYPE=Release ..
     make -j$(nproc)
     ```
-3. Set the relevant environment variables.
+3. Export the relevant environment variables to your dev env (e.g., in .bashrc).
     ```shell
     export XSAN_DIR=/path/to/xsan
     export PATH=$XSAN_DIR/build:$PATH
