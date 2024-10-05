@@ -284,19 +284,19 @@ endif()
 set(TSAN_RTL_CFLAGS ${TSAN_CFLAGS})
 # -mssse3 enables SIMD instructions that are used in TSan runtime.
 append_list_if(COMPILER_RT_HAS_MSSE4_2_FLAG -msse4.2 TSAN_RTL_CFLAGS)
-# compile-time: -Wframe-larger-than=530: limit frame size to 530. Maybe useless?
-append_list_if(SANITIZER_LIMIT_FRAME_SIZE -Wframe-larger-than=530
-                TSAN_RTL_CFLAGS)
-# compile-time: -Wglobal-constructors: warn about global constructors. Maybe useless?
-append_list_if(COMPILER_RT_HAS_WGLOBAL_CONSTRUCTORS_FLAG -Wglobal-constructors
-                TSAN_RTL_CFLAGS)
+# # compile-time: -Wframe-larger-than=530: limit frame size to 530. Maybe useless?
+# append_list_if(SANITIZER_LIMIT_FRAME_SIZE -Wframe-larger-than=530
+#                 TSAN_RTL_CFLAGS)
+# # compile-time: -Wglobal-constructors: warn about global constructors. Maybe useless?
+# append_list_if(COMPILER_RT_HAS_WGLOBAL_CONSTRUCTORS_FLAG -Wglobal-constructors
+#                 TSAN_RTL_CFLAGS)
 
 if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
   # Intercept libdispatch functions in Apple platforms (Grand Central Dispatch).
   list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_LIBDISPATCH_CFLAGS})
 endif()
 
-set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS})
+set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${TSAN_RTL_CFLAGS})
 set(XSAN_COMMON_DEFINITIONS)
 
 append_rtti_flag(OFF XSAN_RTL_CFLAGS)
