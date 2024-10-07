@@ -215,7 +215,7 @@ set(TSAN_HEADERS
   tsan/orig/tsan_flags.inc
   tsan/orig/tsan_ignoreset.h
   tsan/orig/tsan_ilist.h
-  tsan/orig/tsan_interceptors.h
+  # tsan/orig/tsan_interceptors.h
   tsan/orig/tsan_interface.h
   # tsan/orig/tsan_interface.inc
   tsan/orig/tsan_interface_ann.h
@@ -237,6 +237,7 @@ set(TSAN_HEADERS
 
 set(XSAN_TSAN_HEADERS
   tsan/tsan_init.h
+  tsan/tsan_interceptors.h
   tsan/tsan_interface.inc
   tsan/tsan_platform.h
   tsan/tsan_rtl.h
