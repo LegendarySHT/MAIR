@@ -240,6 +240,7 @@ set(XSAN_TSAN_HEADERS
   tsan/tsan_interface.inc
   tsan/tsan_platform.h
   tsan/tsan_rtl.h
+  tsan/tsan_rtl_extra.h
   ${TSAN_HEADERS}
 )
 
