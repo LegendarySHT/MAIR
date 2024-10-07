@@ -1,11 +1,6 @@
 // #include "../xsan_allocator.h"
 
 // #include "asan_mapping.h"
-#include "asan_thread.h"
-#include "orig/asan_stack.h"
-#include "orig/asan_poisoning.h"
-#include "orig/asan_report.h"
-#include "lsan/lsan_common.h"
 #include <sanitizer_common/sanitizer_allocator_checks.h>
 #include <sanitizer_common/sanitizer_allocator_interface.h>
 #include <sanitizer_common/sanitizer_errno.h>
@@ -14,6 +9,13 @@
 #include <sanitizer_common/sanitizer_list.h>
 #include <sanitizer_common/sanitizer_quarantine.h>
 #include <sanitizer_common/sanitizer_stackdepot.h>
+
+#include "../xsan_common_defs.h"
+#include "asan_thread.h"
+#include "lsan/lsan_common.h"
+#include "orig/asan_poisoning.h"
+#include "orig/asan_report.h"
+#include "orig/asan_stack.h"
 
 namespace __asan {
 // using XAsanAllocator = __xsan::XsanAllocator;
@@ -178,9 +180,7 @@ class LargeChunkHeader {
 
 struct QuarantineCallback {
   QuarantineCallback(AllocatorCache *cache, BufferedStackTrace *stack)
-      : cache_(cache),
-        stack_(stack) {
-  }
+      : cache_(cache), stack_(stack) {}
 
   void Recycle(AsanChunk *m) {
     void *p = get_allocator().GetBlockBegin(m);
@@ -215,13 +215,11 @@ struct QuarantineCallback {
     return res;
   }
 
-  void Deallocate(void *p) {
-    get_allocator().Deallocate(cache_, p);
-  }
+  void Deallocate(void *p) { get_allocator().Deallocate(cache_, p); }
 
  private:
-  AllocatorCache* const cache_;
-  BufferedStackTrace* const stack_;
+  AllocatorCache *const cache_;
+  BufferedStackTrace *const stack_;
 };
 
 typedef Quarantine<QuarantineCallback, AsanChunk> AsanQuarantine;
@@ -446,10 +444,12 @@ struct Allocator {
 
   bool UpdateAllocationStack(uptr addr, BufferedStackTrace *stack) {
     AsanChunk *m = GetAsanChunkByAddr(addr);
-    if (!m) return false;
+    if (!m)
+      return false;
     if (atomic_load(&m->chunk_state, memory_order_acquire) != CHUNK_ALLOCATED)
       return false;
-    if (m->Beg() != addr) return false;
+    if (m->Beg() != addr)
+      return false;
     AsanThread *t = GetCurrentThread();
     m->SetAllocContext(t ? t->tid() : kMainTid, StackDepotPut(*stack));
     return true;
@@ -509,11 +509,11 @@ struct Allocator {
     void *allocated;
     if (t) {
       AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
-      allocated = allocator.Allocate(cache, needed_size, 8);
+      allocated = allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     } else {
       SpinMutexLock l(&fallback_mutex);
       AllocatorCache *cache = &fallback_allocator_cache;
-      allocated = allocator.Allocate(cache, needed_size, 8);
+      allocated = allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     }
     if (UNLIKELY(!allocated)) {
       SetAllocatorOutOfMemory();
@@ -650,15 +650,15 @@ struct Allocator {
   void Deallocate(void *ptr, uptr delete_size, uptr delete_alignment,
                   BufferedStackTrace *stack, AllocType alloc_type) {
     uptr p = reinterpret_cast<uptr>(ptr);
-    if (p == 0) return;
+    if (p == 0)
+      return;
 
     uptr chunk_beg = p - kChunkHeaderSize;
     AsanChunk *m = reinterpret_cast<AsanChunk *>(chunk_beg);
 
     // On Windows, uninstrumented DLLs may allocate memory before ASan hooks
     // malloc. Don't report an invalid free in this case.
-    if (SANITIZER_WINDOWS &&
-        !get_allocator().PointerIsMine(ptr)) {
+    if (SANITIZER_WINDOWS && !get_allocator().PointerIsMine(ptr)) {
       if (!IsSystemHeapAddress(p))
         ReportFreeNotMalloced(p, stack);
       return;
@@ -668,7 +668,8 @@ struct Allocator {
 
     // Must mark the chunk as quarantined before any changes to its metadata.
     // Do not quarantine given chunk if we failed to set CHUNK_QUARANTINE flag.
-    if (!AtomicallySetQuarantineFlagIfAllocated(m, ptr, stack)) return;
+    if (!AtomicallySetQuarantineFlagIfAllocated(m, ptr, stack))
+      return;
 
     if (m->alloc_type != alloc_type) {
       if (atomic_load(&alloc_dealloc_mismatch, memory_order_acquire)) {
@@ -698,7 +699,7 @@ struct Allocator {
     thread_stats.reallocs++;
     thread_stats.realloced += new_size;
 
-    void *new_ptr = Allocate(new_size, 8, stack, FROM_MALLOC, true);
+    void *new_ptr = Allocate(new_size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true);
     if (new_ptr) {
       u8 chunk_state = atomic_load(&m->chunk_state, memory_order_acquire);
       if (chunk_state != CHUNK_ALLOCATED)
@@ -719,7 +720,7 @@ struct Allocator {
         return nullptr;
       ReportCallocOverflow(nmemb, size, stack);
     }
-    void *ptr = Allocate(nmemb * size, 8, stack, FROM_MALLOC, false);
+    void *ptr = Allocate(nmemb * size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, false);
     // If the memory comes from the secondary allocator no need to clear it
     // as it comes directly from mmap.
     if (ptr && allocator.FromPrimary(ptr))
@@ -777,10 +778,12 @@ struct Allocator {
 
   uptr AllocationSize(uptr p) {
     AsanChunk *m = GetAsanChunkByAddr(p);
-    if (!m) return 0;
+    if (!m)
+      return 0;
     if (atomic_load(&m->chunk_state, memory_order_acquire) != CHUNK_ALLOCATED)
       return 0;
-    if (m->Beg() != p) return 0;
+    if (m->Beg() != p)
+      return 0;
     return m->UsedSize();
   }
 
@@ -794,7 +797,8 @@ struct Allocator {
       AsanChunk *m2 = nullptr;
       for (uptr l = 1; l < GetPageSizeCached(); l++) {
         m2 = GetAsanChunkByAddr(addr - l);
-        if (m2 == m1) continue;  // Still the same chunk.
+        if (m2 == m1)
+          continue;  // Still the same chunk.
         break;
       }
       if (m2 && AsanChunkView(m2).AddrIsAtRight(addr, 1, &offset))
@@ -807,15 +811,15 @@ struct Allocator {
     AsanThread *t = GetCurrentThread();
     if (t) {
       AsanThreadLocalMallocStorage *ms = &t->malloc_storage();
-      quarantine.DrainAndRecycle(GetQuarantineCache(ms),
-                                 QuarantineCallback(GetAllocatorCache(ms),
-                                                    stack));
+      quarantine.DrainAndRecycle(
+          GetQuarantineCache(ms),
+          QuarantineCallback(GetAllocatorCache(ms), stack));
     }
     {
       SpinMutexLock l(&fallback_mutex);
-      quarantine.DrainAndRecycle(&fallback_quarantine_cache,
-                                 QuarantineCallback(&fallback_allocator_cache,
-                                                    stack));
+      quarantine.DrainAndRecycle(
+          &fallback_quarantine_cache,
+          QuarantineCallback(&fallback_allocator_cache, stack));
     }
 
     allocator.ForceReleaseToOS();
@@ -839,9 +843,7 @@ struct Allocator {
 
 static Allocator instance(LINKER_INITIALIZED);
 
-static AsanAllocator &get_allocator() {
-  return instance.allocator;
-}
+static AsanAllocator &get_allocator() { return instance.allocator; }
 
 bool AsanChunkView::IsValid() const {
   return chunk_ && atomic_load(&chunk_->chunk_state, memory_order_relaxed) !=
@@ -914,7 +916,7 @@ AsanChunkView FindHeapChunkByAddress(uptr addr) {
   return instance.FindHeapChunkByAddress(addr);
 }
 AsanChunkView FindHeapChunkByAllocBeg(uptr addr) {
-  return AsanChunkView(instance.GetAsanChunk(reinterpret_cast<void*>(addr)));
+  return AsanChunkView(instance.GetAsanChunk(reinterpret_cast<void *>(addr)));
 }
 
 void AsanThreadLocalMallocStorage::CommitBack() {
@@ -922,9 +924,7 @@ void AsanThreadLocalMallocStorage::CommitBack() {
   instance.CommitBack(this, &stack);
 }
 
-void PrintInternalAllocatorStats() {
-  instance.PrintStats();
-}
+void PrintInternalAllocatorStats() { instance.PrintStats(); }
 
 void asan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
   instance.Deallocate(ptr, 0, 0, stack, alloc_type);
@@ -936,7 +936,7 @@ void asan_delete(void *ptr, uptr size, uptr alignment,
 }
 
 void *asan_malloc(uptr size, BufferedStackTrace *stack) {
-  return SetErrnoOnNull(instance.Allocate(size, 8, stack, FROM_MALLOC, true));
+  return SetErrnoOnNull(instance.Allocate(size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true));
 }
 
 void *asan_calloc(uptr nmemb, uptr size, BufferedStackTrace *stack) {
@@ -956,7 +956,7 @@ void *asan_reallocarray(void *p, uptr nmemb, uptr size,
 
 void *asan_realloc(void *p, uptr size, BufferedStackTrace *stack) {
   if (!p)
-    return SetErrnoOnNull(instance.Allocate(size, 8, stack, FROM_MALLOC, true));
+    return SetErrnoOnNull(instance.Allocate(size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true));
   if (size == 0) {
     if (flags()->allocator_frees_and_returns_null_on_realloc_zero) {
       instance.Deallocate(p, 0, 0, stack, FROM_MALLOC);
@@ -1027,7 +1027,8 @@ int asan_posix_memalign(void **memptr, uptr alignment, uptr size,
 }
 
 uptr asan_malloc_usable_size(const void *ptr, uptr pc, uptr bp) {
-  if (!ptr) return 0;
+  if (!ptr)
+    return 0;
   uptr usable_size = instance.AllocationSize(reinterpret_cast<uptr>(ptr));
   if (flags()->check_malloc_usable_size && (usable_size == 0)) {
     GET_STACK_TRACE_FATAL(pc, bp);
@@ -1052,13 +1053,9 @@ void asan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 
 // --- Implementation of LSan-specific functions --- {{{1
 namespace __lsan {
-void LockAllocator() {
-  __asan::get_allocator().ForceLock();
-}
+void LockAllocator() { __asan::get_allocator().ForceLock(); }
 
-void UnlockAllocator() {
-  __asan::get_allocator().ForceUnlock();
-}
+void UnlockAllocator() { __asan::get_allocator().ForceUnlock(); }
 
 void GetAllocatorGlobalRange(uptr *begin, uptr *end) {
   *begin = (uptr)&__asan::get_allocator();
@@ -1174,9 +1171,7 @@ using namespace __asan;
 
 // ASan allocator doesn't reserve extra bytes, so normally we would
 // just return "size". We don't want to expose our redzone sizes, etc here.
-uptr __sanitizer_get_estimated_allocated_size(uptr size) {
-  return size;
-}
+uptr __sanitizer_get_estimated_allocated_size(uptr size) { return size; }
 
 int __sanitizer_get_ownership(const void *p) {
   uptr ptr = reinterpret_cast<uptr>(p);
@@ -1184,7 +1179,8 @@ int __sanitizer_get_ownership(const void *p) {
 }
 
 uptr __sanitizer_get_allocated_size(const void *p) {
-  if (!p) return 0;
+  if (!p)
+    return 0;
   uptr ptr = reinterpret_cast<uptr>(p);
   uptr allocated_size = instance.AllocationSize(ptr);
   // Die if p is not malloced or if it is already freed.
@@ -1200,7 +1196,7 @@ void __sanitizer_purge_allocator() {
   instance.Purge(&stack);
 }
 
-int __asan_update_allocation_context(void* addr) {
+int __asan_update_allocation_context(void *addr) {
   GET_STACK_TRACE_MALLOC;
   return instance.UpdateAllocationStack((uptr)addr, &stack);
 }
