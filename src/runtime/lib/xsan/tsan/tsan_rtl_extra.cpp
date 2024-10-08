@@ -9,6 +9,7 @@
  */
 #include "tsan_rtl_extra.h"
 
+#include "tsan/tsan_interceptors.h"
 
 using namespace __tsan;
 
@@ -30,7 +31,6 @@ using namespace __tsan;
 #  define nanosleep __nanosleep50
 #  define vfork __vfork14
 #endif
-
 
 #ifdef __mips__
 struct ucontext_t {
@@ -323,3 +323,53 @@ void ProcessPendingSignalsImpl(ThreadState *thr) {
 }
 
 }  // namespace __tsan
+
+using namespace __tsan;
+
+ScopedInterceptor::ScopedInterceptor(ThreadState *thr, const char *fname,
+                                     uptr pc)
+    : thr_(thr), in_ignored_lib_(false), ignoring_(false) {
+  LazyInitialize(thr);
+  if (!thr_->is_inited)
+    return;
+  if (!thr_->ignore_interceptors)
+    FuncEntry(thr, pc);
+  DPrintf("#%d: intercept %s()\n", thr_->tid, fname);
+  ignoring_ =
+      !thr_->in_ignored_lib && (flags()->ignore_interceptors_accesses ||
+                                libignore()->IsIgnored(pc, &in_ignored_lib_));
+  EnableIgnores();
+}
+
+ScopedInterceptor::~ScopedInterceptor() {
+  if (!thr_->is_inited)
+    return;
+  DisableIgnores();
+  if (!thr_->ignore_interceptors) {
+    ProcessPendingSignals(thr_);
+    FuncExit(thr_);
+    CheckedMutex::CheckNoLocks();
+  }
+}
+
+NOINLINE
+void ScopedInterceptor::EnableIgnoresImpl() {
+  ThreadIgnoreBegin(thr_, 0);
+  if (flags()->ignore_noninstrumented_modules)
+    thr_->suppress_reports++;
+  if (in_ignored_lib_) {
+    DCHECK(!thr_->in_ignored_lib);
+    thr_->in_ignored_lib = true;
+  }
+}
+
+NOINLINE
+void ScopedInterceptor::DisableIgnoresImpl() {
+  ThreadIgnoreEnd(thr_);
+  if (flags()->ignore_noninstrumented_modules)
+    thr_->suppress_reports--;
+  if (in_ignored_lib_) {
+    DCHECK(thr_->in_ignored_lib);
+    thr_->in_ignored_lib = false;
+  }
+}
