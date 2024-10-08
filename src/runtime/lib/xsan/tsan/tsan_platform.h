@@ -60,22 +60,24 @@ C/C++ on netbsd/amd64 can reuse the same mapping:
  * Heap grows downwards (top-down).
  * ASLR must be disabled per-process or globally.
 */
+
+/// Modified: enlarge the heap size from 1T to 2T to fit ASan's needs.
 struct Mapping48AddressSpace {
   static const uptr kMetaShadowBeg = 0x300000000000ull;
   static const uptr kMetaShadowEnd = 0x380000000000ull;
-  static const uptr kShadowBeg = 0x100000000000ull;
-  static const uptr kShadowEnd = 0x300000000000ull;
-  static const uptr kHeapMemBeg = 0x720000000000ull;
-  static const uptr kHeapMemEnd = 0x730000000000ull;
+  static const uptr kShadowBeg     = 0x100000000000ull;
+  static const uptr kShadowEnd     = 0x300000000000ull;
+  static const uptr kHeapMemBeg    = 0x720000000000ull;
+  static const uptr kHeapMemEnd    = 0x740000000000ull;
   static const uptr kLoAppMemBeg   = 0x000000001000ull;
-  static const uptr kLoAppMemEnd = 0x020000000000ull;
+  static const uptr kLoAppMemEnd   = 0x020000000000ull;
   static const uptr kMidAppMemBeg  = 0x550000000000ull;
-  static const uptr kMidAppMemEnd = 0x5a0000000000ull;
-  static const uptr kHiAppMemBeg = 0x7a0000000000ull;
+  static const uptr kMidAppMemEnd  = 0x5a0000000000ull;
+  static const uptr kHiAppMemBeg   = 0x7a0000000000ull;
   static const uptr kHiAppMemEnd   = 0x800000000000ull;
-  static const uptr kShadowMsk = 0x700000000000ull;
-  static const uptr kShadowXor = 0x000000000000ull;
-  static const uptr kShadowAdd = 0x100000000000ull;
+  static const uptr kShadowMsk     = 0x700000000000ull;
+  static const uptr kShadowXor     = 0x000000000000ull;
+  static const uptr kShadowAdd     = 0x100000000000ull;
   static const uptr kVdsoBeg       = 0xf000000000000000ull;
 };
 

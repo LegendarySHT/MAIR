@@ -159,7 +159,7 @@ typedef DefaultSizeClassMap SizeClassMap;
   Note that the heap allocator requires a address space to 
   be the power of 2, so we set it to 2T.
  */
-const uptr kAllocatorSpace = 0x610000000000ULL;
+const uptr kAllocatorSpace = 0x720000000000ULL;
 const uptr kAllocatorSize  =  0x20000000000ULL;  // 2T.
 typedef DefaultSizeClassMap SizeClassMap;
 # endif
