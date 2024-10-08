@@ -43,8 +43,8 @@ inline bool MustIgnoreInterceptor(ThreadState *thr) {
 }  // namespace __tsan
 
 #define SCOPED_INTERCEPTOR_RAW(func, ...)            \
-  ThreadState *thr = cur_thread_init();              \
-  ScopedInterceptor si(thr, #func, GET_CALLER_PC()); \
+  __tsan::ThreadState *thr = __tsan::cur_thread_init();              \
+  __tsan::ScopedInterceptor si(thr, #func, GET_CALLER_PC()); \
   UNUSED const uptr pc = GET_CURRENT_PC();
 
 #ifdef __powerpc64__

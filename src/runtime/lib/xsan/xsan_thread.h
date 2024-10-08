@@ -5,6 +5,7 @@
 #include <sanitizer_common/sanitizer_thread_registry.h>
 
 #include "asan/asan_thread.h"
+#include "tsan/tsan_rtl.h"
 #include "asan_internal.h"
 #include "xsan_allocator.h"
 #include "xsan_internal.h"
@@ -30,6 +31,10 @@ class XsanThread {
   struct InitOptions;
   void Init(const InitOptions *options = nullptr);
 
+
+  Tid PostCreateTsanThread(uptr pc, uptr uid);
+  void BeforeAsanThreadStart(tid_t os_id);
+  void BeforeTsanThreadStart(tid_t os_id);
   thread_return_t ThreadStart(tid_t os_id);
 
   uptr stack_top();
@@ -61,8 +66,11 @@ class XsanThread {
 
   void setThreadName(const char *name);
 
+  bool isMainThread() { return is_main_thread_; }
+
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
+  __tsan::ThreadState *tsan_thread_;
 
  private:
   // NOTE: There is no XsanThread constructor. It is allocated
@@ -94,6 +102,13 @@ class XsanThread {
   // XsanThreadLocalMallocStorage malloc_storage_;
   bool unwinding_;
   uptr extra_spill_area_;
+
+  bool detached_;
+  bool is_main_thread_;
+  Tid tsan_tid_;
+  /// Comes from TSan, controlling the thread create event.
+  Semaphore created_;
+  Semaphore started_;
 };
 
 // Get the current thread. May return 0.

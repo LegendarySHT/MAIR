@@ -8,6 +8,7 @@
 #include "asan/orig/asan_poisoning.h"
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
+#include "tsan/tsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "xsan_thread.h"
@@ -195,6 +196,7 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
 
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
             void *(*start_routine)(void *), void *arg) {
+  SCOPED_INTERCEPTOR_RAW(pthread_create, thread, attr, start_routine, arg);
   EnsureMainThreadIDIsCorrect();
 
   /// TODO: Extract this to a separate function?
@@ -222,7 +224,10 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 #    endif
     result = REAL(pthread_create)(thread, attr, xsan_thread_start, t);
   }
-  if (result != 0) {
+
+  if (result == 0) {
+    t->PostCreateTsanThread(pc, *(uptr *)thread);
+  } else {
     // If the thread didn't start delete the AsanThread to avoid leaking it.
     // Note AsanThreadContexts never get destroyed so the AsanThreadContext
     // that was just created for the AsanThread is wasted.

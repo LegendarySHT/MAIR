@@ -10,11 +10,11 @@
 #include "asan/asan_thread.h"
 #include "asan/orig/asan_internal.h"
 #include "lsan/lsan_common.h"
+#include "tsan/tsan_rtl_extra.h"
 #include "xsan_allocator.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
-
 namespace __xsan {
 
 XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
@@ -26,13 +26,25 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->start_routine_ = start_routine;
   thread->arg_ = arg;
   thread->destructor_iterations_ = GetPthreadDestructorIterations();
+  thread->detached_ = detached;
+  thread->is_main_thread_ =
+      (start_routine == nullptr && parent_tid == kMainTid);
 
   /// TODO: add TSan thread support.
   auto *asan_thread = __asan::AsanThread::Create(
       /* start_routine */ start_routine, /* arg */ arg,
       /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);
 
+  auto *tsan_thread = __tsan::cur_thread_init();
+  if (thread->is_main_thread_) {
+    // Main thread.
+    thread->tsan_tid_ = __tsan::ThreadCreate(nullptr, 0, 0, true);
+  } else {
+    // Other thread create for TSan is called in CreateTsanThread.
+  }
+
   thread->asan_thread_ = asan_thread;
+  thread->tsan_thread_ = tsan_thread;
   return thread;
 }
 
@@ -103,11 +115,61 @@ void XsanThread::Destroy() {
 // xsan_fuchsia.c definies CreateMainThread and SetThreadStackAndTls.
 #if !SANITIZER_FUCHSIA
 
+Tid XsanThread::PostCreateTsanThread(uptr pc, uptr uid) {
+  /// TODO: merge ASan's ThreadContext and TSan's ThreadContext.
+  Tid tsan_tid =
+      __tsan::ThreadCreate(tsan_thread_, pc, uid, IsStateDetached(detached_));
+  CHECK_NE(tsan_tid, kMainTid);
+  tsan_tid_ = tsan_tid;
+
+  // Synchronization on p.tid serves two purposes:
+  // 1. ThreadCreate must finish before the new thread starts.
+  //    Otherwise the new thread can call pthread_detach, but the pthread_t
+  //    identifier is not yet registered in ThreadRegistry by ThreadCreate.
+  // 2. ThreadStart must finish before this thread continues.
+  //    Otherwise, this thread can call pthread_detach and reset thr->sync
+  //    before the new thread got a chance to acquire from it in ThreadStart.
+  created_.Post();
+  started_.Wait();
+  return tsan_tid;
+}
+
+void XsanThread::BeforeAsanThreadStart(tid_t os_id) {
+  asan_thread_->BeforeThreadStart(os_id);
+}
+
+void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
+  __tsan::ThreadState *thr = tsan_thread_;
+  if (isMainThread()) {
+    __tsan::Processor *proc = __tsan::ProcCreate();
+    __tsan::ProcWire(proc, thr);
+    __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
+  } else {
+    // Thread-local state is not initialized yet.
+    __tsan::ScopedIgnoreInterceptors ignore;
+#  if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
+    __tsan::ThreadIgnoreBegin(thr, 0);
+    if (pthread_setspecific(__tsan::interceptor_ctx()->finalize_key,
+                            (void *)GetPthreadDestructorIterations())) {
+      Printf("ThreadSanitizer: failed to set thread key\n");
+      Die();
+    }
+    __tsan::ThreadIgnoreEnd(thr);
+#  endif
+    created_.Wait();
+    __tsan::Processor *proc = __tsan::ProcCreate();
+    __tsan::ProcWire(proc, thr);
+    __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
+    started_.Post();
+  }
+}
+
 thread_return_t XsanThread::ThreadStart(tid_t os_id) {
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular,
   // nullptr);
-  asan_thread_->BeforeThreadStart(os_id);
+  BeforeAsanThreadStart(os_id);
+  BeforeTsanThreadStart(os_id);
 
   Init();
 
@@ -145,13 +207,13 @@ XsanThread *CreateMainThread() {
 
   SetCurrentThread(main_thread);
 
-  main_thread->ThreadStart(internal_getpid());
   return main_thread;
 }
 
 void InitializeMainThread() {
   XsanThread *main_thread = CreateMainThread();
-  CHECK_EQ(0, main_thread->tid());
+  main_thread->ThreadStart(internal_getpid());
+  CHECK_EQ(kMainTid, main_thread->tid());
 }
 
 // This implementation doesn't use the argument, which is just passed down
