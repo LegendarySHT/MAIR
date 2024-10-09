@@ -62,7 +62,7 @@ set(TSAN_SOURCES
   tsan/orig/tsan_rtl_proc.cpp
   tsan/orig/tsan_rtl_report.cpp
   # tsan/orig/tsan_rtl_thread.cpp
-  tsan/orig/tsan_stack_trace.cpp
+  # tsan/orig/tsan_stack_trace.cpp
   tsan/orig/tsan_suppressions.cpp
   tsan/orig/tsan_symbolize.cpp
   tsan/orig/tsan_sync.cpp
@@ -126,6 +126,7 @@ set(XSAN_TSAN_SOURCES
   tsan/tsan_mman.cpp
   tsan/tsan_rtl_thread.cpp
   tsan/tsan_rtl_extra.cpp
+  tsan/tsan_stack_trace.cpp
   ${TSAN_SOURCES}
   ${TSAN_ASM_SOURCES}
 )
