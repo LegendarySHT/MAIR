@@ -9,9 +9,10 @@
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
 //===----------------------------------------------------------------------===//
-#include "tsan_stack_trace.h"
-#include "tsan_rtl.h"
+#include "orig/tsan_stack_trace.h"
+
 #include "tsan_mman.h"
+#include "tsan_rtl.h"
 
 namespace __tsan {
 
@@ -47,12 +48,12 @@ void VarSizeStackTrace::ReverseOrder() {
 
 #if !SANITIZER_GO
 /// TODO: Delegate these interface implemantations to XSan.
-void __sanitizer::BufferedStackTrace::UnwindImpl(
-    uptr pc, uptr bp, void *context, bool request_fast, u32 max_depth) {
-  uptr top = 0;
-  uptr bottom = 0;
-  GetThreadStackTopAndBottom(false, &top, &bottom);
-  bool fast = StackTrace::WillUseFastUnwind(request_fast);
-  Unwind(max_depth, pc, bp, context, top, bottom, fast);
-}
+// void __sanitizer::BufferedStackTrace::UnwindImpl(
+//     uptr pc, uptr bp, void *context, bool request_fast, u32 max_depth) {
+//   uptr top = 0;
+//   uptr bottom = 0;
+//   GetThreadStackTopAndBottom(false, &top, &bottom);
+//   bool fast = StackTrace::WillUseFastUnwind(request_fast);
+//   Unwind(max_depth, pc, bp, context, top, bottom, fast);
+// }
 #endif  // SANITIZER_GO
