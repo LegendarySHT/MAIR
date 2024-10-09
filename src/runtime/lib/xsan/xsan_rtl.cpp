@@ -30,17 +30,19 @@ static void XsanInitInternal() {
   XsanTSDInit(XsanTSDDtor);
 
 
-  // On Linux AsanThread::ThreadStart() calls malloc() that's why xsan_inited
-  // should be set to 1 prior to initializing the threads.
-  xsan_inited = 1;
-  xsan_init_is_running = false;
-
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   __asan::AsanInitFromXsan();
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
+
+
+  
+  // On Linux AsanThread::ThreadStart() calls malloc() that's why xsan_inited
+  // should be set to 1 prior to initializing the threads.
+  xsan_inited = 1;
+  xsan_init_is_running = false;
 
   // This function call interceptors, so it should be called after,
   // waiting for __asan::AsanTSDInit() finished.
