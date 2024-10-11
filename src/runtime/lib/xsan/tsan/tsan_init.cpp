@@ -123,18 +123,18 @@ void TsanInitFromXsan() {
   SanitizerToolName = "ThreadSanitizer";
   /// TODO: Move this from ASan and TSan to XSan
   // Install tool-specific callbacks in sanitizer_common.
-  //   SetCheckUnwindCallback(CheckUnwind);
+  // SetCheckUnwindCallback(CheckUnwind);
 
   ctx = new (ctx_placeholder) Context;
-  const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
-  const char *options = GetEnv(env_name);
+  // const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
+  // const char *options = GetEnv(env_name);
   /// TODO: Move this from ASan and TSan to XSan
   //   CacheBinaryName();
   //   CheckASLR();
   /// TODO: Move this to XSan
   //   InitializeFlags(&ctx->flags, options, env_name);
-  AvoidCVE_2016_2143();
-  __sanitizer::InitializePlatformEarly();
+  // AvoidCVE_2016_2143();
+  // __sanitizer::InitializePlatformEarly();
   __tsan::InitializePlatformEarly();
 
 #if !SANITIZER_GO
@@ -144,9 +144,11 @@ void TsanInitFromXsan() {
 #endif
   if (common_flags()->detect_deadlocks)
     ctx->dd = DDetector::Create(flags());
-  //   Moved to XSan
+  ///   Moved to XSan's InitializeMainThread
   //   Processor *proc = ProcCreate();
   //   ProcWire(proc, thr);
+
+  /// Move to XSan
   //   InitializeInterceptors();
   InitializePlatform();
   InitializeDynamicAnnotations();

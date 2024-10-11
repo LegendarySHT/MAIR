@@ -64,10 +64,10 @@ static void AsanDie() {
 }
 
 
-static void CheckUnwind() {
-  GET_STACK_TRACE(kStackTraceMax, common_flags()->fast_unwind_on_check);
-  stack.Print();
-}
+// static void CheckUnwind() {
+//   GET_STACK_TRACE(kStackTraceMax, common_flags()->fast_unwind_on_check);
+//   stack.Print();
+// }
 
 static void asan_atexit() {
   Printf("AddressSanitizer exit stats:\n");
@@ -237,7 +237,7 @@ void AsanInitFromXsan() {
 
   AsanCheckIncompatibleRT();
   AsanCheckDynamicRTPrereqs();
-  AvoidCVE_2016_2143();
+  // AvoidCVE_2016_2143();
 
   SetCanPoisonMemory(flags()->poison_heap);
   SetMallocContextSize(common_flags()->malloc_context_size);
@@ -251,30 +251,31 @@ void AsanInitFromXsan() {
 
   // Install tool-specific callbacks in sanitizer_common.
   AddDieCallback(AsanDie);
-  SetCheckUnwindCallback(CheckUnwind);
+  // Duplicated with TSan's init, moved to XSan
+  // SetCheckUnwindCallback(CheckUnwind);
   SetPrintfAndReportCallback(AppendToErrorMessageBuffer);
 
-  __sanitizer_set_report_path(common_flags()->log_path);
+  // __sanitizer_set_report_path(common_flags()->log_path);
 
   __asan_option_detect_stack_use_after_return =
       flags()->detect_stack_use_after_return;
 
-  __sanitizer::InitializePlatformEarly();
+  // __sanitizer::InitializePlatformEarly();
 
   // Setup internal allocator callback.
   SetLowLevelAllocateMinAlignment(ASAN_SHADOW_GRANULARITY);
   SetLowLevelAllocateCallback(OnLowLevelAllocate);
 
   // InitializeAsanInterceptors();
-  CheckASLR();
+  // CheckASLR();
 
   // Enable system log ("adb logcat") on Android.
   // Doing this before interceptors are initialized crashes in:
   // AsanInitInternal -> android_log_write -> __interceptor_strcmp
   AndroidLogInit();
 
-  /// TODO: For Android, move it to Xsan initialization 
-  ReplaceSystemMalloc();
+
+  // ReplaceSystemMalloc();
 
   DisableCoreDumperIfNecessary();
 
@@ -322,20 +323,20 @@ void AsanInitFromXsan() {
     InstallAtExitCheckLeaks();
   }
 
-#if CAN_SANITIZE_UB
-  __ubsan::InitAsPlugin();
-#endif
+// #if CAN_SANITIZE_UB
+//   __ubsan::InitAsPlugin();
+// #endif
 
   InitializeSuppressions();
 
-  if (CAN_SANITIZE_LEAKS) {
-    // LateInitialize() calls dlsym, which can allocate an error string buffer
-    // in the TLS.  Let's ignore the allocation to avoid reporting a leak.
-    __lsan::ScopedInterceptorDisabler disabler;
-    Symbolizer::LateInitialize();
-  } else {
-    Symbolizer::LateInitialize();
-  }
+  // if (CAN_SANITIZE_LEAKS) {
+  //   // LateInitialize() calls dlsym, which can allocate an error string buffer
+  //   // in the TLS.  Let's ignore the allocation to avoid reporting a leak.
+  //   __lsan::ScopedInterceptorDisabler disabler;
+  //   Symbolizer::LateInitialize();
+  // } else {
+  //   Symbolizer::LateInitialize();
+  // }
 
   VReport(1, "AddressSanitizer Init done\n");
 

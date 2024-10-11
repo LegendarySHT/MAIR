@@ -1,6 +1,19 @@
 #pragma once
 
+#include <sanitizer_common/sanitizer_internal_defs.h>
+#include <sanitizer_common/sanitizer_libc.h>
+#include <sanitizer_common/sanitizer_mutex.h>
+#include <ubsan/ubsan_platform.h>
+
 #include "xsan_internal.h"
+
+#ifndef XSAN_CONTAINS_UBSAN
+# if CAN_SANITIZE_UB && !SANITIZER_GO
+#  define XSAN_CONTAINS_UBSAN 1
+# else
+#  define XSAN_CONTAINS_UBSAN 0
+# endif
+#endif
 
 namespace __xsan {
 
