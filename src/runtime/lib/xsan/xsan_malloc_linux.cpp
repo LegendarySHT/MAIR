@@ -11,6 +11,7 @@
 #  include "xsan_interceptors.h"
 #  include "xsan_internal.h"
 #  include "xsan_stack.h"
+#  include "xsan_thread.h"
 
 #  include <lsan/lsan_common.h>
 #  include <sanitizer_common/sanitizer_allocator_checks.h>
@@ -41,7 +42,7 @@ INTERCEPTOR(void, free, void *ptr) {
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
   XSAN_EXTRA_ALLOC_ARG(free, ptr);
-  xsan_free(ptr, extra_arg, __asan::FROM_MALLOC);
+  xsan_free(ptr, &stack, __asan::FROM_MALLOC);
 }
 
 #  if SANITIZER_INTERCEPT_CFREE
@@ -49,7 +50,7 @@ INTERCEPTOR(void, cfree, void *ptr) {
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
   XSAN_EXTRA_ALLOC_ARG(cfree, ptr);
-  xsan_free(ptr, extra_arg, __asan::FROM_MALLOC);
+  xsan_free(ptr, &stack, __asan::FROM_MALLOC);
 }
 #  endif  // SANITIZER_INTERCEPT_CFREE
 
@@ -60,7 +61,7 @@ INTERCEPTOR(void *, malloc, uptr size) {
     return DlsymAlloc::Allocate(size);
   ENSURE_XSAN_INITED();
   XSAN_EXTRA_ALLOC_ARG(malloc, size);
-  return xsan_malloc(size, extra_arg);
+  return xsan_malloc(size, &stack);
 }
 
 INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
@@ -70,7 +71,7 @@ INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
     return DlsymAlloc::Callocate(nmemb, size);
   ENSURE_XSAN_INITED();
   XSAN_EXTRA_ALLOC_ARG(calloc, nmemb, size);
-  return xsan_calloc(nmemb, size, extra_arg);
+  return xsan_calloc(nmemb, size, &stack);
 }
 
 INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
@@ -80,7 +81,7 @@ INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
     return DlsymAlloc::Realloc(ptr, size);
   ENSURE_XSAN_INITED();
   XSAN_EXTRA_ALLOC_ARG(realloc, ptr, size);
-  return xsan_realloc(ptr, size, extra_arg);
+  return xsan_realloc(ptr, size, &stack);
 }
 
 #  if SANITIZER_INTERCEPT_REALLOCARRAY
@@ -89,19 +90,19 @@ INTERCEPTOR(void *, reallocarray, void *ptr, uptr nmemb, uptr size) {
     return InternalReallocArray(ptr, size, size);
   ENSURE_XSAN_INITED();
   XSAN_EXTRA_ALLOC_ARG(reallocarray, ptr, nmemb, size);
-  return xsan_reallocarray(ptr, nmemb, size, extra_arg);
+  return xsan_reallocarray(ptr, nmemb, size, &stack);
 }
 #  endif  // SANITIZER_INTERCEPT_REALLOCARRAY
 
 #  if SANITIZER_INTERCEPT_MEMALIGN
 INTERCEPTOR(void *, memalign, uptr boundary, uptr size) {
   XSAN_EXTRA_ALLOC_ARG(memalign, boundary, size);
-  return xsan_memalign(boundary, size, extra_arg, __asan::FROM_MALLOC);
+  return xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
 }
 
 INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
   XSAN_EXTRA_ALLOC_ARG(__libc_memalign, boundary, size);
-  void *res = xsan_memalign(boundary, size, extra_arg, __asan::FROM_MALLOC);
+  void *res = xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
   DTLS_on_libc_memalign(res, size);
   return res;
 }
@@ -112,7 +113,7 @@ INTERCEPTOR(void *, aligned_alloc, uptr boundary, uptr size) {
   if (__tsan::in_symbolizer())
     return InternalAlloc(size, nullptr, boundary);
   XSAN_EXTRA_ALLOC_ARG(aligned_alloc, boundary, size);
-  return xsan_aligned_alloc(boundary, size, extra_arg);
+  return xsan_aligned_alloc(boundary, size, &stack);
 }
 #  endif  // SANITIZER_INTERCEPT_ALIGNED_ALLOC
 
@@ -149,14 +150,14 @@ INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
     return 0;
   }
   XSAN_EXTRA_ALLOC_ARG(posix_memalign, memptr, alignment, size);
-  return xsan_posix_memalign(memptr, alignment, size, extra_arg);
+  return xsan_posix_memalign(memptr, alignment, size, &stack);
 }
 
 INTERCEPTOR(void *, valloc, uptr size) {
   if (__tsan::in_symbolizer())
     return InternalAlloc(size, nullptr, GetPageSizeCached());
   XSAN_EXTRA_ALLOC_ARG(valloc, size);
-  return xsan_valloc(size, extra_arg);
+  return xsan_valloc(size, &stack);
 }
 
 #  if SANITIZER_INTERCEPT_PVALLOC
@@ -167,7 +168,7 @@ INTERCEPTOR(void *, pvalloc, uptr size) {
     return InternalAlloc(size, nullptr, PageSize);
   }
   XSAN_EXTRA_ALLOC_ARG(pvalloc, size);
-  return xsan_pvalloc(size, extra_arg);
+  return xsan_pvalloc(size, &stack);
 }
 #  endif  // SANITIZER_INTERCEPT_PVALLOC
 

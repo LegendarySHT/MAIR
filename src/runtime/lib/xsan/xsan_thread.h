@@ -5,9 +5,10 @@
 #include <sanitizer_common/sanitizer_thread_registry.h>
 
 #include "asan/asan_thread.h"
-#include "tsan/tsan_rtl.h"
 #include "asan_internal.h"
+#include "tsan/tsan_rtl.h"
 #include "xsan_allocator.h"
+#include "xsan_interceptors.h"
 #include "xsan_internal.h"
 
 namespace __sanitizer {
@@ -30,7 +31,6 @@ class XsanThread {
 
   struct InitOptions;
   void Init(const InitOptions *options = nullptr);
-
 
   Tid PostCreateTsanThread(uptr pc, uptr uid);
   void BeforeAsanThreadStart(tid_t os_id);
@@ -67,6 +67,9 @@ class XsanThread {
   void setThreadName(const char *name);
 
   bool isMainThread() { return is_main_thread_; }
+
+  TsanArgs getTsanArgs() { return {tsan_thread_, top_pc_}; }
+  void setTsanArgs(uptr top_pc) { top_pc_ = top_pc; }
 
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
@@ -106,6 +109,15 @@ class XsanThread {
   bool detached_;
   bool is_main_thread_;
   Tid tsan_tid_;
+
+  /// Records the pc of the interceptor, similar to TSan's pc.
+  /// TSan uses this to track the stack trace.
+  uptr top_pc_;
+
+  /// Records the current stack trace.
+  /// ASan uses this to track the stack trace.
+  BufferedStackTrace *stack;
+
   /// Comes from TSan, controlling the thread create event.
   Semaphore created_;
   Semaphore started_;

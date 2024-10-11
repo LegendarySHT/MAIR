@@ -154,17 +154,17 @@ namespace __xsan {
 /// - TSan needs:
 ///     - ThreadState *thr
 ///     - uptr pc
-struct XsanExtraAllocArgs {
-  BufferedStackTrace *stack_;
+struct TsanArgs {
   __tsan::ThreadState *thr_;
   uptr pc_;
 };
 }  // namespace __xsan
 
 #define XSAN_EXTRA_ALLOC_ARG(func, ...)      \
-  SCOPED_INTERCEPTOR_RAW(func, __VA_ARGS__); \
   GET_STACK_TRACE_MALLOC;                    \
-  __xsan::XsanExtraAllocArgs extra_arg{&stack, thr, pc};
+  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread(); \
+  __tsan::ScopedInterceptor si(xsan_thr->tsan_thread_, #func, stack.trace_buffer[1]); \
+  xsan_thr->setTsanArgs(stack.trace_buffer[0]);
 
 // Auto-decomp
 #define XSAN_EXTRA_ARGS_DECOMPOSITION(args) \

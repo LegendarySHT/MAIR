@@ -464,7 +464,7 @@ INTERCEPTOR(char *, strdup, const char *s) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
   XSAN_EXTRA_ALLOC_ARG(strdup, s);
-  void *new_mem = xsan_malloc(length + 1, extra_arg);
+  void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
   return REAL(strdup)(s);
@@ -482,7 +482,7 @@ INTERCEPTOR(char *, __strdup, const char *s) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
   XSAN_EXTRA_ALLOC_ARG(__strdup, s);
-  void *new_mem = xsan_malloc(length + 1, extra_arg);
+  void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
   return REAL(__strdup)(s);

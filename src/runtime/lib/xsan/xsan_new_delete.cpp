@@ -18,6 +18,7 @@
 #include "xsan_allocator.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
+#include "xsan_thread.h"
 
 // C++ operators can't have dllexport attributes on Windows. We export them
 // anyway by passing extra -export flags to the linker, which is exactly that
@@ -73,16 +74,16 @@ enum class align_val_t : size_t {};
 #define OPERATOR_NEW_BODY(mangled_name, type, nothrow)                   \
   XSAN_EXTRA_ALLOC_ARG(mangled_name, size);                              \
   /* void *res = xsan_memalign(0, size, &stack, type); // no alignment*/ \
-  void *res = xsan_memalign(__xsan::kDefaultAlignment, size, extra_arg,  \
+  void *res = xsan_memalign(__xsan::kDefaultAlignment, size, &stack,     \
                             type); /* tsan needs alignment */            \
   if (!nothrow && UNLIKELY(!res))                                        \
     __asan::ReportOutOfMemory(size, &stack);                             \
   return res;
-#define OPERATOR_NEW_BODY_ALIGN(mangled_name, type, nothrow)     \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, size);                      \
-  void *res = xsan_memalign((uptr)align, size, extra_arg, type); \
-  if (!nothrow && UNLIKELY(!res))                                \
-    __asan::ReportOutOfMemory(size, &stack);                     \
+#define OPERATOR_NEW_BODY_ALIGN(mangled_name, type, nothrow)  \
+  XSAN_EXTRA_ALLOC_ARG(mangled_name, size);                   \
+  void *res = xsan_memalign((uptr)align, size, &stack, type); \
+  if (!nothrow && UNLIKELY(!res))                             \
+    __asan::ReportOutOfMemory(size, &stack);                  \
   return res;
 
 // On OS X it's not enough to just provide our own 'operator new' and
@@ -151,19 +152,19 @@ INTERCEPTOR(void *, _ZnamRKSt9nothrow_t, size_t size, std::nothrow_t const &) {
  * mismatching */
 #define OPERATOR_DELETE_BODY(mangled_name, type) \
   XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);       \
-  xsan_delete(ptr, 0, __xsan::kDefaultAlignment, extra_arg, type);
+  xsan_delete(ptr, 0, __xsan::kDefaultAlignment, &stack, type);
 
 #define OPERATOR_DELETE_BODY_SIZE(mangled_name, type) \
   XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);            \
-  xsan_delete(ptr, size, __xsan::kDefaultAlignment, extra_arg, type);
+  xsan_delete(ptr, size, __xsan::kDefaultAlignment, &stack, type);
 
 #define OPERATOR_DELETE_BODY_ALIGN(mangled_name, type) \
   XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);             \
-  xsan_delete(ptr, 0, static_cast<uptr>(align), extra_arg, type);
+  xsan_delete(ptr, 0, static_cast<uptr>(align), &stack, type);
 
 #define OPERATOR_DELETE_BODY_SIZE_ALIGN(mangled_name, type) \
   XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);                  \
-  xsan_delete(ptr, size, static_cast<uptr>(align), extra_arg, type);
+  xsan_delete(ptr, size, static_cast<uptr>(align), &stack, type);
 
 #if !SANITIZER_APPLE
 CXX_OPERATOR_ATTRIBUTE
