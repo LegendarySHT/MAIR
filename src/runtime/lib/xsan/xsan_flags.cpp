@@ -24,6 +24,21 @@
 #include "xsan_interface_internal.h"
 #include "xsan_stack.h"
 
+#include "tsan/orig/tsan_flags.h"
+#include "tsan/tsan_rtl.h"
+
+namespace __asan {
+  void InitializeFlags();
+}
+
+namespace __tsan {
+  void InitializeFlags() {
+    const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
+    const char *options = GetEnv(env_name);
+    InitializeFlags(flags(), options, env_name);
+  }
+}
+
 namespace __xsan {
 
 Flags xsan_flags_dont_use_directly;  // use via flags().
@@ -94,6 +109,10 @@ void InitializeFlags() {
     // Initialize flags. This must be done early, because most of the
     // initialization steps look at flags().
     __asan::InitializeFlags();
+  }
+  {
+    ScopedSanitizerToolName tool_name("ThreadSanitizer");
+    __tsan::InitializeFlags();
   }
 }
 
