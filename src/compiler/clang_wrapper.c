@@ -701,11 +701,12 @@ static void edit_params(u32 argc, char** argv) {
 
   }
 
-  if (!getenv("X_DONT_OPTIMIZE")) {
-    cc_params[cc_par_cnt++] = "-g";
-    if (!have_o) cc_params[cc_par_cnt++] = "-O3";
-    if (!have_unroll && !have_o) cc_params[cc_par_cnt++] = "-funroll-loops";
-  }
+  /// Don't optimize initiatively
+  // if (!getenv("X_DONT_OPTIMIZE")) {
+  //   cc_params[cc_par_cnt++] = "-g";
+  //   if (!have_o) cc_params[cc_par_cnt++] = "-O3";
+  //   if (!have_unroll && !have_o) cc_params[cc_par_cnt++] = "-funroll-loops";
+  // }
   
 
   // afl_runtime();
