@@ -380,6 +380,8 @@ struct Context {
 
 extern Context *ctx;  // The one and the only global runtime context.
 
+ALWAYS_INLINE bool is_tsan_initialized() { return ctx && ctx->initialized; }
+
 ALWAYS_INLINE Flags *flags() {
   return &ctx->flags;
 }

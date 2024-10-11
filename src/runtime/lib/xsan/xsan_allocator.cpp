@@ -4,7 +4,9 @@
 // #include "xsan_poisoning.h"
 // #include "xsan_report.h"
 #include "asan_allocator.h"
+#include "tsan_rtl.h"
 #include "xsan_stack.h"
+#include "xsan_thread.h"
 // #include "xsan_thread.h"
 #include <lsan/lsan_common.h>
 #include <sanitizer_common/sanitizer_allocator_checks.h>
@@ -91,6 +93,35 @@ void xsan_mz_force_lock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 
 void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
   __asan::asan_mz_force_unlock();
+}
+}
+
+namespace __tsan {
+void SignalUnsafeCall(ThreadState *thr, uptr pc);
+}
+
+namespace __xsan {
+// ---------------------- Hook for other Sanitizers ------------------- 
+void XsanAllocHook(uptr ptr, uptr size, bool write) {
+  auto [thr, pc] = GetCurrentThread()->getTsanArgs();
+  if (__tsan::is_tsan_initialized()) {
+    /// TODO: remove code related to tsan's uaf checking
+    __tsan::OnUserAlloc(thr, pc, ptr, size, write);
+  }
+}
+
+void XsanFreeHook(uptr p, bool write) {
+  auto [thr, pc] = GetCurrentThread()->getTsanArgs();
+  if (__tsan::is_tsan_initialized()) {
+    /// TODO: remove code related to tsan's uaf checking
+    __tsan::OnUserFree(thr, pc, p, write);
+  }
+}
+
+void XsanAllocFreeTailHook() {
+  auto [thr, pc] = GetCurrentThread()->getTsanArgs();
+  /// TODO: handle calls from tsan_fd.cpp
+  __tsan::SignalUnsafeCall(thr, pc);
 }
 
 }  // namespace __xsan

@@ -17,6 +17,13 @@
 #include "orig/asan_report.h"
 #include "orig/asan_stack.h"
 
+namespace __xsan {
+// Executes code from other Sanitizers
+void XsanAllocHook(uptr ptr, uptr size, bool write);
+void XsanFreeHook(uptr p, bool write);
+void XsanAllocFreeTailHook();
+}
+
 namespace __asan {
 // using XAsanAllocator = __xsan::XsanAllocator;
 // using XAllocatorCache = __xsan::AllocatorCache;
@@ -583,6 +590,9 @@ struct Allocator {
       CHECK_LE(alloc_beg + sizeof(LargeChunkHeader), chunk_beg);
       reinterpret_cast<LargeChunkHeader *>(alloc_beg)->Set(m);
     }
+    /// TODO: figure out should we transfer user_ptr or real_ptr?
+    __xsan::XsanAllocHook(user_beg, size, true);
+    __xsan::XsanAllocFreeTailHook();
     RunMallocHooks(res, size);
     return res;
   }
@@ -665,6 +675,7 @@ struct Allocator {
     }
 
     RunFreeHooks(ptr);
+    __xsan::XsanFreeHook(p, true);
 
     // Must mark the chunk as quarantined before any changes to its metadata.
     // Do not quarantine given chunk if we failed to set CHUNK_QUARANTINE flag.
@@ -687,6 +698,7 @@ struct Allocator {
     }
 
     QuarantineChunk(m, ptr, stack);
+    __xsan::XsanAllocFreeTailHook();
   }
 
   void *Reallocate(void *old_ptr, uptr new_size, BufferedStackTrace *stack) {

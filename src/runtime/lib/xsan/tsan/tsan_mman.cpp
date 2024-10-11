@@ -160,7 +160,8 @@ void AllocatorPrintStats() {
   allocator()->PrintStats();
 }
 
-static void SignalUnsafeCall(ThreadState *thr, uptr pc) {
+/// Modified: exported for xsan_allocator.cpp
+void SignalUnsafeCall(ThreadState *thr, uptr pc) {
   if (atomic_load_relaxed(&thr->in_signal_handler) == 0 ||
       !ShouldReport(thr, ReportTypeSignalUnsafe))
     return;
