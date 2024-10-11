@@ -43,7 +43,7 @@ set(XSAN_ASAN_SOURCES
 set(TSAN_SOURCES
   tsan/orig/tsan_debugging.cpp
   tsan/orig/tsan_external.cpp
-  tsan/orig/tsan_fd.cpp
+  # tsan/orig/tsan_fd.cpp
   tsan/orig/tsan_flags.cpp
   tsan/orig/tsan_ignoreset.cpp
   # tsan/orig/tsan_interceptors_posix.cpp
@@ -122,6 +122,7 @@ if (NOT APPLE)
 endif()
 
 set(XSAN_TSAN_SOURCES
+  tsan/tsan_fd.cpp
   tsan/tsan_init.cpp
   tsan/tsan_mman.cpp
   tsan/tsan_rtl_thread.cpp
