@@ -593,8 +593,11 @@ static void AtCxaAtexit(void *unused) {
 #  endif
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT
+/// TODO: support on_exit interceptor
 INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
             void *dso_handle) {
+  if (__tsan::in_symbolizer())
+    return 0;
 #    if SANITIZER_APPLE
   if (UNLIKELY(!xsan_inited))
     return REAL(__cxa_atexit)(func, arg, dso_handle);
@@ -611,6 +614,7 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
 
 #  if XSAN_INTERCEPT_ATEXIT
 INTERCEPTOR(int, atexit, void (*func)()) {
+  /// TODO: add if (in_symbolizer()) && support TSan
   ENSURE_XSAN_INITED();
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
