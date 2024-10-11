@@ -40,16 +40,16 @@ struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
 INTERCEPTOR(void, free, void *ptr) {
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
-  GET_STACK_TRACE_FREE;
-  xsan_free(ptr, &stack, __asan::FROM_MALLOC);
+  XSAN_EXTRA_ALLOC_ARG(free, ptr);
+  xsan_free(ptr, extra_arg, __asan::FROM_MALLOC);
 }
 
 #  if SANITIZER_INTERCEPT_CFREE
 INTERCEPTOR(void, cfree, void *ptr) {
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
-  GET_STACK_TRACE_FREE;
-  xsan_free(ptr, &stack, __asan::FROM_MALLOC);
+  XSAN_EXTRA_ALLOC_ARG(cfree, ptr);
+  xsan_free(ptr, extra_arg, __asan::FROM_MALLOC);
 }
 #  endif  // SANITIZER_INTERCEPT_CFREE
 
@@ -57,43 +57,43 @@ INTERCEPTOR(void *, malloc, uptr size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Allocate(size);
   ENSURE_XSAN_INITED();
-  GET_STACK_TRACE_MALLOC;
-  return xsan_malloc(size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(malloc, size);
+  return xsan_malloc(size, extra_arg);
 }
 
 INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(nmemb, size);
   ENSURE_XSAN_INITED();
-  GET_STACK_TRACE_MALLOC;
-  return xsan_calloc(nmemb, size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(calloc, nmemb, size);
+  return xsan_calloc(nmemb, size, extra_arg);
 }
 
 INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Realloc(ptr, size);
   ENSURE_XSAN_INITED();
-  GET_STACK_TRACE_MALLOC;
-  return xsan_realloc(ptr, size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(realloc, ptr, size);
+  return xsan_realloc(ptr, size, extra_arg);
 }
 
 #  if SANITIZER_INTERCEPT_REALLOCARRAY
 INTERCEPTOR(void *, reallocarray, void *ptr, uptr nmemb, uptr size) {
   ENSURE_XSAN_INITED();
-  GET_STACK_TRACE_MALLOC;
-  return xsan_reallocarray(ptr, nmemb, size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(reallocarray, ptr, nmemb, size);
+  return xsan_reallocarray(ptr, nmemb, size, extra_arg);
 }
 #  endif  // SANITIZER_INTERCEPT_REALLOCARRAY
 
 #  if SANITIZER_INTERCEPT_MEMALIGN
 INTERCEPTOR(void *, memalign, uptr boundary, uptr size) {
-  GET_STACK_TRACE_MALLOC;
-  return xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
+  XSAN_EXTRA_ALLOC_ARG(memalign, boundary, size);
+  return xsan_memalign(boundary, size, extra_arg, __asan::FROM_MALLOC);
 }
 
 INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
-  GET_STACK_TRACE_MALLOC;
-  void *res = xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
+  XSAN_EXTRA_ALLOC_ARG(__libc_memalign, boundary, size);
+  void *res = xsan_memalign(boundary, size, extra_arg, __asan::FROM_MALLOC);
   DTLS_on_libc_memalign(res, size);
   return res;
 }
@@ -101,8 +101,8 @@ INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
 
 #  if SANITIZER_INTERCEPT_ALIGNED_ALLOC
 INTERCEPTOR(void *, aligned_alloc, uptr boundary, uptr size) {
-  GET_STACK_TRACE_MALLOC;
-  return xsan_aligned_alloc(boundary, size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(aligned_alloc, boundary, size);
+  return xsan_aligned_alloc(boundary, size, extra_arg);
 }
 #  endif  // SANITIZER_INTERCEPT_ALIGNED_ALLOC
 
@@ -131,19 +131,19 @@ INTERCEPTOR(int, mallopt, int cmd, int value) { return 0; }
 #  endif  // SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
 
 INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
-  GET_STACK_TRACE_MALLOC;
-  return xsan_posix_memalign(memptr, alignment, size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(posix_memalign, memptr, alignment, size);
+  return xsan_posix_memalign(memptr, alignment, size, extra_arg);
 }
 
 INTERCEPTOR(void *, valloc, uptr size) {
-  GET_STACK_TRACE_MALLOC;
-  return xsan_valloc(size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(valloc, size);
+  return xsan_valloc(size, extra_arg);
 }
 
 #  if SANITIZER_INTERCEPT_PVALLOC
 INTERCEPTOR(void *, pvalloc, uptr size) {
-  GET_STACK_TRACE_MALLOC;
-  return xsan_pvalloc(size, &stack);
+  XSAN_EXTRA_ALLOC_ARG(pvalloc, size);
+  return xsan_pvalloc(size, extra_arg);
 }
 #  endif  // SANITIZER_INTERCEPT_PVALLOC
 

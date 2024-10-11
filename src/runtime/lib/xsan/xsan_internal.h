@@ -11,6 +11,7 @@
 #include <sanitizer_common/sanitizer_libc.h>
 #include <sanitizer_common/sanitizer_stacktrace.h>
 
+#include "xsan_common_defs.h"
 #include "xsan_flags.h"
 #include "xsan_interface_internal.h"
 

@@ -4,9 +4,9 @@
 #include <sanitizer_common/sanitizer_platform_interceptors.h>
 
 #include "interception/interception.h"
+#include "tsan/tsan_interceptors.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
-
 namespace __xsan {
 
 void InitializeXsanInterceptors();
@@ -146,3 +146,27 @@ DECLARE_REAL(char *, strstr, const char *s1, const char *s2)
 #  endif  // SANITIZER_APPLE
 
 #endif  // !SANITIZER_FUCHSIA
+
+namespace __xsan {
+/// Represents the extra arguments for alloc. series APIs
+/// - ASan needs:
+///     - BufferredStackTrace *stack
+/// - TSan needs:
+///     - ThreadState *thr
+///     - uptr pc
+struct XsanExtraAllocArgs {
+  BufferedStackTrace *stack_;
+  __tsan::ThreadState *thr_;
+  uptr pc_;
+};
+}  // namespace __xsan
+
+#define XSAN_EXTRA_ALLOC_ARG(func, ...)      \
+  SCOPED_INTERCEPTOR_RAW(func, __VA_ARGS__); \
+  GET_STACK_TRACE_MALLOC;                    \
+  __xsan::XsanExtraAllocArgs extra_arg{&stack, thr, pc};
+
+// Auto-decomp
+#define XSAN_EXTRA_ARGS_DECOMPOSITION(args) \
+  BufferedStackTrace *stack = args.stack_;  \
+  \

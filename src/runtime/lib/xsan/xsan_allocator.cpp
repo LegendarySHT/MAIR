@@ -18,59 +18,71 @@
 
 namespace __xsan {
 
-void xsan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
+void xsan_free(void *ptr, XsanExtraAllocArgs &extra_arg, AllocType alloc_type) {
+  auto &[stack, thr, pc] = extra_arg;
   __asan::asan_free(ptr, stack, alloc_type);
 }
 
 void xsan_delete(void *ptr, uptr size, uptr alignment,
-                 BufferedStackTrace *stack, AllocType alloc_type) {
+                 XsanExtraAllocArgs &extra_arg, AllocType alloc_type) {
+  auto &[stack, thr, pc] = extra_arg;
   __asan::asan_delete(ptr, size, alignment, stack, alloc_type);
 }
 
-void *xsan_malloc(uptr size, BufferedStackTrace *stack) {
+void *xsan_malloc(uptr size, XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_malloc(size, stack);
   return res;
 }
 
-void *xsan_calloc(uptr nmemb, uptr size, BufferedStackTrace *stack) {
+void *xsan_calloc(uptr nmemb, uptr size, XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_calloc(nmemb, size, stack);
   return res;
 }
 
 void *xsan_reallocarray(void *p, uptr nmemb, uptr size,
-                        BufferedStackTrace *stack) {
+                        XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_reallocarray(p, nmemb, size, stack);
   return res;
 }
 
-void *xsan_realloc(void *p, uptr size, BufferedStackTrace *stack) {
+void *xsan_realloc(void *p, uptr size, XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_realloc(p, size, stack);
   return res;
 }
 
-void *xsan_valloc(uptr size, BufferedStackTrace *stack) {
+void *xsan_valloc(uptr size, XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_valloc(size, stack);
   return res;
 }
 
-void *xsan_pvalloc(uptr size, BufferedStackTrace *stack) {
+void *xsan_pvalloc(uptr size, XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_pvalloc(size, stack);
   return res;
 }
 
-void *xsan_memalign(uptr alignment, uptr size, BufferedStackTrace *stack,
+void *xsan_memalign(uptr alignment, uptr size, XsanExtraAllocArgs &extra_arg,
                     AllocType alloc_type) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_memalign(alignment, size, stack, alloc_type);
   return res;
 }
 
-void *xsan_aligned_alloc(uptr alignment, uptr size, BufferedStackTrace *stack) {
+void *xsan_aligned_alloc(uptr alignment, uptr size,
+                         XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   void *res = __asan::asan_aligned_alloc(alignment, size, stack);
   return res;
 }
 
 int xsan_posix_memalign(void **memptr, uptr alignment, uptr size,
-                        BufferedStackTrace *stack) {
+                        XsanExtraAllocArgs &extra_arg) {
+  auto &[stack, thr, pc] = extra_arg;
   int res = __asan::asan_posix_memalign(memptr, alignment, size, stack);
   return res;
 }

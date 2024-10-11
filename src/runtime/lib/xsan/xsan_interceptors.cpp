@@ -463,8 +463,8 @@ INTERCEPTOR(char *, strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  GET_STACK_TRACE_MALLOC;
-  void *new_mem = xsan_malloc(length + 1, &stack);
+  XSAN_EXTRA_ALLOC_ARG(strdup, s);
+  void *new_mem = xsan_malloc(length + 1, extra_arg);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
   return REAL(strdup)(s);
@@ -481,8 +481,8 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  GET_STACK_TRACE_MALLOC;
-  void *new_mem = xsan_malloc(length + 1, &stack);
+  XSAN_EXTRA_ALLOC_ARG(__strdup, s);
+  void *new_mem = xsan_malloc(length + 1, extra_arg);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
   return REAL(__strdup)(s);
