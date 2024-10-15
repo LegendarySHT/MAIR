@@ -112,6 +112,10 @@ static void StopBackgroundThread() {
 #  endif
 #endif
 
+void TsanInitFromXsanEarly() {
+  ctx = new (ctx_placeholder) Context;
+}
+
 void TsanInitFromXsan() {
   ThreadState *thr = cur_thread_init();
   // Thread safe because done before all threads exist.
@@ -125,7 +129,8 @@ void TsanInitFromXsan() {
   // Install tool-specific callbacks in sanitizer_common.
   // SetCheckUnwindCallback(CheckUnwind);
 
-  ctx = new (ctx_placeholder) Context;
+  /// Moved to TsanInitFromXsanEarly
+  // ctx = new (ctx_placeholder) Context;
   // const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
   // const char *options = GetEnv(env_name);
   /// TODO: Move this from ASan and TSan to XSan

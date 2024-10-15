@@ -44,6 +44,8 @@ static void XsanInitInternal() {
   CHECK(!xsan_init_is_running && "XSan init calls itself!");
   xsan_init_is_running = true;
 
+  __tsan::TsanInitFromXsanEarly();
+
   // Install tool-specific callbacks in sanitizer_common.
   // Combine ASan's and TSan's logic
   SetCheckUnwindCallback(CheckUnwind);
