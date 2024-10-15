@@ -3,6 +3,7 @@
 #include <ubsan/ubsan_init.h>
 
 #include "asan/asan_init.h"
+#include "tsan/tsan_init.h"
 #include "xsan_activation.h"
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
@@ -71,6 +72,8 @@ static void XsanInitInternal() {
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   __asan::AsanInitFromXsan();
+
+  __tsan::TsanInitFromXsan();
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
