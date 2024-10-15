@@ -39,10 +39,10 @@ enum {
 /*
 C/C++ on linux/x86_64 and freebsd/x86_64
 0000 0000 1000 - 0200 0000 0000: main binary and/or MAP_32BIT mappings (2TB)
-0200 0000 0000 - 1000 0000 0000: -
-1000 0000 0000 - 3000 0000 0000: shadow (32TB)
-3000 0000 0000 - 3800 0000 0000: metainfo (memory blocks and sync objects; 8TB)
-3800 0000 0000 - 5500 0000 0000: -
+0200 0000 0000 - 2000 0000 0000: -
+2000 0000 0000 - 4000 0000 0000: shadow (32TB)
+4000 0000 0000 - 4800 0000 0000: metainfo (memory blocks and sync objects; 8TB)
+4800 0000 0000 - 5500 0000 0000: -
 5500 0000 0000 - 5a00 0000 0000: pie binaries without ASLR or on 4.1+ kernels
 5a00 0000 0000 - 7200 0000 0000: -
 7200 0000 0000 - 7400 0000 0000: heap (1TB)
@@ -63,10 +63,10 @@ C/C++ on netbsd/amd64 can reuse the same mapping:
 
 /// Modified: enlarge the heap size from 1T to 2T to fit ASan's needs.
 struct Mapping48AddressSpace {
-  static const uptr kMetaShadowBeg = 0x300000000000ull;
-  static const uptr kMetaShadowEnd = 0x380000000000ull;
-  static const uptr kShadowBeg     = 0x100000000000ull;
-  static const uptr kShadowEnd     = 0x300000000000ull;
+  static const uptr kMetaShadowBeg = 0x400000000000ull;
+  static const uptr kMetaShadowEnd = 0x480000000000ull;
+  static const uptr kShadowBeg     = 0x200000000000ull;
+  static const uptr kShadowEnd     = 0x400000000000ull;
   static const uptr kHeapMemBeg    = 0x720000000000ull;
   static const uptr kHeapMemEnd    = 0x740000000000ull;
   static const uptr kLoAppMemBeg   = 0x000000001000ull;
@@ -77,7 +77,7 @@ struct Mapping48AddressSpace {
   static const uptr kHiAppMemEnd   = 0x800000000000ull;
   static const uptr kShadowMsk     = 0x700000000000ull;
   static const uptr kShadowXor     = 0x000000000000ull;
-  static const uptr kShadowAdd     = 0x100000000000ull;
+  static const uptr kShadowAdd     = 0x200000000000ull;
   static const uptr kVdsoBeg       = 0xf000000000000000ull;
 };
 
