@@ -74,13 +74,15 @@ if(APPLE)
     # tsan/orig/tsan_interceptors_mac.cpp
     # tsan/orig/tsan_interceptors_mach_vm.cpp
     tsan/orig/tsan_platform_mac.cpp
-    tsan/orig/tsan_platform_posix.cpp
+    # tsan/orig/tsan_platform_posix.cpp
+    tsan/tsan_platform_posix.cpp
     )
-elseif(UNIX)
-  # Assume Linux
-  list(APPEND TSAN_SOURCES
+    elseif(UNIX)
+    # Assume Linux
+    list(APPEND TSAN_SOURCES
     tsan/orig/tsan_platform_linux.cpp
-    tsan/orig/tsan_platform_posix.cpp
+    # tsan/orig/tsan_platform_posix.cpp
+    tsan/tsan_platform_posix.cpp
     )
 endif()
 
