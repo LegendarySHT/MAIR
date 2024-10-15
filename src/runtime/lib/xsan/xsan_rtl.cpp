@@ -97,6 +97,9 @@ static void XsanInitInternal() {
   /// TODO: this is registed in ASan's initialization
   // InstallAtExitCheckLeaks();
 
+  __asan::AsanInitFromXsanLate();
+
+
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
 #if TSAN_CONTAINS_UBSAN

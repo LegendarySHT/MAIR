@@ -318,10 +318,12 @@ void AsanInitFromXsan() {
   force_interface_symbols();  // no-op.
   SanitizerInitializeUnwinder();
 
-  if (CAN_SANITIZE_LEAKS) {
-    __lsan::InitCommonLsan();
-    InstallAtExitCheckLeaks();
-  }
+  /// Move to AsanInitFromXsanLate, as InstallAtExitCheckLeaks use interceptor atexit
+  /// requiring xsan_init_running = false
+  // if (CAN_SANITIZE_LEAKS) {
+  //   __lsan::InitCommonLsan();
+  //   InstallAtExitCheckLeaks();
+  // }
 
 // #if CAN_SANITIZE_UB
 //   __ubsan::InitAsPlugin();
@@ -342,4 +344,13 @@ void AsanInitFromXsan() {
 
   WaitForDebugger(flags()->sleep_after_init, "after init");
 }
+
+void AsanInitFromXsanLate() {
+  if (CAN_SANITIZE_LEAKS) {
+    __lsan::InitCommonLsan();
+    /// Use interceptor atexit, requiring xsan_init_running = false
+    InstallAtExitCheckLeaks();
+  }
+}
+
 }
