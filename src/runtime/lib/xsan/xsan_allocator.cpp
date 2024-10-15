@@ -94,14 +94,14 @@ void xsan_mz_force_lock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
   __asan::asan_mz_force_unlock();
 }
-}
+}  // namespace __xsan
 
 namespace __tsan {
 void SignalUnsafeCall(ThreadState *thr, uptr pc);
 }
 
 namespace __xsan {
-// ---------------------- Hook for other Sanitizers ------------------- 
+// ---------------------- Hook for other Sanitizers -------------------
 void XsanAllocHook(uptr ptr, uptr size, bool write) {
   auto [thr, pc] = GetCurrentThread()->getTsanArgs();
   if (__tsan::is_tsan_initialized()) {

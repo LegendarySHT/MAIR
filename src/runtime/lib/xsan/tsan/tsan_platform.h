@@ -45,8 +45,8 @@ C/C++ on linux/x86_64 and freebsd/x86_64
 3800 0000 0000 - 5500 0000 0000: -
 5500 0000 0000 - 5a00 0000 0000: pie binaries without ASLR or on 4.1+ kernels
 5a00 0000 0000 - 7200 0000 0000: -
-7200 0000 0000 - 7300 0000 0000: heap (1TB)
-7300 0000 0000 - 7a00 0000 0000: -
+7200 0000 0000 - 7400 0000 0000: heap (1TB)
+7400 0000 0000 - 7a00 0000 0000: -
 7a00 0000 0000 - 8000 0000 0000: modules and main thread stack (6TB)
 C/C++ on netbsd/amd64 can reuse the same mapping:
  * The address space starts from 0x1000 (option with 0x0) and ends with
