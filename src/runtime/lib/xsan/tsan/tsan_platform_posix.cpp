@@ -16,6 +16,7 @@
 
 #  include <dlfcn.h>
 
+#  include "../xsan_platform.h"
 #  include "sanitizer_common/sanitizer_common.h"
 #  include "sanitizer_common/sanitizer_errno.h"
 #  include "sanitizer_common/sanitizer_libc.h"
@@ -101,6 +102,8 @@ void CheckAndProtect() {
     if (IsAppMem(segment.start))
       continue;
     if (segment.start >= HeapMemEnd() && segment.start < HeapEnd())
+      continue;
+    if (__xsan::IsSanitizerPrivateMem(segment.start))
       continue;
     if (segment.protection == 0)  // Zero page or mprotected.
       continue;
