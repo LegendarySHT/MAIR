@@ -18,6 +18,7 @@
 # error "Only 64-bit is supported"
 #endif
 
+#include "../xsan_platform.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "tsan_defs.h"
 
@@ -34,6 +35,17 @@ enum {
   // This is bad and can lead to unpredictable memory corruptions, etc
   // because range access functions assume linearity.
   kBrokenLinearity = 1 << 2,
+};
+
+template <typename Mapping>
+struct TsanMapping : public Mapping {
+  static const uptr kShadowMsk     = Mapping::kTsanShadowMsk     ;
+  static const uptr kShadowXor     = Mapping::kTsanShadowXor     ;
+  static const uptr kShadowAdd     = Mapping::kTsanShadowAdd     ;
+  static const uptr kMetaShadowBeg = Mapping::kTsanMetaShadowBeg ;
+  static const uptr kMetaShadowEnd = Mapping::kTsanMetaShadowEnd ;
+  static const uptr kShadowBeg     = Mapping::kTsanShadowBeg     ;
+  static const uptr kShadowEnd     = Mapping::kTsanShadowEnd     ;
 };
 
 /*
@@ -62,24 +74,25 @@ C/C++ on netbsd/amd64 can reuse the same mapping:
 */
 
 /// Modified: enlarge the heap size from 1T to 2T to fit ASan's needs.
-struct Mapping48AddressSpace {
-  static const uptr kMetaShadowBeg = 0x400000000000ull;
-  static const uptr kMetaShadowEnd = 0x480000000000ull;
-  static const uptr kShadowBeg     = 0x200000000000ull;
-  static const uptr kShadowEnd     = 0x400000000000ull;
-  static const uptr kHeapMemBeg    = 0x720000000000ull;
-  static const uptr kHeapMemEnd    = 0x740000000000ull;
-  static const uptr kLoAppMemBeg   = 0x000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x020000000000ull;
-  static const uptr kMidAppMemBeg  = 0x550000000000ull;
-  static const uptr kMidAppMemEnd  = 0x5a0000000000ull;
-  static const uptr kHiAppMemBeg   = 0x7a0000000000ull;
-  static const uptr kHiAppMemEnd   = 0x800000000000ull;
-  static const uptr kShadowMsk     = 0x700000000000ull;
-  static const uptr kShadowXor     = 0x000000000000ull;
-  static const uptr kShadowAdd     = 0x200000000000ull;
-  static const uptr kVdsoBeg       = 0xf000000000000000ull;
-};
+using Mapping48AddressSpace = TsanMapping<__xsan::Mapping48AddressSpace>;
+// struct Mapping48AddressSpace {
+//   static const uptr kMetaShadowBeg = 0x400000000000ull;
+//   static const uptr kMetaShadowEnd = 0x480000000000ull;
+//   static const uptr kShadowBeg     = 0x200000000000ull;
+//   static const uptr kShadowEnd     = 0x400000000000ull;
+//   static const uptr kHeapMemBeg    = 0x720000000000ull;
+//   static const uptr kHeapMemEnd    = 0x740000000000ull;
+//   static const uptr kLoAppMemBeg   = 0x000000001000ull;
+//   static const uptr kLoAppMemEnd   = 0x020000000000ull;
+//   static const uptr kMidAppMemBeg  = 0x550000000000ull;
+//   static const uptr kMidAppMemEnd  = 0x5a0000000000ull;
+//   static const uptr kHiAppMemBeg   = 0x7a0000000000ull;
+//   static const uptr kHiAppMemEnd   = 0x800000000000ull;
+//   static const uptr kShadowMsk     = 0x700000000000ull;
+//   static const uptr kShadowXor     = 0x000000000000ull;
+//   static const uptr kShadowAdd     = 0x200000000000ull;
+//   static const uptr kVdsoBeg       = 0xf000000000000000ull;
+// };
 
 /*
 C/C++ on linux/mips64 (40-bit VMA)
