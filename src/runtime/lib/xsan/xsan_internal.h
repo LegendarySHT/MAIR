@@ -14,6 +14,7 @@
 #include "xsan_common_defs.h"
 #include "xsan_flags.h"
 #include "xsan_interface_internal.h"
+#include "xsan_platform.h"
 
 // #if defined(__SANITIZE_ADDRESS__)
 // #  error \
