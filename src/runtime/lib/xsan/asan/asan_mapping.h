@@ -15,7 +15,6 @@
 
 #include <sanitizer_common/sanitizer_platform.h>
 
-#include "../xsan_platform.h"
 
 // The full explanation of the memory mapping could be found here:
 // https://github.com/google/sanitizers/wiki/AddressSanitizerAlgorithm
@@ -214,8 +213,7 @@
 #      error "Value below is based on shadow scale = 3."
 #      error "Original formula was: 0x7FFFFFFF & (~0xFFFULL << SHADOW_SCALE)."
 #    endif
-#    define ASAN_SHADOW_OFFSET_CONST \
-      __xsan::Mapping48AddressSpace::kAsanShadowOffset
+#    define ASAN_SHADOW_OFFSET_CONST 0x000000007fff8000
 #  endif
 #endif
 
