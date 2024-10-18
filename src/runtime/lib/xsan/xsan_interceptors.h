@@ -160,13 +160,9 @@ struct TsanArgs {
 };
 }  // namespace __xsan
 
-#define XSAN_EXTRA_ALLOC_ARG(func, ...)      \
-  GET_STACK_TRACE_MALLOC;                    \
-  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread(); \
-  __tsan::ScopedInterceptor si(xsan_thr->tsan_thread_, #func, stack.trace_buffer[1]); \
+#define XSAN_EXTRA_ALLOC_ARG(func, ...)                       \
+  GET_STACK_TRACE_MALLOC;                                     \
+  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();  \
+  __tsan::ScopedInterceptor si(xsan_thr->tsan_thread_, #func, \
+                               stack.trace_buffer[1]);        \
   xsan_thr->setTsanArgs(stack.trace_buffer[0]);
-
-// Auto-decomp
-#define XSAN_EXTRA_ARGS_DECOMPOSITION(args) \
-  BufferedStackTrace *stack = args.stack_;  \
-  \
