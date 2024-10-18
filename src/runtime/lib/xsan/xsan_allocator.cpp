@@ -4,7 +4,7 @@
 // #include "xsan_poisoning.h"
 // #include "xsan_report.h"
 #include "asan_allocator.h"
-#include "tsan_rtl.h"
+#include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "xsan_thread.h"
 // #include "xsan_thread.h"
@@ -21,11 +21,45 @@
 namespace __xsan {
 
 void xsan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
+  /// Refer to `tsan_mman.cpp:user_free`
+  /// TODO: maybe could be eliminated, as ASan does similar handling as follows
+  /*
+    AsanThread *t = GetCurrentThread();
+    void *allocated;
+    if (t) {
+      AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+    } else {
+      SpinMutexLock l(&fallback_mutex);
+      AllocatorCache *cache = &fallback_allocator_cache;
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+    }
+  */
+  __tsan::ScopedGlobalProcessor sgp;
   __asan::asan_free(ptr, stack, alloc_type);
 }
 
 void xsan_delete(void *ptr, uptr size, uptr alignment,
                  BufferedStackTrace *stack, AllocType alloc_type) {
+  /// Refer to `tsan_mman.cpp:user_free`
+  /// TODO: maybe could be eliminated, as ASan does similar handling as follows
+  /*
+    AsanThread *t = GetCurrentThread();
+    void *allocated;
+    if (t) {
+      AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+    } else {
+      SpinMutexLock l(&fallback_mutex);
+      AllocatorCache *cache = &fallback_allocator_cache;
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+    }
+  */
+  __tsan::ScopedGlobalProcessor sgp;
   __asan::asan_delete(ptr, size, alignment, stack, alloc_type);
 }
 
