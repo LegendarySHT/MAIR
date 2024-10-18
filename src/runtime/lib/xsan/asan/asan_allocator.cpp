@@ -22,7 +22,7 @@ namespace __xsan {
 void XsanAllocHook(uptr ptr, uptr size, bool write);
 void XsanFreeHook(uptr p, bool write);
 void XsanAllocFreeTailHook();
-}
+}  // namespace __xsan
 
 namespace __asan {
 // using XAsanAllocator = __xsan::XsanAllocator;
@@ -516,11 +516,13 @@ struct Allocator {
     void *allocated;
     if (t) {
       AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
-      allocated = allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     } else {
       SpinMutexLock l(&fallback_mutex);
       AllocatorCache *cache = &fallback_allocator_cache;
-      allocated = allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     }
     if (UNLIKELY(!allocated)) {
       SetAllocatorOutOfMemory();
@@ -711,7 +713,8 @@ struct Allocator {
     thread_stats.reallocs++;
     thread_stats.realloced += new_size;
 
-    void *new_ptr = Allocate(new_size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true);
+    void *new_ptr =
+        Allocate(new_size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true);
     if (new_ptr) {
       u8 chunk_state = atomic_load(&m->chunk_state, memory_order_acquire);
       if (chunk_state != CHUNK_ALLOCATED)
@@ -732,7 +735,8 @@ struct Allocator {
         return nullptr;
       ReportCallocOverflow(nmemb, size, stack);
     }
-    void *ptr = Allocate(nmemb * size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, false);
+    void *ptr = Allocate(nmemb * size, __xsan::kDefaultAlignment, stack,
+                         FROM_MALLOC, false);
     // If the memory comes from the secondary allocator no need to clear it
     // as it comes directly from mmap.
     if (ptr && allocator.FromPrimary(ptr))
@@ -851,6 +855,159 @@ struct Allocator {
     fallback_mutex.Unlock();
     allocator.ForceUnlock();
   }
+
+  // --------   Allocate Internal Heap Block Used in Xsan ----------------
+
+  // Particularly, TSan's fd tracking needs meta allocation in heap sections,
+  // withour ASan's embedded metadata
+  // Specifically, for internal alloc
+  // - No embedded metadata (ASan/LSan)
+  // - No automatic byte filling
+  // - No ASan's shadow unpoisoning (user is not allowed to access these blocks)
+  // - Use default alignment: 16
+  void *AllocateInternel(uptr size, BufferedStackTrace *stack) {
+    if (UNLIKELY(!asan_inited))
+      AsanInitFromRtl();
+    if (UNLIKELY(IsRssLimitExceeded())) {
+      if (AllocatorMayReturnNull())
+        return nullptr;
+      ReportRssLimitExceeded(stack);
+    }
+    CHECK(stack);
+
+    if (size == 0) {
+      // We'd be happy to avoid allocating memory for zero-size requests, but
+      // some programs/tests depend on this behavior and assume that malloc
+      // would not return NULL even for zero-size allocations. Moreover, it
+      // looks like operator new should never return NULL, and results of
+      // consecutive "new" calls must be different even if the allocated size
+      // is zero.
+      size = 1;
+    }
+
+    uptr needed_size = size;
+
+    if (size > kMaxAllowedMallocSize || needed_size > kMaxAllowedMallocSize ||
+        size > max_user_defined_malloc_size) {
+      if (AllocatorMayReturnNull()) {
+        Report("WARNING: AddressSanitizer failed to allocate 0x%zx bytes\n",
+               size);
+        return nullptr;
+      }
+      uptr malloc_limit =
+          Min(kMaxAllowedMallocSize, max_user_defined_malloc_size);
+      ReportAllocationSizeTooBig(size, needed_size, malloc_limit, stack);
+    }
+
+    AsanThread *t = GetCurrentThread();
+    void *allocated;
+    if (t) {
+      AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+    } else {
+      SpinMutexLock l(&fallback_mutex);
+      AllocatorCache *cache = &fallback_allocator_cache;
+      allocated =
+          allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
+    }
+    if (UNLIKELY(!allocated)) {
+      SetAllocatorOutOfMemory();
+      if (AllocatorMayReturnNull())
+        return nullptr;
+      ReportOutOfMemory(size, stack);
+    }
+
+    if (*(u8 *)MEM_TO_SHADOW((uptr)allocated) == 0 && CanPoisonMemory()) {
+      // Heap poisoning is enabled, but the allocator provides an unpoisoned
+      // chunk. This is possible if CanPoisonMemory() was false for some
+      // time, for example, due to flags()->start_disabled.
+      // Anyway, poison the block before using it for anything else.
+      uptr allocated_size = allocator.GetActuallyAllocatedSize(allocated);
+      PoisonShadow((uptr)allocated, allocated_size, kAsanHeapLeftRedzoneMagic);
+    }
+
+    uptr user_beg = reinterpret_cast<uptr>(allocated);
+
+    /// TODO: should unpoison the block for internal allocation?
+    // uptr size_rounded_down_to_granularity =
+    //     RoundDownTo(size, ASAN_SHADOW_GRANULARITY);
+    // // Unpoison the bulk of the memory region.
+    // if (size_rounded_down_to_granularity)
+    //   PoisonShadow(user_beg, size_rounded_down_to_granularity, 0);
+    //// Deal with the end of the region if size is not aligned to granularity.
+    // if (size != size_rounded_down_to_granularity && CanPoisonMemory()) {
+    //   u8 *shadow =
+    //       (u8 *)MemToShadow(user_beg + size_rounded_down_to_granularity);
+    //   *shadow = fl.poison_partial ? (size & (ASAN_SHADOW_GRANULARITY - 1)) :
+    //   0;
+    // }
+
+    /// Do not record internal alloc stat
+    // AsanStats &thread_stats = GetCurrentThreadStats();
+    // thread_stats.mallocs++;
+    // thread_stats.malloced += size;
+    // if (needed_size > SizeClassMap::kMaxSize)
+    //   thread_stats.malloc_large++;
+    // else
+    //   thread_stats.malloced_by_size[SizeClassMap::ClassID(needed_size)]++;
+
+    void *res = reinterpret_cast<void *>(user_beg);
+
+    __xsan::XsanAllocHook(user_beg, size, true);
+    /// Internal allocations do not occur during signal processing
+    /// Refer to tsan_fd.cpp
+    // __xsan::XsanAllocFreeTailHook();
+    RunMallocHooks(res, size);
+    return allocated;
+  }
+
+  // Particularly, TSan's fd tracking needs meta allocation in heap sections,
+  // withour ASan's embedded metadata
+  // Specifically, for internal dealloc
+  // - No alloc/free type mismatch detection
+  // - No automatic byte filling
+  // - No ASan's shadow unpoisoning (user is not allowed to access these blocks)
+  // - Use default alignment: 16
+  void DeallocateInternal(void *ptr, BufferedStackTrace *stack) {
+    uptr p = reinterpret_cast<uptr>(ptr);
+    if (p == 0)
+      return;
+
+    // On Windows, uninstrumented DLLs may allocate memory before ASan hooks
+    // malloc. Don't report an invalid free in this case.
+    if (SANITIZER_WINDOWS && !get_allocator().PointerIsMine(ptr)) {
+      if (!IsSystemHeapAddress(p))
+        ReportFreeNotMalloced(p, stack);
+      return;
+    }
+
+    RunFreeHooks(ptr);
+    __xsan::XsanFreeHook(p, true);
+
+    AsanThread *t = GetCurrentThread();
+    if (t) {
+      AllocatorCache *cache = GetAllocatorCache(&t->malloc_storage());
+      get_allocator().Deallocate(cache, ptr);
+    } else {
+      SpinMutexLock l(&fallback_mutex);
+      AllocatorCache *cache = &fallback_allocator_cache;
+      get_allocator().Deallocate(cache, ptr);
+    }
+
+    /// Do not record internal alloc stat
+    // AsanStats &thread_stats = GetCurrentThreadStats();
+    // thread_stats.frees++;
+    // thread_stats.freed += size;
+
+    /// TODO: should poison the block for internal free?
+    // PoisonShadow(m->Beg(), RoundUpTo(m->UsedSize(), ASAN_SHADOW_GRANULARITY),
+    //           kAsanHeapFreeMagic);
+
+    /// Internal allocations do not occur during signal processing
+    /// Refer to tsan_fd.cpp
+    // __xsan::XsanAllocFreeTailHook();
+  }
 };
 
 static Allocator instance(LINKER_INITIALIZED);
@@ -938,6 +1095,26 @@ void AsanThreadLocalMallocStorage::CommitBack() {
 
 void PrintInternalAllocatorStats() { instance.PrintStats(); }
 
+bool UserPointerIsMine(const void *p) {
+  if (!get_allocator().PointerIsMine(p))
+    return false;
+  /// Fast check by shadow. If p is a user pointer, its shadow is unposioned
+  return !AddressIsPoisoned((uptr)p);
+}
+
+void *GetUserBlockBegin(const void *p) {
+  uptr chunk_beg = (uptr)instance.GetAsanChunkByAddr((uptr)p);
+  return (void *)(chunk_beg + kChunkHeaderSize);
+}
+
+void *asan_malloc_internal(uptr size, BufferedStackTrace *stack) {
+  return instance.AllocateInternel(size, stack);
+}
+
+void asan_free_internal(void *ptr, BufferedStackTrace *stack) {
+  instance.DeallocateInternal(ptr, stack);
+}
+
 void asan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
   instance.Deallocate(ptr, 0, 0, stack, alloc_type);
 }
@@ -948,7 +1125,8 @@ void asan_delete(void *ptr, uptr size, uptr alignment,
 }
 
 void *asan_malloc(uptr size, BufferedStackTrace *stack) {
-  return SetErrnoOnNull(instance.Allocate(size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true));
+  return SetErrnoOnNull(instance.Allocate(size, __xsan::kDefaultAlignment,
+                                          stack, FROM_MALLOC, true));
 }
 
 void *asan_calloc(uptr nmemb, uptr size, BufferedStackTrace *stack) {
@@ -968,7 +1146,8 @@ void *asan_reallocarray(void *p, uptr nmemb, uptr size,
 
 void *asan_realloc(void *p, uptr size, BufferedStackTrace *stack) {
   if (!p)
-    return SetErrnoOnNull(instance.Allocate(size, __xsan::kDefaultAlignment, stack, FROM_MALLOC, true));
+    return SetErrnoOnNull(instance.Allocate(size, __xsan::kDefaultAlignment,
+                                            stack, FROM_MALLOC, true));
   if (size == 0) {
     if (flags()->allocator_frees_and_returns_null_on_realloc_zero) {
       instance.Deallocate(p, 0, 0, stack, FROM_MALLOC);

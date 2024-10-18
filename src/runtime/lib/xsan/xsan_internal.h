@@ -72,6 +72,7 @@ class ScopedSanitizerToolName {
 
 class XsanThread;
 using __sanitizer::StackTrace;
+class XsanAllocator;
 
 void XsanInitFromRtl();
 

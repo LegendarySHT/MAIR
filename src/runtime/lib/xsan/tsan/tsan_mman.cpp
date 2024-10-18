@@ -9,6 +9,8 @@
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
 //===----------------------------------------------------------------------===//
+#include "../xsan_allocator.h"
+
 #include "sanitizer_common/sanitizer_allocator_checks.h"
 #include "sanitizer_common/sanitizer_allocator_interface.h"
 #include "sanitizer_common/sanitizer_allocator_report.h"
@@ -134,12 +136,12 @@ static constexpr uptr kMaxAllowedMallocSize = 1ull << 40;
 static uptr max_user_defined_malloc_size;
 
 void InitializeAllocator() {
-  SetAllocatorMayReturnNull(common_flags()->allocator_may_return_null);
-  allocator()->Init(common_flags()->allocator_release_to_os_interval_ms);
-  max_user_defined_malloc_size = common_flags()->max_allocation_size_mb
-                                     ? common_flags()->max_allocation_size_mb
-                                           << 20
-                                     : kMaxAllowedMallocSize;
+  // SetAllocatorMayReturnNull(common_flags()->allocator_may_return_null);
+  // allocator()->Init(common_flags()->allocator_release_to_os_interval_ms);
+  // max_user_defined_malloc_size = common_flags()->max_allocation_size_mb
+  //                                    ? common_flags()->max_allocation_size_mb
+  //                                          << 20
+  //                                    : kMaxAllowedMallocSize;
 }
 
 void InitializeAllocatorLate() {
@@ -147,12 +149,12 @@ void InitializeAllocatorLate() {
 }
 
 void AllocatorProcStart(Processor *proc) {
-  allocator()->InitCache(&proc->alloc_cache);
+  // allocator()->InitCache(&proc->alloc_cache);
   internal_allocator()->InitCache(&proc->internal_alloc_cache);
 }
 
 void AllocatorProcFinish(Processor *proc) {
-  allocator()->DestroyCache(&proc->alloc_cache);
+  // allocator()->DestroyCache(&proc->alloc_cache);
   internal_allocator()->DestroyCache(&proc->internal_alloc_cache);
 }
 
@@ -178,71 +180,48 @@ void SignalUnsafeCall(ThreadState *thr, uptr pc) {
 
 void *user_alloc_internal(ThreadState *thr, uptr pc, uptr sz, uptr align,
                           bool signal) {
-  if (sz >= kMaxAllowedMallocSize || align >= kMaxAllowedMallocSize ||
-      sz > max_user_defined_malloc_size) {
-    if (AllocatorMayReturnNull())
-      return nullptr;
-    uptr malloc_limit =
-        Min(kMaxAllowedMallocSize, max_user_defined_malloc_size);
-    GET_STACK_TRACE_FATAL(thr, pc);
-    ReportAllocationSizeTooBig(sz, malloc_limit, &stack);
-  }
-  if (UNLIKELY(IsRssLimitExceeded())) {
-    if (AllocatorMayReturnNull())
-      return nullptr;
-    GET_STACK_TRACE_FATAL(thr, pc);
-    ReportRssLimitExceeded(&stack);
-  }
-  void *p = allocator()->Allocate(&thr->proc()->alloc_cache, sz, align);
-  if (UNLIKELY(!p)) {
-    SetAllocatorOutOfMemory();
-    if (AllocatorMayReturnNull())
-      return nullptr;
-    GET_STACK_TRACE_FATAL(thr, pc);
-    ReportOutOfMemory(sz, &stack);
-  }
-  if (ctx && ctx->initialized)
-    OnUserAlloc(thr, pc, (uptr)p, sz, true);
-  if (signal)
-    SignalUnsafeCall(thr, pc);
-  return p;
+  /// Call from tsan_fd.cpp
+  BufferedStackTrace stack;
+  stack.Init(thr->shadow_stack, thr->shadow_stack_pos - thr->shadow_stack, pc);
+  return __xsan::alloctor()->AllocateInternel(sz, &stack);
+
 }
 
 void user_free(ThreadState *thr, uptr pc, void *p, bool signal) {
+  /// Call from tsan_fd.cpp
   ScopedGlobalProcessor sgp;
-  if (ctx && ctx->initialized)
-    OnUserFree(thr, pc, (uptr)p, true);
-  allocator()->Deallocate(&thr->proc()->alloc_cache, p);
-  if (signal)
-    SignalUnsafeCall(thr, pc);
+  BufferedStackTrace stack;
+  stack.Init(thr->shadow_stack, thr->shadow_stack_pos - thr->shadow_stack, pc);
+  __xsan::alloctor()->DeallocateInternal(p, &stack);
+  return;
 }
 
-void *user_alloc(ThreadState *thr, uptr pc, uptr sz) {
-  return SetErrnoOnNull(user_alloc_internal(thr, pc, sz, kDefaultAlignment));
-}
+// void *user_alloc(ThreadState *thr, uptr pc, uptr sz) {
+//   return SetErrnoOnNull(user_alloc_internal(thr, pc, sz, kDefaultAlignment));
+// }
 
-void *user_calloc(ThreadState *thr, uptr pc, uptr size, uptr n) {
-  if (UNLIKELY(CheckForCallocOverflow(size, n))) {
-    if (AllocatorMayReturnNull())
-      return SetErrnoOnNull(nullptr);
-    GET_STACK_TRACE_FATAL(thr, pc);
-    ReportCallocOverflow(n, size, &stack);
-  }
-  void *p = user_alloc_internal(thr, pc, n * size);
-  if (p)
-    internal_memset(p, 0, n * size);
-  return SetErrnoOnNull(p);
-}
+// void *user_calloc(ThreadState *thr, uptr pc, uptr size, uptr n) {
+//   if (UNLIKELY(CheckForCallocOverflow(size, n))) {
+//     if (AllocatorMayReturnNull())
+//       return SetErrnoOnNull(nullptr);
+//     GET_STACK_TRACE_FATAL(thr, pc);
+//     ReportCallocOverflow(n, size, &stack);
+//   }
+//   void *p = user_alloc_internal(thr, pc, n * size);
+//   if (p)
+//     internal_memset(p, 0, n * size);
+//   return SetErrnoOnNull(p);
+// }
 
-void *user_reallocarray(ThreadState *thr, uptr pc, void *p, uptr size, uptr n) {
-  if (UNLIKELY(CheckForCallocOverflow(size, n))) {
-    if (AllocatorMayReturnNull())
-      return SetErrnoOnNull(nullptr);
-    GET_STACK_TRACE_FATAL(thr, pc);
-    ReportReallocArrayOverflow(size, n, &stack);
-  }
-  return user_realloc(thr, pc, p, size * n);
-}
+// void *user_reallocarray(ThreadState *thr, uptr pc, void *p, uptr size, uptr n) {
+//   if (UNLIKELY(CheckForCallocOverflow(size, n))) {
+//     if (AllocatorMayReturnNull())
+//       return SetErrnoOnNull(nullptr);
+//     GET_STACK_TRACE_FATAL(thr, pc);
+//     ReportReallocArrayOverflow(size, n, &stack);
+//   }
+//   return user_realloc(thr, pc, p, size * n);
+// }
 
 void OnUserAlloc(ThreadState *thr, uptr pc, uptr p, uptr sz, bool write) {
   DPrintf("#%d: alloc(%zu) = 0x%zx\n", thr->tid, sz, p);
@@ -363,6 +342,8 @@ uptr user_alloc_usable_size(const void *p) {
   return b->siz;
 }
 
+
+/// TODO: Unify the malloc hook invoke on XSan
 void invoke_malloc_hook(void *ptr, uptr size) {
   ThreadState *thr = cur_thread();
   if (ctx == 0 || !ctx->initialized || thr->ignore_interceptors)
@@ -435,9 +416,13 @@ extern "C" {
 //   return user_alloc_usable_size(p);
 // }
 
+/// TODO: figure out should we still need this API?
+/// Related: ASan's CommitBack API.
 void __tsan_on_thread_idle() {
   ThreadState *thr = cur_thread();
-  allocator()->SwallowCache(&thr->proc()->alloc_cache);
+  __xsan::alloctor();
+  /// use ASan's allocator, no needs of swallow cache from TSan
+  // allocator()->SwallowCache(&thr->proc()->alloc_cache);
   internal_allocator()->SwallowCache(&thr->proc()->internal_alloc_cache);
   ctx->metamap.OnProcIdle(thr->proc());
 }

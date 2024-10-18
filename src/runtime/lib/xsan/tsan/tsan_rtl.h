@@ -25,6 +25,7 @@
 #ifndef TSAN_RTL_H
 #define TSAN_RTL_H
 
+#include "../xsan_allocator.h"
 #include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_allocator_internal.h"
 #include "sanitizer_common/sanitizer_asm.h"
@@ -86,7 +87,8 @@ struct AP64 {  // Allocator64 parameters. Deliberately using a short name.
 };
 typedef SizeClassAllocator64<AP64> PrimaryAllocator;
 #endif
-typedef CombinedAllocator<PrimaryAllocator> Allocator;
+// typedef CombinedAllocator<PrimaryAllocator> Allocator;
+using Allocator = __xsan::XsanAllocator;
 typedef Allocator::AllocatorCache AllocatorCache;
 Allocator *allocator();
 #endif
@@ -578,7 +580,7 @@ void MutexCreate(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0);
 void MutexDestroy(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0);
 void MutexPreLock(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0);
 void MutexPostLock(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0,
-    int rec = 1);
+                   int rec = 1);
 int  MutexUnlock(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0);
 void MutexPreReadLock(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0);
 void MutexPostReadLock(ThreadState *thr, uptr pc, uptr addr, u32 flagz = 0);

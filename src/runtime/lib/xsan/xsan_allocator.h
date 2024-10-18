@@ -6,12 +6,27 @@
 
 #include "asan/asan_allocator.h"
 #include "xsan_flags.h"
-#include "xsan_interceptors.h"
 #include "xsan_internal.h"
 
 namespace __xsan {
 
 using __asan::AllocType;
+
+
+/// Provides some interfaces for other sanitizer.
+class XsanAllocator {
+public:
+  using AllocatorCache = __asan::AllocatorCache;
+
+public:
+  bool PointerIsMine(const void*p);
+  void *GetBlockBegin(const void*p);
+  void *AllocateInternel(uptr size, BufferedStackTrace *stack);
+  void DeallocateInternal(void *ptr, BufferedStackTrace *stack);
+  void PrintStats();
+};
+
+XsanAllocator *alloctor();
 
 void *xsan_memalign(uptr alignment, uptr size, BufferedStackTrace *stack,
                     AllocType alloc_type);
