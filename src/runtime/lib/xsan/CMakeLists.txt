@@ -80,8 +80,9 @@ if(APPLE)
     elseif(UNIX)
     # Assume Linux
     list(APPEND TSAN_SOURCES
-    tsan/orig/tsan_platform_linux.cpp
+    # tsan/orig/tsan_platform_linux.cpp
     # tsan/orig/tsan_platform_posix.cpp
+    tsan/tsan_platform_linux.cpp
     tsan/tsan_platform_posix.cpp
     )
 endif()
