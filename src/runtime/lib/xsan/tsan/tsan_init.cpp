@@ -117,6 +117,8 @@ void TsanInitFromXsanEarly() {
 }
 
 void TsanInitFromXsan() {
+  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
+
   ThreadState *thr = cur_thread_init();
   // Thread safe because done before all threads exist.
   if (is_initialized)
@@ -124,7 +126,6 @@ void TsanInitFromXsan() {
   is_initialized = true;
   // We are not ready to handle interceptors yet.
   ScopedIgnoreInterceptors ignore;
-  SanitizerToolName = "ThreadSanitizer";
   /// TODO: Move this from ASan and TSan to XSan
   // Install tool-specific callbacks in sanitizer_common.
   // SetCheckUnwindCallback(CheckUnwind);

@@ -41,6 +41,7 @@ static void XsanInitInternal() {
   if (LIKELY(xsan_inited))
     return;
   SanitizerToolName = "XSan";
+  ScopedSanitizerToolName tool_name("XSan");
   CHECK(!xsan_init_is_running && "XSan init calls itself!");
   xsan_init_is_running = true;
 
