@@ -70,7 +70,7 @@ struct Mapping48AddressSpace : public AsanMappingBase<Mapping48AddressSpace> {
   static constexpr const uptr kHeapMemEnd = 0x740000000000ull;
 
   static constexpr const uptr kLoAppMemBeg = 0x000000001000ull;
-  static constexpr const uptr kLoAppMemEnd = 0x00007fff7fffull;
+  static constexpr const uptr kLoAppMemEnd = 0x00007fff8000ull;
   static constexpr const uptr kMidAppMemBeg = 0x550000000000ull;
   static constexpr const uptr kMidAppMemEnd = 0x5a0000000000ull;
   static constexpr const uptr kHiAppMemBeg = 0x7a0000000000ull;
@@ -81,7 +81,7 @@ struct Mapping48AddressSpace : public AsanMappingBase<Mapping48AddressSpace> {
   static constexpr const uptr kTsanShadowBeg = 0x200000000000ull;
   static constexpr const uptr kTsanShadowEnd = 0x400000000000ull;
   static constexpr const uptr kTsanMetaShadowBeg = 0x400000000000ull;
-  static constexpr const uptr kTsanMetaShadowEnd = 0x380000000000ull;
+  static constexpr const uptr kTsanMetaShadowEnd = 0x480000000000ull;
   static constexpr const uptr kTsanShadowMsk = 0x780000000000ull;
   static constexpr const uptr kTsanShadowXor = 0x040000000000ull;
   static constexpr const uptr kTsanShadowAdd = 0x200000000000ull;
@@ -865,9 +865,7 @@ bool IsAsanPrivateMem(uptr p) {
 }
 
 ALWAYS_INLINE
-bool IsTsanPrivateMem(uptr p) {
-  return IsTsanShadowMem(p) || IsTsanMetaMem(p);
-}
+bool IsTsanPrivateMem(uptr p) { return IsTsanShadowMem(p) || IsTsanMetaMem(p); }
 
 ALWAYS_INLINE
 bool IsSanitizerShadowMem(uptr p) {
