@@ -3,15 +3,15 @@
 // RUN: %clangxx_asan -fsanitize-recover=address -pthread %s -o %t
 //
 // RUN: %env_asan_opts=halt_on_error=false:suppress_equal_pcs=false %run %t 1 10 >%t.log 2>&1
-// RUN: grep 'ERROR: {{AddressSanitizer|XSan}}: use-after-poison' %t.log | count 10
+// RUN: grep 'ERROR: AddressSanitizer: use-after-poison' %t.log | count 10
 // RUN: FileCheck %s <%t.log
 //
 // RUN: %env_asan_opts=halt_on_error=false:suppress_equal_pcs=false:exitcode=0 %run %t 10 20 >%t.log 2>&1
-// RUN: grep 'ERROR: {{AddressSanitizer|XSan}}: use-after-poison' %t.log | count 200
+// RUN: grep 'ERROR: AddressSanitizer: use-after-poison' %t.log | count 200
 // RUN: FileCheck %s <%t.log
 //
 // RUN: %env_asan_opts=halt_on_error=false:exitcode=0 %run %t 10 20 >%t.log 2>&1
-// RUN: grep 'ERROR: {{AddressSanitizer|XSan}}: use-after-poison' %t.log | count 1
+// RUN: grep 'ERROR: AddressSanitizer: use-after-poison' %t.log | count 1
 // RUN: FileCheck %s <%t.log
 
 #include <stdio.h>
@@ -38,7 +38,7 @@ void *run(void *arg) {
 
   for (size_t i = 0; i < niter; ++i) {
     random_delay(&seed);
-    // CHECK: ERROR: {{AddressSanitizer|XSan}}: use-after-poison
+    // CHECK: ERROR: AddressSanitizer: use-after-poison
     volatile int idx = 0;
     tmp[idx] = 0;
   }
