@@ -47,19 +47,24 @@ static void RegisterAsanFlags(FlagParser *parser, Flags *f) {
 #undef ASAN_FLAG
 }
 
+void SetCommonFlags(CommonFlags &cf) {
+  cf.detect_leaks = cf.detect_leaks && CAN_SANITIZE_LEAKS;
+  cf.intercept_tls_get_addr = true;
+}
+
 void InitializeFlags() {
   // Set the default values and prepare for parsing ASan and common flags.
-  SetCommonFlagsDefaults();
-  {
-    CommonFlags cf;
-    cf.CopyFrom(*common_flags());
-    cf.detect_leaks = cf.detect_leaks && CAN_SANITIZE_LEAKS;
-    cf.external_symbolizer_path = GetEnv("ASAN_SYMBOLIZER_PATH");
-    cf.malloc_context_size = kDefaultMallocContextSize;
-    cf.intercept_tls_get_addr = true;
-    cf.exitcode = 1;
-    OverrideCommonFlags(cf);
-  }
+//   SetCommonFlagsDefaults();
+//   {
+//     CommonFlags cf;
+//     cf.CopyFrom(*common_flags());
+//     cf.detect_leaks = cf.detect_leaks && CAN_SANITIZE_LEAKS;
+//     cf.external_symbolizer_path = GetEnv("ASAN_SYMBOLIZER_PATH");
+//     cf.malloc_context_size = kDefaultMallocContextSize;
+//     cf.intercept_tls_get_addr = true;
+//     cf.exitcode = 1;
+//     OverrideCommonFlags(cf);
+//   }
   Flags *f = flags();
   f->SetDefaults();
 
@@ -78,14 +83,14 @@ void InitializeFlags() {
   RegisterCommonFlags(&lsan_parser);
 #endif
 
-#if CAN_SANITIZE_UB
-  __ubsan::Flags *uf = __ubsan::flags();
-  uf->SetDefaults();
+// #if CAN_SANITIZE_UB
+//   __ubsan::Flags *uf = __ubsan::flags();
+//   uf->SetDefaults();
 
-  FlagParser ubsan_parser;
-  __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
-  RegisterCommonFlags(&ubsan_parser);
-#endif
+//   FlagParser ubsan_parser;
+//   __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
+//   RegisterCommonFlags(&ubsan_parser);
+// #endif
 
   if (SANITIZER_APPLE) {
     // Support macOS MallocScribble and MallocPreScribble:
@@ -106,10 +111,10 @@ void InitializeFlags() {
   // Override from user-specified string.
   const char *asan_default_options = __asan_default_options();
   asan_parser.ParseString(asan_default_options);
-#if CAN_SANITIZE_UB
-  const char *ubsan_default_options = __ubsan_default_options();
-  ubsan_parser.ParseString(ubsan_default_options);
-#endif
+// #if CAN_SANITIZE_UB
+//   const char *ubsan_default_options = __ubsan_default_options();
+//   ubsan_parser.ParseString(ubsan_default_options);
+// #endif
 #if CAN_SANITIZE_LEAKS
   const char *lsan_default_options = __lsan_default_options();
   lsan_parser.ParseString(lsan_default_options);
@@ -120,11 +125,11 @@ void InitializeFlags() {
 #if CAN_SANITIZE_LEAKS
   lsan_parser.ParseStringFromEnv("LSAN_OPTIONS");
 #endif
-#if CAN_SANITIZE_UB
-  ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
-#endif
+// #if CAN_SANITIZE_UB
+//   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
+// #endif
 
-  InitializeCommonFlags();
+//   InitializeCommonFlags();
 
   // TODO(eugenis): dump all flags at verbosity>=2?
   if (Verbosity()) ReportUnrecognizedFlags();

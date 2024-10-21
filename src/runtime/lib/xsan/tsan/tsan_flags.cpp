@@ -49,26 +49,39 @@ void RegisterTsanFlags(FlagParser *parser, Flags *f) {
       &f->second_deadlock_stack);
 }
 
-void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
-  SetCommonFlagsDefaults();
-  {
-    // Override some common flags defaults.
-    CommonFlags cf;
-    cf.CopyFrom(*common_flags());
-    cf.external_symbolizer_path = GetEnv("TSAN_SYMBOLIZER_PATH");
-    cf.allow_addr2line = true;
-    if (SANITIZER_GO) {
+void SetCommonFlags(CommonFlags &cf) {
+  cf.allow_addr2line = true;
+  if (SANITIZER_GO) {
       // Does not work as expected for Go: runtime handles SIGABRT and crashes.
       cf.abort_on_error = false;
       // Go does not have mutexes.
       cf.detect_deadlocks = false;
-    }
-    cf.print_suppressions = false;
-    cf.stack_trace_format = "    #%n %f %S %M";
-    cf.exitcode = 66;
-    cf.intercept_tls_get_addr = true;
-    OverrideCommonFlags(cf);
   }
+  cf.print_suppressions = false;
+  cf.stack_trace_format = "    #%n %f %S %M";
+  cf.intercept_tls_get_addr = true;
+}
+
+void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
+//   SetCommonFlagsDefaults();
+//   {
+//     // Override some common flags defaults.
+//     CommonFlags cf;
+//     cf.CopyFrom(*common_flags());
+//     cf.external_symbolizer_path = GetEnv("TSAN_SYMBOLIZER_PATH");
+//     cf.allow_addr2line = true;
+//     if (SANITIZER_GO) {
+//       // Does not work as expected for Go: runtime handles SIGABRT and crashes.
+//       cf.abort_on_error = false;
+//       // Go does not have mutexes.
+//       cf.detect_deadlocks = false;
+//     }
+//     cf.print_suppressions = false;
+//     cf.stack_trace_format = "    #%n %f %S %M";
+//     cf.exitcode = 66;
+//     cf.intercept_tls_get_addr = true;
+//     OverrideCommonFlags(cf);
+//   }
 
   f->SetDefaults();
 
@@ -76,26 +89,26 @@ void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
   RegisterTsanFlags(&parser, f);
   RegisterCommonFlags(&parser);
 
-#if TSAN_CONTAINS_UBSAN
-  __ubsan::Flags *uf = __ubsan::flags();
-  uf->SetDefaults();
+// #if TSAN_CONTAINS_UBSAN
+//   __ubsan::Flags *uf = __ubsan::flags();
+//   uf->SetDefaults();
 
-  FlagParser ubsan_parser;
-  __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
-  RegisterCommonFlags(&ubsan_parser);
-#endif
+//   FlagParser ubsan_parser;
+//   __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
+//   RegisterCommonFlags(&ubsan_parser);
+// #endif
 
   // Let a frontend override.
   parser.ParseString(__tsan_default_options());
-#if TSAN_CONTAINS_UBSAN
-  const char *ubsan_default_options = __ubsan_default_options();
-  ubsan_parser.ParseString(ubsan_default_options);
-#endif
+// #if TSAN_CONTAINS_UBSAN
+//   const char *ubsan_default_options = __ubsan_default_options();
+//   ubsan_parser.ParseString(ubsan_default_options);
+// #endif
   // Override from command line.
   parser.ParseString(env, env_option_name);
-#if TSAN_CONTAINS_UBSAN
-  ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
-#endif
+// #if TSAN_CONTAINS_UBSAN
+//   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
+// #endif
 
   // Check flags.
   if (!f->report_bugs) {
@@ -104,7 +117,7 @@ void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
     f->report_signal_unsafe = false;
   }
 
-  InitializeCommonFlags();
+//   InitializeCommonFlags();
 
   if (Verbosity()) ReportUnrecognizedFlags();
 

@@ -29,6 +29,7 @@
 
 namespace __asan {
   void InitializeFlags();
+  void SetCommonFlags(CommonFlags &cf);
 }
 
 namespace __tsan {
@@ -37,6 +38,7 @@ namespace __tsan {
     const char *options = GetEnv(env_name);
     InitializeFlags(flags(), options, env_name);
   }
+  void SetCommonFlags(CommonFlags &cf);
 }
 
 namespace __xsan {
@@ -70,11 +72,13 @@ void InitializeFlags() {
   {
     CommonFlags cf;
     cf.CopyFrom(*common_flags());
-    cf.detect_leaks = cf.detect_leaks && CAN_SANITIZE_LEAKS;
     cf.external_symbolizer_path = GetEnv("XSAN_SYMBOLIZER_PATH");
     cf.malloc_context_size = kDefaultMallocContextSize;
     cf.intercept_tls_get_addr = true;
+    // cf.exitcode = 66; // TSan
     cf.exitcode = 1;
+    __asan::SetCommonFlags(cf);
+    __tsan::SetCommonFlags(cf);
     OverrideCommonFlags(cf);
   }
   Flags *f = flags();
@@ -84,6 +88,15 @@ void InitializeFlags() {
   RegisterXsanFlags(&xsan_parser, f);
   RegisterCommonFlags(&xsan_parser);
 
+#if CAN_SANITIZE_UB
+  __ubsan::Flags *uf = __ubsan::flags();
+  uf->SetDefaults();
+
+  FlagParser ubsan_parser;
+  __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
+  RegisterCommonFlags(&ubsan_parser);
+#endif
+
   // Override from ASan compile definition.
   const char *xsan_compile_def = MaybeUseXsanDefaultOptionsCompileDefinition();
   xsan_parser.ParseString(xsan_compile_def);
@@ -92,17 +105,20 @@ void InitializeFlags() {
   const char *xsan_default_options = __xsan_default_options();
   xsan_parser.ParseString(xsan_default_options);
 
+#if CAN_SANITIZE_UB
+  const char *ubsan_default_options = __ubsan_default_options();
+  ubsan_parser.ParseString(ubsan_default_options);
+#endif
+
   // Override from command line.
   xsan_parser.ParseStringFromEnv("XSAN_OPTIONS");
+#if CAN_SANITIZE_UB
+  ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
+#endif
+
 
   InitializeCommonFlags();
 
-  // Flag validation:
-  if (!CAN_SANITIZE_LEAKS && common_flags()->detect_leaks) {
-    Report("%s: detect_leaks is not supported on this platform.\n",
-           SanitizerToolName);
-    Die();
-  }
 
   {
     ScopedSanitizerToolName tool_name("AddressSanitizer");
@@ -114,6 +130,16 @@ void InitializeFlags() {
     ScopedSanitizerToolName tool_name("ThreadSanitizer");
     __tsan::InitializeFlags();
   }
+
+  // Flag validation:
+  if (!CAN_SANITIZE_LEAKS && common_flags()->detect_leaks) {
+    Report("%s: detect_leaks is not supported on this platform.\n",
+           SanitizerToolName);
+    Die();
+  }
+
+  CHECK_LE((uptr)common_flags()->malloc_context_size, kStackTraceMax);
+
 }
 
 }  // namespace __xsan
