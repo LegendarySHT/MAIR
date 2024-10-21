@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
   free(x);
   char mybuf[10];
   memcpy(mybuf, x, 10);
-  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free on address}}
+  // CHECK: {{.*ERROR: (AddressSanitizer|XSan): heap-use-after-free on address}}
   // CHECK: Process module map:
   // CHECK: uuid.cpp.tmp {{.*}} <[[UUID]]>
 

@@ -17,7 +17,7 @@ class MyClass {
     free(x);
     return x[5];
     // CHECK-DLADDR: Using dladdr symbolizer
-    // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free on address}}
+    // CHECK: {{.*ERROR: (AddressSanitizer|XSan): heap-use-after-free on address}}
     // CHECK: {{READ of size 1 at 0x.* thread T0}}
     // CHECK-DLADDR: failed to spawn external symbolizer
     // CHECK: {{    #0 0x.* in MyClass::my_function\(int\)}}

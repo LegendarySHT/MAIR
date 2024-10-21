@@ -25,7 +25,7 @@ int main() {
   // deep_free(x);
   DeepFree<200>::free(x);
   return x[5];
-  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free on address}}
+  // CHECK: {{.*ERROR: (AddressSanitizer|XSan): heap-use-after-free on address}}
   // The libcxxrt demangling procedure on FreeBSD 9.2 incorrectly appends
   // extra 'E' characters to the end of template arguments; see:
   // https://bugs.freebsd.org/bugzilla/show_bug.cgi?id=192115

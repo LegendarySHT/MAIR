@@ -9,7 +9,7 @@
 
 int main() {
   void *p = calloc(-1, 1000);
-  // CHECK: {{ERROR: {{AddressSanitizer|XSan}}: calloc parameters overflow: count \* size \(.* \* 1000\) cannot be represented in type size_t}}
+  // CHECK: {{ERROR: (AddressSanitizer|XSan): calloc parameters overflow: count \* size \(.* \* 1000\) cannot be represented in type size_t}}
   // CHECK: {{#0 0x.* in .*calloc}}
   // CHECK: {{#1 0x.* in main .*calloc-overflow.cpp:}}[[@LINE-3]]
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: calloc-overflow

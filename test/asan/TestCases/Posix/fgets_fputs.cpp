@@ -46,9 +46,9 @@ int main(int argc, char *argv[]) {
   return 1;
 }
 
-// CHECK-FGETS: {{.*ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow}}
+// CHECK-FGETS: {{.*ERROR: (AddressSanitizer|XSan): stack-buffer-overflow}}
 // CHECK-FGETS: #{{.*}} in {{(wrap_|__interceptor_)?}}fgets
-// CHECK-FPUTS: {{.*ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow}}
+// CHECK-FPUTS: {{.*ERROR: (AddressSanitizer|XSan): stack-buffer-overflow}}
 // CHECK-FPUTS: #{{.*}} in {{(wrap_|__interceptor_)?}}fputs
-// CHECK-PUTS: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free}}
+// CHECK-PUTS: {{.*ERROR: (AddressSanitizer|XSan): heap-use-after-free}}
 // CHECK-PUTS: #{{.*}} in {{(wrap_|__interceptor_)?}}puts

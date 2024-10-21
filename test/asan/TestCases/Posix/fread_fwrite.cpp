@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-// CHECK-FREAD: {{.*ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow}}
+// CHECK-FREAD: {{.*ERROR: (AddressSanitizer|XSan): stack-buffer-overflow}}
 // CHECK-FREAD: #{{.*}} in {{(wrap_|__interceptor_)?}}fread
-// CHECK-FWRITE: {{.*ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow}}
+// CHECK-FWRITE: {{.*ERROR: (AddressSanitizer|XSan): stack-buffer-overflow}}
 // CHECK-FWRITE: #{{.*}} in {{(wrap_|__interceptor_)?}}fwrite

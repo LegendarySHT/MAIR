@@ -16,7 +16,7 @@ static const size_t kMaxAllowedMallocSizePlusOne =
 
 int main() {
   void *p = malloc(kMaxAllowedMallocSizePlusOne);
-  // CHECK: {{ERROR: {{AddressSanitizer|XSan}}: requested allocation size .* \(.* after adjustments for alignment, red zones etc\.\) exceeds maximum supported size}}
+  // CHECK: {{ERROR: (AddressSanitizer|XSan): requested allocation size .* \(.* after adjustments for alignment, red zones etc\.\) exceeds maximum supported size}}
   // CHECK: {{#0 0x.* in .*malloc}}
   // CHECK: {{#1 0x.* in main .*malloc-size-too-big.cpp:}}[[@LINE-3]]
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: allocation-size-too-big
