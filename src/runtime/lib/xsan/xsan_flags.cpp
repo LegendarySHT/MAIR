@@ -30,6 +30,7 @@
 namespace __asan {
   void InitializeFlags();
   void SetCommonFlags(CommonFlags &cf);
+  void ValidateFlags();
 }
 
 namespace __tsan {
@@ -39,6 +40,7 @@ namespace __tsan {
     InitializeFlags(flags(), options, env_name);
   }
   void SetCommonFlags(CommonFlags &cf);
+  void ValidateFlags();
 }
 
 namespace __xsan {
@@ -117,7 +119,6 @@ void InitializeFlags() {
 #endif
 
 
-  InitializeCommonFlags();
 
 
   {
@@ -130,13 +131,14 @@ void InitializeFlags() {
     ScopedSanitizerToolName tool_name("ThreadSanitizer");
     __tsan::InitializeFlags();
   }
+  InitializeCommonFlags();
 
   // Flag validation:
-  if (!CAN_SANITIZE_LEAKS && common_flags()->detect_leaks) {
-    Report("%s: detect_leaks is not supported on this platform.\n",
-           SanitizerToolName);
-    Die();
-  }
+  
+  if (Verbosity()) ReportUnrecognizedFlags();
+  
+  __asan::ValidateFlags();
+  __tsan::ValidateFlags();
 
   CHECK_LE((uptr)common_flags()->malloc_context_size, kStackTraceMax);
 
