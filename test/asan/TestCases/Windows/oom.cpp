@@ -8,5 +8,5 @@ int main() {
   while (true) {
     void *ptr = malloc(200 * 1024 * 1024);  // 200MB
   }
-// CHECK: SUMMARY: AddressSanitizer: out-of-memory
+// CHECK: SUMMARY: {{AddressSanitizer|XSan}}: out-of-memory
 }

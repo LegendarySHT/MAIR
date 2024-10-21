@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
   int res = x[argc];
   free(x);
   free(x + argc - 1);  // BOOM
-  // CHECK: AddressSanitizer: attempting double-free{{.*}}in thread T0
+  // CHECK: {{AddressSanitizer|XSan}}: attempting double-free{{.*}}in thread T0
   // CHECK: #0 0x{{.*}} in {{.*}}free
   // CHECK: #1 0x{{.*}} in main {{.*}}double-free.cpp:[[@LINE-3]]
   // CHECK: freed by thread T0 here:
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
   // MALLOC-CTX: #1 0x{{.*}} in main {{.*}}double-free.cpp:[[@LINE-7]]
   // CHECK: allocated by thread T0 here:
   // MALLOC-CTX: double-free.cpp:[[@LINE-12]]
-  // CHECK-RECOVER: AddressSanitizer: attempting double-free{{.*}}in thread T0
-  // CHECK-RECOVER-NOT: AddressSanitizer CHECK failed:
+  // CHECK-RECOVER: {{AddressSanitizer|XSan}}: attempting double-free{{.*}}in thread T0
+  // CHECK-RECOVER-NOT: {{AddressSanitizer|XSan}} CHECK failed:
   return res;
 }

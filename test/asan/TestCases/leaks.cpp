@@ -1,4 +1,4 @@
-// Test for LeakSanitizer+AddressSanitizer of different sizes.
+// Test for LeakSanitizer+{{AddressSanitizer|XSan}} of different sizes.
 // REQUIRES: leak-detection
 //
 // RUN: %clangxx_asan -O0 %s -o %t

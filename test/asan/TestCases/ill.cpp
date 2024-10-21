@@ -27,5 +27,5 @@ int main(int argc, char **argv) {
   SetErrorMode(0);
 #endif
 }
-// CHECK0-NOT: ERROR: AddressSanitizer
-// CHECK1: ERROR: AddressSanitizer: {{ILL|illegal-instruction}} on unknown address {{0x0*}}
+// CHECK0-NOT: ERROR: {{AddressSanitizer|XSan}}
+// CHECK1: ERROR: {{AddressSanitizer|XSan}}: {{ILL|illegal-instruction}} on unknown address {{0x0*}}

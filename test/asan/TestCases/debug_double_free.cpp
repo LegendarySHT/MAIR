@@ -55,4 +55,4 @@ __asan_on_error() {
   // CHECK: description: double-free
 }
 
-// CHECK: AddressSanitizer: attempting double-free on {{0x0*}}[[ADDR]] in thread T0
+// CHECK: {{AddressSanitizer|XSan}}: attempting double-free on {{0x0*}}[[ADDR]] in thread T0

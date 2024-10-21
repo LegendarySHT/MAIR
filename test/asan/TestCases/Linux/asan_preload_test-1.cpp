@@ -15,7 +15,7 @@
 #if BUILD_SO
 char dummy;
 void do_access(const void *p) {
-  // CHECK: AddressSanitizer: heap-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow
   dummy = ((const char *)p)[1];
 }
 #else

@@ -18,7 +18,7 @@ int main() {
   // CHECK: p = [[ADDR:0x[0-9]+]]
 
   char c = *ptr;  // BOOM
-  // CHECK: ERROR: AddressSanitizer: {{SEGV|BUS}}
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: {{SEGV|BUS}}
   // CHECK: Register values:
   // CHECK: [[ADDR]]
   fprintf(stderr, "World\n");

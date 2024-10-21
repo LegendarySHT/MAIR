@@ -3,7 +3,7 @@
 // RUN: %clangxx_asan -O2 %s -o %t && not %run %t 2>&1 | FileCheck %s
 // RUN: %clangxx_asan -O3 %s -o %t && not %run %t 2>&1 | FileCheck %s
 
-// CHECK: AddressSanitizer: global-buffer-overflow
+// CHECK: {{AddressSanitizer|XSan}}: global-buffer-overflow
 int global[10];
 // CHECK: {{#0.*call4}}
 void __attribute__((noinline)) call4(int i) { global[i+10]++; }

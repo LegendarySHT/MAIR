@@ -43,7 +43,7 @@ BOOL WINAPI DllMain(HMODULE, DWORD reason, LPVOID) {
 // CHECK: in DLL(reason=0)
 // CHECK: WITHOUT:[[WITHOUT:0x[0-9a-fA-F]+]]
 // CHECK: WITH:[[WITH:0x[0-9a-fA-F]+]]
-// CHECK: AddressSanitizer: attempting double-free on [[WITH]] in thread T0:
+// CHECK: {{AddressSanitizer|XSan}}: attempting double-free on [[WITH]] in thread T0:
 
 #else
 #error oops!

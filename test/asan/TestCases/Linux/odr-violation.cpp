@@ -54,7 +54,7 @@ namespace foo { char G[SZ]; }
 #else
 #include <stdio.h>
 namespace foo { char G[100]; }
-// CHECK: ERROR: AddressSanitizer: odr-violation
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: odr-violation
 // CHECK: size=100 'foo::G' {{.*}}odr-violation.cpp:[[@LINE-2]]
 // CHECK: size={{4|100}} 'foo::G'
 int main(int argc, char **argv) {
@@ -65,5 +65,5 @@ int main(int argc, char **argv) {
 // CHECK: These globals were registered at these points:
 // CHECK: {{odr-violation.cpp|ODR-EXE}}
 // CHECK: odr-violation.cpp{{$}}
-// CHECK: SUMMARY: AddressSanitizer: odr-violation: global 'foo::G' at {{.*}}odr-violation.cpp
+// CHECK: SUMMARY: {{AddressSanitizer|XSan}}: odr-violation: global 'foo::G' at {{.*}}odr-violation.cpp
 // DISABLED: PASS

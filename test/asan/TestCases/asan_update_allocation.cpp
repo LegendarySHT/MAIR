@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     UPDATE(x);
   free(x);
   return x[5];
-  // CHECK: {{.*ERROR: AddressSanitizer: heap-use-after-free on address}}
+  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free on address}}
   // CHECK: READ of size 1 at {{.*}} thread T0
   // T0: allocated by thread T0 here
   // T1: allocated by thread T1 here

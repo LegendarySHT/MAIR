@@ -18,6 +18,6 @@ int main() {
   foo(A());
 }
 
-// CHECK: ERROR: AddressSanitizer: stack-buffer-underflow
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-buffer-underflow
 // CHECK: READ of size 4 at
 // CHECK: is located in stack of thread

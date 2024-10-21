@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
   memset(x, 0, 10);
   int res = x[argc];
   free(x + 5);  // BOOM
-  // CHECK: AddressSanitizer: attempting free on address{{.*}}in thread T0
+  // CHECK: {{AddressSanitizer|XSan}}: attempting free on address{{.*}}in thread T0
   // CHECK: invalid-free.cpp:[[@LINE-2]]
   // CHECK: is located 5 bytes inside of 10-byte region
   // CHECK: allocated by thread T0 here:

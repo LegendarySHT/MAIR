@@ -35,5 +35,5 @@ void putstest()
 
 #endif // PART == 1
 
-// CHECK-NOT: ERROR: AddressSanitizer: odr-violation
+// CHECK-NOT: ERROR: {{AddressSanitizer|XSan}}: odr-violation
 // CHECK: Done.

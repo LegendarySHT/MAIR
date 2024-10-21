@@ -7,10 +7,10 @@ int main() {
   char *x = new char[20];
   delete[] x;
   return x[0];
-  // SOURCE: ERROR: AddressSanitizer: heap-use-after-free
-  // SOURCE: SUMMARY: AddressSanitizer: heap-use-after-free {{.*}}print_summary.cpp:[[@LINE-2]]{{.*}} main
-  // MODULE: ERROR: AddressSanitizer: heap-use-after-free
-  // MODULE: SUMMARY: AddressSanitizer: heap-use-after-free ({{.*}}+0x{{.*}})
-  // MISSING: ERROR: AddressSanitizer: heap-use-after-free
+  // SOURCE: ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free
+  // SOURCE: SUMMARY: {{AddressSanitizer|XSan}}: heap-use-after-free {{.*}}print_summary.cpp:[[@LINE-2]]{{.*}} main
+  // MODULE: ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free
+  // MODULE: SUMMARY: {{AddressSanitizer|XSan}}: heap-use-after-free ({{.*}}+0x{{.*}})
+  // MISSING: ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free
   // MISSING-NOT: SUMMARY
 }

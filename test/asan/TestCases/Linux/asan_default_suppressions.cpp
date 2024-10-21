@@ -3,5 +3,5 @@
 extern "C" {
   const char *__asan_default_suppressions() { return "FooBar"; }
 }
-// CHECK: AddressSanitizer: failed to parse suppressions
+// CHECK: {{AddressSanitizer|XSan}}: failed to parse suppressions
 int main() {}

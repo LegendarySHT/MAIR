@@ -63,6 +63,6 @@ int main() {
   }
 
   buffer[buffer_size + 1] = 'a';
-  // CHECK: AddressSanitizer: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+  // CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
   // CHECK: WRITE of size 1 at [[ADDR]] thread T0
 }

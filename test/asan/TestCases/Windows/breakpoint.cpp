@@ -13,6 +13,6 @@ int main() {
   return 0;
 }
 // CHECK: before breakpoint
-// CHECK: ERROR: AddressSanitizer: breakpoint on unknown address [[ADDR:0x[^ ]*]]
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: breakpoint on unknown address [[ADDR:0x[^ ]*]]
 // CHECK-SAME: (pc [[ADDR]] {{.*}})
 // CHECK-NEXT: #0 {{.*}} in main {{.*}}breakpoint.cpp:{{.*}}

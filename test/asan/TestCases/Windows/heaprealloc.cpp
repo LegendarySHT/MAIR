@@ -17,7 +17,7 @@ int main() {
 
   newbuf[0] = 'a';
   oldbuf[0] = 'a';
-  // CHECK: AddressSanitizer: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
+  // CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
   // CHECK: WRITE of size 1 at [[WRITE2:0x[0-9a-f]+]] thread T0
   // CHECK: #0 {{0x[0-9a-f]+ in main.*}}:[[@LINE-3]]
 }

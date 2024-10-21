@@ -12,6 +12,6 @@ int main() {
   return 0;
 }
 // CHECK: before ud2a
-// CHECK: ERROR: AddressSanitizer: illegal-instruction on unknown address [[ADDR:0x[^ ]*]]
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: illegal-instruction on unknown address [[ADDR:0x[^ ]*]]
 // CHECK-SAME: (pc [[ADDR]] {{.*}})
 // CHECK-NEXT: #0 {{.*}} in main {{.*}}illegal_instruction.cpp:{{.*}}

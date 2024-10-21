@@ -102,10 +102,10 @@ int main(int argc, char *argv[]) {
 }
 
 // CHECK-NOT: TestSig
-// CHECK: AddressSanitizer:DEADLYSIGNAL
+// CHECK: {{AddressSanitizer|XSan}}:DEADLYSIGNAL
 
-// CHECK-HANDLER-NOT: AddressSanitizer:DEADLYSIGNAL
+// CHECK-HANDLER-NOT: {{AddressSanitizer|XSan}}:DEADLYSIGNAL
 // CHECK-HANDLER: TestSigHandler
 
-// CHECK-ACTION-NOT: AddressSanitizer:DEADLYSIGNAL
+// CHECK-ACTION-NOT: {{AddressSanitizer|XSan}}:DEADLYSIGNAL
 // CHECK-ACTION: TestSigAction

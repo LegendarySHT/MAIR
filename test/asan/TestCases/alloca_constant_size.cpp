@@ -50,5 +50,5 @@ int main(int argc, const char *argv[]) {
   return 0;
 }
 
-// CHECK-NOT: ERROR: AddressSanitizer
+// CHECK-NOT: ERROR: {{AddressSanitizer|XSan}}
 // CHECK: Done.

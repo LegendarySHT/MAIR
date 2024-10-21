@@ -9,7 +9,7 @@
 #include <stdlib.h>
 
 int f(char c, char *p, char *q) {
-  // ALL-ERRORS: ERROR: AddressSanitizer: invalid-pointer-pair
+  // ALL-ERRORS: ERROR: {{AddressSanitizer|XSan}}: invalid-pointer-pair
   // [[PTR1:0x[0-9a-f]+]] [[PTR2:0x[0-9a-f]+]]
   switch (c) {
   case 'g':

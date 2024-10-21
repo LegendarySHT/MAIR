@@ -16,7 +16,7 @@ class A {
  public:
   A() { }
   ~A() { AccessC(); printf("PASSED\n"); }
-  // CHECK-NOT: AddressSanitizer
+  // CHECK-NOT: {{AddressSanitizer|XSan}}
   // CHECK: PASSED
 };
 

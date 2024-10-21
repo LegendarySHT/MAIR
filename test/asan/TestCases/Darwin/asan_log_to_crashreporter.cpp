@@ -24,6 +24,6 @@ int main() {
   // needs to crash hard so the crashlog exists...
   // CHECK-CRASHLOG: {{.*Application Specific Information:}}
   // CHECK-CRASHLOG-NEXT: {{=====}}
-  // CHECK-CRASHLOG-NEXT: {{.*ERROR: AddressSanitizer: heap-use-after-free on address}}
+  // CHECK-CRASHLOG-NEXT: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free on address}}
   // CHECK-CRASHLOG: {{abort()}}
 }

@@ -50,7 +50,7 @@
 // %dynamiclib has .plt entries that are not recognized by
 // objdump,
 // "sancov.py: found 0 instrumented PCs in *.so",
-// causing AddressSanitizer-i386-linux to fail.
+// causing {{AddressSanitizer|XSan}}-i386-linux to fail.
 // Change it back to x86-target-arch after %sancov switches to a more robust approach.
 
 // REQUIRES: x86_64-target-arch

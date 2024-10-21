@@ -24,7 +24,7 @@ int main() {
   if (d)
     fn3(&f, sizeof 0 * (&c - e));
   e[a] = 0;
-// CHECK: ERROR: AddressSanitizer: dynamic-stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: dynamic-stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 4 at [[ADDR]] thread T0
   return 0;
 }

@@ -35,6 +35,6 @@ int main() {
   foo(a);
 }
 
-// CHECK: ERROR: AddressSanitizer: stack-buffer-overflow
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow
 // CHECK: READ of size 4 at
 // CHECK: is located in stack of thread

@@ -47,4 +47,4 @@ int main(int argc, char **argv) {
   return 1;
 }
 
-// CHECK: ERROR: AddressSanitizer: stack-use-after-scope
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-use-after-scope

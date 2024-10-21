@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
       (void *)__builtin_extract_return_addr(__builtin_return_address(0)), 0, 0,
       0, true, 1);
   // CHECK: ABCDEF
-  // CHECK: ERROR: AddressSanitizer
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}
   // CHECK: GHIJKL
   return 0;
 }

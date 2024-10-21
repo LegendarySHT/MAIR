@@ -42,7 +42,7 @@ int main() {
   char *buffer = (char*)malloc(42);
   free(buffer);
   A<char*> a(buffer);
-// CHECK: AddressSanitizer: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: foo::bar<42>{{.*}}demangled_names.cpp
 // CHECK: foo::spam{{.*}}demangled_names.cpp
 // CHECK: baz<char *,{{ *}}1>{{.*}}demangled_names.cpp

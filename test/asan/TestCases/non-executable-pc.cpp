@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
   func();
   // CHECK: DEADLYSIGNAL
-  // CHECK: {{AddressSanitizer: (SEGV|access-violation).*(address|pc) }}
+  // CHECK: {{{{AddressSanitizer|XSan}}: (SEGV|access-violation).*(address|pc) }}
   // NON_EXEC: PC is at a non-executable region. Maybe a wild jump?
   return 0;
 }

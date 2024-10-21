@@ -94,5 +94,5 @@ int main() {
 }
 
 // CHECK-NOT: Assertion failed:
-// CHECK-NOT: AddressSanitizer
+// CHECK-NOT: {{AddressSanitizer|XSan}}
 // CHECK: Success

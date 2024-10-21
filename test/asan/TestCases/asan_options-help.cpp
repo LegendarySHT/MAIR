@@ -4,6 +4,6 @@
 int main() {
 }
 
-// CHECK: Available flags for AddressSanitizer:
+// CHECK: Available flags for {{AddressSanitizer|XSan}}:
 // CHECK-DAG: handle_segv
 // CHECK-DAG: check_initialization_order

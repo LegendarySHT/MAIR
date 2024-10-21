@@ -28,5 +28,5 @@ int main() {
 }
 
 // CHECK: Expected bad addr: [[ADDR:0x[0-9,a-f]+]]
-// CHECK: AddressSanitizer: unknown-crash on address [[ADDR]]
+// CHECK: {{AddressSanitizer|XSan}}: unknown-crash on address [[ADDR]]
 // CHECK: Address [[ADDR]] is a wild pointer inside of access range of size 0x4567890123456789

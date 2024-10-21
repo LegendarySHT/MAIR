@@ -13,7 +13,7 @@
 extern "C" ssize_t write(int fd, const void *buf, size_t count);
 
 void do_access(void *p) {
-  // CHECK: AddressSanitizer: heap-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow
   write(1, p, 2);
 }
 

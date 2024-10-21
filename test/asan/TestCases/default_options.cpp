@@ -13,7 +13,7 @@ __attribute__((weak))
 __attribute__((no_sanitize_address))
 extern "C" const char *
 __asan_default_options() {
-  // CHECK: Available flags for AddressSanitizer:
+  // CHECK: Available flags for {{AddressSanitizer|XSan}}:
   return kAsanDefaultOptions;
 }
 

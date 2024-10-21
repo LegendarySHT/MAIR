@@ -4,9 +4,9 @@
 
 int g_i = 42;
 int main() {
-  // CHECK: AddressSanitizer: attempting to call __sanitizer_get_allocated_size() for pointer which is not owned
-  // CHECK-NOT: AddressSanitizer:DEADLYSIGNAL
-  // CHECK: SUMMARY: AddressSanitizer: bad-__sanitizer_get_allocated_size
-  // CHECK-NOT: AddressSanitizer:DEADLYSIGNAL
+  // CHECK: {{AddressSanitizer|XSan}}: attempting to call __sanitizer_get_allocated_size() for pointer which is not owned
+  // CHECK-NOT: {{AddressSanitizer|XSan}}:DEADLYSIGNAL
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: bad-__sanitizer_get_allocated_size
+  // CHECK-NOT: {{AddressSanitizer|XSan}}:DEADLYSIGNAL
   return (int)__sanitizer_get_allocated_size(&g_i);
 }

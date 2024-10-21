@@ -18,10 +18,10 @@ int main() {
   // CHECK-NEXT: #0 0x{{.*}} in {{operator new( )?\[\]|wrap__Znam}}
   // CHECK-NOT: #1 0x{{.*}}
 
-  // CHECK: SUMMARY: AddressSanitizer: heap-use-after-free
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: heap-use-after-free
 
   // TWO: previously allocated by thread T{{.*}} here:
   // TWO-NEXT: #0 0x{{.*}}
   // TWO-NEXT: #1 0x{{.*}} in main {{.*}}malloc_context_size.cpp
-  // TWO: SUMMARY: AddressSanitizer: heap-use-after-free
+  // TWO: SUMMARY: {{AddressSanitizer|XSan}}: heap-use-after-free
 }

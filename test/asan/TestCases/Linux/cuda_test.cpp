@@ -25,11 +25,11 @@ int main(void) {
   // W/o protect_shadow_gap=0 we should fail here.
   for (uintptr_t Addr = Base; Addr < Base + Size; Addr += Size / 100)
     *(char*)Addr = 1;
-  // CHECK-PROTECT1: AddressSanitizer: SEGV on unknown address 0x0000bfff8000
+  // CHECK-PROTECT1: {{AddressSanitizer|XSan}}: SEGV on unknown address 0x0000bfff8000
 
   // Poison a part of gap's shadow:
   __asan_poison_memory_region((void*)Base, 4096);
   // Now we should fail with use-after-poison.
   *(char*)(Base + 1234) = 1;
-  // CHECK-PROTECT0: AddressSanitizer: use-after-poison on address 0x0002000004d2
+  // CHECK-PROTECT0: {{AddressSanitizer|XSan}}: use-after-poison on address 0x0002000004d2
 }

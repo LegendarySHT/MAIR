@@ -15,4 +15,4 @@ int *p2 = (int*)malloc(90000);
 int *p3 = (int*)malloc(9000000);
 int main() { }
 
-// CHECK: AddressSanitizer exit stats:
+// CHECK: {{AddressSanitizer|XSan}} exit stats:

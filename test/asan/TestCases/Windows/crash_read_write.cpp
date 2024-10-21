@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
   else
     Write((int *)p);
 }
-// READ: AddressSanitizer: access-violation on unknown address
+// READ: {{AddressSanitizer|XSan}}: access-violation on unknown address
 // READ: The signal is caused by a READ memory access.
-// WRITE: AddressSanitizer: access-violation on unknown address
+// WRITE: {{AddressSanitizer|XSan}}: access-violation on unknown address
 // WRITE: The signal is caused by a WRITE memory access.

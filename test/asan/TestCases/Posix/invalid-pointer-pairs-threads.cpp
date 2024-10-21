@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     char local;
     char *parent_pointer = &local;
 
-    // B: ERROR: AddressSanitizer: invalid-pointer-pair
+    // B: ERROR: {{AddressSanitizer|XSan}}: invalid-pointer-pair
     // B: #{{[0-9]+ .*}} in main {{.*}}invalid-pointer-pairs-threads.cpp:[[@LINE+1]]
     unsigned r = parent_pointer - pointers[0];
   }

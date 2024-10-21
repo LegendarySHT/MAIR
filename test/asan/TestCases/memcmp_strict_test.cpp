@@ -10,6 +10,6 @@ int main() {
   char kFubar[] = "fubar";
   int res = memcmp(kFoo, kFubar, strlen(kFubar));
   printf("res: %d\n", res);
-  // CHECK: AddressSanitizer: stack-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: stack-buffer-overflow
   return 0;
 }

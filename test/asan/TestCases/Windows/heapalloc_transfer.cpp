@@ -24,5 +24,5 @@ int main() {
 }
 
 // CHECK-NOT: assert
-// CHECK-NOT: AddressSanitizer
+// CHECK-NOT: {{AddressSanitizer|XSan}}
 // CHECK: Success

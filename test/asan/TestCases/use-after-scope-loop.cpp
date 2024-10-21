@@ -9,6 +9,6 @@ int main() {
     p[i] = &x;
   }
   return **p;  // BOOM
-  // CHECK: ERROR: AddressSanitizer: stack-use-after-scope
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-use-after-scope
   // CHECK: #0 0x{{.*}} in main {{.*}}.cpp:[[@LINE-2]]
 }

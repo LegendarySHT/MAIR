@@ -4,7 +4,7 @@
 
 __attribute__((noinline))
 static void NullDeref(int *ptr) {
-  // CHECK: ERROR: AddressSanitizer: access-violation on unknown address
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: access-violation on unknown address
   // CHECK:   {{0x0*000.. .*pc 0x.*}}
   ptr[10]++;  // BOOM
 }
@@ -13,6 +13,6 @@ extern "C" __declspec(dllexport)
 int test_function() {
   NullDeref((int*)0);
   // CHECK: {{    #1 0x.* in test_function .*\dll_null_deref.cpp:}}[[@LINE-1]]
-  // CHECK: AddressSanitizer can not provide additional info.
+  // CHECK: {{AddressSanitizer|XSan}} can not provide additional info.
   return 0;
 }

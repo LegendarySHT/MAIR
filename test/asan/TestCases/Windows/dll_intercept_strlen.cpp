@@ -16,7 +16,7 @@ int test_function() {
 
   str[6] = '!';  // Removes '\0' at the end!
   int len = strlen(str);
-// CHECK: AddressSanitizer: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // FIXME: Should be READ of size 1, see issue 155.
 // CHECK: READ of size {{[0-9]+}} at [[ADDR]] thread T0
 // CHECK-NEXT: {{#0 .*}}strlen

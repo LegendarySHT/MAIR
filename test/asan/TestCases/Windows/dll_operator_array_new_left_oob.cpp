@@ -6,7 +6,7 @@ extern "C" __declspec(dllexport)
 int test_function() {
   char *buffer = new char[42];
   buffer[-1] = 42;
-// CHECK: AddressSanitizer: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 1 at [[ADDR]] thread T0
 // CHECK-NEXT: test_function {{.*}}dll_operator_array_new_left_oob.cpp:[[@LINE-3]]
 // CHECK-NEXT: main {{.*}}dll_host.cpp

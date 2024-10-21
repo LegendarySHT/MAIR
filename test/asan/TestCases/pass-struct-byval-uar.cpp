@@ -33,10 +33,10 @@ int main() {
                                // detected.
 }
 
-// CHECK-NO-UAR-NOT: ERROR: AddressSanitizer: stack-use-after-return
+// CHECK-NO-UAR-NOT: ERROR: {{AddressSanitizer|XSan}}: stack-use-after-return
 // CHECK-NO-UAR-NOT: WRITE of size 4 at
 // CHECK-NO-UAR-NOT: Memory access at offset {{[0-9]+}} is inside this variable
 //
-// CHECK-UAR: ERROR: AddressSanitizer: stack-use-after-return
+// CHECK-UAR: ERROR: {{AddressSanitizer|XSan}}: stack-use-after-return
 // CHECK-UAR: WRITE of size 4 at
 // CHECK-UAR: Memory access at offset {{[0-9]+}} is inside this variable

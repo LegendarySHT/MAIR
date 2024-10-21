@@ -18,7 +18,7 @@ static void LargeFunction(int *x, int zero) {
   x[8]++;
   x[9]++;
 
-  // CHECK: {{.*ERROR: AddressSanitizer: heap-buffer-overflow on address}}
+  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-buffer-overflow on address}}
   // CHECK:   {{0x.* at pc 0x.* bp 0x.* sp 0x.*}}
   // CHECK: {{READ of size 4 at 0x.* thread T0}}
   x[zero + 103]++;  // we should report this exact line

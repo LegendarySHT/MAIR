@@ -9,7 +9,7 @@ DWORD CALLBACK work_item(LPVOID) {
   int subscript = -1;
   volatile char stack_buffer[42];
   stack_buffer[subscript] = 42;
-  // CHECK: AddressSanitizer: stack-buffer-underflow on address [[ADDR:0x[0-9a-f]+]]
+  // CHECK: {{AddressSanitizer|XSan}}: stack-buffer-underflow on address [[ADDR:0x[0-9a-f]+]]
   // CHECK: WRITE of size 1 at [[ADDR]] thread T-1
   // CHECK:   {{#0 .* work_item.*queue_user_work_item_report.cpp}}:[[@LINE-3]]
   SetEvent(done);

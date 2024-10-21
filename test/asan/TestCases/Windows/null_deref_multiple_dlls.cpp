@@ -24,7 +24,7 @@ __declspec(dllexport) void foo1() {}
 #elif defined(DLL2)
 __attribute__((noinline))
 static void NullDeref(int *ptr) {
-  // CHECK: ERROR: AddressSanitizer: access-violation on unknown address
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: access-violation on unknown address
   // CHECK:   {{0x0*000.. .*pc 0x.*}}
   ptr[10]++;  // BOOM
 }
@@ -32,7 +32,7 @@ static void NullDeref(int *ptr) {
 __declspec(dllexport) void foo2() {
   NullDeref((int*)0);
   // CHECK: {{    #1 0x.* in foo2.*null_deref_multiple_dlls.cpp:}}[[@LINE-1]]
-  // CHECK: AddressSanitizer can not provide additional info.
+  // CHECK: {{AddressSanitizer|XSan}} can not provide additional info.
 }
 #else
 # error oops!

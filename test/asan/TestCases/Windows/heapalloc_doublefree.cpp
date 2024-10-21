@@ -13,4 +13,4 @@ int main() {
   return 0;
 }
 
-// CHECK: AddressSanitizer: attempting double-free on [[addr:0x[0-9a-fA-F]+]] in thread T0:
+// CHECK: {{AddressSanitizer|XSan}}: attempting double-free on [[addr:0x[0-9a-fA-F]+]] in thread T0:

@@ -41,7 +41,7 @@ int main() {
   crash_function();
 }
 
-// CHECK-CRASH: AddressSanitizer: heap-use-after-free
-// CHECK-IGNORE-NOT: AddressSanitizer: heap-buffer-overflow
+// CHECK-CRASH: {{AddressSanitizer|XSan}}: heap-use-after-free
+// CHECK-IGNORE-NOT: {{AddressSanitizer|XSan}}: heap-buffer-overflow
 // CHECK-IGNORE: ignored
 // CHECK-WRONG-FILE-NAME: failed to read suppressions file

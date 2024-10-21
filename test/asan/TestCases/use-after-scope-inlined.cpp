@@ -17,7 +17,7 @@ void inlined(int arg) {
 int main(int argc, char *argv[]) {
   inlined(argc);
   return arr[argc - 1];  // BOOM
-  // CHECK: ERROR: AddressSanitizer: stack-use-after-scope
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-use-after-scope
   // CHECK: READ of size 4 at 0x{{.*}} thread T0
   // CHECK:   #0 0x{{.*}} in main
   // CHECK:      {{.*}}use-after-scope-inlined.cpp:[[@LINE-4]]

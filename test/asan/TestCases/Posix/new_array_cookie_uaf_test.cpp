@@ -30,12 +30,12 @@ int main(int argc, char **argv) {
   delete [] buffer;
 // COOKIE: DTOR 1
 // COOKIE-NOT: DTOR 2
-// COOKIE: AddressSanitizer: loaded array cookie from free-d memory
-// COOKIE: AddressSanitizer: attempting double-free
+// COOKIE: {{AddressSanitizer|XSan}}: loaded array cookie from free-d memory
+// COOKIE: {{AddressSanitizer|XSan}}: attempting double-free
 // NO_COOKIE: DTOR 1
 // NO_COOKIE: DTOR 43
 // NO_COOKIE-NOT: DTOR 44
-// NO_COOKIE-NOT: AddressSanitizer: loaded array cookie from free-d memory
-// NO_COOKIE: AddressSanitizer: attempting double-free
+// NO_COOKIE-NOT: {{AddressSanitizer|XSan}}: loaded array cookie from free-d memory
+// NO_COOKIE: {{AddressSanitizer|XSan}}: attempting double-free
 
 }

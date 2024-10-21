@@ -42,5 +42,5 @@ int main(int argc, char **argv) {
   return addr[42];
   // CHECK-NOT: DEADLYSIGNAL
   // CHECK-BUS: DEADLYSIGNAL
-  // CHECK-BUS: ERROR: AddressSanitizer: BUS
+  // CHECK-BUS: ERROR: {{AddressSanitizer|XSan}}: BUS
 }

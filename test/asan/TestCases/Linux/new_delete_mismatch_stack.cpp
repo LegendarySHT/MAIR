@@ -12,6 +12,6 @@ int main() {
   delete x;
 }
 
-// CHECK: AddressSanitizer: attempting free on address which was not malloc()-ed
+// CHECK: {{AddressSanitizer|XSan}}: attempting free on address which was not malloc()-ed
 // CHECK: is located in stack of thread T0 at offset
 // CHECK: 'a'{{.*}} <== Memory access at offset {{16|32}} is inside this variable

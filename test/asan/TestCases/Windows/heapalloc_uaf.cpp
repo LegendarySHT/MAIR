@@ -8,6 +8,6 @@ int main() {
   buffer = (char *)HeapAlloc(GetProcessHeap(), 0, 32),
   HeapFree(GetProcessHeap(), 0, buffer);
   buffer[0] = 'a';
-  // CHECK: AddressSanitizer: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
+  // CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
   // CHECK: WRITE of size 1 at [[ADDR]] thread T0
 }

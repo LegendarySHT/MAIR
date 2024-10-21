@@ -7,7 +7,7 @@ int main() {
   int *buffer = (int*)calloc(42, sizeof(int));
   free(buffer);
   buffer[0] = 42;
-// CHECK: AddressSanitizer: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 4 at [[ADDR]] thread T0
 // CHECK-NEXT: {{#0 .* main .*calloc_uaf.cpp}}:[[@LINE-3]]
 // CHECK: [[ADDR]] is located 0 bytes inside of 168-byte region

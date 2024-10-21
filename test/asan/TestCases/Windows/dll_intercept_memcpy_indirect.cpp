@@ -22,7 +22,7 @@ int test_function() {
 // CHECK: Initial test OK
 
   call_memcpy(&memcpy, buff2, buff1, 6);
-// CHECK: AddressSanitizer: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 6 at [[ADDR]] thread T0
 // CHECK-NEXT:  __asan_{{.*}}mem{{.*}}
 // CHECK-NEXT:  call_memcpy

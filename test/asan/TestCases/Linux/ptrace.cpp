@@ -106,7 +106,7 @@ int main(void) {
 # define __PTRACE_ARGS     NULL, pregs
 #endif
     res = ptrace((enum __ptrace_request)__PTRACE_REQUEST, pid, __PTRACE_ARGS);
-    // CHECK: AddressSanitizer: stack-buffer-overflow
+    // CHECK: {{AddressSanitizer|XSan}}: stack-buffer-overflow
     // CHECK: {{.*ptrace.cpp:}}[[@LINE-2]]
     assert(!res);
     PRINT_REG_PC(regs);

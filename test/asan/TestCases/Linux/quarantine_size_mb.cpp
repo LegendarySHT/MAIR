@@ -25,4 +25,4 @@ int main() {
 
 // Q10: quarantine_size_mb=10M
 // BOTH: please use either 'quarantine_size' (deprecated) or quarantine_size_mb, but not both
-// RSS_LIMIT: AddressSanitizer: hard rss limit exhausted
+// RSS_LIMIT: {{AddressSanitizer|XSan}}: hard rss limit exhausted

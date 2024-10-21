@@ -23,6 +23,6 @@ int main() {
   return 0;
 }
 // CHECK: before alignment fault
-// CHECK: ERROR: AddressSanitizer: access-violation on unknown address {{0x[fF]*}}
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: access-violation on unknown address {{0x[fF]*}}
 // CHECK-NEXT: The signal is caused by a READ memory access.
 // CHECK-NEXT: #0 {{.*}} in test(void) {{.*}}misalignment.cpp:{{.*}}

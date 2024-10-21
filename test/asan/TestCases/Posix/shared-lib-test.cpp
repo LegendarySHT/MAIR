@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
   printf("ok\n");
   inc(1);
   inc(-1);  // BOOM
-  // CHECK: {{.*ERROR: AddressSanitizer: global-buffer-overflow}}
+  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: global-buffer-overflow}}
   // CHECK: {{READ of size 4 at 0x.* thread T0}}
   // CHECK: {{    #0 0x.*}}
   // CHECK: {{    #1 0x.* in main .*shared-lib-test.cpp:}}[[@LINE-4]]

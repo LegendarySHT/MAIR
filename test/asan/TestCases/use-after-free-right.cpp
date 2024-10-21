@@ -12,7 +12,7 @@ int main() {
   volatile char *x = (char*)malloc(sizeof(char));
   free((void*)x);
   *x = 42;
-  // CHECK: {{.*ERROR: AddressSanitizer: heap-use-after-free on address}}
+  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free on address}}
   // CHECK:   {{0x.* at pc 0x.* bp 0x.* sp 0x.*}}
   // CHECK: {{WRITE of size 1 at 0x.* thread T0}}
   // CHECK: {{    #0 0x.* in main .*use-after-free-right.cpp:}}[[@LINE-4]]

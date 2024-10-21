@@ -61,7 +61,7 @@ int main() {
 
   mem[0] = 'A'; // BOOM
 
-  // CHECK: ERROR: AddressSanitizer: heap-use-after-free
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: heap-use-after-free
   // CHECK: WRITE of size 1 at 0x{{.*}}
   // CHECK: freed by thread T0 here:
   // CHECK: #0 [[FREE_FRAME_0]]

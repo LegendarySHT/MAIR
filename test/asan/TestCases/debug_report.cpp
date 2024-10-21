@@ -70,5 +70,5 @@ __asan_on_error() {
   // CHECK: description: heap-use-after-free
 }
 
-// CHECK: AddressSanitizer: heap-use-after-free on address {{0x0*}}[[ADDR]] at pc {{0x0*}}[[PC]] bp {{0x0*}}[[BP]] sp {{0x0*}}[[SP]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free on address {{0x0*}}[[ADDR]] at pc {{0x0*}}[[PC]] bp {{0x0*}}[[BP]] sp {{0x0*}}[[SP]]
 // CHECK: WRITE of size 1 at {{0x0*}}[[ADDR]] thread T0

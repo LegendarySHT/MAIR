@@ -109,10 +109,10 @@ int main(int argc, char *argv[]) {
   // Test that ASAN_ACTIVATION_OPTIONS=allocator_may_return_null=1 has effect.
   void *p = malloc((unsigned long)-2);
   assert(!p);
-  // CHECK: WARNING: AddressSanitizer failed to allocate 0xfff{{.*}} bytes
+  // CHECK: WARNING: {{AddressSanitizer|XSan}} failed to allocate 0xfff{{.*}} bytes
 
   ((Fn)fn)();
-  // CHECK: AddressSanitizer: heap-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow
   // CHECK: READ of size 1
   // CHECK: {{#0 .* in do_another_bad_thing}}
   // CHECK: is located 5 bytes to the right of 100-byte region

@@ -83,7 +83,7 @@ void check_data_symbolication() {
 extern "C"
 void faulty_func(char *p) {
   *p = 'x';  // BOOM
-  // CHECK: AddressSanitizer: global-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: global-buffer-overflow
   // CHECK-LI: #0 0x{{.*}} in faulty_func{{.*}} {{.*}}haswell-symbolication.cpp:[[@LINE-2]]
   // CHECK-NOLI: #0 0x{{.*}} in faulty_func{{.*}} {{.*}}haswell-symbolication
   // CHECK: is located 2 bytes to the right of global variable 'faulty_global'

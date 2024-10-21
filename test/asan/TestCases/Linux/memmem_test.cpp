@@ -12,12 +12,12 @@ int main(int argc, char **argv) {
     res = memmem(a1, sizeof(a1) + 1, a2, sizeof(a2));  // BOOM
   else
     res = memmem(a1, sizeof(a1), a2, sizeof(a2) + 1);  // BOOM
-  // A1: AddressSanitizer: stack-buffer-overflow
+  // A1: {{AddressSanitizer|XSan}}: stack-buffer-overflow
   // A1: {{#0.*memmem}}
   // A1-NEXT: {{#1.*main}}
   // A1: 'a1'{{.*}} <== Memory access at offset
   //
-  // A2: AddressSanitizer: stack-buffer-overflow
+  // A2: {{AddressSanitizer|XSan}}: stack-buffer-overflow
   // A2: {{#0.*memmem}}
   // A2: 'a2'{{.*}} <== Memory access at offset
   return res == NULL;

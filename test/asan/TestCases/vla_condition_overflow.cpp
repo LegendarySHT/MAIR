@@ -11,7 +11,7 @@ __attribute__((noinline)) void foo(int index, int len) {
     char str[len];
     assert(!(reinterpret_cast<uintptr_t>(str) & 31L));
     str[index] = '1'; // BOOM
-// CHECK: ERROR: AddressSanitizer: dynamic-stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: dynamic-stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 1 at [[ADDR]] thread T0
   }
 }

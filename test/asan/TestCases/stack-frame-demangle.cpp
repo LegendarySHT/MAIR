@@ -8,7 +8,7 @@ struct YYY {
     char array[10];
     memset(array, 0, 10);
     return array[x];  // BOOOM
-    // CHECK: ERROR: AddressSanitizer: stack-buffer-overflow
+    // CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow
     // CHECK: READ of size 1 at
     // CHECK: is located in stack of thread T0 at offset
     // CHECK: XXX::YYY::ZZZ

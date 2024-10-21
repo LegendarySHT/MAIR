@@ -14,5 +14,5 @@ int main() {
   std::cin >> i;
   return 0;
 // CHECK: Type i:
-// CHECK-NOT: AddressSanitizer: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK-NOT: {{AddressSanitizer|XSan}}: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 }

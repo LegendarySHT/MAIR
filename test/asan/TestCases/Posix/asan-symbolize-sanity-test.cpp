@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
   int *array = (int*)malloc(40);
   inc2(array, 1);
   inc2(array, -1);  // BOOM
-  // CHECK: ERROR: AddressSanitizer: heap-buffer-overflow
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: heap-buffer-overflow
   // CHECK: READ of size 4 at 0x{{.*}}
   // CHECK: #0 {{.*}} in inc2 {{.*}}asan-symbolize-sanity-test.cpp:[[@LINE+21]]
   // CHECK: #1 {{.*}} in main {{.*}}asan-symbolize-sanity-test.cpp:[[@LINE-4]]

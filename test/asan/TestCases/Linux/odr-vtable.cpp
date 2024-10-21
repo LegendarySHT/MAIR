@@ -36,6 +36,6 @@ int main() {}
 
 #endif
 
-// CHECK: AddressSanitizer: odr-violation
+// CHECK: {{AddressSanitizer|XSan}}: odr-violation
 // CHECK-NEXT: 'vtable for XYZ'
 // CHECK-NEXT: 'vtable for XYZ'

@@ -15,7 +15,7 @@ class Foo {
   virtual ~Foo() {
   }
   void set(int i, int val) { a[i] = val; }
-// CHECK: ERROR: AddressSanitizer: intra-object-overflow
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: intra-object-overflow
 // CHECK: #0 {{.*}}Foo::set{{.*}}intra-object-overflow.cpp:[[@LINE-2]]
  private:
   int pre1, pre2;

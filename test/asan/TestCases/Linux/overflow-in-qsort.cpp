@@ -38,11 +38,11 @@ int main() {
 }
 
 // Fast unwind may not unwind through qsort.
-// CHECK-FAST: ERROR: AddressSanitizer: global-buffer-overflow
+// CHECK-FAST: ERROR: {{AddressSanitizer|XSan}}: global-buffer-overflow
 // CHECK-FAST: #0{{.*}} in QsortCallback
 // CHECK-FAST: is located 0 bytes to the right of global variable 'global_array
 
-// CHECK-SLOW: ERROR: AddressSanitizer: global-buffer-overflow
+// CHECK-SLOW: ERROR: {{AddressSanitizer|XSan}}: global-buffer-overflow
 // CHECK-SLOW: #0{{.*}} in QsortCallback
 // CHECK-SLOW: #{{.*}} in MyQsort
 // CHECK-SLOW: #{{.*}} in main

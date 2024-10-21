@@ -19,5 +19,5 @@ int main() {
 }
 
 // CHECK-NOT: double-free
-// CHECK-NOT: AddressSanitizer
+// CHECK-NOT: {{AddressSanitizer|XSan}}
 // CHECK: passed!

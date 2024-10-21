@@ -24,7 +24,7 @@ int main() {
   CFRelease(str);
 }
 
-// CHECK-CRASH: AddressSanitizer: heap-buffer-overflow
+// CHECK-CRASH: {{AddressSanitizer|XSan}}: heap-buffer-overflow
 // CHECK-CRASH-NOT: Ignored.
-// CHECK-IGNORE-NOT: AddressSanitizer: heap-buffer-overflow
+// CHECK-IGNORE-NOT: {{AddressSanitizer|XSan}}: heap-buffer-overflow
 // CHECK-IGNORE: Ignored.

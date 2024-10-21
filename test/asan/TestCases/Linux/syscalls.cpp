@@ -15,7 +15,7 @@
 int main(int argc, char *argv[]) {
   char buf[1000];
   __sanitizer_syscall_pre_recvmsg(0, buf - 1, 0);
-  // CHECK: AddressSanitizer: stack-buffer-{{.*}}erflow
+  // CHECK: {{AddressSanitizer|XSan}}: stack-buffer-{{.*}}erflow
   // CHECK: READ of size {{.*}} at {{.*}} thread T0
   // CHECK: #0 {{.*}} in __sanitizer_syscall{{.*}}recvmsg
   return 0;

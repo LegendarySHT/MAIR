@@ -13,7 +13,7 @@ void foo() {
 int main() {
   foo();
   *x = 42;
-// CHECK: AddressSanitizer: stack-use-after-return
+// CHECK: {{AddressSanitizer|XSan}}: stack-use-after-return
 // CHECK: WRITE of size 1 at {{.*}} thread T0
 // CHECK-NEXT: {{#0 0x.* in main .*stack_use_after_return.cpp}}:[[@LINE-3]]
 //

@@ -30,5 +30,5 @@ int main(void) {
 }
 
 // CHECK-NOT: nested bug
-// CHECK: ERROR: AddressSanitizer: stack-buffer-overflow on address
-// CHECK: SUMMARY: AddressSanitizer: stack-buffer-overflow
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow on address
+// CHECK: SUMMARY: {{AddressSanitizer|XSan}}: stack-buffer-overflow

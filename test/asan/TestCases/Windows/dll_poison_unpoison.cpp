@@ -22,7 +22,7 @@ int test_function() {
   should_not_crash(&buffer[32]);
 
   should_crash(&buffer[96]);
-// CHECK: AddressSanitizer: use-after-poison on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: use-after-poison on address [[ADDR:0x[0-9a-f]+]]
 // CHECK-NEXT: WRITE of size 1 at [[ADDR]] thread T0
 // CHECK-NEXT: should_crash{{.*}}\dll_poison_unpoison.cpp
 // CHECK-NEXT: test_function{{.*}}\dll_poison_unpoison.cpp:[[@LINE-4]]

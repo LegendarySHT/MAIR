@@ -15,7 +15,7 @@ int test_function() {
   char buff[6] = "Hello";
 
   memchr(buff, 'z', 7);
-// CHECK: AddressSanitizer: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: stack-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: READ of size 7 at [[ADDR]] thread T0
 // CHECK-NEXT:  __asan_wrap_memchr
 // CHECK-NEXT:  memchr

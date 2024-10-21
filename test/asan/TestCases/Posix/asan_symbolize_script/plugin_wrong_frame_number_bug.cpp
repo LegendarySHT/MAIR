@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
 
 // Check that the numbering of the stackframes is correct.
 
-// CHECK: AddressSanitizer: heap-use-after-free
+// CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free
 // CHECK-NEXT: WRITE of size
 // CHECK-NEXT: #0 0x{{[0-9a-fA-F]+}}
 // CHECK-NEXT: #1 0x{{[0-9a-fA-F]+}} in do_access

@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
   free(x);
   return res;
 }
-// CHECK-ERROR: ERROR: AddressSanitizer
+// CHECK-ERROR: ERROR: {{AddressSanitizer|XSan}}
 // CHECK-INVALID: ERROR: Can't open file: /INVALID
 // CHECK-BAD-DIR: ERROR: Can't create directory: /dev/null
 // CHECK-LONG: ERROR: Path is too long: 01234

@@ -7,7 +7,7 @@ int main() {
   int *x = new int[42];
   delete [] x;
   delete [] x;
-// CHECK: AddressSanitizer: attempting double-free on [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: attempting double-free on [[ADDR:0x[0-9a-f]+]]
 // FIXME: The 'operator delete' frame should have [].
 // CHECK-NEXT: {{#0 .* operator delete}}
 // CHECK-NEXT: {{#1 .* main .*double_operator_delete.cpp}}:[[@LINE-4]]

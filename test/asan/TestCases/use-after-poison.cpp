@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
   x[10] = 0;
   __asan_poison_memory_region(x, 16);
   int res = x[argc * 10];  // BOOOM
-  // CHECK: ERROR: AddressSanitizer: use-after-poison
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: use-after-poison
   // CHECK: main{{.*}}use-after-poison.cpp:[[@LINE-2]]
   delete [] x;
   return res;

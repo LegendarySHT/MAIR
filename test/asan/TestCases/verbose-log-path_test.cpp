@@ -23,4 +23,4 @@ int main(int argc, char **argv) {
   free(x);
   return res;
 }
-// CHECK-ERROR: ERROR: AddressSanitizer
+// CHECK-ERROR: ERROR: {{AddressSanitizer|XSan}}

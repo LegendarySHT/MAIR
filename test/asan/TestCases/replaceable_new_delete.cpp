@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
   char *x = new char[5];
   // CHECK: replaced delete
   delete[] x;
-  // CHECK: ERROR: AddressSanitizer
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}
   *x = 13;
   return 0;
 }

@@ -7,7 +7,7 @@ int main() {
   int *x = (int*)malloc(42 * sizeof(int));
   free(x);
   free(x);
-// CHECK: AddressSanitizer: attempting double-free on [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: attempting double-free on [[ADDR:0x[0-9a-f]+]]
 // CHECK-NEXT: {{#0 .* free }}
 // CHECK-NEXT: {{#1 .* main .*double_free.cpp}}:[[@LINE-3]]
 // CHECK: [[ADDR]] is located 0 bytes inside of 168-byte region

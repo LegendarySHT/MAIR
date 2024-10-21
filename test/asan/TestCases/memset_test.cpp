@@ -45,23 +45,23 @@ int main(int argc, char **argv) {
 #if defined(TEST_MEMSET)
   memset(p, 0, 3000);
   assert(p[1] == 0);
-  // CHECK-MEMSET: AddressSanitizer: use-after-poison on address
+  // CHECK-MEMSET: {{AddressSanitizer|XSan}}: use-after-poison on address
   // CHECK-MEMSET: in {{.*}}memset
 #else
   char * volatile q = (char *)malloc(3000);
 #if defined(TEST_MEMCPY)
   memcpy(q, p, 3000);
-  // CHECK-MEMCPY: AddressSanitizer: use-after-poison on address
+  // CHECK-MEMCPY: {{AddressSanitizer|XSan}}: use-after-poison on address
   // On Mac, memmove and memcpy are the same. Accept either one.
   // CHECK-MEMCPY: in {{.*(memmove|memcpy)}}
 #elif defined(TEST_MEMMOVE)
   memmove(q, p, 3000);
-  // CHECK-MEMMOVE: AddressSanitizer: use-after-poison on address
+  // CHECK-MEMMOVE: {{AddressSanitizer|XSan}}: use-after-poison on address
   // CHECK-MEMMOVE: in {{.*(memmove|memcpy)}}
 #elif defined(TEST_MEMCPY_SIZE_OVERFLOW)
   volatile memcpy_t my_memcpy = &memcpy;
   my_memcpy(p, q, -argc);
-  // CHECK-MEMCPY_SIZE_OVERFLOW: AddressSanitizer: negative-size-param: (size=-1)
+  // CHECK-MEMCPY_SIZE_OVERFLOW: {{AddressSanitizer|XSan}}: negative-size-param: (size=-1)
 #endif
   assert(q[1] == 0);
   free(q);

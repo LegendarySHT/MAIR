@@ -27,4 +27,4 @@ int main(int argc, char **argv) {
 #endif
 
 // CHECK: myglobal: 42
-// CHECK-NOT: ERROR: AddressSanitizer: attempting free on address which was not malloc()-ed
+// CHECK-NOT: ERROR: {{AddressSanitizer|XSan}}: attempting free on address which was not malloc()-ed

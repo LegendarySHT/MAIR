@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
   int nonblock;
   int res = ioctl(fd, FIONBIO, &nonblock + 1);
-  // CHECK: AddressSanitizer: stack-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: stack-buffer-overflow
   // CHECK: READ of size 4 at
   // CHECK: {{#.* in main .*ioctl.cpp:}}[[@LINE-3]]
   assert(res == 0);

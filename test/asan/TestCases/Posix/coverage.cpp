@@ -66,10 +66,10 @@ int main(int argc, char **argv) {
 // CHECK-foo-bar-DAG: so.[[PID]].sancov: 1 PCs written
 // CHECK-foo-bar-DAG: [[PID]].sancov: 2 PCs written
 //
-// CHECK-report: AddressSanitizer: global-buffer-overflow
+// CHECK-report: {{AddressSanitizer|XSan}}: global-buffer-overflow
 // CHECK-report: PCs written
 //
-// CHECK-segv: AddressSanitizer: SEGV
+// CHECK-segv: {{AddressSanitizer|XSan}}: SEGV
 // CHECK-segv: PCs written
 //
 // CHECK-SANCOV1: 1 PCs total

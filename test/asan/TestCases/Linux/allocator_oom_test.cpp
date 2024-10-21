@@ -84,5 +84,5 @@ int main(int argc, char **argv) {
 // CHECK-REALLOC: realloc:
 // CHECK-MALLOC-REALLOC: realloc-after-malloc:
 
-// CHECK-CRASH: SUMMARY: AddressSanitizer: out-of-memory
+// CHECK-CRASH: SUMMARY: {{AddressSanitizer|XSan}}: out-of-memory
 // CHECK-NULL: x: 0

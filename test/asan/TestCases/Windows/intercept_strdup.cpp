@@ -15,7 +15,7 @@ int main() {
 
   subscript = -1;
   ptr[subscript] = 42;
-// CHECK: AddressSanitizer: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 1 at [[ADDR]] thread T0
 // CHECK:   {{#0 .* main .*}}intercept_strdup.cpp:[[@LINE-3]]
 // CHECK: [[ADDR]] is located 1 bytes to the left of 6-byte region

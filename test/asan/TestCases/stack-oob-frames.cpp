@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
   Frame3(argv[1][0] - '0');
 }
 
-// CHECK0: AddressSanitizer: stack-buffer-overflow
+// CHECK0: {{AddressSanitizer|XSan}}: stack-buffer-overflow
 // CHECK0: #0{{.*}}Frame0
 // CHECK0: #1{{.*}}Frame1
 // CHECK0: #2{{.*}}Frame2
@@ -46,14 +46,14 @@ int main(int argc, char **argv) {
 // CHECK0: is located in stack of thread T0 at offset
 // CHECK0-NEXT: #0{{.*}}Frame0
 //
-// CHECK1: AddressSanitizer: stack-buffer-overflow
+// CHECK1: {{AddressSanitizer|XSan}}: stack-buffer-overflow
 // CHECK1: is located in stack of thread T0 at offset
 // CHECK1-NEXT: #0{{.*}}Frame1
 //
-// CHECK2: AddressSanitizer: stack-buffer-overflow
+// CHECK2: {{AddressSanitizer|XSan}}: stack-buffer-overflow
 // CHECK2: is located in stack of thread T0 at offset
 // CHECK2-NEXT: #0{{.*}}Frame2
 //
-// CHECK3: AddressSanitizer: stack-buffer-overflow
+// CHECK3: {{AddressSanitizer|XSan}}: stack-buffer-overflow
 // CHECK3: is located in stack of thread T0 at offset
 // CHECK3-NEXT: #0{{.*}}Frame3

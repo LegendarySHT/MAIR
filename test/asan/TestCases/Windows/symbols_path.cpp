@@ -11,7 +11,7 @@
 int main() {
   char *buffer = (char*)malloc(42);
   buffer[-1] = 42;
-// CHECK: AddressSanitizer: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-buffer-overflow on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 1 at [[ADDR]] thread T0
 // CHECK-NEXT: {{#0 .* main .*symbols_path.cpp}}:[[@LINE-3]]
 // CHECK: [[ADDR]] is located 1 bytes to the left of 42-byte region

@@ -19,7 +19,7 @@ extern "C" void my_memset(void *p, size_t sz);
 int main(int argc, char *argv[]) {
   char buf[10];
   my_memset(buf, 11);
-  // CHECK: {{.*ERROR: AddressSanitizer: stack-buffer-overflow}}
+  // CHECK: {{.*ERROR: {{AddressSanitizer|XSan}}: stack-buffer-overflow}}
   // CHECK: {{WRITE of size 11 at 0x.* thread T0}}
   // CHECK: {{0x.* in my_memset .*interception-in-shared-lib-test.cpp:}}[[@LINE-10]]
   return 0;

@@ -12,5 +12,5 @@ int main() {
   delete x;
 }
 
-// CHECK: AddressSanitizer: attempting free on address which was not malloc()-ed
+// CHECK: {{AddressSanitizer|XSan}}: attempting free on address which was not malloc()-ed
 // CHECK: is located 0 bytes inside of global variable 'a' defined in

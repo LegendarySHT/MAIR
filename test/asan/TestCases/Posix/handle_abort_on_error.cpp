@@ -7,5 +7,5 @@
 
 int main() {
   abort();
-  // CHECK: ERROR: AddressSanitizer: ABRT
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: ABRT
 }

@@ -9,7 +9,7 @@ int test_function() {
   int *buffer = (int*)malloc(42);
   free(buffer);
   buffer[0] = 42;
-// CHECK: AddressSanitizer: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
+// CHECK: {{AddressSanitizer|XSan}}: heap-use-after-free on address [[ADDR:0x[0-9a-f]+]]
 // CHECK: WRITE of size 4 at [[ADDR]] thread T0
 // CHECK-NEXT:  test_function {{.*}}dll_malloc_uaf.cpp:[[@LINE-3]]
 // CHECK-NEXT:  main {{.*}}dll_host

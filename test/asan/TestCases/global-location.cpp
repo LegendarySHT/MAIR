@@ -10,7 +10,7 @@
 // atos doesn't show source line numbers for global variables.
 // UNSUPPORTED: darwin
 
-// CHECK: AddressSanitizer: global-buffer-overflow
+// CHECK: {{AddressSanitizer|XSan}}: global-buffer-overflow
 
 #include <string.h>
 
@@ -41,4 +41,4 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-// CHECK: SUMMARY: AddressSanitizer: global-buffer-overflow
+// CHECK: SUMMARY: {{AddressSanitizer|XSan}}: global-buffer-overflow

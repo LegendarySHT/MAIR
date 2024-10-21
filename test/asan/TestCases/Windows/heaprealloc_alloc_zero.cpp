@@ -54,5 +54,5 @@ int main() {
 
 // CHECK: allocated!
 // CHECK-NOT: heap-buffer-overflow
-// CHECK-NOT: AddressSanitizer
+// CHECK-NOT: {{AddressSanitizer|XSan}}
 // CHECK-NOT: HeapAlloc size failure!

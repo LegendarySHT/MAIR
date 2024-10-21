@@ -10,7 +10,7 @@ __attribute__((noinline))
 static
 #endif
 void NullDeref(int *ptr) {
-  // CHECK: ERROR: AddressSanitizer: {{SEGV|access-violation}} on unknown address
+  // CHECK: ERROR: {{AddressSanitizer|XSan}}: {{SEGV|access-violation}} on unknown address
   // CHECK:   {{0x0*000.. .*pc 0x.*}}
   ptr[10]++;  // BOOM
   // atos on Mac cannot extract the symbol name correctly. Also, on FreeBSD 9.2
@@ -20,5 +20,5 @@ void NullDeref(int *ptr) {
 int main() {
   NullDeref((int*)0);
   // CHECK: {{    #1 0x.* in main.*null_deref.cpp}}
-  // CHECK: AddressSanitizer can not provide additional info.
+  // CHECK: {{AddressSanitizer|XSan}} can not provide additional info.
 }

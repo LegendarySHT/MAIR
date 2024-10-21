@@ -17,7 +17,7 @@ extern "C" __declspec(dllexport)
 int test_function() {
   foo();
   *x = 42;
-// CHECK: AddressSanitizer: stack-use-after-return
+// CHECK: {{AddressSanitizer|XSan}}: stack-use-after-return
 // CHECK: WRITE of size 1 at [[ADDR:.*]] thread T0
 // CHECK-NEXT:  test_function{{.*}}dll_stack_use_after_return.cpp:[[@LINE-3]]
 // CHECK-NEXT:  main

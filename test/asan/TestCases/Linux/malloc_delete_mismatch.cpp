@@ -22,7 +22,7 @@ int main() {
   x[0] = 0;
   delete x;
 }
-// CHECK: ERROR: AddressSanitizer: alloc-dealloc-mismatch (malloc vs operator delete) on 0x
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: alloc-dealloc-mismatch (malloc vs operator delete) on 0x
 // CHECK-NEXT: #0{{.*}}operator delete
 // CHECK: #{{.*}}main
 // CHECK: is located 0 bytes inside of 10-byte region

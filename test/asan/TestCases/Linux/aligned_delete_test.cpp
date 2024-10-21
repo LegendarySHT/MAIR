@@ -59,76 +59,76 @@ int main(int argc, char **argv) {
   // test/sanitizer_common/TestCases/Linux/new_delete_test.cpp.
 
   operator delete(break_optimization(new S12_128), std::nothrow);
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
   // CHECK:  alignment of the deallocated type: default-aligned.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   operator delete(break_optimization(new S12_128), sizeof(S12_128));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
   // CHECK:  alignment of the deallocated type: default-aligned.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   operator delete[](break_optimization(new S12_128[100]), std::nothrow);
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
   // CHECK:  alignment of the deallocated type: default-aligned.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   operator delete[](break_optimization(new S12_128[100]), sizeof(S12_128[100]));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
   // CHECK:  alignment of the deallocated type: default-aligned.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   // Various mismatched alignments.
 
   delete break_optimization(reinterpret_cast<S12*>(new S12_256));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   256 bytes;
   // CHECK:  alignment of the deallocated type: default-aligned.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete break_optimization(reinterpret_cast<S12_256*>(new S12));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   default-aligned;
   // CHECK:  alignment of the deallocated type: 256 bytes.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete break_optimization(reinterpret_cast<S12_128*>(new S12_256));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   256 bytes;
   // CHECK:  alignment of the deallocated type: 128 bytes.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete [] break_optimization(reinterpret_cast<S12*>(new S12_256[100]));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   256 bytes;
   // CHECK:  alignment of the deallocated type: default-aligned.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete [] break_optimization(reinterpret_cast<S12_256*>(new S12[100]));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   default-aligned;
   // CHECK:  alignment of the deallocated type: 256 bytes.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete [] break_optimization(reinterpret_cast<S12_128*>(new S12_256[100]));
-  // CHECK: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   256 bytes;
   // CHECK:  alignment of the deallocated type: 128 bytes.
-  // CHECK: SUMMARY: AddressSanitizer: new-delete-type-mismatch
+  // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   // Push ASan limits, the current limitation is that it cannot differentiate
   // alignments above 512 bytes.

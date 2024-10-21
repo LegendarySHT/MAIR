@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
   char buf[100];
   // *& to suppress bzero-to-memset optimization.
   (*&bzero)(buf, sizeof(buf) + 1);
-  // CHECK:      AddressSanitizer: stack-buffer-overflow
+  // CHECK:      {{AddressSanitizer|XSan}}: stack-buffer-overflow
   // CHECK-NEXT: WRITE of size 101 at
   return 0;
 }

@@ -22,7 +22,7 @@ int main() {
   crash_function();
 }
 
-// CHECK-CRASH: AddressSanitizer: heap-use-after-free
+// CHECK-CRASH: {{AddressSanitizer|XSan}}: heap-use-after-free
 // CHECK-CRASH-NOT: strlen ignored
-// CHECK-IGNORE-NOT: AddressSanitizer: heap-use-after-free
+// CHECK-IGNORE-NOT: {{AddressSanitizer|XSan}}: heap-use-after-free
 // CHECK-IGNORE: strlen ignored

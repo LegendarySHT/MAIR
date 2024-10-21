@@ -11,7 +11,7 @@
 // USER: in SEHHandler
 
 // ASAN: in main
-// ASAN: ERROR: AddressSanitizer: access-violation
+// ASAN: ERROR: {{AddressSanitizer|XSan}}: access-violation
 
 #include <windows.h>
 #include <stdio.h>

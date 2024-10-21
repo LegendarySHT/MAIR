@@ -13,6 +13,6 @@ int main() {
   return numerator / divisor;
 }
 // CHECK: before ud2a
-// CHECK: ERROR: AddressSanitizer: int-divide-by-zero on unknown address [[ADDR:0x[^ ]*]]
+// CHECK: ERROR: {{AddressSanitizer|XSan}}: int-divide-by-zero on unknown address [[ADDR:0x[^ ]*]]
 // CHECK-SAME: (pc [[ADDR]] {{.*}})
 // CHECK-NEXT: #0 {{.*}} in main {{.*}}integer_divide_by_zero.cpp:{{.*}}

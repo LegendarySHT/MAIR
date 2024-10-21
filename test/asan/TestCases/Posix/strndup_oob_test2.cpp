@@ -16,7 +16,7 @@ char kChars[] = { 'f', 'o', 'o' };
 int main(int argc, char **argv) {
   char *copy = strndup(kChars, 3);
   copy = strndup(kChars, 10);
-  // CHECK: AddressSanitizer: global-buffer-overflow
+  // CHECK: {{AddressSanitizer|XSan}}: global-buffer-overflow
   // CHECK: {{.*}}main {{.*}}.cpp:[[@LINE-2]]
   return *copy;
 }

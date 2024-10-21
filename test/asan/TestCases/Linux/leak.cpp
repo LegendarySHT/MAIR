@@ -1,4 +1,4 @@
-// Minimal test for LeakSanitizer+AddressSanitizer.
+// Minimal test for LeakSanitizer+{{AddressSanitizer|XSan}}.
 // REQUIRES: leak-detection
 //
 // RUN: %clangxx_asan  %s -o %t
