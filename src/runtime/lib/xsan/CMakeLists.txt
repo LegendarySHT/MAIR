@@ -6,7 +6,7 @@ set(ASAN_SOURCES
   asan/orig/asan_descriptions.cpp
   asan/orig/asan_errors.cpp
   asan/orig/asan_fake_stack.cpp
-  asan/orig/asan_flags.cpp
+  # asan/orig/asan_flags.cpp
   asan/orig/asan_fuchsia.cpp
   asan/orig/asan_globals.cpp
   asan/orig/asan_globals_win.cpp
@@ -33,6 +33,7 @@ set(ASAN_SOURCES
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
+  asan/asan_flags.cpp
   asan/asan_thread.cpp
   asan/asan_init.cpp
   ${ASAN_SOURCES}
@@ -44,7 +45,7 @@ set(TSAN_SOURCES
   tsan/orig/tsan_debugging.cpp
   tsan/orig/tsan_external.cpp
   # tsan/orig/tsan_fd.cpp
-  tsan/orig/tsan_flags.cpp
+  # tsan/orig/tsan_flags.cpp
   tsan/orig/tsan_ignoreset.cpp
   # tsan/orig/tsan_interceptors_posix.cpp
   tsan/orig/tsan_interface.cpp
@@ -126,6 +127,7 @@ endif()
 
 set(XSAN_TSAN_SOURCES
   tsan/tsan_fd.cpp
+  tsan/tsan_flags.cpp
   tsan/tsan_init.cpp
   tsan/tsan_mman.cpp
   tsan/tsan_rtl_thread.cpp
