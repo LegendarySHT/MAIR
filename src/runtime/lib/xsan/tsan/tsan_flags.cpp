@@ -58,7 +58,7 @@ void SetCommonFlags(CommonFlags &cf) {
       cf.detect_deadlocks = false;
   }
   cf.print_suppressions = false;
-  cf.stack_trace_format = "    #%n %f %S %M";
+//   cf.stack_trace_format = "    #%n %f %S %M";
   cf.intercept_tls_get_addr = true;
 }
 
