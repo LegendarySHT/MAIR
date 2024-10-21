@@ -114,7 +114,8 @@ struct JmpBuf {
 struct Processor {
   ThreadState *thr; // currently wired thread, or nullptr
 #if !SANITIZER_GO
-  AllocatorCache alloc_cache;
+  /// Heap allocation is delegated to XSan-ASan
+  // AllocatorCache alloc_cache;
   InternalAllocatorCache internal_alloc_cache;
 #endif
   DenseSlabAllocCache block_cache;
