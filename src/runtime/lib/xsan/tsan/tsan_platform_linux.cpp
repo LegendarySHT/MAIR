@@ -262,7 +262,8 @@ void InitializePlatformEarly() {
 }
 
 void InitializePlatform() {
-  DisableCoreDumperIfNecessary();
+  /// Common Settup, moved to XSan
+  // DisableCoreDumperIfNecessary();
 
   // Go maps shadow memory lazily and works fine with limited address space.
   // Unlimited stack is not a problem as well, because the executable
@@ -310,8 +311,9 @@ void InitializePlatform() {
       ReExec();
   }
 
-  CheckAndProtect();
-  InitTlsSize();
+  /// Common Settup, moved to XSan
+  // CheckAndProtect();
+  // InitTlsSize();
 #endif  // !SANITIZER_GO
 }
 

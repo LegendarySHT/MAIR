@@ -1,5 +1,6 @@
 #include <lsan/lsan_common.h>
 #include <sanitizer_common/sanitizer_interface_internal.h>
+#include <sanitizer_common/sanitizer_common.h>
 #include <ubsan/ubsan_init.h>
 
 #include "asan/asan_init.h"
@@ -8,9 +9,15 @@
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
+#include "xsan_platform.h"
 #include "xsan_stack.h"
 
 namespace __xsan {
+
+// With the zero shadow base we can not actually map pages starting from 0.
+// This constant is somewhat arbitrary.
+constexpr uptr ZeroBaseShadowStart = 0;
+constexpr uptr ZeroBaseMaxShadowStart = 1 << 18;
 
 // -------------------------- Globals --------------------- {{{1
 int xsan_inited;
@@ -33,6 +40,66 @@ static void CheckUnwind() {
 
   GET_STACK_TRACE(kStackTraceMax, common_flags()->fast_unwind_on_check);
   stack.Print();
+}
+
+uptr ALWAYS_INLINE HeapEnd() {
+  return HeapMemEnd() + PrimaryAllocator::AdditionalSize();
+}
+
+static void ProtectRange(uptr beg, uptr end) { 
+  if (beg == end) return;
+  ProtectGap(beg, end - beg, ZeroBaseShadowStart, ZeroBaseMaxShadowStart);
+}
+
+void CheckAndProtect() {
+  // Ensure that the binary is indeed compiled with -pie.
+  MemoryMappingLayout proc_maps(true);
+  MemoryMappedSegment segment;
+  while (proc_maps.Next(&segment)) {
+    if (IsAppMem(segment.start))
+      continue;
+    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd())
+      continue;
+    if (__xsan::IsSanitizerShadowMem(segment.start))
+      continue;
+    if (segment.protection == 0)  // Zero page or mprotected.
+      continue;
+    if (segment.start >= VdsoBeg())  // vdso
+      break;
+    Printf("FATAL: XSan: unexpected memory mapping 0x%zx-0x%zx\n",
+           segment.start, segment.end);
+    Die();
+  }
+
+#    if SANITIZER_IOS && !SANITIZER_IOSSIM
+  ProtectRange(HeapMemEnd(), TsanShadowBeg());
+  ProtectRange(TsanShadowEnd(), TsanMetaShadowBeg());
+  ProtectRange(TsanMetaShadowEnd(), HiAppMemBeg());
+#    else
+  /// TODO: migrate GAP caculation in xsn_platform.h
+  ProtectRange(LoAppMemEnd(), AsanLowShadowBeg());
+  /// Protected in asan::InitializeShadowMemory  
+  ProtectRange(AsanLowShadowEnd(), AsanHighShadowBeg());
+
+  ProtectRange(AsanHighShadowEnd(), TsanShadowBeg());
+  if (MidAppMemBeg()) {
+    ProtectRange(TsanMetaShadowEnd(), MidAppMemBeg());
+    ProtectRange(MidAppMemEnd(), HeapMemBeg());
+  } else {
+    ProtectRange(TsanMetaShadowEnd(), HeapMemBeg());
+  }
+  ProtectRange(HeapEnd(), HiAppMemBeg());
+#    endif
+
+#    if defined(__s390x__)
+  // Protect the rest of the address space.
+  const uptr user_addr_max_l4 = 0x0020000000000000ull;
+  const uptr user_addr_max_l5 = 0xfffffffffffff000ull;
+  // All the maintained s390x kernels support at least 4-level page tables.
+  ProtectRange(HiAppMemEnd(), user_addr_max_l4);
+  // Older s390x kernels may not support 5-level page tables.
+  TryProtectRange(user_addr_max_l4, user_addr_max_l5);
+#    endif
 }
 
 // -------------------------- Run-time entry ------------------- {{{1
@@ -77,6 +144,8 @@ static void XsanInitInternal() {
   __asan::AsanInitFromXsan();
 
   __tsan::TsanInitFromXsan();
+
+  CheckAndProtect();
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);

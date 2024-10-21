@@ -11,7 +11,7 @@
 namespace __xsan {
 
 using __asan::AllocType;
-
+using PrimaryAllocator = __asan::PrimaryAllocator;
 
 /// Provides some interfaces for other sanitizer.
 class XsanAllocator {
