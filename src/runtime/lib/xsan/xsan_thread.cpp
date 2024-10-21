@@ -38,6 +38,8 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   auto *tsan_thread = __tsan::cur_thread_init();
   if (thread->is_main_thread_) {
     // Main thread.
+    __tsan::Processor *proc = __tsan::ProcCreate();
+    __tsan::ProcWire(proc, tsan_thread);
     thread->tsan_tid_ = __tsan::ThreadCreate(nullptr, 0, 0, true);
   } else {
     // Other thread create for TSan is called in CreateTsanThread.
@@ -141,8 +143,6 @@ void XsanThread::BeforeAsanThreadStart(tid_t os_id) {
 void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
   __tsan::ThreadState *thr = tsan_thread_;
   if (isMainThread()) {
-    __tsan::Processor *proc = __tsan::ProcCreate();
-    __tsan::ProcWire(proc, thr);
     __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
   } else {
     // Thread-local state is not initialized yet.
