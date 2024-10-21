@@ -39,6 +39,10 @@ struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
 };
 
 INTERCEPTOR(void, free, void *ptr) {
+  if (ptr == 0) 
+    return; 
+  if (__tsan::in_symbolizer())
+    return InternalFree(ptr);
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
   XSAN_EXTRA_ALLOC_ARG(free, ptr);
@@ -47,6 +51,10 @@ INTERCEPTOR(void, free, void *ptr) {
 
 #  if SANITIZER_INTERCEPT_CFREE
 INTERCEPTOR(void, cfree, void *ptr) {
+  if (ptr == 0) 
+    return; 
+  if (__tsan::in_symbolizer())
+    return InternalFree(ptr);
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
   XSAN_EXTRA_ALLOC_ARG(cfree, ptr);
