@@ -13,6 +13,7 @@
 #include "xsan_stack.h"
 #include "xsan_thread.h"
 
+
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
 // really defined to replace libc functions.
@@ -611,6 +612,8 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
   return res;
 }
 #  endif  // XSAN_INTERCEPT___CXA_ATEXIT
+
+
 
 #  if XSAN_INTERCEPT_ATEXIT
 INTERCEPTOR(int, atexit, void (*func)()) {

@@ -300,8 +300,11 @@ void AsanInitFromXsan() {
   asan_inited = 1;
   asan_init_is_running = false;
 
-  if (flags()->atexit)
-    Atexit(asan_atexit);
+  
+  /// Moved to AsanInitFromXsanLate, as Atexit is intercepted, requiring
+  /// `xsan_inited = true, xsan_init_is_running = false`
+  // if (flags()->atexit)
+  //   Atexit(asan_atexit);
 
 //   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
@@ -349,6 +352,10 @@ void AsanInitFromXsan() {
 
 void AsanInitFromXsanLate() {
   __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
+
+  if (flags()->atexit)
+    Atexit(asan_atexit);
+
   if (CAN_SANITIZE_LEAKS) {
     __lsan::InitCommonLsan();
     /// Use interceptor atexit, requiring xsan_init_running = false
