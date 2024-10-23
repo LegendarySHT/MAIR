@@ -677,7 +677,6 @@ struct Allocator {
     }
 
     RunFreeHooks(ptr);
-    __xsan::XsanFreeHook(p, true);
 
     // Must mark the chunk as quarantined before any changes to its metadata.
     // Do not quarantine given chunk if we failed to set CHUNK_QUARANTINE flag.
@@ -698,7 +697,7 @@ struct Allocator {
         ReportNewDeleteTypeMismatch(p, delete_size, delete_alignment, stack);
       }
     }
-
+    __xsan::XsanFreeHook(p, true);
     QuarantineChunk(m, ptr, stack);
     __xsan::XsanAllocFreeTailHook();
   }
