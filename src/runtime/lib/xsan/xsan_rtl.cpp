@@ -79,10 +79,10 @@ void CheckAndProtect() {
   /// TODO: migrate GAP caculation in xsn_platform.h
   ProtectRange(LoAppMemEnd(), AsanLowShadowBeg());
   /// Protected in asan::InitializeShadowMemory  
-  ProtectRange(AsanLowShadowEnd(), AsanHighShadowBeg());
-
+  // ProtectRange(AsanLowShadowEnd(), AsanHighShadowBeg());
   ProtectRange(AsanHighShadowEnd(), TsanShadowBeg());
   if (MidAppMemBeg()) {
+    //Printf("Protecting range: start = 0x%lx, end = 0x%lx\n", TsanMetaShadowEnd(), MidAppMemBeg());
     ProtectRange(TsanMetaShadowEnd(), MidAppMemBeg());
     ProtectRange(MidAppMemEnd(), HeapMemBeg());
   } else {
@@ -141,11 +141,12 @@ static void XsanInitInternal() {
 
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
+  CheckAndProtect();
   __asan::AsanInitFromXsan();
 
   __tsan::TsanInitFromXsan();
 
-  CheckAndProtect();
+ 
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
