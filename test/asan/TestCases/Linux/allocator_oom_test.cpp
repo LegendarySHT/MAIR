@@ -8,7 +8,7 @@
 // limits (shadow memory size, allocation limits etc.)
 
 // RUN: %clangxx_asan -O0 %s -o %t
-// RUN: ulimit -v 22024290304
+
 // RUN: not %run %t malloc 2>&1 \
 // RUN:   | FileCheck %s --check-prefixes=CHECK-MALLOC,CHECK-CRASH
 // RUN: %env_asan_opts=allocator_may_return_null=0 not %run %t malloc 2>&1 \
