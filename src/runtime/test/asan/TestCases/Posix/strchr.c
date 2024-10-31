@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
   if (mprotect(p + 1, 1, PROT_NONE))
     return 1;
   char *r = strchr(s, 'x');
-  // CHECK: AddressSanitizer: {{SEGV|BUS}} on unknown address
+  // CHECK: {{AddressSanitizer|XSan}: {{SEGV|BUS}} on unknown address
   assert(r == p);
 
   return 0;

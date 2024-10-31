@@ -26,8 +26,8 @@ void random_delay(unsigned *seed) {
 volatile char bad[2] = {1, };
 
 void error() {
-  // CHECK-COLLISION: AddressSanitizer: nested bug in the same thread, aborting
-  // CHECK-NO-COLLISION: AddressSanitizer: use-after-poison
+  // CHECK-COLLISION: {{AddressSanitizer|XSan}}: nested bug in the same thread, aborting
+  // CHECK-NO-COLLISION: {{AddressSanitizer|XSan}}: use-after-poison
   volatile int idx = 0;
   bad[idx] = 0;
 }

@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
   else
     Write((int *)p);
 }
-// READ: AddressSanitizer: SEGV on unknown address
+// READ: {{AddressSanitizer|XSan}}: SEGV on unknown address
 // READ: The signal is caused by a READ memory access.
-// WRITE: AddressSanitizer: SEGV on unknown address
+// WRITE: {{AddressSanitizer|XSan}}: SEGV on unknown address
 // WRITE: The signal is caused by a WRITE memory access.
