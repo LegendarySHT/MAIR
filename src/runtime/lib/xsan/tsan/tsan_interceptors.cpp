@@ -697,8 +697,9 @@ static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
 }
 
 TSAN_INTERCEPTOR(int, munmap, void *addr, long_t sz) {
-  SCOPED_TSAN_INTERCEPTOR(munmap, addr, sz);
-  UnmapShadow(thr, (uptr)addr, sz);
+  /// FIXME: this interceptor crashes asan_and_llvm_coverage_test.cpp
+  // SCOPED_TSAN_INTERCEPTOR(munmap, addr, sz);
+  // UnmapShadow(thr, (uptr)addr, sz);
   int res = REAL(munmap)(addr, sz);
   return res;
 }
@@ -2620,7 +2621,7 @@ void InitializeInterceptors() {
 //   TSAN_INTERCEPT(reallocarray);
 //   TSAN_INTERCEPT(free);
 //   TSAN_INTERCEPT(cfree);
-//   TSAN_INTERCEPT(munmap);
+  TSAN_INTERCEPT(munmap);
 //   TSAN_MAYBE_INTERCEPT_MEMALIGN;
 //   TSAN_INTERCEPT(valloc);
 //   TSAN_MAYBE_INTERCEPT_PVALLOC;
