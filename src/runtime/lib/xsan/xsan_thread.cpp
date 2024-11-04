@@ -11,6 +11,7 @@
 #include "asan/orig/asan_internal.h"
 #include "lsan/lsan_common.h"
 #include "tsan/tsan_rtl_extra.h"
+#include "tsan_rtl.h"
 #include "xsan_allocator.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
@@ -35,18 +36,19 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
       /* start_routine */ start_routine, /* arg */ arg,
       /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);
 
-  auto *tsan_thread = __tsan::cur_thread_init();
   if (thread->is_main_thread_) {
     // Main thread.
+    auto *tsan_thread = __tsan::cur_thread_init();
     __tsan::Processor *proc = __tsan::ProcCreate();
     __tsan::ProcWire(proc, tsan_thread);
     thread->tsan_tid_ = __tsan::ThreadCreate(nullptr, 0, 0, true);
+    thread->tsan_thread_ = tsan_thread;
   } else {
     // Other thread create for TSan is called in CreateTsanThread.
   }
 
   thread->asan_thread_ = asan_thread;
-  thread->tsan_thread_ = tsan_thread;
+
   return thread;
 }
 
@@ -105,11 +107,10 @@ void XsanThread::Destroy() {
   //   UnsetAlternateSignalStack();
 
   uptr size = RoundUpTo(sizeof(XsanThread), GetPageSizeCached());
-  this->asan_thread_->Destroy();
-
-  UnmapOrDie(this, size);
-
+  this->tsan_thread_->DestroyThreadState();
   // Common resource, must be managed by the XSan
+  this->asan_thread_->Destroy();
+  UnmapOrDie(this, size);
   DTLS_Destroy();
 }
 
@@ -119,8 +120,8 @@ void XsanThread::Destroy() {
 
 Tid XsanThread::PostCreateTsanThread(uptr pc, uptr uid) {
   /// TODO: merge ASan's ThreadContext and TSan's ThreadContext.
-  Tid tsan_tid =
-      __tsan::ThreadCreate(tsan_thread_, pc, uid, IsStateDetached(detached_));
+  Tid tsan_tid = __tsan::ThreadCreate(__tsan::cur_thread_init(), pc, uid,
+                                      IsStateDetached(detached_));
   CHECK_NE(tsan_tid, kMainTid);
   tsan_tid_ = tsan_tid;
 
@@ -147,15 +148,15 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
   } else {
     // Thread-local state is not initialized yet.
     __tsan::ScopedIgnoreInterceptors ignore;
-#  if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
-    __tsan::ThreadIgnoreBegin(thr, 0);
-    if (pthread_setspecific(__tsan::interceptor_ctx()->finalize_key,
-                            (void *)GetPthreadDestructorIterations())) {
-      Printf("ThreadSanitizer: failed to set thread key\n");
-      Die();
-    }
-    __tsan::ThreadIgnoreEnd(thr);
-#  endif
+    //  #  if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
+    //      __tsan::ThreadIgnoreBegin(thr, 0);
+    //     if (pthread_setspecific(__tsan::interceptor_ctx()->finalize_key,
+    //                             (void *)GetPthreadDestructorIterations())) {
+    //       Printf("ThreadSanitizer: failed to set thread key\n");
+    //       Die();
+    //     }
+    //     __tsan::ThreadIgnoreEnd(thr);
+    // #  endif
     created_.Wait();
     __tsan::Processor *proc = __tsan::ProcCreate();
     __tsan::ProcWire(proc, thr);
@@ -165,11 +166,17 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
 }
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id) {
+  auto *thr = __tsan::cur_thread_init();
+  tsan_thread_ = thr;
+
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular,
   // nullptr);
-  BeforeAsanThreadStart(os_id);
+
+  /// TODO: should TSan care these heap blocks allocated by ASan?
+  /// TODO: unify ASan's and TSan's thread context as XSan's thread context.
   BeforeTsanThreadStart(os_id);
+  BeforeAsanThreadStart(os_id);
 
   Init();
 
