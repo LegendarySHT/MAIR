@@ -113,6 +113,8 @@ static void XsanInitInternal() {
   xsan_init_is_running = true;
 
   __tsan::TsanInitFromXsanEarly();
+  /// TODO: move this to XSan (note that place this after cur_thread_init())
+  __tsan::ScopedIgnoreInterceptors ignore;
 
   // Install tool-specific callbacks in sanitizer_common.
   // Combine ASan's and TSan's logic

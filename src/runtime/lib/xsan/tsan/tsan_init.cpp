@@ -114,6 +114,7 @@ static void StopBackgroundThread() {
 
 void TsanInitFromXsanEarly() {
   ctx = new (ctx_placeholder) Context;
+  ThreadState *thr = cur_thread_init();
 }
 
 void TsanInitFromXsan() {
