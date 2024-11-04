@@ -317,12 +317,14 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
 #  endif
 
 INTERCEPTOR(void, longjmp, void *env, int val) {
+  __tsan::handle_longjmp(env, "longjmp", GET_CALLER_PC());
   __xsan_handle_no_return();
   REAL(longjmp)(env, val);
 }
 
 #  if XSAN_INTERCEPT__LONGJMP
 INTERCEPTOR(void, _longjmp, void *env, int val) {
+  __tsan::handle_longjmp(env, "_longjmp", GET_CALLER_PC());
   __xsan_handle_no_return();
   REAL(_longjmp)(env, val);
 }
@@ -330,6 +332,7 @@ INTERCEPTOR(void, _longjmp, void *env, int val) {
 
 #  if XSAN_INTERCEPT___LONGJMP_CHK
 INTERCEPTOR(void, __longjmp_chk, void *env, int val) {
+  __tsan::handle_longjmp(env, "__longjmp_chk", GET_CALLER_PC());
   __xsan_handle_no_return();
   REAL(__longjmp_chk)(env, val);
 }
@@ -337,6 +340,7 @@ INTERCEPTOR(void, __longjmp_chk, void *env, int val) {
 
 #  if XSAN_INTERCEPT_SIGLONGJMP
 INTERCEPTOR(void, siglongjmp, void *env, int val) {
+  __tsan::handle_longjmp(env, "siglongjmp", GET_CALLER_PC());
   __xsan_handle_no_return();
   REAL(siglongjmp)(env, val);
 }
