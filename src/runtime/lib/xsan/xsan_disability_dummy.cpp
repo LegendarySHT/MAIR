@@ -18,5 +18,5 @@ void ReplaceSystemMalloc() {}
 
 namespace __tsan {
 /* In tsan_interceptors_posix.cpp */
-void InitializeInterceptors() {}
+// void InitializeInterceptors() {}
 }  // namespace __tsan

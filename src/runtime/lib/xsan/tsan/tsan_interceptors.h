@@ -40,6 +40,8 @@ inline bool MustIgnoreInterceptor(ThreadState *thr) {
   return !thr->is_inited || thr->ignore_interceptors || thr->in_ignored_lib;
 }
 
+void handle_longjmp(void *env, const char *fname, uptr caller_pc);
+
 }  // namespace __tsan
 
 #define SCOPED_INTERCEPTOR_RAW(func, ...)            \
