@@ -125,15 +125,6 @@ Tid XsanThread::PostCreateTsanThread(uptr pc, uptr uid) {
   CHECK_NE(tsan_tid, kMainTid);
   tsan_tid_ = tsan_tid;
 
-  // Synchronization on p.tid serves two purposes:
-  // 1. ThreadCreate must finish before the new thread starts.
-  //    Otherwise the new thread can call pthread_detach, but the pthread_t
-  //    identifier is not yet registered in ThreadRegistry by ThreadCreate.
-  // 2. ThreadStart must finish before this thread continues.
-  //    Otherwise, this thread can call pthread_detach and reset thr->sync
-  //    before the new thread got a chance to acquire from it in ThreadStart.
-  created_.Post();
-  started_.Wait();
   return tsan_tid;
 }
 
@@ -147,7 +138,6 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
     __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
   } else {
     // Thread-local state is not initialized yet.
-    __tsan::ScopedIgnoreInterceptors ignore;
     //  #  if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
     //      __tsan::ThreadIgnoreBegin(thr, 0);
     //     if (pthread_setspecific(__tsan::interceptor_ctx()->finalize_key,
@@ -157,15 +147,13 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
     //     }
     //     __tsan::ThreadIgnoreEnd(thr);
     // #  endif
-    created_.Wait();
     __tsan::Processor *proc = __tsan::ProcCreate();
     __tsan::ProcWire(proc, thr);
     __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
-    started_.Post();
   }
 }
 
-thread_return_t XsanThread::ThreadStart(tid_t os_id) {
+thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semaphore *started) {
   auto *thr = __tsan::cur_thread_init();
   tsan_thread_ = thr;
 
@@ -175,34 +163,42 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id) {
 
   /// TODO: should TSan care these heap blocks allocated by ASan?
   /// TODO: unify ASan's and TSan's thread context as XSan's thread context.
-  BeforeTsanThreadStart(os_id);
-  BeforeAsanThreadStart(os_id);
+  {
+    __tsan::ScopedIgnoreInterceptors ignore;
+    if (created) created->Wait();
 
-  Init();
+    BeforeTsanThreadStart(os_id);
+    BeforeAsanThreadStart(os_id);
 
-  /// Now only ASan uses this, so let's consider it as ASan's exclusive
-  /// resource.
-  // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
+    Init();
+    if (started) started->Post();
 
-  if (!start_routine_) {
-    // start_routine_ == 0 if we're on the main thread or on one of the
-    // OS X libdispatch worker threads. But nobody is supposed to call
-    // ThreadStart() for the worker threads.
-    CHECK_EQ(tid(), 0);
-    return 0;
+    /// Now only ASan uses this, so let's consider it as ASan's exclusive
+    /// resource.
+    // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
+
+    if (!start_routine_) {
+      // start_routine_ == 0 if we're on the main thread or on one of the
+      // OS X libdispatch worker threads. But nobody is supposed to call
+      // ThreadStart() for the worker threads.
+      CHECK_EQ(tid(), 0);
+      return 0;
+    }
   }
 
   thread_return_t res = start_routine_(arg_);
 
-  asan_thread_->AfterThreadStart();
-
-  // On POSIX systems we defer this to the TSD destructor. LSan will consider
-  // the thread's memory as non-live from the moment we call Destroy(), even
-  // though that memory might contain pointers to heap objects which will be
-  // cleaned up by a user-defined TSD destructor. Thus, calling Destroy() before
-  // the TSD destructors have run might cause false positives in LSan.
-  if (!SANITIZER_POSIX)
-    this->Destroy();
+  {
+    __tsan::ScopedIgnoreInterceptors ignore;
+    asan_thread_->AfterThreadStart();
+    // On POSIX systems we defer this to the TSD destructor. LSan will consider
+    // the thread's memory as non-live from the moment we call Destroy(), even
+    // though that memory might contain pointers to heap objects which will be
+    // cleaned up by a user-defined TSD destructor. Thus, calling Destroy() before
+    // the TSD destructors have run might cause false positives in LSan.
+    if (!SANITIZER_POSIX)
+      this->Destroy();
+  }
 
   return res;
 }

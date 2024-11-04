@@ -35,7 +35,9 @@ class XsanThread {
   Tid PostCreateTsanThread(uptr pc, uptr uid);
   void BeforeAsanThreadStart(tid_t os_id);
   void BeforeTsanThreadStart(tid_t os_id);
-  thread_return_t ThreadStart(tid_t os_id);
+  /// Semaphore: comes from TSan, controlling the thread create event.
+  thread_return_t ThreadStart(tid_t os_id, Semaphore *created = nullptr,
+                              Semaphore *started = nullptr);
 
   uptr stack_top();
   uptr stack_bottom();
@@ -117,10 +119,6 @@ class XsanThread {
   /// Records the current stack trace.
   /// ASan uses this to track the stack trace.
   BufferedStackTrace *stack;
-
-  /// Comes from TSan, controlling the thread create event.
-  Semaphore created_;
-  Semaphore started_;
 };
 
 // Get the current thread. May return 0.

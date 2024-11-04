@@ -189,10 +189,18 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
 
 #  if XSAN_INTERCEPT_PTHREAD_CREATE
+
+struct ThreadParam {
+  XsanThread *t;
+  Semaphore created;
+  Semaphore started;
+};
+
 static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
-  XsanThread *t = (XsanThread *)arg;
+  ThreadParam *p = (ThreadParam *)arg;
+  auto& [t, created, started] = *p;
   SetCurrentThread(t);
-  return t->ThreadStart(GetTid());
+  return t->ThreadStart(GetTid(), &created, &started);
 }
 
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
@@ -211,8 +219,14 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     REAL(pthread_attr_getdetachstate)(attr, &detached);
 
   u32 current_tid = GetCurrentTidOrInvalid();
-  XsanThread *t =
+
+  /// Note that sub_thread's recycle is delegated to sub thread.
+  /// Hence, we could not use it after pthread_create in the parent thread.
+  XsanThread *sub_thread =
       XsanThread::Create(start_routine, arg, current_tid, &stack, detached);
+
+  ThreadParam p;
+  p.t = sub_thread;
 
   int result;
   {
@@ -223,16 +237,26 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 #    if CAN_SANITIZE_LEAKS
     __lsan::ScopedInterceptorDisabler disabler;
 #    endif
-    result = REAL(pthread_create)(thread, attr, xsan_thread_start, t);
+    result = REAL(pthread_create)(thread, attr, xsan_thread_start, &p);
   }
 
   if (result == 0) {
-    t->PostCreateTsanThread(pc, *(uptr *)thread);
+    // sub_thread must live, as sub_thread waits for `created_.Post()`
+    sub_thread->PostCreateTsanThread(pc, *(uptr *)thread);
+    // Synchronization on p.tid serves two purposes:
+    // 1. ThreadCreate must finish before the new thread starts.
+    //    Otherwise the new thread can call pthread_detach, but the pthread_t
+    //    identifier is not yet registered in ThreadRegistry by ThreadCreate.
+    // 2. ThreadStart must finish before this thread continues.
+    //    Otherwise, this thread can call pthread_detach and reset thr->sync
+    //    before the new thread got a chance to acquire from it in ThreadStart.
+    p.created.Post();
+    p.started.Wait();
   } else {
     // If the thread didn't start delete the AsanThread to avoid leaking it.
     // Note AsanThreadContexts never get destroyed so the AsanThreadContext
     // that was just created for the AsanThread is wasted.
-    t->Destroy();
+    sub_thread->Destroy();
   }
   return result;
 }
