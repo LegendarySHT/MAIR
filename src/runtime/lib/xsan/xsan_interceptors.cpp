@@ -748,6 +748,8 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(vfork);
 #  endif
 
+  __tsan::InitializeInterceptors();
+
   InitializePlatformInterceptors();
 
   VReport(1, "AddressSanitizer: libc interceptors initialized\n");
