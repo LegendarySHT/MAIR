@@ -886,7 +886,18 @@ extern "C" void *__tsan_thread_start_func(void *arg) {
 DECLARE_REAL(int, pthread_create,
     void *th, void *attr, void *(*callback)(void*), void * param)
 
-DECLARE_REAL(int, pthread_join, void *th, void **ret)
+TSAN_INTERCEPTOR(int, pthread_join, void *th, void **ret) {
+  SCOPED_INTERCEPTOR_RAW(pthread_join, th, ret);
+  Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
+  ThreadIgnoreBegin(thr, pc);
+  int res = BLOCK_REAL(pthread_join)(th, ret);
+  ThreadIgnoreEnd(thr);
+  if (res == 0) {
+    ThreadJoin(thr, pc, tid);
+  }
+  return res;
+}
+
 
 DEFINE_REAL_PTHREAD_FUNCTIONS
 
@@ -2602,7 +2613,7 @@ void InitializeInterceptors() {
 //   TSAN_INTERCEPT(strdup);
 
 //   TSAN_INTERCEPT(pthread_create);
-//   TSAN_INTERCEPT(pthread_join);
+  TSAN_INTERCEPT(pthread_join);
   TSAN_INTERCEPT(pthread_detach);
   TSAN_INTERCEPT(pthread_exit);
   #if SANITIZER_LINUX

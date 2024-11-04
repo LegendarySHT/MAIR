@@ -237,11 +237,12 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   return result;
 }
 
-INTERCEPTOR(int, pthread_join, void *t, void **arg) {
-  return real_pthread_join(t, arg);
-}
+/// TODO: If not compose TSan, intercept join here
+// INTERCEPTOR(int, pthread_join, void *t, void **arg) {
+//   return real_pthread_join(t, arg);
+// }
 
-DEFINE_REAL_PTHREAD_FUNCTIONS
+// DEFINE_REAL_PTHREAD_FUNCTIONS
 #  endif  // XSAN_INTERCEPT_PTHREAD_CREATE
 
 #  if XSAN_INTERCEPT_SWAPCONTEXT
@@ -726,7 +727,8 @@ void InitializeXsanInterceptors() {
 #    else
   XSAN_INTERCEPT_FUNC(pthread_create);
 #    endif
-  XSAN_INTERCEPT_FUNC(pthread_join);
+  /// TODO: If not compose TSan, intercept join here
+  // XSAN_INTERCEPT_FUNC(pthread_join);
 #  endif
 
   // Intercept atexit function.
