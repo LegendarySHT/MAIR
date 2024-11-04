@@ -235,6 +235,7 @@ struct ThreadState {
   const ReportDesc *current_report;
 
   explicit ThreadState(Tid tid);
+  void DestroyThreadState();
 } ALIGNED(SANITIZER_CACHE_LINE_SIZE);
 
 #if !SANITIZER_GO

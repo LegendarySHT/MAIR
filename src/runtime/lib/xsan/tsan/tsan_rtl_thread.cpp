@@ -211,6 +211,15 @@ void ThreadContext::OnStarted(void *arg) {
 #endif
 }
 
+void ThreadState::DestroyThreadState() {
+  ThreadState *thr = this;
+  Processor *proc = thr->proc();
+  ThreadFinish(thr);
+  ProcUnwire(proc, thr);
+  ProcDestroy(proc);
+  cur_thread_finalize();
+}
+
 void ThreadFinish(ThreadState *thr) {
   DPrintf("#%d: ThreadFinish\n", thr->tid);
   ThreadCheckIgnore(thr);
