@@ -132,7 +132,6 @@ set(XSAN_TSAN_SOURCES
   tsan/tsan_interceptors.cpp
   tsan/tsan_mman.cpp
   tsan/tsan_rtl_thread.cpp
-  # tsan/tsan_rtl_extra.cpp
   tsan/tsan_stack_trace.cpp
   ${TSAN_SOURCES}
   ${TSAN_ASM_SOURCES}
@@ -249,7 +248,6 @@ set(XSAN_TSAN_HEADERS
   tsan/tsan_interface.inc
   tsan/tsan_platform.h
   tsan/tsan_rtl.h
-  # tsan/tsan_rtl_extra.h
   ${TSAN_HEADERS}
 )
 

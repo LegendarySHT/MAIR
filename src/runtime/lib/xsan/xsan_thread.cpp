@@ -10,7 +10,6 @@
 #include "asan/asan_thread.h"
 #include "asan/orig/asan_internal.h"
 #include "lsan/lsan_common.h"
-#include "tsan/tsan_rtl_extra.h"
 #include "tsan_rtl.h"
 #include "xsan_allocator.h"
 #include "xsan_interceptors.h"
