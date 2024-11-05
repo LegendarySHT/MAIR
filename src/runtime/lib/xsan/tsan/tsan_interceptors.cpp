@@ -631,6 +631,8 @@ namespace __tsan {
 
 void handle_longjmp(void *env, const char *fname, uptr caller_pc) {
   {
+    /// Set ignore flag to avoid CheckNoLocks in ~ScopedInterceptor
+    __tsan::ScopedIgnoreInterceptors sii;
     __tsan::ThreadState *thr = __tsan::cur_thread_init();
     __tsan::ScopedInterceptor si(thr, fname, caller_pc);
   }
