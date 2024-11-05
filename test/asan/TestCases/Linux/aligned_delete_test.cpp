@@ -62,28 +62,28 @@ int main(int argc, char **argv) {
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
-  // CHECK:  alignment of the deallocated type: default-aligned.
+  // CHECK:  alignment of the deallocated type: {{default-aligned|16 bytes}}.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   operator delete(break_optimization(new S12_128), sizeof(S12_128));
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
-  // CHECK:  alignment of the deallocated type: default-aligned.
+  // CHECK:  alignment of the deallocated type: {{default-aligned|16 bytes}}.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   operator delete[](break_optimization(new S12_128[100]), std::nothrow);
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
-  // CHECK:  alignment of the deallocated type: default-aligned.
+  // CHECK:  alignment of the deallocated type: {{default-aligned|16 bytes}}.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   operator delete[](break_optimization(new S12_128[100]), sizeof(S12_128[100]));
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   128 bytes;
-  // CHECK:  alignment of the deallocated type: default-aligned.
+  // CHECK:  alignment of the deallocated type: {{default-aligned|16 bytes}}.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   // Various mismatched alignments.
@@ -92,13 +92,13 @@ int main(int argc, char **argv) {
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   256 bytes;
-  // CHECK:  alignment of the deallocated type: default-aligned.
+  // CHECK:  alignment of the deallocated type: {{default-aligned|16 bytes}}.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete break_optimization(reinterpret_cast<S12_256*>(new S12));
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
-  // CHECK:  alignment of the allocated type:   default-aligned;
+  // CHECK:  alignment of the allocated type:   {{default-aligned|16 bytes}};
   // CHECK:  alignment of the deallocated type: 256 bytes.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
@@ -113,13 +113,13 @@ int main(int argc, char **argv) {
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
   // CHECK:  alignment of the allocated type:   256 bytes;
-  // CHECK:  alignment of the deallocated type: default-aligned.
+  // CHECK:  alignment of the deallocated type: {{default-aligned|16 bytes}}.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
   delete [] break_optimization(reinterpret_cast<S12_256*>(new S12[100]));
   // CHECK: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
   // CHECK:  object passed to delete has wrong type:
-  // CHECK:  alignment of the allocated type:   default-aligned;
+  // CHECK:  alignment of the allocated type:   {{default-aligned|16 bytes}};
   // CHECK:  alignment of the deallocated type: 256 bytes.
   // CHECK: SUMMARY: {{AddressSanitizer|XSan}}: new-delete-type-mismatch
 
