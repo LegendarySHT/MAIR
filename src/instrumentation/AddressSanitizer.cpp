@@ -1989,6 +1989,7 @@ Instruction *ModuleAddressSanitizer::CreateAsanModuleDtor(Module &M) {
       FunctionType::get(Type::getVoidTy(*C), false),
       GlobalValue::InternalLinkage, 0, kAsanModuleDtorName, &M);
   AsanDtorFunction->addFnAttr(Attribute::NoUnwind);
+  AsanDtorFunction->addFnAttr(Attribute::NoSanitizeCoverage);
   // Ensure Dtor cannot be discarded, even if in a comdat.
   appendToUsed(M, {AsanDtorFunction});
   BasicBlock *AsanDtorBB = BasicBlock::Create(*C, "", AsanDtorFunction);
@@ -2441,6 +2442,7 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
                                             kAsanInitName, /*InitArgTypes=*/{},
                                             /*InitArgs=*/{}, VersionCheckName);
   }
+  AsanCtorFunction->addFnAttr(Attribute::NoSanitizeCoverage);
 
   bool CtorComdat = true;
   if (ClGlobals) {

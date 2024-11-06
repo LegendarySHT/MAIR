@@ -179,7 +179,10 @@ void insertModuleCtor(Module &M) {
       /*InitArgs=*/{},
       // This callback is invoked when the functions are created the first
       // time. Hook them into the global ctors list in that case:
-      [&](Function *Ctor, FunctionCallee) { appendToGlobalCtors(M, Ctor, 0); });
+      [&](Function *Ctor, FunctionCallee) {
+        Ctor->addFnAttr(Attribute::NoSanitizeCoverage);
+        appendToGlobalCtors(M, Ctor, 0);
+      });
 }
 }  // namespace
 
