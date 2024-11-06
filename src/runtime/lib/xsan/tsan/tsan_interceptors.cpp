@@ -401,27 +401,21 @@ static void cxa_at_exit_callback_installed_at(void *arg) {
 
 static int setup_at_exit_wrapper(ThreadState *thr, uptr pc, void(*f)(),
       void *arg, void *dso);
-
-/// FIXME: this interceptor make test coverage.cpp fails.
-///   TSan's atexit handling delays the hook invokements.
-/// Bug1: inappropriate SanCov's instrumentation on asan.module_dtor.
-/// Bug2: inappropriate atext hook invokement timing
+      
+/// FIXME: this interceptor changes the exit hook invokement timing. Figure out
+/// is it OKay?
 ///   - Without TSan, Atexit hooks are called before asan.module_dtor
 ///   - With this interceptor, Atexit hooks are called after asan.module_dtor
-/// The TWO bugs causes 
-///   1. __sanitizer_cov_dump is called after asan.module_dtor, 
-///   2. and asan.module_dtor influences the SanCov PC trace abnormally, 
-/// Accordingly, the report dumped by SanCov is abnormal.
-// #if !SANITIZER_ANDROID
-// TSAN_INTERCEPTOR(int, atexit, void (*f)()) {
-//   if (in_symbolizer())
-//     return 0;
-//   // We want to setup the atexit callback even if we are in ignored lib
-//   // or after fork.
-//   SCOPED_INTERCEPTOR_RAW(atexit, f);
-//   return setup_at_exit_wrapper(thr, GET_CALLER_PC(), (void (*)())f, 0, 0);
-// }
-// #endif
+#if !SANITIZER_ANDROID
+TSAN_INTERCEPTOR(int, atexit, void (*f)()) {
+  if (in_symbolizer())
+    return 0;
+  // We want to setup the atexit callback even if we are in ignored lib
+  // or after fork.
+  SCOPED_INTERCEPTOR_RAW(atexit, f);
+  return setup_at_exit_wrapper(thr, GET_CALLER_PC(), (void (*)())f, 0, 0);
+}
+#endif
 
 DECLARE_REAL(int, __cxa_atexit, void (*f)(void *a), void *arg, void *dso)
 
@@ -2760,11 +2754,11 @@ void InitializeInterceptors() {
   TSAN_MAYBE_INTERCEPT__LWP_EXIT;
   TSAN_MAYBE_INTERCEPT_THR_EXIT;
 
-// #if !SANITIZER_APPLE && !SANITIZER_ANDROID
-//   // Need to setup it, because interceptors check that the function is resolved.
-//   // But atexit is emitted directly into the module, so can't be resolved.
-//   REAL(atexit) = (int(*)(void(*)()))unreachable;
-// #endif
+#if !SANITIZER_APPLE && !SANITIZER_ANDROID
+  // Need to setup it, because interceptors check that the function is resolved.
+  // But atexit is emitted directly into the module, so can't be resolved.
+  REAL(atexit) = (int(*)(void(*)()))unreachable;
+#endif
 
   /// FIXME: bug in clone_test.cpp
   /// Multiple Die() cause Asan_Die dead loop
