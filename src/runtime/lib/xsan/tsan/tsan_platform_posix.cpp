@@ -45,6 +45,7 @@ static void DontDumpShadow(uptr addr, uptr size) {
 
 void InitializeShadowMemory() {
   // Map memory shadow.
+  DecreaseTotalMmap(ShadowEnd() - ShadowBeg());// Don't count the shadow against mmap_limit_mb.
   if (!MmapFixedSuperNoReserve(ShadowBeg(), ShadowEnd() - ShadowBeg(),
                                "shadow")) {
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
@@ -62,6 +63,7 @@ void InitializeShadowMemory() {
   // Map meta shadow.
   const uptr meta = MetaShadowBeg();
   const uptr meta_size = MetaShadowEnd() - meta;
+  DecreaseTotalMmap(meta_size);// Don't count the shadow against mmap_limit_mb.
   if (!MmapFixedSuperNoReserve(meta, meta_size, "meta shadow")) {
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
     Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
