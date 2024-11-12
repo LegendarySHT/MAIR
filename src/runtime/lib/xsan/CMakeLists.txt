@@ -21,7 +21,7 @@ set(ASAN_SOURCES
   asan/orig/asan_poisoning.cpp
   asan/orig/asan_posix.cpp
   asan/orig/asan_premap_shadow.cpp
-  asan/orig/asan_report.cpp
+  #asan/orig/asan_report.cpp
   asan/orig/asan_rtl.cpp
   asan/orig/asan_shadow_setup.cpp
   asan/orig/asan_stack.cpp
@@ -35,6 +35,7 @@ set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
   asan/asan_flags.cpp
   asan/asan_thread.cpp
+  asan/asan_report.cpp
   asan/asan_init.cpp
   ${ASAN_SOURCES}
 )
