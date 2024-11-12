@@ -10,7 +10,7 @@
 //
 // This file contains error reporting code.
 //===----------------------------------------------------------------------===//
-#include "../tsan/tsan_rtl.h"
+#include "../xsan_interceptors.h"
 #include "asan_report.h"
 
 #include "asan_descriptions.h"
@@ -135,17 +135,10 @@ class ScopedInErrorReport {
   }
 
   ~ScopedInErrorReport() {
-      // There is high probability that interceptors will check-fail as well,
-  // on the other hand there is no sense in processing interceptors
-  // since we are going to die soon.
-  __tsan::ScopedIgnoreInterceptors ignore;
-  #if !SANITIZER_GO
-    __tsan::ThreadState *thr = __tsan::cur_thread_init();
-    thr->nomalloc = false;
-    thr->ignore_sync++;
-    thr->ignore_reads_and_writes++;
-    atomic_store_relaxed(&thr->in_signal_handler, 0);
-  #endif 
+    // There is high probability that interceptors will check-fail as well,
+    // on the other hand there is no sense in processing interceptors
+    // since we are going to die soon.
+    __xsan::ScopedIgnoreInterceptors ignore(true);
     if (halt_on_error_ && !__sanitizer_acquire_crash_state()) {
       asanThreadRegistry().Unlock();
       return;
@@ -228,14 +221,8 @@ void ReportDeadlySignal(const SignalContext &sig) {
   // There is high probability that interceptors will check-fail as well,
   // on the other hand there is no sense in processing interceptors
   // since we are going to die soon.
-  __tsan::ScopedIgnoreInterceptors ignore;
-#if !SANITIZER_GO
-  __tsan::ThreadState *thr = __tsan::cur_thread_init();
-  thr->nomalloc = false;
-  thr->ignore_sync++;
-  thr->ignore_reads_and_writes++;
-  atomic_store_relaxed(&thr->in_signal_handler, 0);
-#endif
+  __xsan::ScopedIgnoreInterceptors ignore(true);
+
   ScopedInErrorReport in_report(/*fatal*/ true);
   ErrorDeadlySignal error(GetCurrentTidOrInvalid(), sig);
   in_report.ReportError(error);
@@ -484,7 +471,6 @@ static bool SuppressErrorReport(uptr pc) {
 
 void ReportGenericError(uptr pc, uptr bp, uptr sp, uptr addr, bool is_write,
                         uptr access_size, u32 exp, bool fatal) {
-  //__tsan::ScopedIgnoreInterceptors ignore;                          
   if (__asan_test_only_reported_buggy_pointer) {
     *__asan_test_only_reported_buggy_pointer = addr;
     return;

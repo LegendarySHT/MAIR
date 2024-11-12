@@ -163,7 +163,7 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
   /// TODO: should TSan care these heap blocks allocated by ASan?
   /// TODO: unify ASan's and TSan's thread context as XSan's thread context.
   {
-    __tsan::ScopedIgnoreInterceptors ignore;
+    __xsan::ScopedIgnoreInterceptors ignore;
     if (created) created->Wait();
 
     BeforeTsanThreadStart(os_id);
@@ -188,7 +188,7 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
   thread_return_t res = start_routine_(arg_);
 
   {
-    __tsan::ScopedIgnoreInterceptors ignore;
+    __xsan::ScopedIgnoreInterceptors ignore;
     asan_thread_->AfterThreadStart();
     // On POSIX systems we defer this to the TSD destructor. LSan will consider
     // the thread's memory as non-live from the moment we call Destroy(), even

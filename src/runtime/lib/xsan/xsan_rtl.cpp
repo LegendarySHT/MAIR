@@ -28,15 +28,7 @@ uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
 #endif
 
 static void CheckUnwind() {
-  // --------------- TSan's logic -------------------------
-  __tsan::ScopedIgnoreInterceptors ignore;
-#if !SANITIZER_GO
-  __tsan::ThreadState* thr = __tsan::cur_thread();
-  thr->nomalloc = false;
-  thr->ignore_sync++;
-  thr->ignore_reads_and_writes++;
-  atomic_store_relaxed(&thr->in_signal_handler, 0);
-#endif
+  __xsan::ScopedIgnoreInterceptors sii(true);
 
   GET_STACK_TRACE(kStackTraceMax, common_flags()->fast_unwind_on_check);
   stack.Print();
@@ -113,8 +105,8 @@ static void XsanInitInternal() {
   xsan_init_is_running = true;
 
   __tsan::TsanInitFromXsanEarly();
-  /// TODO: move this to XSan (note that place this after cur_thread_init())
-  __tsan::ScopedIgnoreInterceptors ignore;
+  /// note that place this after cur_thread_init()
+  __xsan::ScopedIgnoreInterceptors ignore;
 
   // Install tool-specific callbacks in sanitizer_common.
   // Combine ASan's and TSan's logic

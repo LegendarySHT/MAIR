@@ -5,6 +5,7 @@
 
 #include "interception/interception.h"
 #include "tsan/tsan_interceptors.h"
+#include "tsan/tsan_rtl_extra.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
 namespace __xsan {
@@ -158,6 +159,17 @@ struct TsanArgs {
   __tsan::ThreadState *thr_;
   uptr pc_;
 };
+
+class ScopedIgnoreInterceptors {
+ public:
+  ScopedIgnoreInterceptors(bool in_report = false) : sit(in_report) {}
+  ~ScopedIgnoreInterceptors() {}
+
+ private:
+  __tsan::ScopedIgnoreInterceptors tsan_sii;
+  __tsan::ScopedIgnoreTsan sit;
+};
+
 }  // namespace __xsan
 
 #define XSAN_EXTRA_ALLOC_ARG(func, ...)                       \
