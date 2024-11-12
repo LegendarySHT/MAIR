@@ -1338,29 +1338,31 @@ TSAN_INTERCEPTOR(int, pthread_barrier_wait, void *b) {
 #endif
 
 TSAN_INTERCEPTOR(int, pthread_once, void *o, void (*f)()) {
-  // SCOPED_INTERCEPTOR_RAW(pthread_once, o, f);
-  // if (o == 0 || f == 0)
-  //   return errno_EINVAL;
-  // atomic_uint32_t *a;
+  SCOPED_INTERCEPTOR_RAW(pthread_once, o, f);
+  /// TODO: figure out whether we can ignore this interceptor.
+  // SCOPED_TSAN_INTERCEPTOR(pthread_once, o, f);
+  if (o == 0 || f == 0)
+    return errno_EINVAL;
+  atomic_uint32_t *a;
 
-  // if (SANITIZER_APPLE)
-  //   a = static_cast<atomic_uint32_t*>((void *)((char *)o + sizeof(long_t)));
-  // else if (SANITIZER_NETBSD)
-  //   a = static_cast<atomic_uint32_t*>
-  //         ((void *)((char *)o + __sanitizer::pthread_mutex_t_sz));
-  // else
-  //   a = static_cast<atomic_uint32_t*>(o);
+  if (SANITIZER_APPLE)
+    a = static_cast<atomic_uint32_t*>((void *)((char *)o + sizeof(long_t)));
+  else if (SANITIZER_NETBSD)
+    a = static_cast<atomic_uint32_t*>
+          ((void *)((char *)o + __sanitizer::pthread_mutex_t_sz));
+  else
+    a = static_cast<atomic_uint32_t*>(o);
 
-  // // Mac OS X appears to use pthread_once() where calling BlockingRegion hooks
-  // // result in crashes due to too little stack space.
-  // if (guard_acquire(thr, pc, a, !SANITIZER_APPLE)) {
-  //   (*f)();
-  //   guard_release(thr, pc, a, kGuardDone);
-  // }
-  // return 0;
-  /// FIXME: This causes bug in strtok.c
-  /// XSan: internal deadlock: can't lock ThreadRegistry under ThreadRegistry mutex
-  return REAL(pthread_once)(o, f);
+  // Mac OS X appears to use pthread_once() where calling BlockingRegion hooks
+  // result in crashes due to too little stack space.
+  if (guard_acquire(thr, pc, a, !SANITIZER_APPLE)) {
+    (*f)();
+    guard_release(thr, pc, a, kGuardDone);
+  }
+  return 0;
+  // / FIXME: This causes bug in strtok.c
+  // / XSan: internal deadlock: can't lock ThreadRegistry under ThreadRegistry mutex
+    //return REAL(pthread_once)(o, f);
 }
 
 #if SANITIZER_GLIBC
@@ -2739,8 +2741,8 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(dl_iterate_phdr);
 #endif
   TSAN_MAYBE_INTERCEPT_ON_EXIT;
-//   TSAN_INTERCEPT(__cxa_atexit);
-//   TSAN_INTERCEPT(_exit);
+  //TSAN_INTERCEPT(__cxa_atexit);
+  // TSAN_INTERCEPT(_exit);
 
 #ifdef NEED_TLS_GET_ADDR
 #if !SANITIZER_S390
