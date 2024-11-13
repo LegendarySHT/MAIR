@@ -13,7 +13,6 @@
 #include "xsan_stack.h"
 #include "xsan_thread.h"
 
-
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
 // really defined to replace libc functions.
@@ -76,9 +75,11 @@ using namespace __xsan;
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
-#  define XSAN_INTERCEPTOR_ENTER(ctx, func) \
-    XsanInterceptorContext _ctx = {#func};  \
-    ctx = (void *)&_ctx;                    \
+/// TODO: use a better approach to use SCOPED_TSAN_INTERCEPTOR
+#  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)    \
+    SCOPED_TSAN_INTERCEPTOR(func, __VA_ARGS__);     \
+    XsanInterceptorContext _ctx = {#func, thr, pc}; \
+    ctx = (void *)&_ctx;                            \
     (void)ctx;
 
 #  define XSAN_BEFORE_DLOPEN(filename, flag) \
@@ -95,7 +96,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
     XSAN_READ_RANGE(ctx, ptr, size)
 #  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)   \
-    XSAN_INTERCEPTOR_ENTER(ctx, func);               \
+    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__);  \
     do {                                             \
       if (xsan_init_is_running)                      \
         return REAL(func)(__VA_ARGS__);              \
@@ -147,19 +148,19 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
 #  define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
     do {                                                       \
-      XSAN_INTERCEPTOR_ENTER(ctx, memmove);                    \
+      XSAN_INTERCEPTOR_ENTER(ctx, memmove, to, from, size);    \
       XSAN_MEMMOVE_IMPL(ctx, to, from, size);                  \
     } while (false)
 
 #  define COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, to, from, size) \
     do {                                                      \
-      XSAN_INTERCEPTOR_ENTER(ctx, memcpy);                    \
+      XSAN_INTERCEPTOR_ENTER(ctx, memcpy, to, from, size);    \
       XSAN_MEMCPY_IMPL(ctx, to, from, size);                  \
     } while (false)
 
 #  define COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, block, c, size) \
     do {                                                      \
-      XSAN_INTERCEPTOR_ENTER(ctx, memset);                    \
+      XSAN_INTERCEPTOR_ENTER(ctx, memset, block, c, size);    \
       XSAN_MEMSET_IMPL(ctx, block, c, size);                  \
     } while (false)
 
@@ -198,13 +199,14 @@ struct ThreadParam {
 
 static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   ThreadParam *p = (ThreadParam *)arg;
-  auto& [t, created, started] = *p;
+  auto &[t, created, started] = *p;
   SetCurrentThread(t);
   return t->ThreadStart(GetTid(), &created, &started);
 }
 
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
             void *(*start_routine)(void *), void *arg) {
+  /// TODO: managed by XSan
   SCOPED_INTERCEPTOR_RAW(pthread_create, thread, attr, start_routine, arg);
   EnsureMainThreadIDIsCorrect();
 
@@ -423,7 +425,7 @@ DEFINE_REAL(char *, index, const char *string, int c)
 // argument irrespective of the |from| length.
 INTERCEPTOR(char *, strcat, char *to, const char *from) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strcat);
+  XSAN_INTERCEPTOR_ENTER(ctx, strcat, to, from);
   ENSURE_XSAN_INITED();
   if (__asan::flags()->replace_str) {
     uptr from_length = internal_strlen(from);
@@ -444,7 +446,7 @@ INTERCEPTOR(char *, strcat, char *to, const char *from) {
 
 INTERCEPTOR(char *, strncat, char *to, const char *from, uptr size) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strncat);
+  XSAN_INTERCEPTOR_ENTER(ctx, strncat, to, from, size);
   ENSURE_XSAN_INITED();
   if (__asan::flags()->replace_str) {
     uptr from_length = MaybeRealStrnlen(from, size);
@@ -463,7 +465,7 @@ INTERCEPTOR(char *, strncat, char *to, const char *from, uptr size) {
 
 INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strcpy);
+  XSAN_INTERCEPTOR_ENTER(ctx, strcpy, to, from);
 #  if SANITIZER_APPLE
   if (UNLIKELY(!xsan_inited))
     return REAL(strcpy)(to, from);
@@ -485,7 +487,7 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
 
 INTERCEPTOR(char *, strdup, const char *s) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strdup);
+  XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
   if (UNLIKELY(!xsan_inited))
     return internal_strdup(s);
   ENSURE_XSAN_INITED();
@@ -503,7 +505,7 @@ INTERCEPTOR(char *, strdup, const char *s) {
 #  if XSAN_INTERCEPT___STRDUP
 INTERCEPTOR(char *, __strdup, const char *s) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strdup);
+  XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
   if (UNLIKELY(!xsan_inited))
     return internal_strdup(s);
   ENSURE_XSAN_INITED();
@@ -521,7 +523,7 @@ INTERCEPTOR(char *, __strdup, const char *s) {
 
 INTERCEPTOR(char *, strncpy, char *to, const char *from, uptr size) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strncpy);
+  XSAN_INTERCEPTOR_ENTER(ctx, strncpy, to, from, size);
   ENSURE_XSAN_INITED();
   if (__asan::flags()->replace_str) {
     uptr from_size = Min(size, MaybeRealStrnlen(from, size) + 1);
@@ -534,7 +536,7 @@ INTERCEPTOR(char *, strncpy, char *to, const char *from, uptr size) {
 
 INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strtol);
+  XSAN_INTERCEPTOR_ENTER(ctx, strtol, nptr, endptr, base);
   ENSURE_XSAN_INITED();
   if (!__asan::flags()->replace_str) {
     return REAL(strtol)(nptr, endptr, base);
@@ -547,7 +549,7 @@ INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
 
 INTERCEPTOR(int, atoi, const char *nptr) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, atoi);
+  XSAN_INTERCEPTOR_ENTER(ctx, atoi, nptr);
 #  if SANITIZER_APPLE
   if (UNLIKELY(!xsan_inited))
     return REAL(atoi)(nptr);
@@ -569,7 +571,7 @@ INTERCEPTOR(int, atoi, const char *nptr) {
 
 INTERCEPTOR(long, atol, const char *nptr) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, atol);
+  XSAN_INTERCEPTOR_ENTER(ctx, atol, nptr);
 #  if SANITIZER_APPLE
   if (UNLIKELY(!xsan_inited))
     return REAL(atol)(nptr);
@@ -588,7 +590,7 @@ INTERCEPTOR(long, atol, const char *nptr) {
 #  if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 INTERCEPTOR(long long, strtoll, const char *nptr, char **endptr, int base) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strtoll);
+  XSAN_INTERCEPTOR_ENTER(ctx, strtoll, nptr, endptr, base);
   ENSURE_XSAN_INITED();
   if (!__asan::flags()->replace_str) {
     return REAL(strtoll)(nptr, endptr, base);
@@ -601,7 +603,7 @@ INTERCEPTOR(long long, strtoll, const char *nptr, char **endptr, int base) {
 
 INTERCEPTOR(long long, atoll, const char *nptr) {
   void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, atoll);
+  XSAN_INTERCEPTOR_ENTER(ctx, atoll, nptr);
   ENSURE_XSAN_INITED();
   if (!__asan::flags()->replace_str) {
     return REAL(atoll)(nptr);
@@ -641,8 +643,6 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
   return res;
 }
 #  endif  // XSAN_INTERCEPT___CXA_ATEXIT
-
-
 
 #  if XSAN_INTERCEPT_ATEXIT
 INTERCEPTOR(int, atexit, void (*func)()) {

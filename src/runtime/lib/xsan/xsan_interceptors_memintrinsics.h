@@ -12,10 +12,17 @@
 DECLARE_REAL(void *, memcpy, void *to, const void *from, uptr size)
 DECLARE_REAL(void *, memset, void *block, int c, uptr size)
 
+namespace __tsan {
+struct ThreadState;
+}
+
 namespace __xsan {
 
 struct XsanInterceptorContext {
   const char *interceptor_name;
+
+  __tsan::ThreadState *thr;
+  const uptr pc;
 };
 
 #define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2) \
@@ -68,10 +75,19 @@ struct XsanInterceptorContext {
     }                                                                         \
   } while (0)
 
+/// TODO: mange this in a better way
+#define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                 \
+  do {                                                                       \
+    XsanInterceptorContext *_tsan_ctx = (XsanInterceptorContext *)(ctx);     \
+    __tsan::MemoryAccessRange(_tsan_ctx->thr, _tsan_ctx->pc, (uptr)(offset), \
+                              (size), (isWrite));                            \
+  } while (0)
+
 /// TODO: Implement this
 #define XSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite) \
   do {                                                       \
     ASAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite);    \
+    TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite);    \
   } while (0)
 
 // memcpy is called during __xsan_init() from the internals of printf(...).
