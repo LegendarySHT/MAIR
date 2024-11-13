@@ -76,11 +76,16 @@ struct XsanInterceptorContext {
   } while (0)
 
 /// TODO: mange this in a better way
-#define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                 \
-  do {                                                                       \
-    XsanInterceptorContext *_tsan_ctx = (XsanInterceptorContext *)(ctx);     \
-    __tsan::MemoryAccessRange(_tsan_ctx->thr, _tsan_ctx->pc, (uptr)(offset), \
-                              (size), (isWrite));                            \
+#define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                   \
+  do {                                                                         \
+    XsanInterceptorContext *_tsan_ctx = (XsanInterceptorContext *)(ctx);       \
+    if (ctx) {                                                                 \
+      __tsan::MemoryAccessRange(_tsan_ctx->thr, _tsan_ctx->pc, (uptr)(offset), \
+                                (size), (isWrite));                            \
+    } else {                                                                   \
+      __tsan::MemoryAccessRange(__tsan::cur_thread_init(), GET_CURRENT_PC(),   \
+                                (uptr)(offset), (size), (isWrite));            \
+    }                                                                          \
   } while (0)
 
 /// TODO: Implement this

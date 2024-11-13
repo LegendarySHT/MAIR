@@ -5,6 +5,9 @@
 
 using namespace __xsan;
 
+/// FIXME: is it OKay to use nullptr as ctx? Should __asan_memcpy be ignorable
+/// by ScopedIgnoreInterceptors?
+
 void *__xsan_memcpy(void *to, const void *from, uptr size) {
   XSAN_MEMCPY_IMPL(nullptr, to, from, size);
 }
