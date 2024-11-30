@@ -402,19 +402,8 @@ static void cxa_at_exit_callback_installed_at(void *arg) {
 static int setup_at_exit_wrapper(ThreadState *thr, uptr pc, void(*f)(),
       void *arg, void *dso);
       
-/// FIXME: this interceptor changes the exit hook invokement timing. Figure out
-/// is it OKay?
-///   - Without TSan, Atexit hooks are called before asan.module_dtor
-///   - With this interceptor, Atexit hooks are called after asan.module_dtor
 #if !SANITIZER_ANDROID
-TSAN_INTERCEPTOR(int, atexit, void (*f)()) {
-  if (in_symbolizer())
-    return 0;
-  // We want to setup the atexit callback even if we are in ignored lib
-  // or after fork.
-  SCOPED_INTERCEPTOR_RAW(atexit, f);
-  return setup_at_exit_wrapper(thr, GET_CALLER_PC(), (void (*)())f, 0, 0);
-}
+DECLARE_REAL(int, atexit, void (*f)())
 #endif
 
 DECLARE_REAL(int, __cxa_atexit, void (*f)(void *a), void *arg, void *dso)
@@ -2759,7 +2748,7 @@ void InitializeInterceptors() {
 #if !SANITIZER_APPLE && !SANITIZER_ANDROID
   // Need to setup it, because interceptors check that the function is resolved.
   // But atexit is emitted directly into the module, so can't be resolved.
-  REAL(atexit) = (int(*)(void(*)()))unreachable;
+  // REAL(atexit) = (int(*)(void(*)()))unreachable;
 #endif
 
   /// FIXME: bug in clone_test.cpp

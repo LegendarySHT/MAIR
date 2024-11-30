@@ -89,7 +89,7 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT___CXA_ATEXIT 0
 #  endif
 
-#  if SANITIZER_NETBSD
+#  if !SANITIZER_ANDROID
 #    define XSAN_INTERCEPT_ATEXIT 1
 #  else
 #    define XSAN_INTERCEPT_ATEXIT 0

@@ -35,6 +35,56 @@
 
 namespace __xsan {
 
+// The sole reason tsan wraps atexit callbacks is to establish synchronization
+// between callback setup and callback execution.
+using AtExitFuncTy = void (*)();
+struct AtExitCtx {
+  AtExitFuncTy f;
+  void *arg;
+  uptr pc;
+};
+
+/// This context comes from TSan's and MSan's xxx_interceptors.cpp
+// InterceptorContext holds all global data required for interceptors.
+// It's explicitly constructed in InitializeInterceptors with placement new
+// and is never destroyed. This allows usage of members with non-trivial
+// constructors and destructors.
+struct InterceptorContext {
+  /// FIXME: provide interface for TSan to register its own implementations like
+  /// the following..
+  //   // The object is 64-byte aligned, because we want hot data to be located
+  //   // in a single cache line if possible (it's accessed in every
+  //   interceptor). ALIGNED(64) LibIgnore libignore;
+  //   __sanitizer_sigaction sigactions[kSigCount];
+  // #if !SANITIZER_APPLE && !SANITIZER_NETBSD
+  //   unsigned finalize_key;
+  // #endif
+
+  Mutex atexit_mu;
+  Vector<struct AtExitCtx *> AtExitStack;
+  /// FIXME: TSan use MutexTypeAtExit, but we don't have it. But MSan use
+  /// MutexUnchecked.
+  InterceptorContext() : atexit_mu(MutexUnchecked), AtExitStack() {}
+};
+
+static ALIGNED(64) char interceptor_placeholder[sizeof(InterceptorContext)];
+InterceptorContext *interceptor_ctx() {
+  return reinterpret_cast<InterceptorContext *>(&interceptor_placeholder[0]);
+}
+
+// void InitializeLibIgnore() {
+//   const SuppressionContext &supp = *Suppressions();
+//   const uptr n = supp.SuppressionCount();
+//   for (uptr i = 0; i < n; i++) {
+//     const Suppression *s = supp.SuppressionAt(i);
+//     if (0 == internal_strcmp(s->type, kSuppressionLib))
+//       libignore()->AddIgnoredLibrary(s->templ);
+//   }
+//   if (flags()->ignore_noninstrumented_modules)
+//     libignore()->IgnoreNoninstrumentedModules(true);
+//   libignore()->OnLibraryLoaded(0);
+// }
+
 #  define XSAN_READ_STRING_OF_LEN(ctx, s, len, n) \
     XSAN_READ_RANGE((ctx), (s),                   \
                     common_flags()->strict_string_checks ? (len) + 1 : (n))
@@ -616,13 +666,9 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
 }
 #  endif  // XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 
-#  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
-static void AtCxaAtexit(void *unused) {
-  (void)unused;
-  /// TODO: do ASan's check in a more generic way
-  __asan::StopInitOrderChecking();
-}
-#  endif
+static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg,
+                                 void *dso);
+static void AtCxaAtexit(void *unused);
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT
 /// TODO: support on_exit interceptor
@@ -638,9 +684,10 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
-  int res = REAL(__cxa_atexit)(func, arg, dso_handle);
-  REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
-  return res;
+  // int res = REAL(__cxa_atexit)(func, arg, dso_handle);
+  // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
+  // return res;
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, arg, dso_handle);
 }
 #  endif  // XSAN_INTERCEPT___CXA_ATEXIT
 
@@ -652,11 +699,87 @@ INTERCEPTOR(int, atexit, void (*func)()) {
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
   // Avoid calling real atexit as it is unreachable on at least on Linux.
-  int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
-  REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
-  return res;
+  // int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
+  // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
+  // return res;
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, nullptr, nullptr);
 }
 #  endif
+
+#  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
+static void AtCxaAtexit(void *unused) {
+  (void)unused;
+  /// TODO: do ASan's check in a more generic way
+  __asan::StopInitOrderChecking();
+}
+
+static void XSanAtExitWrapper() {
+  AtExitCtx *ctx;
+  {
+    // Ensure thread-safety.
+    Lock l(&interceptor_ctx()->atexit_mu);
+
+    // Pop AtExitCtx from the top of the stack of callback functions
+    uptr element = interceptor_ctx()->AtExitStack.Size() - 1;
+    ctx = interceptor_ctx()->AtExitStack[element];
+    interceptor_ctx()->AtExitStack.PopBack();
+  }
+
+  AtCxaAtexit(nullptr);
+  /// FIXME: support TSan here
+  // ThreadState *thr = cur_thread();
+  // Acquire(thr, ctx->pc, (uptr)ctx);
+  // FuncEntry(thr, ctx->pc);
+  ((void (*)())ctx->f)();
+  // FuncExit(thr);
+  Free(ctx);
+}
+
+static void XSanCxaAtExitWrapper(void *arg) {
+  AtExitCtx *ctx = (AtExitCtx *)arg;
+
+  AtCxaAtexit(nullptr);
+  /// FIXME: support TSan here
+  // ThreadState *thr = cur_thread();
+  // Acquire(thr, ctx->pc, (uptr)arg);
+  // FuncEntry(thr, ctx->pc);
+  ((void (*)(void *arg))ctx->f)(ctx->arg);
+  // FuncExit(thr);
+  Free(ctx);
+}
+#  endif
+
+static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg, void *dso) {
+  auto *ctx = New<AtExitCtx>();
+  ctx->f = f;
+  ctx->arg = arg;
+  ctx->pc = pc;
+  // Release(thr, pc, (uptr)ctx);
+  // Memory allocation in __cxa_atexit will race with free during exit,
+  // because we do not see synchronization around atexit callback list.
+  // ThreadIgnoreBegin(thr, pc);
+  int res;
+  if (!dso) {
+    // NetBSD does not preserve the 2nd argument if dso is equal to 0
+    // Store ctx in a local stack-like structure
+
+    // Ensure thread-safety.
+    Lock l(&interceptor_ctx()->atexit_mu);
+    // __cxa_atexit calls calloc. If we don't ignore interceptors, we will fail
+    // due to atexit_mu held on exit from the calloc interceptor.
+    ScopedIgnoreInterceptors ignore;
+
+    res = REAL(__cxa_atexit)((void (*)(void *a))XSanAtExitWrapper, 0, 0);
+    // Push AtExitCtx on the top of the stack of callback functions
+    if (!res) {
+      interceptor_ctx()->AtExitStack.PushBack(ctx);
+    }
+  } else {
+    res = REAL(__cxa_atexit)(XSanCxaAtExitWrapper, ctx, dso);
+  }
+  // ThreadIgnoreEnd(thr);
+  return res;
+}
 
 #  if XSAN_INTERCEPT_PTHREAD_ATFORK
 extern "C" {
@@ -682,6 +805,14 @@ DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork)
 
 // ---------------------- InitializeXsanInterceptors ---------------- {{{1
 namespace __xsan {
+
+#if !SANITIZER_APPLE && !SANITIZER_ANDROID
+static void unreachable() {
+  Report("FATAL: XSan: unreachable called\n");
+  Die();
+}
+#endif
+
 void InitializeXsanInterceptors() {
   static bool was_called_once;
   CHECK(!was_called_once);
@@ -760,9 +891,15 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(__cxa_atexit);
 #  endif
 
-#  if XSAN_INTERCEPT_ATEXIT
-  XSAN_INTERCEPT_FUNC(atexit);
-#  endif
+// #  if XSAN_INTERCEPT_ATEXIT
+//   XSAN_INTERCEPT_FUNC(atexit);
+// #  endif
+
+# if !SANITIZER_APPLE && !SANITIZER_ANDROID
+  // Need to setup it, because interceptors check that the function is resolved.
+  // But atexit is emitted directly into the module, so can't be resolved.
+  REAL(atexit) = (int(*)(void(*)()))unreachable;
+# endif
 
 #  if XSAN_INTERCEPT_PTHREAD_ATFORK
   XSAN_INTERCEPT_FUNC(pthread_atfork);
