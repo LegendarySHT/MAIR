@@ -51,4 +51,33 @@ uptr xsan_mz_size(const void *ptr);
 void xsan_mz_force_lock();
 void xsan_mz_force_unlock();
 
+
+/// ------ Comes from tsan/tsan_mman.h. -----------
+// For internal data structures.
+void *Alloc(uptr sz);
+void FreeImpl(void *p);
+
+template <typename T, typename... Args>
+T *New(Args &&...args) {
+  return new (Alloc(sizeof(T))) T(static_cast<Args &&>(args)...);
+}
+
+template <typename T>
+void Free(T *&p) {
+  if (p == nullptr)
+    return;
+  FreeImpl(p);
+  p = nullptr;
+}
+
+template <typename T>
+void DestroyAndFree(T *&p) {
+  if (p == nullptr)
+    return;
+  p->~T();
+  Free(p);
+}
+
+/// ------------------------------------------------
+
 }  // namespace __xsan

@@ -186,6 +186,32 @@ void XsanAllocFreeTailHook() {
   __tsan::SignalUnsafeCall(thr, pc);
 }
 
+
+
+void *Alloc(uptr sz) {
+  /// FIXME: figure out why TSan does this.
+  // ThreadState *thr = cur_thread();
+  // if (thr->nomalloc) {
+  //   thr->nomalloc = 0;  // CHECK calls internal_malloc().
+  //   CHECK(0);
+  // }
+  // InternalAllocAccess();
+  // return InternalAlloc(sz, &thr->proc()->internal_alloc_cache);
+  return InternalAlloc(sz);
+}
+
+void FreeImpl(void *p) {
+  // ThreadState *thr = cur_thread();
+  // if (thr->nomalloc) {
+  //   thr->nomalloc = 0;  // CHECK calls internal_malloc().
+  //   CHECK(0);
+  // }
+  // InternalAllocAccess();
+  // InternalFree(p, &thr->proc()->internal_alloc_cache);
+  InternalFree(p);
+}
+
+
 }  // namespace __xsan
 
 // ---------------------- Interface ---------------- {{{1
