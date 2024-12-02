@@ -23,6 +23,9 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   uptr PageSize = GetPageSizeCached();
   uptr size = RoundUpTo(sizeof(XsanThread), PageSize);
   XsanThread *thread = (XsanThread *)MmapOrDie(size, __func__);
+  thread->is_inited_ = false;
+  thread->in_ignored_lib_ = false;
+
   thread->start_routine_ = start_routine;
   thread->arg_ = arg;
   thread->destructor_iterations_ = GetPthreadDestructorIterations();
@@ -82,6 +85,7 @@ void XsanThread::Init(const InitOptions *options) {
   atomic_store(&stack_switching_, false, memory_order_release);
   CHECK_EQ(this->stack_size(), 0U);
   SetThreadStackAndTls(options);
+  is_inited_ = true;
   int local = 0;
   VReport(1, "T%d: stack [%p,%p) size 0x%zx; local=%p\n", tid(),
           (void *)stack_bottom_, (void *)stack_top_, stack_top_ - stack_bottom_,

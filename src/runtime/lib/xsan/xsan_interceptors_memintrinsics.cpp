@@ -2,6 +2,7 @@
 #include "asan/orig/asan_stack.h"
 #include "asan/orig/asan_suppressions.h"
 #include "xsan_interceptors.h"
+#include "xsan_thread.h"
 
 using namespace __xsan;
 

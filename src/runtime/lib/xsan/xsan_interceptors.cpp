@@ -8,6 +8,8 @@
 #include "asan/orig/asan_poisoning.h"
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
+#include "sanitizer_common/sanitizer_internal_defs.h"
+#include "tsan/rtl/tsan_rtl.h"
 #include "tsan/tsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
@@ -35,8 +37,26 @@
 
 namespace __xsan {
 
-ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func, uptr caller_pc)
-      : tsan_si(xsan_thr->tsan_thread_, func, caller_pc) {}
+THREADLOCAL uptr xsan_ignore_interceptors = 0;
+
+ScopedIgnoreInterceptors::ScopedIgnoreInterceptors(bool in_report)
+    : tsan_sii(), sit(in_report) {
+  xsan_ignore_interceptors++;
+}
+
+ScopedIgnoreInterceptors::~ScopedIgnoreInterceptors() {
+  xsan_ignore_interceptors--;
+}
+
+ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func,
+                                     uptr caller_pc)
+    : tsan_si(xsan_thr ? xsan_thr->tsan_thread_ : __tsan::cur_thread_init(),
+              func, caller_pc) {}
+
+inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
+  return xsan_ignore_interceptors || !thread || !thread->is_inited_ ||
+         thread->in_ignored_lib_;
+}
 
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
 // between callback setup and callback execution.
@@ -139,10 +159,10 @@ DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
 /// TODO: use a better approach to use SCOPED_TSAN_INTERCEPTOR
-#  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)    \
-    SCOPED_TSAN_INTERCEPTOR(func, __VA_ARGS__);     \
-    XsanInterceptorContext _ctx = {#func, thr, pc}; \
-    ctx = (void *)&_ctx;                            \
+#  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)     \
+    SCOPED_XSAN_INTERCEPTOR(func, __VA_ARGS__);      \
+    XsanInterceptorContext _ctx = {#func, xsan_thr}; \
+    ctx = (void *)&_ctx;                             \
     (void)ctx;
 
 #  define XSAN_BEFORE_DLOPEN(filename, flag) \
@@ -270,9 +290,9 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
             void *(*start_routine)(void *), void *arg) {
   GET_STACK_TRACE_THREAD;
-  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();            
- 
-  ScopedInterceptor si(xsan_thr, "pthread_create", stack.trace_buffer[1]); 
+  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();
+
+  ScopedInterceptor si(xsan_thr, "pthread_create", stack.trace_buffer[1]);
   const uptr pc = stack.trace_buffer[0];
   xsan_thr->setTsanArgs(pc);
 
@@ -562,7 +582,7 @@ INTERCEPTOR(char *, strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  XSAN_SCOPED_INTERCEPTOR_MALLOC(strdup, s);
+  GET_STACK_TRACE_MALLOC;
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
@@ -580,7 +600,7 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  XSAN_SCOPED_INTERCEPTOR_MALLOC(__strdup, s);
+  GET_STACK_TRACE_MALLOC;
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);

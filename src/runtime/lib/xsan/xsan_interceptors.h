@@ -152,8 +152,8 @@ namespace __xsan {
 
 class ScopedIgnoreInterceptors {
  public:
-  ScopedIgnoreInterceptors(bool in_report = false) : sit(in_report) {}
-  ~ScopedIgnoreInterceptors() {}
+  ScopedIgnoreInterceptors(bool in_report = false);
+  ~ScopedIgnoreInterceptors();
 
  private:
   __tsan::ScopedIgnoreInterceptors tsan_sii;
@@ -168,17 +168,42 @@ class ScopedInterceptor {
  private:
   __tsan::ScopedInterceptor tsan_si;
 };
+
+inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread);
+
 }  // namespace __xsan
 
-#define XSAN_SCOPED_INTERCEPTOR_INTERNAL(func, caller_pc, curr_pc)            \
-  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();             \
-  __xsan::ScopedInterceptor xsi(xsan_thr, #func, caller_pc); \
-  xsan_thr->setTsanArgs(curr_pc);
+#define SCOPED_XSAN_INTERCEPTOR_INTERNAL(func, caller_pc, curr_pc) \
+  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();       \
+  __xsan::ScopedInterceptor xsi(xsan_thr, #func, caller_pc);       \
+  if (xsan_thr) xsan_thr->setTsanArgs(curr_pc);
 
-#define XSAN_SCOPED_INTERCEPTOR_MALLOC(func, ...)                        \
-  GET_STACK_TRACE_MALLOC;                                                \
-  XSAN_SCOPED_INTERCEPTOR_INTERNAL(func, stack.trace[1], stack.trace[0]);
+#define SCOPED_XSAN_INTERCEPTOR_MALLOC(func, ...) \
+  GET_STACK_TRACE_MALLOC;                         \
+  SCOPED_XSAN_INTERCEPTOR_INTERNAL(func, stack.trace[1], stack.trace[0]);
 
-#define XSAN_SCOPED_INTERCEPTOR_RAW(func, ...)                          \
-  XSAN_SCOPED_INTERCEPTOR_INTERNAL(func, GET_CALLER_PC(), GET_CURRENT_PC())
+#define SCOPED_XSAN_INTERCEPTOR_RAW(func, ...) \
+  SCOPED_XSAN_INTERCEPTOR_INTERNAL(func, GET_CALLER_PC(), GET_CURRENT_PC())
 
+#ifdef __powerpc64__
+// Debugging of crashes on powerpc after commit:
+// c80604f7a3 ("tsan: remove real func check from interceptors")
+// Somehow replacing if with DCHECK leads to strange failures in:
+// SanitizerCommon-tsan-powerpc64le-Linux :: Linux/ptrace.cpp
+// https://lab.llvm.org/buildbot/#/builders/105
+// https://lab.llvm.org/buildbot/#/builders/121
+// https://lab.llvm.org/buildbot/#/builders/57
+#  define XSAN_CHECK_REAL_FUNC(func)                                     \
+    if (REAL(func) == 0) {                                               \
+      Report("FATAL: ThreadSanitizer: failed to intercept %s\n", #func); \
+      Die();                                                             \
+    }
+#else
+#  define XSAN_CHECK_REAL_FUNC(func) DCHECK(REAL(func))
+#endif
+
+#define SCOPED_XSAN_INTERCEPTOR(func, ...)           \
+  SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);    \
+  XSAN_CHECK_REAL_FUNC(func);                        \
+  if (__xsan::ShouldXsanIgnoreInterceptor(xsan_thr)) \
+    return REAL(func)(__VA_ARGS__);

@@ -21,8 +21,7 @@ namespace __xsan {
 struct XsanInterceptorContext {
   const char *interceptor_name;
 
-  __tsan::ThreadState *thr;
-  const uptr pc;
+  XsanThread *xsan_thr;
 };
 
 #define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2) \
@@ -76,16 +75,16 @@ struct XsanInterceptorContext {
   } while (0)
 
 /// TODO: mange this in a better way
-#define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                   \
-  do {                                                                         \
-    XsanInterceptorContext *_tsan_ctx = (XsanInterceptorContext *)(ctx);       \
-    if (ctx) {                                                                 \
-      __tsan::MemoryAccessRange(_tsan_ctx->thr, _tsan_ctx->pc, (uptr)(offset), \
-                                (size), (isWrite));                            \
-    } else {                                                                   \
-      __tsan::MemoryAccessRange(__tsan::cur_thread_init(), GET_CURRENT_PC(),   \
-                                (uptr)(offset), (size), (isWrite));            \
-    }                                                                          \
+#define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                 \
+  do {                                                                       \
+    XsanInterceptorContext *_ctx = (XsanInterceptorContext *)(ctx);          \
+    if (_ctx && _ctx->xsan_thr) {                                            \
+      auto [thr, pc] = _ctx->xsan_thr->getTsanArgs();                  \
+      __tsan::MemoryAccessRange(thr, pc, (uptr)(offset), (size), (isWrite)); \
+    } else {                                                                 \
+      __tsan::MemoryAccessRange(__tsan::cur_thread_init(), GET_CURRENT_PC(), \
+                                (uptr)(offset), (size), (isWrite));          \
+    }                                                                        \
   } while (0)
 
 /// TODO: Implement this

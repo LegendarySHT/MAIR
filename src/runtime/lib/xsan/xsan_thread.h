@@ -87,6 +87,8 @@ class XsanThread {
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
   __tsan::ThreadState *tsan_thread_;
+  bool is_inited_;
+  bool in_ignored_lib_;
 
  private:
   // NOTE: There is no XsanThread constructor. It is allocated
