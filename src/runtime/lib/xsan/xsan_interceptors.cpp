@@ -128,11 +128,8 @@ using namespace __xsan;
 /// TSan needs to ignore memory accesses in getaddrinfo()
 #undef SANITIZER_INTERCEPT_GETADDRINFO
 // We define our own.
-// #if SANITIZER_INTERCEPT_TLS_GET_ADDR
-// #define NEED_TLS_GET_ADDR
-// #endif
-// #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-// #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+#undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+#define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 #endif
 
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)

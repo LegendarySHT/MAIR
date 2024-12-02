@@ -2142,15 +2142,15 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
 }
 #endif
 
-// #include "sanitizer_common/sanitizer_platform_interceptors.h"
+#include "sanitizer_common/sanitizer_platform_interceptors.h"
 // Causes interceptor recursion (getaddrinfo() and fopen())
-// #undef SANITIZER_INTERCEPT_GETADDRINFO
+#undef SANITIZER_INTERCEPT_GETADDRINFO
 // We define our own.
-// #if SANITIZER_INTERCEPT_TLS_GET_ADDR
-// #define NEED_TLS_GET_ADDR
-// #endif
-// #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-// #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+#if SANITIZER_INTERCEPT_TLS_GET_ADDR
+#define NEED_TLS_GET_ADDR
+#endif
+#undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+#define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 
 /// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
 #undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
@@ -2499,10 +2499,18 @@ static void handle_tls_addr(void *arg, void *res) {
 // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58066
 // So the interceptor must work with mis-aligned stack, in particular, does not
 // execute MOVDQA with stack addresses.
-/// Pending to be moved to sanitizer_common's one
-DECLARE_REAL(void *, __tls_get_addr, void *arg);
+TSAN_INTERCEPTOR(void *, __tls_get_addr, void *arg) {
+  void *res = REAL(__tls_get_addr)(arg);
+  handle_tls_addr(arg, res);
+  return res;
+}
 #else // SANITIZER_S390
-DECLARE_REAL(uptr, __tls_get_addr_internal, void *arg);
+TSAN_INTERCEPTOR(uptr, __tls_get_addr_internal, void *arg) {
+  uptr res = __tls_get_offset_wrapper(arg, REAL(__tls_get_offset));
+  char *tp = static_cast<char *>(__builtin_thread_pointer());
+  handle_tls_addr(arg, res + tp);
+  return res;
+}
 #endif
 #endif
 
