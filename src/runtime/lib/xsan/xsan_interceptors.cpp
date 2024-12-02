@@ -668,7 +668,6 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
 
 static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg,
                                  void *dso);
-static void AtCxaAtexit(void *unused);
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT
 /// TODO: support on_exit interceptor
@@ -707,11 +706,24 @@ INTERCEPTOR(int, atexit, void (*func)()) {
 #  endif
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
-static void AtCxaAtexit(void *unused) {
-  (void)unused;
-  /// TODO: do ASan's check in a more generic way
+
+static void XsanBeforeAtExitHandler(AtExitCtx *ctx) {
+  /// Stop init order checking to avoid false positives in the
+  /// initialization code, adhering the logic of ASan.
   __asan::StopInitOrderChecking();
+
+  /// TODO: use a more generic way 
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  __tsan::Acquire(thr, ctx->pc, (uptr)ctx);
+  __tsan::FuncEntry(thr, ctx->pc);
 }
+
+static void XsanPostAtExitHandler(AtExitCtx *ctx) {
+  (void)ctx;
+  /// TODO: use a more generic way 
+  __tsan::FuncExit(__tsan::cur_thread());
+}
+
 
 static void XSanAtExitWrapper() {
   AtExitCtx *ctx;
@@ -725,26 +737,18 @@ static void XSanAtExitWrapper() {
     interceptor_ctx()->AtExitStack.PopBack();
   }
 
-  AtCxaAtexit(nullptr);
-  /// FIXME: support TSan here
-  // ThreadState *thr = cur_thread();
-  // Acquire(thr, ctx->pc, (uptr)ctx);
-  // FuncEntry(thr, ctx->pc);
+  XsanBeforeAtExitHandler(ctx);
   ((void (*)())ctx->f)();
-  // FuncExit(thr);
+  XsanPostAtExitHandler(ctx);
   Free(ctx);
 }
 
 static void XSanCxaAtExitWrapper(void *arg) {
   AtExitCtx *ctx = (AtExitCtx *)arg;
 
-  AtCxaAtexit(nullptr);
-  /// FIXME: support TSan here
-  // ThreadState *thr = cur_thread();
-  // Acquire(thr, ctx->pc, (uptr)arg);
-  // FuncEntry(thr, ctx->pc);
+  XsanBeforeAtExitHandler(ctx); 
   ((void (*)(void *arg))ctx->f)(ctx->arg);
-  // FuncExit(thr);
+  XsanPostAtExitHandler(ctx);
   Free(ctx);
 }
 #  endif
