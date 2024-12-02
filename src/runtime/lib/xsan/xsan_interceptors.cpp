@@ -122,6 +122,19 @@ int OnExit() {
 // ---------------------- Wrappers ---------------- {{{1
 using namespace __xsan;
 
+#if XSAN_CONTAINS_TSAN
+#include "sanitizer_common/sanitizer_platform_interceptors.h"
+// Causes interceptor recursion (getaddrinfo() and fopen())
+/// TSan needs to ignore memory accesses in getaddrinfo()
+#undef SANITIZER_INTERCEPT_GETADDRINFO
+// We define our own.
+// #if SANITIZER_INTERCEPT_TLS_GET_ADDR
+// #define NEED_TLS_GET_ADDR
+// #endif
+// #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+// #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+#endif
+
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 

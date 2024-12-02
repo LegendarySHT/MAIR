@@ -1980,8 +1980,18 @@ TSAN_INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
 }
 
 /// See https://github.com/llvm/llvm-project/commit/8cff61f29efee104f14f6e8ff06bdcbc71a5fcf8#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78efR1738
-DECLARE_REAL(int, getaddrinfo, void *node, void *service,
-    void *hints, void *rv);
+TSAN_INTERCEPTOR(int, getaddrinfo, void *node, void *service,
+    void *hints, void *rv) {
+  SCOPED_TSAN_INTERCEPTOR(getaddrinfo, node, service, hints, rv);
+  // We miss atomic synchronization in getaddrinfo,
+  // and can report false race between malloc and free
+  // inside of getaddrinfo. So ignore memory accesses.
+  ThreadIgnoreBegin(thr, pc);
+  int res = REAL(getaddrinfo)(node, service, hints, rv);
+  ThreadIgnoreEnd(thr);
+  return res;
+}
+
 
 TSAN_INTERCEPTOR(int, fork, int fake) {
   if (in_symbolizer())
@@ -2132,7 +2142,7 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
 }
 #endif
 
-#include "sanitizer_common/sanitizer_platform_interceptors.h"
+// #include "sanitizer_common/sanitizer_platform_interceptors.h"
 // Causes interceptor recursion (getaddrinfo() and fopen())
 // #undef SANITIZER_INTERCEPT_GETADDRINFO
 // We define our own.
@@ -2718,7 +2728,7 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(nanosleep);
   TSAN_INTERCEPT(pause);
   TSAN_INTERCEPT(gettimeofday);
-//   TSAN_INTERCEPT(getaddrinfo);
+  TSAN_INTERCEPT(getaddrinfo);
 
   TSAN_INTERCEPT(fork);
 //   TSAN_INTERCEPT(vfork);

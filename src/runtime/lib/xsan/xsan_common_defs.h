@@ -15,6 +15,15 @@
 # endif
 #endif
 
+
+#ifndef XSAN_CONTAINS_TSAN
+# if !SANITIZER_GO
+#  define XSAN_CONTAINS_TSAN 1
+# endif
+#endif
+
+
+
 namespace __xsan {
 
 /// The default alignment for heap allocations.
