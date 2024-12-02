@@ -122,15 +122,15 @@ int OnExit() {
 // ---------------------- Wrappers ---------------- {{{1
 using namespace __xsan;
 
-#if XSAN_CONTAINS_TSAN
-#include "sanitizer_common/sanitizer_platform_interceptors.h"
+#  if XSAN_CONTAINS_TSAN
+#    include "sanitizer_common/sanitizer_platform_interceptors.h"
 // Causes interceptor recursion (getaddrinfo() and fopen())
 /// TSan needs to ignore memory accesses in getaddrinfo()
-#undef SANITIZER_INTERCEPT_GETADDRINFO
+#    undef SANITIZER_INTERCEPT_GETADDRINFO
 // We define our own.
-#undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-#define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
-#endif
+#    undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+#    define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+#  endif
 
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
@@ -676,8 +676,7 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
 }
 #  endif  // XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 
-static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg,
-                                 void *dso);
+static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg, void *dso);
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT
 /// TODO: support on_exit interceptor
@@ -696,7 +695,8 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
   // int res = REAL(__cxa_atexit)(func, arg, dso_handle);
   // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   // return res;
-  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, arg, dso_handle);
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, arg,
+                               dso_handle);
 }
 #  endif  // XSAN_INTERCEPT___CXA_ATEXIT
 
@@ -711,7 +711,8 @@ INTERCEPTOR(int, atexit, void (*func)()) {
   // int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
   // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   // return res;
-  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, nullptr, nullptr);
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, nullptr,
+                               nullptr);
 }
 #  endif
 
@@ -722,7 +723,7 @@ static void XsanBeforeAtExitHandler(AtExitCtx *ctx) {
   /// initialization code, adhering the logic of ASan.
   __asan::StopInitOrderChecking();
 
-  /// TODO: use a more generic way 
+  /// TODO: use a more generic way
   __tsan::ThreadState *thr = __tsan::cur_thread();
   __tsan::Acquire(thr, ctx->pc, (uptr)ctx);
   __tsan::FuncEntry(thr, ctx->pc);
@@ -730,10 +731,9 @@ static void XsanBeforeAtExitHandler(AtExitCtx *ctx) {
 
 static void XsanPostAtExitHandler(AtExitCtx *ctx) {
   (void)ctx;
-  /// TODO: use a more generic way 
+  /// TODO: use a more generic way
   __tsan::FuncExit(__tsan::cur_thread());
 }
-
 
 static void XSanAtExitWrapper() {
   AtExitCtx *ctx;
@@ -756,14 +756,15 @@ static void XSanAtExitWrapper() {
 static void XSanCxaAtExitWrapper(void *arg) {
   AtExitCtx *ctx = (AtExitCtx *)arg;
 
-  XsanBeforeAtExitHandler(ctx); 
+  XsanBeforeAtExitHandler(ctx);
   ((void (*)(void *arg))ctx->f)(ctx->arg);
   XsanPostAtExitHandler(ctx);
   Free(ctx);
 }
 #  endif
 
-static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg, void *dso) {
+static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg,
+                                 void *dso) {
   auto *ctx = New<AtExitCtx>();
   ctx->f = f;
   ctx->arg = arg;
@@ -820,12 +821,12 @@ DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork)
 // ---------------------- InitializeXsanInterceptors ---------------- {{{1
 namespace __xsan {
 
-#if !SANITIZER_APPLE && !SANITIZER_ANDROID
+#  if !SANITIZER_APPLE && !SANITIZER_ANDROID
 static void unreachable() {
   Report("FATAL: XSan: unreachable called\n");
   Die();
 }
-#endif
+#  endif
 
 void InitializeXsanInterceptors() {
   static bool was_called_once;
@@ -905,15 +906,15 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(__cxa_atexit);
 #  endif
 
-// #  if XSAN_INTERCEPT_ATEXIT
-//   XSAN_INTERCEPT_FUNC(atexit);
-// #  endif
+  // #  if XSAN_INTERCEPT_ATEXIT
+  //   XSAN_INTERCEPT_FUNC(atexit);
+  // #  endif
 
-# if !SANITIZER_APPLE && !SANITIZER_ANDROID
+#  if !SANITIZER_APPLE && !SANITIZER_ANDROID
   // Need to setup it, because interceptors check that the function is resolved.
   // But atexit is emitted directly into the module, so can't be resolved.
-  REAL(atexit) = (int(*)(void(*)()))unreachable;
-# endif
+  REAL(atexit) = (int (*)(void (*)()))unreachable;
+#  endif
 
 #  if XSAN_INTERCEPT_PTHREAD_ATFORK
   XSAN_INTERCEPT_FUNC(pthread_atfork);
