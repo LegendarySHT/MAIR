@@ -35,6 +35,9 @@
 
 namespace __xsan {
 
+ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func, uptr caller_pc)
+      : tsan_si(xsan_thr->tsan_thread_, func, caller_pc) {}
+
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
 // between callback setup and callback execution.
 using AtExitFuncTy = void (*)();
@@ -266,8 +269,13 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
 
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
             void *(*start_routine)(void *), void *arg) {
-  /// TODO: managed by XSan
-  SCOPED_INTERCEPTOR_RAW(pthread_create, thread, attr, start_routine, arg);
+  GET_STACK_TRACE_THREAD;
+  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();            
+ 
+  ScopedInterceptor si(xsan_thr, "pthread_create", stack.trace_buffer[1]); 
+  const uptr pc = stack.trace_buffer[0];
+  xsan_thr->setTsanArgs(pc);
+
   EnsureMainThreadIDIsCorrect();
 
   /// TODO: Extract this to a separate function?
@@ -275,7 +283,6 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   if (__asan::flags()->strict_init_order)
     __asan::StopInitOrderChecking();
 
-  GET_STACK_TRACE_THREAD;
   int detached = 0;
   if (attr)
     REAL(pthread_attr_getdetachstate)(attr, &detached);
@@ -555,7 +562,7 @@ INTERCEPTOR(char *, strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  XSAN_EXTRA_ALLOC_ARG(strdup, s);
+  XSAN_SCOPED_INTERCEPTOR_MALLOC(strdup, s);
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
@@ -573,7 +580,7 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  XSAN_EXTRA_ALLOC_ARG(__strdup, s);
+  XSAN_SCOPED_INTERCEPTOR_MALLOC(__strdup, s);
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);

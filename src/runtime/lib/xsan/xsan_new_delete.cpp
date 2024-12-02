@@ -72,7 +72,7 @@ enum class align_val_t : size_t {};
 // allocator behavior.
 /// TODO: Figure out should we really need alignment of 16?
 #define OPERATOR_NEW_BODY(mangled_name, type, nothrow)                   \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, size);                              \
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(mangled_name, size);                    \
   /* void *res = xsan_memalign(0, size, &stack, type); // no alignment*/ \
   void *res = xsan_memalign(__xsan::kDefaultAlignment, size, &stack,     \
                             type); /* tsan needs alignment */            \
@@ -80,7 +80,7 @@ enum class align_val_t : size_t {};
     __asan::ReportOutOfMemory(size, &stack);                             \
   return res;
 #define OPERATOR_NEW_BODY_ALIGN(mangled_name, type, nothrow)  \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, size);                   \
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(mangled_name, size);         \
   void *res = xsan_memalign((uptr)align, size, &stack, type); \
   if (!nothrow && UNLIKELY(!res))                             \
     __asan::ReportOutOfMemory(size, &stack);                  \
@@ -150,20 +150,20 @@ INTERCEPTOR(void *, _ZnamRKSt9nothrow_t, size_t size, std::nothrow_t const &) {
 
 /* Transfer alignment and size info to delete, checking the new/delete
  * mismatching */
-#define OPERATOR_DELETE_BODY(mangled_name, type) \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);       \
+#define OPERATOR_DELETE_BODY(mangled_name, type)     \
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(mangled_name, ptr); \
   xsan_delete(ptr, 0, __xsan::kDefaultAlignment, &stack, type);
 
 #define OPERATOR_DELETE_BODY_SIZE(mangled_name, type) \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);            \
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(mangled_name, ptr);  \
   xsan_delete(ptr, size, __xsan::kDefaultAlignment, &stack, type);
 
 #define OPERATOR_DELETE_BODY_ALIGN(mangled_name, type) \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);             \
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(mangled_name, ptr);   \
   xsan_delete(ptr, 0, static_cast<uptr>(align), &stack, type);
 
 #define OPERATOR_DELETE_BODY_SIZE_ALIGN(mangled_name, type) \
-  XSAN_EXTRA_ALLOC_ARG(mangled_name, ptr);                  \
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(mangled_name, ptr);        \
   xsan_delete(ptr, size, static_cast<uptr>(align), &stack, type);
 
 #if !SANITIZER_APPLE

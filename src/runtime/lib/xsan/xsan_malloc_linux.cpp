@@ -45,7 +45,7 @@ INTERCEPTOR(void, free, void *ptr) {
     return InternalFree(ptr);
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
-  XSAN_EXTRA_ALLOC_ARG(free, ptr);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(free, ptr);
   xsan_free(ptr, &stack, __asan::FROM_MALLOC);
 }
 
@@ -57,7 +57,7 @@ INTERCEPTOR(void, cfree, void *ptr) {
     return InternalFree(ptr);
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
-  XSAN_EXTRA_ALLOC_ARG(cfree, ptr);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(cfree, ptr);
   xsan_free(ptr, &stack, __asan::FROM_MALLOC);
 }
 #  endif  // SANITIZER_INTERCEPT_CFREE
@@ -68,7 +68,7 @@ INTERCEPTOR(void *, malloc, uptr size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Allocate(size);
   ENSURE_XSAN_INITED();
-  XSAN_EXTRA_ALLOC_ARG(malloc, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(malloc, size);
   return xsan_malloc(size, &stack);
 }
 
@@ -78,7 +78,7 @@ INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(nmemb, size);
   ENSURE_XSAN_INITED();
-  XSAN_EXTRA_ALLOC_ARG(calloc, nmemb, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(calloc, nmemb, size);
   return xsan_calloc(nmemb, size, &stack);
 }
 
@@ -88,7 +88,7 @@ INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Realloc(ptr, size);
   ENSURE_XSAN_INITED();
-  XSAN_EXTRA_ALLOC_ARG(realloc, ptr, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(realloc, ptr, size);
   return xsan_realloc(ptr, size, &stack);
 }
 
@@ -97,19 +97,19 @@ INTERCEPTOR(void *, reallocarray, void *ptr, uptr nmemb, uptr size) {
   if (__tsan::in_symbolizer())
     return InternalReallocArray(ptr, size, size);
   ENSURE_XSAN_INITED();
-  XSAN_EXTRA_ALLOC_ARG(reallocarray, ptr, nmemb, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(reallocarray, ptr, nmemb, size);
   return xsan_reallocarray(ptr, nmemb, size, &stack);
 }
 #  endif  // SANITIZER_INTERCEPT_REALLOCARRAY
 
 #  if SANITIZER_INTERCEPT_MEMALIGN
 INTERCEPTOR(void *, memalign, uptr boundary, uptr size) {
-  XSAN_EXTRA_ALLOC_ARG(memalign, boundary, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(memalign, boundary, size);
   return xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
 }
 
 INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
-  XSAN_EXTRA_ALLOC_ARG(__libc_memalign, boundary, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(__libc_memalign, boundary, size);
   void *res = xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
   DTLS_on_libc_memalign(res, size);
   return res;
@@ -120,7 +120,7 @@ INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
 INTERCEPTOR(void *, aligned_alloc, uptr boundary, uptr size) {
   if (__tsan::in_symbolizer())
     return InternalAlloc(size, nullptr, boundary);
-  XSAN_EXTRA_ALLOC_ARG(aligned_alloc, boundary, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(aligned_alloc, boundary, size);
   return xsan_aligned_alloc(boundary, size, &stack);
 }
 #  endif  // SANITIZER_INTERCEPT_ALIGNED_ALLOC
@@ -157,14 +157,14 @@ INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
     *memptr = p;
     return 0;
   }
-  XSAN_EXTRA_ALLOC_ARG(posix_memalign, memptr, alignment, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(posix_memalign, memptr, alignment, size);
   return xsan_posix_memalign(memptr, alignment, size, &stack);
 }
 
 INTERCEPTOR(void *, valloc, uptr size) {
   if (__tsan::in_symbolizer())
     return InternalAlloc(size, nullptr, GetPageSizeCached());
-  XSAN_EXTRA_ALLOC_ARG(valloc, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(valloc, size);
   return xsan_valloc(size, &stack);
 }
 
@@ -175,7 +175,7 @@ INTERCEPTOR(void *, pvalloc, uptr size) {
     size = size ? RoundUpTo(size, PageSize) : PageSize;
     return InternalAlloc(size, nullptr, PageSize);
   }
-  XSAN_EXTRA_ALLOC_ARG(pvalloc, size);
+  SCOPED_XSAN_INTERCEPTOR_MALLOC(pvalloc, size);
   return xsan_pvalloc(size, &stack);
 }
 #  endif  // SANITIZER_INTERCEPT_PVALLOC

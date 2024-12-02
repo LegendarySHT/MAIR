@@ -149,16 +149,6 @@ DECLARE_REAL(char *, strstr, const char *s1, const char *s2)
 #endif  // !SANITIZER_FUCHSIA
 
 namespace __xsan {
-/// Represents the extra arguments for alloc. series APIs
-/// - ASan needs:
-///     - BufferredStackTrace *stack
-/// - TSan needs:
-///     - ThreadState *thr
-///     - uptr pc
-struct TsanArgs {
-  __tsan::ThreadState *thr_;
-  uptr pc_;
-};
 
 class ScopedIgnoreInterceptors {
  public:
@@ -170,11 +160,25 @@ class ScopedIgnoreInterceptors {
   __tsan::ScopedIgnoreTsan sit;
 };
 
+class ScopedInterceptor {
+ public:
+  ScopedInterceptor(XsanThread *xsan_thr, const char *func, uptr caller_pc);
+  ~ScopedInterceptor() {}
+
+ private:
+  __tsan::ScopedInterceptor tsan_si;
+};
 }  // namespace __xsan
 
-#define XSAN_EXTRA_ALLOC_ARG(func, ...)                        \
-  GET_STACK_TRACE_MALLOC;                                      \
-  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();   \
-  __tsan::ScopedInterceptor tsi(xsan_thr->tsan_thread_, #func, \
-                                stack.trace_buffer[1]);        \
-  xsan_thr->setTsanArgs(stack.trace_buffer[0]);
+#define XSAN_SCOPED_INTERCEPTOR_INTERNAL(func, caller_pc, curr_pc)            \
+  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();             \
+  __xsan::ScopedInterceptor xsi(xsan_thr, #func, caller_pc); \
+  xsan_thr->setTsanArgs(curr_pc);
+
+#define XSAN_SCOPED_INTERCEPTOR_MALLOC(func, ...)                        \
+  GET_STACK_TRACE_MALLOC;                                                \
+  XSAN_SCOPED_INTERCEPTOR_INTERNAL(func, stack.trace[1], stack.trace[0]);
+
+#define XSAN_SCOPED_INTERCEPTOR_RAW(func, ...)                          \
+  XSAN_SCOPED_INTERCEPTOR_INTERNAL(func, GET_CALLER_PC(), GET_CURRENT_PC())
+

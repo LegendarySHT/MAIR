@@ -17,6 +17,17 @@ struct DTLS;
 
 namespace __xsan {
 
+/// Represents the extra arguments for alloc. series APIs
+/// - ASan needs:
+///     - BufferredStackTrace *stack
+/// - TSan needs:
+///     - ThreadState *thr
+///     - uptr pc
+struct TsanArgs {
+  __tsan::ThreadState *thr_;
+  uptr pc_;
+};
+
 /// FIXME: Should we actually need such a complex class?
 // XsanThread are stored in TSD and destroyed when the thread dies.
 class XsanThread {
