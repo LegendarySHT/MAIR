@@ -453,22 +453,8 @@ static void on_exit_callback_installed_at(int status, void *arg) {
   Free(ctx);
 }
 
-TSAN_INTERCEPTOR(int, on_exit, void(*f)(int, void*), void *arg) {
-  if (in_symbolizer())
-    return 0;
-  SCOPED_TSAN_INTERCEPTOR(on_exit, f, arg);
-  auto *ctx = New<AtExitCtx>();
-  ctx->f = (void(*)())f;
-  ctx->arg = arg;
-  ctx->pc = GET_CALLER_PC();
-  Release(thr, pc, (uptr)ctx);
-  // Memory allocation in __cxa_atexit will race with free during exit,
-  // because we do not see synchronization around atexit callback list.
-  ThreadIgnoreBegin(thr, pc);
-  int res = REAL(on_exit)(on_exit_callback_installed_at, ctx);
-  ThreadIgnoreEnd(thr);
-  return res;
-}
+DECLARE_REAL(int, on_exit, void(*f)(int, void*), void *arg);
+
 #define TSAN_MAYBE_INTERCEPT_ON_EXIT TSAN_INTERCEPT(on_exit)
 #else
 #define TSAN_MAYBE_INTERCEPT_ON_EXIT
@@ -2746,7 +2732,7 @@ void InitializeInterceptors() {
 #if !SANITIZER_ANDROID
   TSAN_INTERCEPT(dl_iterate_phdr);
 #endif
-  TSAN_MAYBE_INTERCEPT_ON_EXIT;
+  // TSAN_MAYBE_INTERCEPT_ON_EXIT;
   //TSAN_INTERCEPT(__cxa_atexit);
   // TSAN_INTERCEPT(_exit);
 

@@ -89,6 +89,13 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT___CXA_ATEXIT 0
 #  endif
 
+#  if !SANITIZER_APPLE && !SANITIZER_NETBSD
+#    define XSAN_INTERCEPT_ON_EXIT 1
+#  else
+#    define XSAN_INTERCEPT_ON_EXIT 0
+#  endif
+
+
 #  if !SANITIZER_ANDROID
 #    define XSAN_INTERCEPT_ATEXIT 1
 #  else

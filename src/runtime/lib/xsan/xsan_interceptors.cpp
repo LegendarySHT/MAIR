@@ -703,7 +703,9 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
 }
 #  endif  // XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 
-static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg, void *dso);
+static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f,
+                                 bool is_on_exit = false, void *arg = nullptr,
+                                 void *dso = nullptr);
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT
 /// TODO: support on_exit interceptor
@@ -719,31 +721,53 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
+  SCOPED_XSAN_INTERCEPTOR(__cxa_atexit, func, arg, dso_handle);
   // int res = REAL(__cxa_atexit)(func, arg, dso_handle);
   // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   // return res;
-  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, arg,
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, false, arg,
                                dso_handle);
 }
 #  endif  // XSAN_INTERCEPT___CXA_ATEXIT
 
 #  if XSAN_INTERCEPT_ATEXIT
 INTERCEPTOR(int, atexit, void (*func)()) {
-  /// TODO: add if (in_symbolizer()) && support TSan
+  if (__tsan::in_symbolizer())
+    return 0;
+
   ENSURE_XSAN_INITED();
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
+  SCOPED_XSAN_INTERCEPTOR_RAW(atexit, func);
   // Avoid calling real atexit as it is unreachable on at least on Linux.
   // int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
   // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   // return res;
-  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, nullptr,
-                               nullptr);
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func);
 }
 #  endif
 
-#  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT
+#  if XSAN_INTERCEPT_ON_EXIT
+INTERCEPTOR(int, on_exit, void (*func)(int, void *), void *arg) {
+  if (__tsan::in_symbolizer())
+    return 0;
+
+  ENSURE_XSAN_INITED();
+#    if CAN_SANITIZE_LEAKS
+  __lsan::ScopedInterceptorDisabler disabler;
+#    endif
+  SCOPED_XSAN_INTERCEPTOR(on_exit, func, arg);
+  // Avoid calling real atexit as it is unreachable on at least on Linux.
+  // int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
+  // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
+  // return res;
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, true);
+}
+#  endif
+
+#  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT || \
+      XSAN_INTERCEPT_ON_EXIT
 
 static void XsanBeforeAtExitHandler(AtExitCtx *ctx) {
   /// Stop init order checking to avoid false positives in the
@@ -788,18 +812,29 @@ static void XSanCxaAtExitWrapper(void *arg) {
   XsanPostAtExitHandler(ctx);
   Free(ctx);
 }
+
+static void XSanOnExitWrapper(int status, void *arg) {
+  AtExitCtx *ctx = (AtExitCtx *)arg;
+
+  XsanBeforeAtExitHandler(ctx);
+  ((void (*)(int status, void *arg))ctx->f)(status, ctx->arg);
+  XsanPostAtExitHandler(ctx);
+  Free(ctx);
+}
+
 #  endif
 
-static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg,
-                                 void *dso) {
+static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
+                                 void *arg, void *dso) {
   auto *ctx = New<AtExitCtx>();
   ctx->f = f;
   ctx->arg = arg;
   ctx->pc = pc;
-  // Release(thr, pc, (uptr)ctx);
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  __tsan::Release(thr, pc, (uptr)ctx);
   // Memory allocation in __cxa_atexit will race with free during exit,
   // because we do not see synchronization around atexit callback list.
-  // ThreadIgnoreBegin(thr, pc);
+  __tsan::ThreadIgnoreBegin(thr, pc);
   int res;
   if (!dso) {
     // NetBSD does not preserve the 2nd argument if dso is equal to 0
@@ -816,10 +851,15 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, void *arg,
     if (!res) {
       interceptor_ctx()->AtExitStack.PushBack(ctx);
     }
-  } else {
+  } else if (!is_on_exit) {
     res = REAL(__cxa_atexit)(XSanCxaAtExitWrapper, ctx, dso);
   }
-  // ThreadIgnoreEnd(thr);
+#  if XSAN_INTERCEPT_ON_EXIT
+  else {
+    res = REAL(on_exit)(XSanOnExitWrapper, ctx);
+  }
+#  endif
+  __tsan::ThreadIgnoreEnd(thr);
   return res;
 }
 
@@ -931,6 +971,10 @@ void InitializeXsanInterceptors() {
   // Intercept atexit function.
 #  if XSAN_INTERCEPT___CXA_ATEXIT
   XSAN_INTERCEPT_FUNC(__cxa_atexit);
+#  endif
+
+#  if XSAN_INTERCEPT_ON_EXIT
+  XSAN_INTERCEPT_FUNC(on_exit);
 #  endif
 
   // #  if XSAN_INTERCEPT_ATEXIT
