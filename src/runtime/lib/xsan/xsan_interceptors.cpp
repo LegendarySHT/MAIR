@@ -9,8 +9,9 @@
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
-#include "tsan/rtl/tsan_rtl.h"
+#include "tsan/orig/tsan_fd.h"
 #include "tsan/tsan_interceptors.h"
+#include "tsan/tsan_rtl.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "xsan_thread.h"
@@ -257,20 +258,116 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #    include <sanitizer_common/sanitizer_signal_interceptors.inc>
 #  endif
 
+/// Following the logic of TSan, treat syscall in a special way.
+#  define XSAN_SYSCALL()                                       \
+    __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread(); \
+    if (xsan_ignore_interceptors)                              \
+      return;                                                  \
+    ScopedSyscall scoped_syscall(xsan_thr)
+
+struct ScopedSyscall {
+  XsanThread *thr;
+
+  explicit ScopedSyscall(XsanThread *thr) : thr(thr) { ENSURE_XSAN_INITED(); }
+
+  ~ScopedSyscall() {
+    /// FIXME: migrate handling of pending signals to XSan
+    __tsan::ProcessPendingSignals(thr->tsan_thread_);
+  }
+};
+
+#  if !SANITIZER_FREEBSD && !SANITIZER_APPLE
+[[gnu::always_inline]] static void syscall_access_range(uptr pc, uptr offset,
+                                                        uptr size, bool write) {
+  XSAN_SYSCALL();
+  ASAN_ACCESS_MEMORY_RANGE(nullptr, offset, size, write);
+  __tsan::MemoryAccessRange(__tsan::cur_thread(), pc, offset, size, write);
+}
+
+static USED void syscall_acquire(uptr pc, uptr addr) {
+  XSAN_SYSCALL();
+  __tsan::Acquire(__tsan::cur_thread(), pc, addr);
+  DPrintf("syscall_acquire(0x%zx))\n", addr);
+}
+
+static USED void syscall_release(uptr pc, uptr addr) {
+  XSAN_SYSCALL();
+  DPrintf("syscall_release(0x%zx)\n", addr);
+  __tsan::Release(__tsan::cur_thread(), pc, addr);
+}
+
+static void syscall_fd_close(uptr pc, int fd) {
+  __tsan::FdClose(__tsan::cur_thread(), pc, fd);
+}
+
+static USED void syscall_fd_acquire(uptr pc, int fd) {
+  XSAN_SYSCALL();
+  __tsan::FdAcquire(__tsan::cur_thread(), pc, fd);
+  DPrintf("syscall_fd_acquire(%d)\n", fd);
+}
+
+static USED void syscall_fd_release(uptr pc, int fd) {
+  XSAN_SYSCALL();
+  DPrintf("syscall_fd_release(%d)\n", fd);
+  __tsan::FdRelease(__tsan::cur_thread(), pc, fd);
+}
+
+static void syscall_pre_fork(uptr pc) {
+  __tsan::ForkBefore(__tsan::cur_thread(), pc);
+}
+
+static void syscall_post_fork(uptr pc, int pid) {
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  if (pid == 0) {
+    // child
+    __tsan::ForkChildAfter(thr, pc, true);
+    __tsan::FdOnFork(thr, pc);
+  } else if (pid > 0) {
+    // parent
+    __tsan::ForkParentAfter(thr, pc);
+  } else {
+    // error
+    __tsan::ForkParentAfter(thr, pc);
+  }
+}
+#  endif
+
 // Syscall interceptors don't have contexts, we don't support suppressions
 // for them.
-#  define COMMON_SYSCALL_PRE_READ_RANGE(p, s) XSAN_READ_RANGE(nullptr, p, s)
-#  define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) XSAN_WRITE_RANGE(nullptr, p, s)
+#  define COMMON_SYSCALL_PRE_READ_RANGE(p, s) \
+    syscall_access_range(GET_CALLER_PC(), (uptr)(p), (uptr)(s), false)
+
+#  define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) \
+    syscall_access_range(GET_CALLER_PC(), (uptr)(p), (uptr)(s), true)
+
 #  define COMMON_SYSCALL_POST_READ_RANGE(p, s) \
     do {                                       \
       (void)(p);                               \
       (void)(s);                               \
     } while (false)
+
 #  define COMMON_SYSCALL_POST_WRITE_RANGE(p, s) \
     do {                                        \
       (void)(p);                                \
       (void)(s);                                \
     } while (false)
+
+#  define COMMON_SYSCALL_ACQUIRE(addr) \
+    syscall_acquire(GET_CALLER_PC(), (uptr)(addr))
+
+#  define COMMON_SYSCALL_RELEASE(addr) \
+    syscall_release(GET_CALLER_PC(), (uptr)(addr))
+
+#  define COMMON_SYSCALL_FD_CLOSE(fd) syscall_fd_close(GET_CALLER_PC(), fd)
+
+#  define COMMON_SYSCALL_FD_ACQUIRE(fd) syscall_fd_acquire(GET_CALLER_PC(), fd)
+
+#  define COMMON_SYSCALL_FD_RELEASE(fd) syscall_fd_release(GET_CALLER_PC(), fd)
+
+#  define COMMON_SYSCALL_PRE_FORK() syscall_pre_fork(GET_CALLER_PC())
+
+#  define COMMON_SYSCALL_POST_FORK(res) syscall_post_fork(GET_CALLER_PC(), res)
+
 #  include <sanitizer_common/sanitizer_common_syscalls.inc>
 #  include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
 
