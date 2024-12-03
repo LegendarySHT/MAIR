@@ -253,7 +253,9 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  endif
 
 #  include <sanitizer_common/sanitizer_common_interceptors.inc>
-#  include <sanitizer_common/sanitizer_signal_interceptors.inc>
+#  if !XSAN_CONTAINS_TSAN
+#    include <sanitizer_common/sanitizer_signal_interceptors.inc>
+#  endif
 
 // Syscall interceptors don't have contexts, we don't support suppressions
 // for them.
@@ -898,8 +900,9 @@ void InitializeXsanInterceptors() {
   CHECK(!was_called_once);
   was_called_once = true;
   InitializeCommonInterceptors();
+#  if !XSAN_CONTAINS_TSAN
   InitializeSignalInterceptors();
-
+#  endif
   // Intercept str* functions.
   XSAN_INTERCEPT_FUNC(strcat);
   XSAN_INTERCEPT_FUNC(strcpy);

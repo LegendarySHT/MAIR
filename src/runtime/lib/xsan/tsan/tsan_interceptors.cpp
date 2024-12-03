@@ -2282,75 +2282,75 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
 
 // #include "sanitizer_common/sanitizer_common_interceptors.inc"
 
-// static int sigaction_impl(int sig, const __sanitizer_sigaction *act,
-//                           __sanitizer_sigaction *old);
-// static __sanitizer_sighandler_ptr signal_impl(int sig,
-//                                               __sanitizer_sighandler_ptr h);
+static int sigaction_impl(int sig, const __sanitizer_sigaction *act,
+                          __sanitizer_sigaction *old);
+static __sanitizer_sighandler_ptr signal_impl(int sig,
+                                              __sanitizer_sighandler_ptr h);
 
-// #define SIGNAL_INTERCEPTOR_SIGACTION_IMPL(signo, act, oldact) \
-//   { return sigaction_impl(signo, act, oldact); }
+#define SIGNAL_INTERCEPTOR_SIGACTION_IMPL(signo, act, oldact) \
+  { return sigaction_impl(signo, act, oldact); }
 
-// #define SIGNAL_INTERCEPTOR_SIGNAL_IMPL(func, signo, handler) \
-//   { return (uptr)signal_impl(signo, (__sanitizer_sighandler_ptr)handler); }
+#define SIGNAL_INTERCEPTOR_SIGNAL_IMPL(func, signo, handler) \
+  { return (uptr)signal_impl(signo, (__sanitizer_sighandler_ptr)handler); }
 
-// #include "sanitizer_common/sanitizer_signal_interceptors.inc"
+#include "sanitizer_common/sanitizer_signal_interceptors.inc"
 
-// int sigaction_impl(int sig, const __sanitizer_sigaction *act,
-//                    __sanitizer_sigaction *old) {
-//   // Note: if we call REAL(sigaction) directly for any reason without proxying
-//   // the signal handler through sighandler, very bad things will happen.
-//   // The handler will run synchronously and corrupt tsan per-thread state.
-//   SCOPED_INTERCEPTOR_RAW(sigaction, sig, act, old);
-//   if (sig <= 0 || sig >= kSigCount) {
-//     errno = errno_EINVAL;
-//     return -1;
-//   }
-//   __sanitizer_sigaction *sigactions = interceptor_ctx()->sigactions;
-//   __sanitizer_sigaction old_stored;
-//   if (old) internal_memcpy(&old_stored, &sigactions[sig], sizeof(old_stored));
-//   __sanitizer_sigaction newact;
-//   if (act) {
-//     // Copy act into sigactions[sig].
-//     // Can't use struct copy, because compiler can emit call to memcpy.
-//     // Can't use internal_memcpy, because it copies byte-by-byte,
-//     // and signal handler reads the handler concurrently. It it can read
-//     // some bytes from old value and some bytes from new value.
-//     // Use volatile to prevent insertion of memcpy.
-//     sigactions[sig].handler =
-//         *(volatile __sanitizer_sighandler_ptr const *)&act->handler;
-//     sigactions[sig].sa_flags = *(volatile int const *)&act->sa_flags;
-//     internal_memcpy(&sigactions[sig].sa_mask, &act->sa_mask,
-//                     sizeof(sigactions[sig].sa_mask));
-// #if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
-//     sigactions[sig].sa_restorer = act->sa_restorer;
-// #endif
-//     internal_memcpy(&newact, act, sizeof(newact));
-//     internal_sigfillset(&newact.sa_mask);
-//     if ((act->sa_flags & SA_SIGINFO) ||
-//         ((uptr)act->handler != sig_ign && (uptr)act->handler != sig_dfl)) {
-//       newact.sa_flags |= SA_SIGINFO;
-//       newact.sigaction = sighandler;
-//     }
-//     ReleaseStore(thr, pc, (uptr)&sigactions[sig]);
-//     act = &newact;
-//   }
-//   int res = REAL(sigaction)(sig, act, old);
-//   if (res == 0 && old && old->sigaction == sighandler)
-//     internal_memcpy(old, &old_stored, sizeof(*old));
-//   return res;
-// }
+int sigaction_impl(int sig, const __sanitizer_sigaction *act,
+                   __sanitizer_sigaction *old) {
+  // Note: if we call REAL(sigaction) directly for any reason without proxying
+  // the signal handler through sighandler, very bad things will happen.
+  // The handler will run synchronously and corrupt tsan per-thread state.
+  SCOPED_INTERCEPTOR_RAW(sigaction, sig, act, old);
+  if (sig <= 0 || sig >= kSigCount) {
+    errno = errno_EINVAL;
+    return -1;
+  }
+  __sanitizer_sigaction *sigactions = interceptor_ctx()->sigactions;
+  __sanitizer_sigaction old_stored;
+  if (old) internal_memcpy(&old_stored, &sigactions[sig], sizeof(old_stored));
+  __sanitizer_sigaction newact;
+  if (act) {
+    // Copy act into sigactions[sig].
+    // Can't use struct copy, because compiler can emit call to memcpy.
+    // Can't use internal_memcpy, because it copies byte-by-byte,
+    // and signal handler reads the handler concurrently. It it can read
+    // some bytes from old value and some bytes from new value.
+    // Use volatile to prevent insertion of memcpy.
+    sigactions[sig].handler =
+        *(volatile __sanitizer_sighandler_ptr const *)&act->handler;
+    sigactions[sig].sa_flags = *(volatile int const *)&act->sa_flags;
+    internal_memcpy(&sigactions[sig].sa_mask, &act->sa_mask,
+                    sizeof(sigactions[sig].sa_mask));
+#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
+    sigactions[sig].sa_restorer = act->sa_restorer;
+#endif
+    internal_memcpy(&newact, act, sizeof(newact));
+    internal_sigfillset(&newact.sa_mask);
+    if ((act->sa_flags & SA_SIGINFO) ||
+        ((uptr)act->handler != sig_ign && (uptr)act->handler != sig_dfl)) {
+      newact.sa_flags |= SA_SIGINFO;
+      newact.sigaction = sighandler;
+    }
+    ReleaseStore(thr, pc, (uptr)&sigactions[sig]);
+    act = &newact;
+  }
+  int res = REAL(sigaction)(sig, act, old);
+  if (res == 0 && old && old->sigaction == sighandler)
+    internal_memcpy(old, &old_stored, sizeof(*old));
+  return res;
+}
 
-// static __sanitizer_sighandler_ptr signal_impl(int sig,
-//                                               __sanitizer_sighandler_ptr h) {
-//   __sanitizer_sigaction act;
-//   act.handler = h;
-//   internal_memset(&act.sa_mask, -1, sizeof(act.sa_mask));
-//   act.sa_flags = 0;
-//   __sanitizer_sigaction old;
-//   int res = sigaction_symname(sig, &act, &old);
-//   if (res) return (__sanitizer_sighandler_ptr)sig_err;
-//   return old.handler;
-// }
+static __sanitizer_sighandler_ptr signal_impl(int sig,
+                                              __sanitizer_sighandler_ptr h) {
+  __sanitizer_sigaction act;
+  act.handler = h;
+  internal_memset(&act.sa_mask, -1, sizeof(act.sa_mask));
+  act.sa_flags = 0;
+  __sanitizer_sigaction old;
+  int res = sigaction_symname(sig, &act, &old);
+  if (res) return (__sanitizer_sighandler_ptr)sig_err;
+  return old.handler;
+}
 
 // #define TSAN_SYSCALL()             \
 //   ThreadState *thr = cur_thread(); \
@@ -2592,7 +2592,7 @@ void InitializeInterceptors() {
   new(interceptor_ctx()) InterceptorContext();
 
 //   InitializeCommonInterceptors();
-//   InitializeSignalInterceptors();
+  InitializeSignalInterceptors();
   InitializeLibdispatchInterceptors();
 
 #if !SANITIZER_APPLE
