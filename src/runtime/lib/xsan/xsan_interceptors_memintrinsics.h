@@ -57,7 +57,7 @@ struct XsanInterceptorContext {
     }                                                                         \
     if (!__asan::AsanQuickCheckForUnpoisonedRegion(__offset, __size) &&       \
         (__bad = __asan_region_is_poisoned(__offset, __size))) {              \
-      XsanInterceptorContext *_ctx = (XsanInterceptorContext *)ctx;           \
+      XsanInterceptorContext *_ctx = (XsanInterceptorContext *)(ctx);         \
       bool suppressed = false;                                                \
       if (_ctx) {                                                             \
         suppressed = __asan::IsInterceptorSuppressed(_ctx->interceptor_name); \
@@ -79,7 +79,7 @@ struct XsanInterceptorContext {
   do {                                                                       \
     XsanInterceptorContext *_ctx = (XsanInterceptorContext *)(ctx);          \
     if (_ctx && _ctx->xsan_thr) {                                            \
-      auto [thr, pc] = _ctx->xsan_thr->getTsanArgs();                  \
+      auto [thr, pc] = _ctx->xsan_thr->getTsanArgs();                        \
       __tsan::MemoryAccessRange(thr, pc, (uptr)(offset), (size), (isWrite)); \
     } else {                                                                 \
       __tsan::MemoryAccessRange(__tsan::cur_thread_init(), GET_CURRENT_PC(), \
@@ -87,7 +87,6 @@ struct XsanInterceptorContext {
     }                                                                        \
   } while (0)
 
-/// TODO: Implement this
 #define XSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite) \
   do {                                                       \
     ASAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite);    \
