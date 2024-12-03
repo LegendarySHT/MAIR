@@ -586,7 +586,6 @@ INTERCEPTOR(char *, strdup, const char *s) {
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
-  return REAL(strdup)(s);
 }
 
 #  if XSAN_INTERCEPT___STRDUP
@@ -604,7 +603,6 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   void *new_mem = xsan_malloc(length + 1, &stack);
   REAL(memcpy)(new_mem, s, length + 1);
   return reinterpret_cast<char *>(new_mem);
-  return REAL(__strdup)(s);
 }
 #  endif  // XSAN_INTERCEPT___STRDUP
 
