@@ -21,9 +21,10 @@ class ScopedInterceptor {
 
  private:
   ThreadState *const thr_;
-  bool in_ignored_lib_;
-  bool ignoring_;
-
+  bool in_ignored_lib_ = false;
+  bool in_blocking_func_ = false;
+  bool ignoring_ = false;
+  
   void DisableIgnoresImpl();
   void EnableIgnoresImpl();
 };
