@@ -533,6 +533,9 @@ bool ThreadSanitizer::sanitizeFunction(Function &F,
   // Traverse all instructions, collect loads/stores/returns, check for calls.
   for (auto &BB : F) {
     for (auto &Inst : BB) {
+      // Skip instructions inserted by another instrumentation.
+      if (Inst.hasMetadata(LLVMContext::MD_nosanitize))
+        continue;
       if (isTsanAtomic(&Inst))
         AtomicAccesses.push_back(&Inst);
       else if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))
