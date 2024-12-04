@@ -88,6 +88,8 @@
 #include <string>
 #include <tuple>
 
+#include "Instrumentation.h"
+
 using namespace llvm;
 
 // TODO: duplicate macro
@@ -1131,6 +1133,11 @@ ModuleAddressSanitizerPass::ModuleAddressSanitizerPass(
 
 PreservedAnalyses ModuleAddressSanitizerPass::run(Module &M,
                                                   ModuleAnalysisManager &MAM) {
+  // Return early if nosanitize_address module flag is present for the module.
+  // This implies that asan pass has already run before.
+  if (__xsan::checkIfAlreadyInstrumented(M, "nosanitize_address"))
+    return PreservedAnalyses::all();
+
   ModuleAddressSanitizer ModuleSanitizer(M, Options.CompileKernel,
                                          Options.Recover, UseGlobalGC,
                                          UseOdrIndicator, DestructorKind);

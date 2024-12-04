@@ -14,6 +14,7 @@ add_link_options(-Wl,-Bsymbolic)
 
 set(XSAN_PASS_COMMON 
   AttributeTaggingPass.cpp
+  Instrumentation.cpp
   PassRegistry.cpp
 )
 
