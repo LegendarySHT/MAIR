@@ -1,5 +1,5 @@
 diff --git a/clang/include/clang/Driver/SanitizerArgs.h b/clang/include/clang/Driver/SanitizerArgs.h
-index 1b29b1151224..753305d3d225 100644
+index 1b29b1151224..2820907f10f2 100644
 --- a/clang/include/clang/Driver/SanitizerArgs.h
 +++ b/clang/include/clang/Driver/SanitizerArgs.h
 @@ -12,6 +12,7 @@
@@ -10,13 +10,18 @@ index 1b29b1151224..753305d3d225 100644
  #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
  #include <string>
  #include <vector>
-@@ -71,18 +72,33 @@ public:
+@@ -66,23 +67,38 @@ class SanitizerArgs {
+ 
+   std::string MemtagMode;
+ 
++  bool XsanEnabled;
++
+ public:
+   /// Parses the sanitizer arguments from an argument list.
    SanitizerArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
                  bool DiagnoseErrors = true);
  
-+  bool isXsanOnlyFrontend() const {
-+    return llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
-+  }
++  bool isXsanEnabled() const { return XsanEnabled; }
 +
    bool needsSharedRt() const { return SharedRuntime; }
  
@@ -24,7 +29,7 @@ index 1b29b1151224..753305d3d225 100644
 -  bool needsAsanRt() const { return Sanitizers.has(SanitizerKind::Address); }
 +  // MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
 +  bool needsAsanRt() const {
-+    return !isXsanOnlyFrontend() && Sanitizers.has(SanitizerKind::Address);
++    return !isXsanEnabled() && Sanitizers.has(SanitizerKind::Address);
 +  }
    bool needsHwasanRt() const {
      return Sanitizers.has(SanitizerKind::HWAddress);
@@ -37,18 +42,18 @@ index 1b29b1151224..753305d3d225 100644
 +  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
 +  // Rt
 +  bool needsTsanRt() const {
-+    return !isXsanOnlyFrontend() && Sanitizers.has(SanitizerKind::Thread);
++    return !isXsanEnabled() && Sanitizers.has(SanitizerKind::Thread);
 +  }
 +  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
 +  // Rt
 +  bool needsMsanRt() const {
-+    return !isXsanOnlyFrontend() && Sanitizers.has(SanitizerKind::Memory);
++    return !isXsanEnabled() && Sanitizers.has(SanitizerKind::Memory);
 +  }
    bool needsFuzzer() const { return Sanitizers.has(SanitizerKind::Fuzzer); }
    bool needsLsanRt() const {
      return Sanitizers.has(SanitizerKind::Leak) &&
 diff --git a/clang/lib/CodeGen/BackendUtil.cpp b/clang/lib/CodeGen/BackendUtil.cpp
-index 7c4e35634e5d..f855909b541e 100644
+index 7c4e35634e5d..9d05070f13d3 100644
 --- a/clang/lib/CodeGen/BackendUtil.cpp
 +++ b/clang/lib/CodeGen/BackendUtil.cpp
 @@ -47,6 +47,7 @@
@@ -64,7 +69,7 @@ index 7c4e35634e5d..f855909b541e 100644
    PB.registerOptimizerLastEPCallback([&](ModulePassManager &MPM,
                                           OptimizationLevel Level) {
 +    // XSAN-MODIFIED: add env check "XSAN_ONLY_FRONTEND" to forbid sanitizer passes
-+    bool IsXSANOnlyFrontend = llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
++    bool isXsanEnabled = llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
 +
      if (CodeGenOpts.hasSanitizeCoverage()) {
        auto SancovOpts = getSancovOptsFromCGOpts(CodeGenOpts);
@@ -74,7 +79,7 @@ index 7c4e35634e5d..f855909b541e 100644
  
      auto MSanPass = [&](SanitizerMask Mask, bool CompileKernel) {
 -      if (LangOpts.Sanitize.has(Mask)) {
-+      if (LangOpts.Sanitize.has(Mask) && !IsXSANOnlyFrontend) {
++      if (LangOpts.Sanitize.has(Mask) && !isXsanEnabled) {
          int TrackOrigins = CodeGenOpts.SanitizeMemoryTrackOrigins;
          bool Recover = CodeGenOpts.SanitizeRecover.has(Mask);
  
@@ -83,14 +88,14 @@ index 7c4e35634e5d..f855909b541e 100644
      MSanPass(SanitizerKind::KernelMemory, true);
  
 -    if (LangOpts.Sanitize.has(SanitizerKind::Thread)) {
-+    if (LangOpts.Sanitize.has(SanitizerKind::Thread) && !IsXSANOnlyFrontend) {
++    if (LangOpts.Sanitize.has(SanitizerKind::Thread) && !isXsanEnabled) {
        MPM.addPass(ModuleThreadSanitizerPass());
        MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
      }
  
      auto ASanPass = [&](SanitizerMask Mask, bool CompileKernel) {
 -      if (LangOpts.Sanitize.has(Mask)) {
-+      if (LangOpts.Sanitize.has(Mask) && !IsXSANOnlyFrontend) {
++      if (LangOpts.Sanitize.has(Mask) && !isXsanEnabled) {
          bool UseGlobalGC = asanUseGlobalsGC(TargetTriple, CodeGenOpts);
          bool UseOdrIndicator = CodeGenOpts.SanitizeAddressUseOdrIndicator;
          llvm::AsanDtorKind DestructorKind =
@@ -99,12 +104,12 @@ index 7c4e35634e5d..f855909b541e 100644
  
      auto HWASanPass = [&](SanitizerMask Mask, bool CompileKernel) {
 -      if (LangOpts.Sanitize.has(Mask)) {
-+      if (LangOpts.Sanitize.has(Mask) && !IsXSANOnlyFrontend) {
++      if (LangOpts.Sanitize.has(Mask) && !isXsanEnabled) {
          bool Recover = CodeGenOpts.SanitizeRecover.has(Mask);
          MPM.addPass(HWAddressSanitizerPass(
              {CompileKernel, Recover,
 diff --git a/clang/lib/Driver/SanitizerArgs.cpp b/clang/lib/Driver/SanitizerArgs.cpp
-index 68fe90c7a69d..1b2c692b2f74 100644
+index 68fe90c7a69d..bf5ca210e4da 100644
 --- a/clang/lib/Driver/SanitizerArgs.cpp
 +++ b/clang/lib/Driver/SanitizerArgs.cpp
 @@ -257,10 +257,11 @@ bool SanitizerArgs::needsFuzzerInterceptors() const {
@@ -116,19 +121,33 @@ index 68fe90c7a69d..1b2c692b2f74 100644
    if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
        needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||
 -      (needsScudoRt() && !requiresMinimalRuntime()))
-+      (needsScudoRt() && !requiresMinimalRuntime()) || isXsanOnlyFrontend())
++      (needsScudoRt() && !requiresMinimalRuntime()) || isXsanEnabled())
      return false;
  
    return (Sanitizers.Mask & NeedsUbsanRt & ~TrapSanitizers.Mask) ||
-diff --git a/clang/lib/Driver/ToolChains/CommonArgs.cpp b/clang/lib/Driver/ToolChains/CommonArgs.cpp
-index 443725f7d8a8..be6b7f50d5e8 100644
---- a/clang/lib/Driver/ToolChains/CommonArgs.cpp
-+++ b/clang/lib/Driver/ToolChains/CommonArgs.cpp
-@@ -58,6 +58,7 @@
- #include "llvm/Support/Threading.h"
- #include "llvm/Support/VirtualFileSystem.h"
- #include "llvm/Support/YAMLParser.h"
-+#include "llvm/Support/raw_ostream.h"
+@@ -303,6 +304,9 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
+   SanitizerMask DiagnosedKinds; // All Kinds we have diagnosed up to now.
+                                 // Used to deduplicate diagnostics.
+   SanitizerMask Kinds;
++
++  XsanEnabled = llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
++
+   const SanitizerMask Supported = setGroupBits(TC.getSupportedSanitizers());
  
- using namespace clang::driver;
- using namespace clang::driver::tools;
+   CfiCrossDso = Args.hasFlag(options::OPT_fsanitize_cfi_cross_dso,
+@@ -503,6 +507,15 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
+                      SanitizerKind::Address | SanitizerKind::KernelAddress |
+                          SanitizerKind::HWAddress |
+                          SanitizerKind::KernelHWAddress)};
++  // XSAN-MODIFIED: modify IncompatibleGroups
++  if (isXsanEnabled()) {
++    for (auto &G : IncompatibleGroups) {
++      if (G.first == SanitizerKind::Address) {
++        G.second &= ~SanitizerKind::Thread;
++      }
++    }
++  }
++
+   // Enable toolchain specific default sanitizers if not explicitly disabled.
+   SanitizerMask Default = TC.getDefaultSanitizers() & ~AllRemove;
+ 

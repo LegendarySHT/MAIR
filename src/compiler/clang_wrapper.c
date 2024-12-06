@@ -195,7 +195,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
     } else if (!strcmp(cur, "-xsan")) {
       /// TODO: support more sanitizers
       cc_params[cc_par_cnt++] = "-fsanitize=address";
-      // cc_params[cc_par_cnt++] = "-fsanitize=thread";
+      cc_params[cc_par_cnt++] = "-fsanitize=thread";
       xsanTy = XSan;
       continue;
     } else if (!strncmp(cur, "-fno-sanitize=", 14)){

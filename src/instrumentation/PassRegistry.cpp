@@ -100,7 +100,7 @@ void registerXsanForClangAndOpt(PassBuilder &PB) {
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
         addAsanToMPM(MPM);
-        // addTsanToMPM(MPM);
+        addTsanToMPM(MPM);
       });
 
   // 这里注册opt回调的名称
@@ -109,9 +109,9 @@ void registerXsanForClangAndOpt(PassBuilder &PB) {
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "xsan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-          //   MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+          MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
           addAsanToMPM(MPM);
-          //   addTsanToMPM(MPM);
+          addTsanToMPM(MPM);
           return true;
         }
         return false;
