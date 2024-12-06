@@ -603,7 +603,7 @@ void MapShadow(uptr addr, uptr size) {
     // Second and subsequent calls map heap.
     if (shadow_end <= ctx->mapped_shadow_end)
       return;
-    if (ctx->mapped_shadow_begin < shadow_begin)
+    if (!ctx->mapped_shadow_begin || ctx->mapped_shadow_begin > shadow_begin)
       ctx->mapped_shadow_begin = shadow_begin;
     if (shadow_begin < ctx->mapped_shadow_end)
       shadow_begin = ctx->mapped_shadow_end;
