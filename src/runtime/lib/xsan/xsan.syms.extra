@@ -1,5 +1,6 @@
 __xsan_*
 __asan_*
+__tsan_*
 __lsan_*
 __ubsan_*
 __sancov_*

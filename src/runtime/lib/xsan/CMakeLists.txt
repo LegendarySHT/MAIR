@@ -387,7 +387,7 @@ if(NOT APPLE)
                   RTUbsan_cxx
       CFLAGS ${XSAN_RTL_CFLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
-      PARENT_TARGET asan)
+      PARENT_TARGET xsan)
   
   add_compiler_rt_runtime(clang_rt.xsan_static
       STATIC
@@ -408,12 +408,13 @@ if(NOT APPLE)
   foreach(arch ${XSAN_SUPPORTED_ARCH})
     if (SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
       add_sanitizer_rt_symbols(clang_rt.xsan_cxx
-        ARCHS ${arch})
-      add_dependencies(xsan clang_rt.xsan_cxx-${arch}-symbols)
+        ARCHS ${arch}
+        EXTRA xsan.syms.extra)
       add_sanitizer_rt_symbols(clang_rt.xsan
         ARCHS ${arch}
         EXTRA xsan.syms.extra)
-      add_dependencies(xsan clang_rt.xsan-${arch}-symbols)
+      add_dependencies(xsan clang_rt.xsan-${arch}-symbols
+                            clang_rt.xsan_cxx-${arch}-symbols)
     endif()
 
   endforeach()
