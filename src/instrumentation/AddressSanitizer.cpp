@@ -980,7 +980,7 @@ struct FunctionStackPoisoner : public InstVisitor<FunctionStackPoisoner> {
 
   void unpoisonDynamicAllocasBeforeInst(Instruction *InstBefore,
                                         Value *SavedStack) {
-    IRBuilder<> IRB(InstBefore);
+    __xsan::InstrumentationIRBuilder IRB(InstBefore);
     Value *DynamicAreaPtr = IRB.CreatePtrToInt(SavedStack, IntptrTy);
     // When we insert _asan_allocas_unpoison before @llvm.stackrestore, we
     // need to adjust extracted SP to compute the address of the most recent
@@ -1207,7 +1207,7 @@ Value *AddressSanitizer::memToShadow(Value *Shadow, IRBuilder<> &IRB) {
 
 // Instrument memset/memmove/memcpy
 void AddressSanitizer::instrumentMemIntrinsic(MemIntrinsic *MI) {
-  IRBuilder<> IRB(MI);
+  __xsan::InstrumentationIRBuilder IRB(MI);
   if (isa<MemTransferInst>(MI)) {
     IRB.CreateCall(
         isa<MemMoveInst>(MI) ? AsanMemmove : AsanMemcpy,
@@ -1382,7 +1382,7 @@ bool AddressSanitizer::GlobalIsLinkerInitialized(GlobalVariable *G) {
 
 void AddressSanitizer::instrumentPointerComparisonOrSubtraction(
     Instruction *I) {
-  IRBuilder<> IRB(I);
+  __xsan::InstrumentationIRBuilder IRB(I);
   FunctionCallee F = isa<ICmpInst>(I) ? AsanPtrCmpFunction : AsanPtrSubFunction;
   Value *Param[2] = {I->getOperand(0), I->getOperand(1)};
   for (Value *&i : Param) {
@@ -1433,13 +1433,13 @@ static void instrumentMaskedLoadOrStore(AddressSanitizer *Pass,
         // with InsertBefore == I
       }
     } else {
-      IRBuilder<> IRB(I);
+      __xsan::InstrumentationIRBuilder IRB(I);
       Value *MaskElem = IRB.CreateExtractElement(Mask, Idx);
       Instruction *ThenTerm = SplitBlockAndInsertIfThen(MaskElem, I, false);
       InsertBefore = ThenTerm;
     }
 
-    IRBuilder<> IRB(InsertBefore);
+    __xsan::InstrumentationIRBuilder IRB(InsertBefore);
     InstrumentedAddress =
         IRB.CreateGEP(VTy, Addr, {Zero, ConstantInt::get(IntptrTy, Idx)});
     doInstrumentAddress(Pass, I, InsertBefore, InstrumentedAddress, Alignment,
@@ -1508,7 +1508,7 @@ Instruction *AddressSanitizer::generateCrashCode(Instruction *InsertBefore,
                                                  size_t AccessSizeIndex,
                                                  Value *SizeArgument,
                                                  uint32_t Exp) {
-  IRBuilder<> IRB(InsertBefore);
+  __xsan::InstrumentationIRBuilder IRB(InsertBefore);
   Value *ExpVal = Exp == 0 ? nullptr : ConstantInt::get(IRB.getInt32Ty(), Exp);
   CallInst *Call = nullptr;
   if (SizeArgument) {
@@ -1560,7 +1560,7 @@ Instruction *AddressSanitizer::instrumentAMDGPUAddress(
   if (PtrTy->getPointerAddressSpace() != 0)
     return InsertBefore;
   // Instrument generic addresses in supported addressspaces.
-  IRBuilder<> IRB(InsertBefore);
+  __xsan::InstrumentationIRBuilder IRB(InsertBefore);
   Value *AddrLong = IRB.CreatePointerCast(Addr, IRB.getInt8PtrTy());
   Value *IsShared = IRB.CreateCall(AMDGPUAddressShared, {AddrLong});
   Value *IsPrivate = IRB.CreateCall(AMDGPUAddressPrivate, {AddrLong});
@@ -1584,7 +1584,7 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
       return;
   }
 
-  IRBuilder<> IRB(InsertBefore);
+  __xsan::InstrumentationIRBuilder IRB(InsertBefore);
   size_t AccessSizeIndex = TypeSizeToSizeIndex(TypeSize);
   const ASanAccessInfo AccessInfo(IsWrite, CompileKernel, AccessSizeIndex);
 
@@ -1655,7 +1655,7 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
 void AddressSanitizer::instrumentUnusualSizeOrAlignment(
     Instruction *I, Instruction *InsertBefore, Value *Addr, uint32_t TypeSize,
     bool IsWrite, Value *SizeArgument, bool UseCalls, uint32_t Exp) {
-  IRBuilder<> IRB(InsertBefore);
+  __xsan::InstrumentationIRBuilder IRB(InsertBefore);
   Value *Size = ConstantInt::get(IntptrTy, TypeSize / 8);
   Value *AddrLong = IRB.CreatePointerCast(Addr, IntptrTy);
   if (UseCalls) {
@@ -1677,7 +1677,7 @@ void AddressSanitizer::instrumentUnusualSizeOrAlignment(
 void ModuleAddressSanitizer::poisonOneInitializer(Function &GlobalInit,
                                                   GlobalValue *ModuleName) {
   // Set up the arguments to our poison/unpoison functions.
-  IRBuilder<> IRB(&GlobalInit.front(),
+  __xsan::InstrumentationIRBuilder IRB(&GlobalInit.front(),
                   GlobalInit.front().getFirstInsertionPt());
 
   // Add a call to poison all external globals before the given function starts.
@@ -1910,7 +1910,7 @@ StringRef ModuleAddressSanitizer::getGlobalMetadataSection() const {
 }
 
 void ModuleAddressSanitizer::initializeCallbacks(Module &M) {
-  IRBuilder<> IRB(*C);
+  __xsan::InstrumentationIRBuilder IRB(*C);
 
   // Declare our poisoning and unpoisoning functions.
   AsanPoisonGlobals =
@@ -1997,6 +1997,7 @@ Instruction *ModuleAddressSanitizer::CreateAsanModuleDtor(Module &M) {
       GlobalValue::InternalLinkage, 0, kAsanModuleDtorName, &M);
   AsanDtorFunction->addFnAttr(Attribute::NoUnwind);
   AsanDtorFunction->addFnAttr(Attribute::NoSanitizeCoverage);
+  AsanDtorFunction->addFnAttr(Attribute::DisableSanitizerInstrumentation);
   // Ensure Dtor cannot be discarded, even if in a comdat.
   appendToUsed(M, {AsanDtorFunction});
   BasicBlock *AsanDtorBB = BasicBlock::Create(*C, "", AsanDtorFunction);
@@ -2097,7 +2098,7 @@ void ModuleAddressSanitizer::InstrumentGlobalsELF(
   // We also need to unregister globals at the end, e.g., when a shared library
   // gets closed.
   if (DestructorKind != AsanDtorKind::None) {
-    IRBuilder<> IrbDtor(CreateAsanModuleDtor(M));
+    __xsan::InstrumentationIRBuilder IrbDtor(CreateAsanModuleDtor(M));
     IrbDtor.CreateCall(AsanUnregisterElfGlobals,
                        {IRB.CreatePointerCast(RegisteredFlag, IntptrTy),
                         IRB.CreatePointerCast(StartELFMetadata, IntptrTy),
@@ -2158,7 +2159,7 @@ void ModuleAddressSanitizer::InstrumentGlobalsMachO(
   // We also need to unregister globals at the end, e.g., when a shared library
   // gets closed.
   if (DestructorKind != AsanDtorKind::None) {
-    IRBuilder<> IrbDtor(CreateAsanModuleDtor(M));
+    __xsan::InstrumentationIRBuilder IrbDtor(CreateAsanModuleDtor(M));
     IrbDtor.CreateCall(AsanUnregisterImageGlobals,
                        {IRB.CreatePointerCast(RegisteredFlag, IntptrTy)});
   }
@@ -2188,7 +2189,7 @@ void ModuleAddressSanitizer::InstrumentGlobalsWithMetadataArray(
   // We also need to unregister globals at the end, e.g., when a shared library
   // gets closed.
   if (DestructorKind != AsanDtorKind::None) {
-    IRBuilder<> IrbDtor(CreateAsanModuleDtor(M));
+    __xsan::InstrumentationIRBuilder IrbDtor(CreateAsanModuleDtor(M));
     IrbDtor.CreateCall(AsanUnregisterGlobals,
                        {IRB.CreatePointerCast(AllGlobals, IntptrTy),
                         ConstantInt::get(IntptrTy, N)});
@@ -2450,10 +2451,11 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
                                             /*InitArgs=*/{}, VersionCheckName);
   }
   AsanCtorFunction->addFnAttr(Attribute::NoSanitizeCoverage);
+  AsanCtorFunction->addFnAttr(Attribute::DisableSanitizerInstrumentation);
 
   bool CtorComdat = true;
   if (ClGlobals) {
-    IRBuilder<> IRB(AsanCtorFunction->getEntryBlock().getTerminator());
+    __xsan::InstrumentationIRBuilder IRB(AsanCtorFunction->getEntryBlock().getTerminator());
     InstrumentGlobals(IRB, M, &CtorComdat);
   }
 
@@ -2479,7 +2481,7 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
 }
 
 void AddressSanitizer::initializeCallbacks(Module &M) {
-  IRBuilder<> IRB(*C);
+  __xsan::InstrumentationIRBuilder IRB(*C);
   // Create __asan_report* callbacks.
   // IsWrite, TypeSize and Exp are encoded in the function name.
   for (int Exp = 0; Exp < 2; Exp++) {
@@ -2561,7 +2563,7 @@ bool AddressSanitizer::maybeInsertAsanInitAtFunctionEntry(Function &F) {
   if (F.getName().find(" load]") != std::string::npos) {
     FunctionCallee AsanInitFunction =
         declareSanitizerInitFunction(*F.getParent(), kAsanInitName, {});
-    IRBuilder<> IRB(&F.front(), F.front().begin());
+    __xsan::InstrumentationIRBuilder IRB(&F.front(), F.front().begin());
     IRB.CreateCall(AsanInitFunction, {});
     return true;
   }
@@ -2573,7 +2575,7 @@ bool AddressSanitizer::maybeInsertDynamicShadowAtFunctionEntry(Function &F) {
   if (Mapping.Offset != kDynamicShadowSentinel)
     return false;
 
-  IRBuilder<> IRB(&F.front().front());
+  __xsan::InstrumentationIRBuilder IRB(&F.front().front());
   if (Mapping.InGlobal) {
     if (ClWithIfuncSuppressRemat) {
       // An empty inline asm with input reg == output reg.
@@ -2757,7 +2759,7 @@ bool AddressSanitizer::instrumentFunction(Function &F,
   // We must unpoison the stack before NoReturn calls (throw, _exit, etc).
   // See e.g. https://github.com/google/sanitizers/issues/37
   for (auto CI : NoReturnCalls) {
-    IRBuilder<> IRB(CI);
+    __xsan::InstrumentationIRBuilder IRB(CI);
     IRB.CreateCall(AsanHandleNoReturnFunc, {});
   }
 
@@ -2789,7 +2791,7 @@ bool AddressSanitizer::LooksLikeCodeInBug11395(Instruction *I) {
 }
 
 void FunctionStackPoisoner::initializeCallbacks(Module &M) {
-  IRBuilder<> IRB(*C);
+  __xsan::InstrumentationIRBuilder IRB(*C);
   if (ASan.UseAfterReturn == AsanDetectStackUseAfterReturnMode::Always ||
       ASan.UseAfterReturn == AsanDetectStackUseAfterReturnMode::Runtime) {
     const char *MallocNameTemplate =
@@ -2933,7 +2935,7 @@ void FunctionStackPoisoner::copyArgsPassedByValToAllocas() {
     CopyInsertPoint = CopyInsertPoint->getNextNode();
     assert(CopyInsertPoint);
   }
-  IRBuilder<> IRB(CopyInsertPoint);
+  __xsan::InstrumentationIRBuilder IRB(CopyInsertPoint);
   const DataLayout &DL = F.getParent()->getDataLayout();
   for (Argument &Arg : F.args()) {
     if (Arg.hasByValAttr()) {
@@ -2986,7 +2988,7 @@ Value *FunctionStackPoisoner::createAllocaForLayout(
 
 void FunctionStackPoisoner::createDynamicAllocasInitStorage() {
   BasicBlock &FirstBB = *F.begin();
-  IRBuilder<> IRB(dyn_cast<Instruction>(FirstBB.begin()));
+  __xsan::InstrumentationIRBuilder IRB(dyn_cast<Instruction>(FirstBB.begin()));
   DynamicAllocaLayout = IRB.CreateAlloca(IntptrTy, nullptr);
   IRB.CreateStore(Constant::getNullValue(IntptrTy), DynamicAllocaLayout);
   DynamicAllocaLayout->setAlignment(Align(32));
@@ -3005,7 +3007,7 @@ void FunctionStackPoisoner::processDynamicAllocas() {
     assert(ASan.isInterestingAlloca(*APC.AI));
     assert(!APC.AI->isStaticAlloca());
 
-    IRBuilder<> IRB(APC.InsBefore);
+    __xsan::InstrumentationIRBuilder IRB(APC.InsBefore);
     poisonAlloca(APC.AI, APC.Size, IRB, APC.DoPoison);
     // Dynamic allocas will be unpoisoned unconditionally below in
     // unpoisonDynamicAllocas.
@@ -3085,7 +3087,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
         DILocation::get(SP->getContext(), SP->getScopeLine(), 0, SP);
 
   Instruction *InsBefore = AllocaVec[0];
-  IRBuilder<> IRB(InsBefore);
+  __xsan::InstrumentationIRBuilder IRB(InsBefore);
 
   // Make sure non-instrumented allocas stay in the entry block. Otherwise,
   // debug info is broken, because only entry-block allocas are treated as
@@ -3191,7 +3193,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
           Constant::getNullValue(IRB.getInt32Ty()));
       Instruction *Term =
           SplitBlockAndInsertIfThen(UseAfterReturnIsEnabled, InsBefore, false);
-      IRBuilder<> IRBIf(Term);
+      __xsan::InstrumentationIRBuilder IRBIf(Term);
       StackMallocIdx = StackMallocSizeClass(LocalStackSize);
       assert(StackMallocIdx <= kMaxAsanStackMallocSizeClass);
       Value *FakeStackValue =
@@ -3213,7 +3215,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
         IRB.CreateICmpEQ(FakeStack, Constant::getNullValue(IntptrTy));
     Instruction *Term =
         SplitBlockAndInsertIfThen(NoFakeStack, InsBefore, false);
-    IRBuilder<> IRBIf(Term);
+    __xsan::InstrumentationIRBuilder IRBIf(Term);
     Value *AllocaValue =
         DoDynamicAlloca ? createAllocaForLayout(IRBIf, L, true) : StaticAlloca;
 
@@ -3291,7 +3293,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
       size_t Begin = Desc.Offset / L.Granularity;
       size_t End = Begin + (APC.Size + L.Granularity - 1) / L.Granularity;
 
-      IRBuilder<> IRB(APC.InsBefore);
+      __xsan::InstrumentationIRBuilder IRB(APC.InsBefore);
       copyToShadow(ShadowAfterScope,
                    APC.DoPoison ? ShadowAfterScope : ShadowInScope, Begin, End,
                    IRB, ShadowBase);
@@ -3303,7 +3305,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
 
   // (Un)poison the stack before all ret instructions.
   for (Instruction *Ret : RetVec) {
-    IRBuilder<> IRBRet(Ret);
+    __xsan::InstrumentationIRBuilder IRBRet(Ret);
     // Mark the current frame as retired.
     IRBRet.CreateStore(ConstantInt::get(IntptrTy, kRetiredStackFrameMagic),
                        BasePlus0);
@@ -3324,7 +3326,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
       Instruction *ThenTerm, *ElseTerm;
       SplitBlockAndInsertIfThenElse(Cmp, Ret, &ThenTerm, &ElseTerm);
 
-      IRBuilder<> IRBPoison(ThenTerm);
+      __xsan::InstrumentationIRBuilder IRBPoison(ThenTerm);
       if (StackMallocIdx <= 4) {
         int ClassSize = kMinStackMallocSize << StackMallocIdx;
         ShadowAfterReturn.resize(ClassSize / L.Granularity,
@@ -3346,7 +3348,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
             {FakeStack, ConstantInt::get(IntptrTy, LocalStackSize)});
       }
 
-      IRBuilder<> IRBElse(ElseTerm);
+      __xsan::InstrumentationIRBuilder IRBElse(ElseTerm);
       copyToShadow(ShadowAfterScope, ShadowClean, IRBElse, ShadowBase);
     } else {
       copyToShadow(ShadowAfterScope, ShadowClean, IRBRet, ShadowBase);
@@ -3376,7 +3378,7 @@ void FunctionStackPoisoner::poisonAlloca(Value *V, uint64_t Size,
 // (3) if we poisoned at least one %alloca in a function,
 //     unpoison the whole stack frame at function exit.
 void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
-  IRBuilder<> IRB(AI);
+  __xsan::InstrumentationIRBuilder IRB(AI);
 
   const Align Alignment = std::max(Align(kAllocaRzSize), AI->getAlign());
   const uint64_t AllocaRedzoneMask = kAllocaRzSize - 1;
