@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 extern "C" void *__interceptor_malloc(size_t size);
+__attribute__((disable_sanitizer_instrumentation))
 extern "C" void *malloc(size_t size) {
   write(2, "malloc call\n", sizeof("malloc call\n") - 1);
   return __interceptor_malloc(size);
