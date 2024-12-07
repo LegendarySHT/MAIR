@@ -10,7 +10,7 @@ const char *kAsanDefaultOptions = "verbosity=1 help=1";
 #if (__APPLE__)
 __attribute__((weak))
 #endif
-__attribute__((no_sanitize_address))
+__attribute__((disable_sanitizer_instrumentation))
 extern "C" const char *
 __asan_default_options() {
   // CHECK: Available flags for {{AddressSanitizer|XSan}}:
