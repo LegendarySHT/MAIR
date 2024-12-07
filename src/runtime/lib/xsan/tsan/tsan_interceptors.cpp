@@ -2114,6 +2114,14 @@ DECLARE_REAL(int, vfork, int fake)
 #if SANITIZER_LINUX
 TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
                  void *arg, int *parent_tid, void *tls, pid_t *child_tid) {
+
+/// FIXME: TSan does not support CLONE_VM, so we temporarily remove it from flags.
+#define CLONE_VM  0x00000100
+  if (flags | CLONE_VM) {
+    // TSan does not support CLONE_VM, so we remove it from flags.
+    flags &= ~CLONE_VM;
+  }
+#undef CLONE_VM
   SCOPED_INTERCEPTOR_RAW(clone, fn, stack, flags, arg, parent_tid, tls,
                          child_tid);
   struct Arg {
