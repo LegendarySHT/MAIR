@@ -3,35 +3,14 @@
 #include "asan/orig/asan_suppressions.h"
 #include "xsan_interceptors.h"
 #include "xsan_thread.h"
+#include "xsan_interceptors.h"
+
 
 using namespace __xsan;
 
 /// FIXME: is it OKay to use nullptr as ctx? Should __asan_memcpy be ignorable
 /// by ScopedIgnoreInterceptors?
 
-void *__xsan_memcpy(void *to, const void *from, uptr size) {
-  XSAN_MEMCPY_IMPL(nullptr, to, from, size);
-}
-
-void *__xsan_memset(void *block, int c, uptr size) {
-  XSAN_MEMSET_IMPL(nullptr, block, c, size);
-}
-
-void *__xsan_memmove(void *to, const void *from, uptr size) {
-  XSAN_MEMMOVE_IMPL(nullptr, to, from, size);
-}
-
-void *__asan_memcpy(void *to, const void *from, uptr size) {
-  XSAN_MEMCPY_IMPL(nullptr, to, from, size);
-}
-
-void *__asan_memset(void *block, int c, uptr size) {
-  XSAN_MEMSET_IMPL(nullptr, block, c, size);
-}
-
-void *__asan_memmove(void *to, const void *from, uptr size) {
-  XSAN_MEMMOVE_IMPL(nullptr, to, from, size);
-}
 
 #if SANITIZER_FUCHSIA
 
