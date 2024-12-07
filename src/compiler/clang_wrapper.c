@@ -597,40 +597,60 @@ static void edit_params(u32 argc, char** argv) {
 
   cc_params[cc_par_cnt++] = "-Qunused-arguments";
 
+  /* Detect the compilation mode in advance. */
   xsanTy = detect_san_type(argc, argv);
-  while (--argc) {
-    u8* cur = *(++argv);
+  for (u32 i = 1; i < argc; i++) {
+    u8* cur = argv[i];
 
     if (!strcmp(cur, "--driver-mode=g++")) is_cxx = 1;
+    else if (!strcmp(cur, "-m32")) bit_mode = 32;
+    else if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
+    else if (!strcmp(cur, "-m64")) bit_mode = 64;
+    else if (!strcmp(cur, "-xc++")) x_set = 1;
+    else if (!strcmp(cur, "-xc")) x_set = 1;
+    else if (!strcmp(cur, "-x")) x_set = 1;
+    else if (!strcmp(cur, "-fsanitize=address") ||
+             !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
+    else if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
+    else if (!strcmp(cur, "-E")) preprocessor_only = 1;
+    else if (!strcmp(cur, "-shared")) shared_linking = 1;
+    else if (!strcmp(cur, "-dynamiclib")) shared_linking = 1;
+    else if (!strcmp(cur, "-Wl,-r")) partial_linking = 1;
+    else if (!strcmp(cur, "-Wl,-i")) partial_linking = 1;
+    else if (!strcmp(cur, "-Wl,--relocatable")) partial_linking = 1;
+    else if (!strcmp(cur, "-r")) partial_linking = 1;
+    else if (!strcmp(cur, "--relocatable")) partial_linking = 1;
+    else if (!strcmp(cur, "-c")) have_c = 1;
+    else if (!strncmp(cur, "-O", 2)) have_o = 1;
+    else if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
 
-    if (!strcmp(cur, "-m32")) bit_mode = 32;
-    if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
-    if (!strcmp(cur, "-m64")) bit_mode = 64;
+  }
 
-    if (!strcmp(cur, "-xc++")) x_set = 1;
-    if (!strcmp(cur, "-xc")) x_set = 1;
-    if (!strcmp(cur, "-x")) x_set = 1;
+  init_sanitizer_setting(xsanTy);
 
-    if (!strcmp(cur, "-fsanitize=address") ||
-        !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
+  /*
+    We should put the sanitizer static runtime library just ahead of the input
+    *.o/*.c  files, so that the CTor of sanitizers can be called before the CTors of
+    user code (.preinit, module_ctor).
 
-    if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
+    What's more, the compiler also places the sanitizer runtime library before
+    the input files after the Driver generates the command line, which should be
+    adhered by this compiler wrapper.
+
+    However, it is hard to judge whether an argument is an input file or not precisely,
+    so we simply add the sanitizer runtime library as front as possible.
+
+    See ASan's testcase "init_fini_sections.cpp" for details.
+  */
+  regist_pass_plugin(xsanTy);
+  add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+
+  while (--argc) {
+    u8* cur = *(++argv);
 
     if (!strcmp(cur, "-Wl,-z,defs") ||
         !strcmp(cur, "-Wl,--no-undefined")) continue;
 
-    if (!strcmp(cur, "-E")) preprocessor_only = 1;
-    if (!strcmp(cur, "-shared")) shared_linking = 1;
-    if (!strcmp(cur, "-dynamiclib")) shared_linking = 1;
-    if (!strcmp(cur, "-Wl,-r")) partial_linking = 1;
-    if (!strcmp(cur, "-Wl,-i")) partial_linking = 1;
-    if (!strcmp(cur, "-Wl,--relocatable")) partial_linking = 1;
-    if (!strcmp(cur, "-r")) partial_linking = 1;
-    if (!strcmp(cur, "--relocatable")) partial_linking = 1;
-    if (!strcmp(cur, "-c")) have_c = 1;
-
-    if (!strncmp(cur, "-O", 2)) have_o = 1;
-    if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
     if (handle_sanitizer_options(cur, 
         !strcmp(argv[-1], "-mllvm"), xsanTy)) {
       continue;
@@ -793,9 +813,9 @@ static void edit_params(u32 argc, char** argv) {
     cc_params[cc_par_cnt++] = "none";
   }
 
-  init_sanitizer_setting(xsanTy);
-  regist_pass_plugin(xsanTy);
-  add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+  // init_sanitizer_setting(xsanTy);
+  // regist_pass_plugin(xsanTy);
+  // add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
 
   cc_params[cc_par_cnt++] = "-fuse-ld=lld";
 
