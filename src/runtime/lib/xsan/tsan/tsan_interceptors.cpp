@@ -2840,9 +2840,7 @@ void InitializeInterceptors() {
   // REAL(atexit) = (int(*)(void(*)()))unreachable;
 #endif
 
-  /// FIXME: bug in clone_test.cpp
-  /// Multiple Die() cause Asan_Die dead loop
-  /// Original TSan also report the similar problem 
+  /// Moved to XSan's interceptors.cpp.
   // if (REAL(__cxa_atexit)(&finalize, 0, 0)) {
   //   Printf("ThreadSanitizer: failed to setup atexit callback\n");
   //   Die();

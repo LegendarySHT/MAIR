@@ -12,6 +12,7 @@
 #include "tsan/orig/tsan_fd.h"
 #include "tsan/tsan_interceptors.h"
 #include "tsan/tsan_rtl.h"
+#include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "xsan_thread.h"
@@ -132,19 +133,43 @@ void SetThreadName(const char *name) {
   }
 }
 
-int OnExit() {
-  if (CAN_SANITIZE_LEAKS && common_flags()->detect_leaks &&
-      __lsan::HasReportedLeaks()) {
-    return common_flags()->exitcode;
-  }
-  // FIXME: ask frontend whether we need to return failure.
-  return 0;
-}
-
 }  // namespace __xsan
 
 // ---------------------- Wrappers ---------------- {{{1
 using namespace __xsan;
+
+extern __sanitizer_FILE *stdout, *stderr;
+
+DECLARE_REAL(int, fflush, __sanitizer_FILE *fp)
+
+static void FlushStreams() {
+  REAL(fflush)(stdout);
+  REAL(fflush)(stderr);
+}
+
+/// Changes exit code.
+static int OnExit(void *ctx) {
+  if (CAN_SANITIZE_LEAKS && common_flags()->detect_leaks &&
+      __lsan::HasReportedLeaks()) {
+    return common_flags()->exitcode;
+  }
+
+  auto *ctx_ = (XsanInterceptorContext *)ctx;
+  int status = __tsan::Finalize(ctx_->xsan_thr->tsan_thread_);
+  FlushStreams();
+
+  // FIXME: ask frontend whether we need to return failure.
+  return status;
+}
+
+/// Changes exit code.
+static void finalize(void *arg) {
+  int status = __tsan::Finalize(__tsan::cur_thread());
+  // Make sure the output is not lost.
+  FlushStreams();
+  if (status)
+    Die();
+}
 
 #  if XSAN_CONTAINS_TSAN
 #    include "sanitizer_common/sanitizer_platform_interceptors.h"
@@ -217,7 +242,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
       CheckNoDeepBind(filename, flag);              \
       REAL(dlopen)(filename, flag);                 \
     })
-#  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit()
+#  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit(ctx)
 #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle)
 #  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()
 #  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!xsan_inited)
@@ -1079,11 +1104,6 @@ void InitializeXsanInterceptors() {
   //   XSAN_INTERCEPT_FUNC(atexit);
   // #  endif
 
-#  if !SANITIZER_APPLE && !SANITIZER_ANDROID
-  // Need to setup it, because interceptors check that the function is resolved.
-  // But atexit is emitted directly into the module, so can't be resolved.
-  REAL(atexit) = (int (*)(void (*)()))unreachable;
-#  endif
 
 #  if XSAN_INTERCEPT_PTHREAD_ATFORK
   XSAN_INTERCEPT_FUNC(pthread_atfork);
@@ -1092,6 +1112,20 @@ void InitializeXsanInterceptors() {
 #  if XSAN_INTERCEPT_VFORK
   XSAN_INTERCEPT_FUNC(vfork);
 #  endif
+
+#  if !SANITIZER_APPLE && !SANITIZER_ANDROID
+  // Need to setup it, because interceptors check that the function is resolved.
+  // But atexit is emitted directly into the module, so can't be resolved.
+  REAL(atexit) = (int (*)(void (*)()))unreachable;
+#  endif
+
+  /// FIXME: bug in clone_test.cpp
+  /// Multiple Die() cause Asan_Die dead loop
+  /// Original TSan also report the similar problem 
+  if (REAL(__cxa_atexit)(&finalize, 0, 0)) {
+    Printf("XSan: failed to setup atexit callback\n");
+    Die();
+  }
 
   __tsan::InitializeInterceptors();
 
