@@ -64,7 +64,8 @@ if config.host_os == 'Darwin' and config.apple_platform == 'osx':
   default_asan_opts += ['detect_leaks=1']
 
 default_asan_opts_str = ':'.join(default_asan_opts)
-# make the clang wrapper not optimize the test binaries
+# Disable TSan's report in ASan's test pipeline.
+config.environment['TSAN_OPTIONS'] = "report_bugs=0"
 if default_asan_opts_str:
   config.environment['ASAN_OPTIONS'] = default_asan_opts_str
   default_asan_opts_str += ':'
