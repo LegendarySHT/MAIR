@@ -37,4 +37,4 @@ int main() {
 // CHECK:        Thread T2 {{.*}} created by thread T1 at
 // CHECK:        Thread T3 {{.*}} created by thread T1 at:
 // CHECK:        Thread T1 {{.*}} created by main thread at:
-// CHECK: SUMMARY: ThreadSanitizer: data race{{.*}}
+// CHECK: SUMMARY: {{ThreadSanitizer|XSan}}: data race{{.*}}

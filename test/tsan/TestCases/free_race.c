@@ -42,6 +42,6 @@ int main() {
 // CHECK-NOZUPP:   Previous write of size 8 at {{.*}} by thread T1{{.*}}:
 // CHECK-NOZUPP:     #0 free
 // CHECK-NOZUPP:     #{{(1|2)}} Thread1
-// CHECK-NOZUPP: SUMMARY: ThreadSanitizer: heap-use-after-free{{.*}}Thread2
+// CHECK-NOZUPP: SUMMARY: {{ThreadSanitizer|XSan}}: heap-use-after-free{{.*}}Thread2
 // CHECK-SUPP:   ThreadSanitizer: Matched 1 suppressions
 // CHECK-SUPP:    1 race:^Thread2$

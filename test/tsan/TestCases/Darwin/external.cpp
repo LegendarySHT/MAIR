@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
   // TEST3: {{ObjectWrite|ObjectRead}}
   // TEST3: Location is MyLibrary::MyObject of size 16 at
   // TEST3: {{ObjectCreate}}
-  // TEST3: SUMMARY: ThreadSanitizer: race on MyLibrary::MyObject {{.*}} in {{ObjectWrite|ObjectRead}}
+  // TEST3: SUMMARY: {{ThreadSanitizer|XSan}}: race on MyLibrary::MyObject {{.*}} in {{ObjectWrite|ObjectRead}}
 
   fprintf(stderr, "RW test done\n");
   // CHECK: RW test done
@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
   // TEST3: {{ObjectWrite|ObjectWriteAnother}}
   // TEST3: Location is MyLibrary::MyObject of size 16 at
   // TEST3: {{ObjectCreate}}
-  // TEST3: SUMMARY: ThreadSanitizer: race on MyLibrary::MyObject {{.*}} in {{ObjectWrite|ObjectWriteAnother}}
+  // TEST3: SUMMARY: {{ThreadSanitizer|XSan}}: race on MyLibrary::MyObject {{.*}} in {{ObjectWrite|ObjectWriteAnother}}
 
   fprintf(stderr, "WW test done\n");
   // CHECK: WW test done

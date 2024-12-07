@@ -15,5 +15,5 @@ int main() {
 // CHECK:   Mutex {{.*}}) created at:
 // CHECK:     #0 AnnotateRWLockAcquired
 // CHECK:     #1 main
-// CHECK: SUMMARY: ThreadSanitizer: read unlock of a write locked mutex
+// CHECK: SUMMARY: {{ThreadSanitizer|XSan}}: read unlock of a write locked mutex
 

@@ -26,4 +26,4 @@ int main() {
 }
 
 // CHECK: WARNING: ThreadSanitizer: data race
-// CHECK: SUMMARY: ThreadSanitizer: data race{{.*}}Thread
+// CHECK: SUMMARY: {{ThreadSanitizer|XSan}}: data race{{.*}}Thread
