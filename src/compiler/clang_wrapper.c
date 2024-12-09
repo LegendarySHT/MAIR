@@ -200,11 +200,28 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       continue;
     } else if (!strncmp(cur, "-fno-sanitize=", 14)){
       u8 *val = cur + 14;
-      if (!strcmp(val, "all") 
-        || (xsanTy == ASan && !strcmp(val, "address"))
-        || (xsanTy == TSan && !strcmp(val, "thread"))
-      ) {
+      enum SanitizerType disableTy = SanNone;
+      if (!strcmp(val, "all")) {
+        disableTy = XSan;
+      } else if (!strcmp(val, "address")) {
+        disableTy = ASan;
+      } else if (!strcmp(val, "thread")) {
+        disableTy = TSan;
+      } else if (!strcmp(val, "undefined")) {
+        disableTy = UBSan;
+      } else {
+        FATAL("Unsupported -fno-sanitize option: %s", val);
+      }
+
+      if (xsanTy == disableTy) {
         xsanTy = SanNone;
+      } else if (xsanTy == XSan) {
+        /// TDDO: use bit-op to support more sanitizers
+        if (disableTy == ASan) {
+          xsanTy = TSan;
+        } else if (disableTy == TSan) {
+          xsanTy = ASan;
+        }
       }
     }
   }
