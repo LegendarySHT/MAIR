@@ -19,9 +19,9 @@
 
 namespace __xsan {
 // Executes code from other Sanitizers
-void XsanAllocHook(uptr ptr, uptr size, bool write);
-void XsanFreeHook(uptr p, bool write);
-void XsanAllocFreeTailHook();
+void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
+void XsanFreeHook(uptr ptr, bool write, uptr pc);
+void XsanAllocFreeTailHook(uptr pc);
 }  // namespace __xsan
 
 namespace __asan {
@@ -519,6 +519,8 @@ struct Allocator {
       allocated =
           allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     } else {
+      /// This APi might be called after TSD destructor (e.g.,
+      /// pthread_deattach), where t == nullptr. In this case, we use fallback.
       SpinMutexLock l(&fallback_mutex);
       AllocatorCache *cache = &fallback_allocator_cache;
       allocated =
@@ -593,8 +595,8 @@ struct Allocator {
       reinterpret_cast<LargeChunkHeader *>(alloc_beg)->Set(m);
     }
     /// TODO: figure out should we transfer user_ptr or real_ptr?
-    __xsan::XsanAllocHook(user_beg, size, true);
-    __xsan::XsanAllocFreeTailHook();
+    __xsan::XsanAllocHook(user_beg, size, true, stack->trace[0]);
+    __xsan::XsanAllocFreeTailHook(stack->trace[0]);
     RunMallocHooks(res, size);
     return res;
   }
@@ -697,9 +699,9 @@ struct Allocator {
         ReportNewDeleteTypeMismatch(p, delete_size, delete_alignment, stack);
       }
     }
-    __xsan::XsanFreeHook(p, true);
+    __xsan::XsanFreeHook(p, true, stack->trace[0]);
     QuarantineChunk(m, ptr, stack);
-    __xsan::XsanAllocFreeTailHook();
+    __xsan::XsanAllocFreeTailHook(stack->trace[0]);
   }
 
   void *Reallocate(void *old_ptr, uptr new_size, BufferedStackTrace *stack) {
@@ -953,7 +955,7 @@ struct Allocator {
 
     void *res = reinterpret_cast<void *>(user_beg);
 
-    __xsan::XsanAllocHook(user_beg, size, true);
+    __xsan::XsanAllocHook(user_beg, size, true, stack->trace[0]);
     /// Internal allocations do not occur during signal processing
     /// Refer to tsan_fd.cpp
     // __xsan::XsanAllocFreeTailHook();
@@ -982,7 +984,7 @@ struct Allocator {
     }
 
     RunFreeHooks(ptr);
-    __xsan::XsanFreeHook(p, true);
+    __xsan::XsanFreeHook(p, true, stack->trace[0]);
 
     AsanThread *t = GetCurrentThread();
     if (t) {

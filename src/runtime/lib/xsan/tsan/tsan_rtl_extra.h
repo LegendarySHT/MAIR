@@ -8,6 +8,10 @@
 #include "tsan_rtl.h"
 
 namespace __tsan {
+
+/// Comes from  interceptor_ctx()->finalize_key;
+unsigned& finalize_key();
+
 class ScopedIgnoreTsan {
  public:
   ScopedIgnoreTsan(bool enable) : enable_(enable) {

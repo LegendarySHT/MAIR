@@ -131,8 +131,13 @@ void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 }  // namespace __xsan
 
 namespace __tsan {
-void SignalUnsafeCall(ThreadState *thr, uptr pc);
-}
+void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
+
+void OnXsanFreeHook(uptr ptr, bool write, uptr pc);
+
+void OnXsanAllocFreeTailHook(uptr pc);
+
+}  // namespace __tsan
 
 namespace __xsan {
 // ---------------------- API exposed by xsan::Alloctor ---------------
@@ -164,26 +169,16 @@ void XsanAllocator::PrintStats() {
 }
 
 // ---------------------- Hook for other Sanitizers -------------------
-void XsanAllocHook(uptr ptr, uptr size, bool write) {
-  auto [thr, pc] = GetCurrentThread()->getTsanArgs();
-  if (__tsan::is_tsan_initialized()) {
-    /// TODO: remove code related to tsan's uaf checking
-    __tsan::OnUserAlloc(thr, pc, ptr, size, write);
-  }
+void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
+  __tsan::OnXsanAllocHook(ptr, size, write, pc);
 }
 
-void XsanFreeHook(uptr p, bool write) {
-  auto [thr, pc] = GetCurrentThread()->getTsanArgs();
-  if (__tsan::is_tsan_initialized()) {
-    /// TODO: remove code related to tsan's uaf checking
-    __tsan::OnUserFree(thr, pc, p, write);
-  }
+void XsanFreeHook(uptr ptr, bool write, uptr pc) {
+  __tsan::OnXsanFreeHook(ptr, write, pc);
 }
 
-void XsanAllocFreeTailHook() {
-  auto [thr, pc] = GetCurrentThread()->getTsanArgs();
-  /// TODO: handle calls from tsan_fd.cpp
-  __tsan::SignalUnsafeCall(thr, pc);
+void XsanAllocFreeTailHook(uptr pc) {
+  __tsan::OnXsanAllocFreeTailHook(pc);
 }
 
 
