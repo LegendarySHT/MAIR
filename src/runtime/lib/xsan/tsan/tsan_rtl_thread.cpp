@@ -11,11 +11,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common/sanitizer_placement_new.h"
-#include "tsan_rtl.h"
+#include "tsan/rtl/tsan_defs.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_report.h"
+#include "tsan_rtl.h"
+#include "tsan_rtl_extra.h"
 #include "tsan_sync.h"
+
+extern "C" int pthread_setspecific(unsigned key, const void *v);
 
 namespace __tsan {
 
@@ -148,6 +152,22 @@ struct OnStartedArgs {
   uptr tls_addr;
   uptr tls_size;
 };
+
+ThreadState *SetCurrentThread() {
+  ThreadState *thr = cur_thread_init();
+#if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
+  ThreadIgnoreBegin(thr, 0);
+  /// Set TSD, and TSD destructor will be called automatically when the thread
+  /// exits.
+  if (pthread_setspecific(finalize_key(),
+                          (void *)GetPthreadDestructorIterations())) {
+    Printf("ThreadSanitizer: failed to set thread key\n");
+    Die();
+  }
+  ThreadIgnoreEnd(thr);
+#endif
+  return thr;
+}
 
 void ThreadStart(ThreadState *thr, Tid tid, tid_t os_id,
                  ThreadType thread_type) {

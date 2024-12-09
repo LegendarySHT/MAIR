@@ -143,6 +143,7 @@ class XsanThread {
 
 // Get the current thread. May return 0.
 XsanThread *GetCurrentThread();
+/// Set the current thread and enable the TSD and TSD destructor.
 void SetCurrentThread(XsanThread *t);
 u32 GetCurrentTidOrInvalid();
 XsanThread *FindThreadByStackAddress(uptr addr);

@@ -141,16 +141,6 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
   if (isMainThread()) {
     __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
   } else {
-    // Thread-local state is not initialized yet.
-    //  #  if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
-    //      __tsan::ThreadIgnoreBegin(thr, 0);
-    //     if (pthread_setspecific(__tsan::interceptor_ctx()->finalize_key,
-    //                             (void *)GetPthreadDestructorIterations())) {
-    //       Printf("ThreadSanitizer: failed to set thread key\n");
-    //       Die();
-    //     }
-    //     __tsan::ThreadIgnoreEnd(thr);
-    // #  endif
     __tsan::Processor *proc = __tsan::ProcCreate();
     __tsan::ProcWire(proc, thr);
     __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
@@ -158,10 +148,6 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
 }
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semaphore *started) {
-  auto *thr = __tsan::cur_thread_init();
-  this->tsan_thread_ = thr;
-  thr->xsan_thread = this;
-
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular,
   // nullptr);
@@ -169,6 +155,7 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
   /// TODO: should TSan care these heap blocks allocated by ASan?
   /// TODO: unify ASan's and TSan's thread context as XSan's thread context.
   {
+    // Thread-local state is not initialized yet.
     __xsan::ScopedIgnoreInterceptors ignore;
     if (created) created->Wait();
 
@@ -303,6 +290,10 @@ XsanThread *GetCurrentThread() { return xsan_current_thread; }
 
 void SetCurrentThread(XsanThread *t) {
   __asan::SetCurrentThread(t->asan_thread_);
+  auto *tsan_thread = __tsan::SetCurrentThread();
+  t->tsan_thread_ = tsan_thread;
+  tsan_thread->xsan_thread = t;
+
   // Make sure we do not reset the current XsanThread.
   CHECK_EQ(0, xsan_current_thread);
   xsan_current_thread = t;

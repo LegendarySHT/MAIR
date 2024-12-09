@@ -215,6 +215,10 @@ LibIgnore *libignore() {
   return &interceptor_ctx()->libignore;
 }
 
+unsigned& finalize_key() {
+  return interceptor_ctx()->finalize_key;
+}
+
 void InitializeLibIgnore() {
   const SuppressionContext &supp = *Suppressions();
   const uptr n = supp.SuppressionCount();
@@ -845,7 +849,8 @@ static void thread_finalize(void *v) {
     }
     return;
   }
-  DestroyThreadState();
+  /// Moved to XsanThread::Destroy()
+  // DestroyThreadState();
 }
 #endif
 
