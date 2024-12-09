@@ -58,7 +58,11 @@ void SetCommonFlags(CommonFlags &cf) {
       cf.detect_deadlocks = false;
   }
   cf.print_suppressions = false;
-//   cf.stack_trace_format = "    #%n %f %S %M";
+  /// In TSan's testcase, we need to report the same stack trace as the original
+  /// TSan.
+  if (!!GetEnv("XSAN_IN_TSAN_TEST")) {
+      cf.stack_trace_format = "    #%n %f %S %M";
+  }
   cf.intercept_tls_get_addr = true;
 }
 

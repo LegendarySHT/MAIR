@@ -30,6 +30,8 @@ if config.host_os == 'Darwin':
   default_tsan_opts += ':ignore_noninstrumented_modules=0'
   default_tsan_opts += ':ignore_interceptors_accesses=0'
 
+# Let XSan's stack trace format be the same with TSan's.
+config.environment['XSAN_IN_TSAN_TEST'] = '1'
 # Platform-specific default TSAN_OPTIONS for lit tests.
 if default_tsan_opts:
   config.environment['TSAN_OPTIONS'] = default_tsan_opts
