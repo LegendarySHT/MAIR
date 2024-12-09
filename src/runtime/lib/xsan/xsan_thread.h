@@ -63,7 +63,14 @@ class XsanThread {
   // Returns a pointer to the start of the stack variable's shadow memory.
   uptr GetStackVariableShadowStart(uptr addr);
 
+  bool AddrIsInRealStack(uptr addr);
+  /// ASan uses FakeStack to detect use-after-return bugs just like what it does
+  /// to detect use-after-free bugs.
+  /// Based on ASan, XSan also provides API to query if an address is in the fake
+  /// stack.
+  bool AddrIsInFakeStack(uptr addr);
   bool AddrIsInStack(uptr addr);
+  bool AddrIsInTls(uptr addr);
 
   // True is this thread is currently unwinding stack (i.e. collecting a stack
   // trace). Used to prevent deadlocks on platforms where libc unwinder calls

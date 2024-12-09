@@ -174,6 +174,7 @@ struct ThreadState {
   // Technically `current` should be a separate THREADLOCAL variable;
   // but it is placed here in order to share cache line with previous fields.
   ThreadState* current;
+  __xsan::XsanThread *xsan_thread;
 
   atomic_sint32_t pending_signals;
 

@@ -45,6 +45,7 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
     __tsan::ProcWire(proc, tsan_thread);
     thread->tsan_tid_ = __tsan::ThreadCreate(nullptr, 0, 0, true);
     thread->tsan_thread_ = tsan_thread;
+    tsan_thread->xsan_thread = thread;
   } else {
     // Other thread create for TSan is called in CreateTsanThread.
   }
@@ -158,7 +159,8 @@ void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semaphore *started) {
   auto *thr = __tsan::cur_thread_init();
-  tsan_thread_ = thr;
+  this->tsan_thread_ = thr;
+  thr->xsan_thread = this;
 
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular,
@@ -252,9 +254,25 @@ uptr XsanThread::GetStackVariableShadowStart(uptr addr) {
   return asan_thread_->GetStackVariableShadowStart(addr);
 }
 
-bool XsanThread::AddrIsInStack(uptr addr) {
+bool XsanThread::AddrIsInRealStack(uptr addr) {
   const auto bounds = GetStackBounds();
   return addr >= bounds.bottom && addr < bounds.top;
+}
+
+bool XsanThread::AddrIsInFakeStack(uptr addr) {
+  __asan::FakeStack *fake_stack = this->asan_thread_->get_fake_stack();
+  if (fake_stack) {
+    return fake_stack->AddrIsInFakeStack((uptr)addr);
+  }
+  return false;
+}
+
+bool XsanThread::AddrIsInStack(uptr addr) {
+  return AddrIsInRealStack(addr) || AddrIsInFakeStack(addr);
+}
+
+bool XsanThread::AddrIsInTls(uptr addr) {
+  return tls_begin() <= addr && addr < tls_end();
 }
 
 static pthread_key_t tsd_key;

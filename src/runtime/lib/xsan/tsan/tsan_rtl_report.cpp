@@ -9,6 +9,7 @@
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
 //===----------------------------------------------------------------------===//
+#include "../xsan_thread.h"
 
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
@@ -236,8 +237,11 @@ static bool IsInStackOrTls(ThreadContextBase *tctx_base, void *arg) {
     return false;
   ThreadState *thr = tctx->thr;
   CHECK(thr);
-  return ((addr >= thr->stk_addr && addr < thr->stk_addr + thr->stk_size) ||
-          (addr >= thr->tls_addr && addr < thr->tls_addr + thr->tls_size));
+  __xsan::XsanThread *xsan_thr = thr->xsan_thread;
+  CHECK(xsan_thr);
+  /// Due to ASan's fake stack, delegates this check to
+  /// XsanThread::AddrIsInStack and XsanThread::AddrIsInTls
+  return xsan_thr->AddrIsInStack(addr) || xsan_thr->AddrIsInTls(addr);
 }
 
 ThreadContext *IsThreadStackOrTls(uptr addr, bool *is_stack) {
@@ -249,7 +253,11 @@ ThreadContext *IsThreadStackOrTls(uptr addr, bool *is_stack) {
     return 0;
   ThreadState *thr = tctx->thr;
   CHECK(thr);
-  *is_stack = (addr >= thr->stk_addr && addr < thr->stk_addr + thr->stk_size);
+  __xsan::XsanThread *xsan_thr = thr->xsan_thread;
+  CHECK(xsan_thr);
+  /// Due to ASan's fake stack, delegates this check to
+  /// XsanThread::AddrIsInStack
+  *is_stack = xsan_thr->AddrIsInStack(addr);
   return tctx;
 }
 #endif
@@ -803,7 +811,7 @@ void ReportRace(ThreadState *thr, RawShadow *shadow_mem, Shadow cur, Shadow old,
         ctx->thread_registry.GetThreadLocked(tids[i]));
     rep.AddThread(tctx);
   }
-  
+
   rep.AddLocation(addr_min, addr_max - addr_min);
 
   if (flags()->print_full_thread_history) {
