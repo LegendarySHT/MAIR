@@ -82,8 +82,8 @@ struct Mapping48AddressSpace : public AsanMappingBase<Mapping48AddressSpace> {
   static constexpr const uptr kTsanShadowEnd = 0x400000000000ull;
   static constexpr const uptr kTsanMetaShadowBeg = 0x400000000000ull;
   static constexpr const uptr kTsanMetaShadowEnd = 0x480000000000ull;
-  static constexpr const uptr kTsanShadowMsk = 0x780000000000ull;
-  static constexpr const uptr kTsanShadowXor = 0x040000000000ull;
+  static constexpr const uptr kTsanShadowMsk = 0x700000000000ull;
+  static constexpr const uptr kTsanShadowXor = 0x000000000000ull;
   static constexpr const uptr kTsanShadowAdd = 0x200000000000ull;
 
   /// ASan's Shadow parameters
