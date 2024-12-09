@@ -194,6 +194,12 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     ctx = (void *)&_ctx;                             \
     (void)ctx;
 
+#  define XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, ...) \
+    SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);        \
+    XsanInterceptorContext _ctx = {#func, xsan_thr};       \
+    ctx = (void *)&_ctx;                                   \
+    (void)ctx;
+
 #  define XSAN_BEFORE_DLOPEN(filename, flag) \
     if (__asan::flags()->strict_init_order)  \
       __asan::StopInitOrderChecking();
@@ -215,6 +221,11 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
       if (SANITIZER_APPLE && UNLIKELY(!xsan_inited)) \
         return REAL(func)(__VA_ARGS__);              \
       ENSURE_XSAN_INITED();                          \
+    } while (false)
+#  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)   \
+    XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__); \
+    do {                                                      \
+      ENSURE_XSAN_INITED();                                   \
     } while (false)
 #  define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
     do {                                            \
