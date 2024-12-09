@@ -103,4 +103,4 @@ int main() {
 // CHECK-REPORT: WARNING: ThreadSanitizer: data race
 // CHECK-REPORT: WARNING: ThreadSanitizer: data race
 // CHECK-REPORT: DONE
-// CHECK-REPORT: ThreadSanitizer: reported 4 warnings
+// CHECK-REPORT: {{XSan|ThreadSanitizer}}: reported 4 warnings

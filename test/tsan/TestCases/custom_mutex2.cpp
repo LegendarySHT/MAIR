@@ -30,5 +30,5 @@ int main() {
   return 0;
 }
 
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK: DONE

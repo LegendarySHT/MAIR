@@ -59,7 +59,7 @@ int main(int argc, const char **argv) {
   return 0;
 }
 
-// CHECK-DIE: ThreadSanitizer: starting new threads after multi-threaded fork is not supported
+// CHECK-DIE: {{XSan|ThreadSanitizer}}: starting new threads after multi-threaded fork is not supported
 
 // CHECK-NODIE-NOT: ThreadSanitizer:
 // CHECK-NODIE: OK

@@ -59,4 +59,4 @@ int main() {
   pthread_join(t, 0);
 }
 
-// CHECK-NOT: ThreadSanitizer: data race
+// CHECK-NOT: {{XSan|ThreadSanitizer}}: data race

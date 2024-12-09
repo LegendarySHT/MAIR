@@ -35,6 +35,6 @@ int main() {
   fprintf(stderr, "OK\n");
 }
 
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK: OK
 

@@ -34,6 +34,6 @@ extern "C" void libfunc() {
 
 #endif  // #ifdef LIB
 
-// CHECK: ThreadSanitizer: library {{.*}} that was matched against called_from_lib suppression 'ignore_lib3.so' is unloaded
+// CHECK: {{XSan|ThreadSanitizer}}: library {{.*}} that was matched against called_from_lib suppression 'ignore_lib3.so' is unloaded
 // CHECK-NOT: OK
 

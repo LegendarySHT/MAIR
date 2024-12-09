@@ -27,4 +27,4 @@ int main() {
   pthread_join(t, 0);
 }
 
-// CHECK: ThreadSanitizer: reported 1 warnings
+// CHECK: {{XSan|ThreadSanitizer}}: reported 1 warnings

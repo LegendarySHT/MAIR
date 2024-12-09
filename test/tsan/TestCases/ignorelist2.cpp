@@ -11,7 +11,7 @@ int Global;
 
 void *Thread1(void *x) {
   barrier_wait(&barrier);
-  // CHECK: ThreadSanitizer: data race
+  // CHECK: {{XSan|ThreadSanitizer}}: data race
   // CHECK: Write of size 4
   // CHECK: #0 Thread1{{.*}}ignorelist2.cpp:[[@LINE+1]]
   Global++;

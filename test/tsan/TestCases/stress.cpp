@@ -98,5 +98,5 @@ int main() {
 // CHECK-NORACE-NOT: ThreadSanitizer:
 // CHECK-NORACE: DONE
 // CHECK-NORACE-NOT: ThreadSanitizer:
-// CHECK-RACE: ThreadSanitizer: data race
+// CHECK-RACE: {{XSan|ThreadSanitizer}}: data race
 // CHECK-RACE: DONE

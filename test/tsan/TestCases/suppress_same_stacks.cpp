@@ -24,4 +24,4 @@ int main() {
   delete[] data;
 }
 
-// CHECK: ThreadSanitizer: reported 1 warnings
+// CHECK: {{XSan|ThreadSanitizer}}: reported 1 warnings

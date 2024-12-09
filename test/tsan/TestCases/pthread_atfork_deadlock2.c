@@ -44,7 +44,7 @@ int main() {
   return 0;
 }
 
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK:   Write of size 4
 // CHECK:     #0 atfork
 // CHECK:   Previous write of size 4

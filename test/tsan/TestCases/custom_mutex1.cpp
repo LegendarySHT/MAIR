@@ -33,7 +33,7 @@ int main() {
   return 0;
 }
 
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK-NEXT:   Write of size 8 at {{.*}} by main thread:
 // CHECK-NEXT:     #0 main {{.*}}custom_mutex1.cpp:29
 // CHECK: DONE

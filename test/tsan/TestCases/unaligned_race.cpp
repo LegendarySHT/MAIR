@@ -126,4 +126,4 @@ int main() {
 }
 
 // CHECK: WARNING: ThreadSanitizer: data race
-// CHECK: ThreadSanitizer: reported 224 warnings
+// CHECK: {{XSan|ThreadSanitizer}}: reported 224 warnings

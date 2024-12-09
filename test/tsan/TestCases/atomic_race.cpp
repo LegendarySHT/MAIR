@@ -60,22 +60,22 @@ int main() {
 }
 
 // CHECK: Test 0
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK-NOT: SUMMARY{{.*}}tsan_interface_atomic
 // CHECK: Test 1
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK-NOT: SUMMARY{{.*}}tsan_interface_atomic
 // CHECK: Test 2
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK-NOT: SUMMARY{{.*}}tsan_interface_atomic
 // CHECK: Test 3
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK-NOT: SUMMARY{{.*}}tsan_interface_atomic
 // CHECK: Test 0 reverse
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK: Test 1 reverse
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK: Test 2 reverse
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK: Test 3 reverse
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race

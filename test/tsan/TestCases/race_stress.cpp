@@ -21,5 +21,5 @@ int main() {
   fprintf(stderr, "DONE\n");
 }
 
-// CHECK: ThreadSanitizer: data race
+// CHECK: {{XSan|ThreadSanitizer}}: data race
 // CHECK: DONE

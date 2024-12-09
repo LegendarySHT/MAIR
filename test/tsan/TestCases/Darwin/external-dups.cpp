@@ -55,4 +55,4 @@ int main(int argc, char *argv[]) {
   // CHECK: Second phase done.
 }
 
-// CHECK: ThreadSanitizer: reported 2 warnings
+// CHECK: {{XSan|ThreadSanitizer}}: reported 2 warnings

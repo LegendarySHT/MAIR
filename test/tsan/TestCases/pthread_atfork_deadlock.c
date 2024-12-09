@@ -27,7 +27,7 @@ int main() {
   glob++;
   barrier_wait(&barrier);
   pthread_join(t, NULL);
-  // CHECK: ThreadSanitizer: data race
+  // CHECK: {{XSan|ThreadSanitizer}}: data race
   // CHECK-NOT: ATFORK
   return 0;
 }

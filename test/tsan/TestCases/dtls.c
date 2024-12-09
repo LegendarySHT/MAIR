@@ -60,5 +60,5 @@ long *GetTls() {
 }
 #endif
 
-// CHECK-NOT: ThreadSanitizer: data race
+// CHECK-NOT: {{XSan|ThreadSanitizer}}: data race
 // CHECK: DONE
