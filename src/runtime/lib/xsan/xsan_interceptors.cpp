@@ -57,7 +57,10 @@ ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func,
 
 inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
   return xsan_ignore_interceptors || !thread || !thread->is_inited_ ||
-         thread->in_ignored_lib_;
+         thread->in_ignored_lib_ || 
+         /// TODO: to support libignore, we plan to migrate it to Xsan.
+         /// xsan_suppressions.cpp is required accordingly.
+         __tsan::MustIgnoreInterceptor(thread->tsan_thread_);
 }
 
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
@@ -243,8 +246,16 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
       REAL(dlopen)(filename, flag);                 \
     })
 #  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit(ctx)
-#  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle)
-#  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()
+// #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle)
+// #  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()
+/// TODO: move libignore to Xsan.
+#  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
+  __tsan::libignore()->OnLibraryLoaded(filename)
+
+#  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() \
+  __tsan::libignore()->OnLibraryUnloaded()
+
+
 #  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!xsan_inited)
 
 #  define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end) \
