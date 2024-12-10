@@ -172,6 +172,8 @@ class AsanThread {
   uptr tls_end_;
   DTLS *dtls_;
 
+  /// TODO: manupulate fake_stack_ in XSanThread.
+  /// As it is a shared resource.
   FakeStack *fake_stack_;
   AsanThreadLocalMallocStorage malloc_storage_;
   AsanStats stats_;

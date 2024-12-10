@@ -16,13 +16,12 @@ struct CommonFlags;
 namespace __xsan {
 // ---------------------- Hook for other Sanitizers -------------------
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
-
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
-
 void XsanAllocFreeTailHook(uptr pc);
+void OnFakeStackDestory(uptr addr, uptr size);
 
 void InitializeSanitizerFlags();
 void SetSanitizerCommonFlags(CommonFlags &cf);
-
 void ValidateSanitizerFlags();
+
 }  // namespace __xsan

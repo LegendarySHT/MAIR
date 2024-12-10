@@ -9,18 +9,18 @@
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
 //===----------------------------------------------------------------------===//
-#include "../xsan_allocator.h"
+#include "tsan_mman.h"
 
+#include "../xsan_allocator.h"
 #include "sanitizer_common/sanitizer_allocator_checks.h"
 #include "sanitizer_common/sanitizer_allocator_interface.h"
 #include "sanitizer_common/sanitizer_allocator_report.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
-#include "tsan_mman.h"
-#include "tsan_rtl.h"
-#include "tsan_report.h"
 #include "tsan_flags.h"
+#include "tsan_report.h"
+#include "tsan_rtl.h"
 
 namespace __tsan {
 
@@ -403,6 +403,11 @@ void OnXsanAllocFreeTailHook(uptr pc) {
   // auto [thr, pc] = GetCurrentThread()->getTsanArgs();
   /// TODO: handle calls from tsan_fd.cpp
   __tsan::SignalUnsafeCall(__tsan::cur_thread(), pc);
+}
+
+void OnFakeStackDestory(uptr addr, uptr size) {
+  /// The 1st and 2nd arguments are ignored in MemoryResetRange.
+  MemoryResetRange(cur_thread(), 0, addr, size);
 }
 
 

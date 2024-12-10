@@ -14,9 +14,9 @@
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
 
-// ---------------------- Heap Alloc / Free Hooks -------------------
-/// As XSan uses ASan's heap allocator directly, hence we don't need to invoke
-/// ASan's hooks here.
+// ---------------------- Memory Management Hooks -------------------
+/// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
+/// need to invoke ASan's hooks here.
 namespace __tsan {
 
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
@@ -27,6 +27,9 @@ void OnXsanFreeHook(uptr ptr, bool write, uptr pc) {}
 
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
 void OnXsanAllocFreeTailHook(uptr pc) {}
+
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+void OnFakeStackDestory(uptr addr, uptr size) {}
 }  // namespace __tsan
 
 namespace __xsan {
@@ -40,9 +43,13 @@ void XsanFreeHook(uptr ptr, bool write, uptr pc) {
 
 void XsanAllocFreeTailHook(uptr pc) { __tsan::OnXsanAllocFreeTailHook(pc); }
 
+void OnFakeStackDestory(uptr addr, uptr size) {
+  __tsan::OnFakeStackDestory(addr, size);
+}
+
 }  // namespace __xsan
 
-// ---------- End of Heap Alloc / Free Hooks -------------------
+// ---------- End of Memory Management Hooks -------------------
 
 // ---------------------- Flags Registration Hooks ---------------
 namespace __asan {

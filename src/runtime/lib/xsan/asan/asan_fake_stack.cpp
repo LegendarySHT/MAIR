@@ -11,6 +11,7 @@
 // FakeStack is used to detect use-after-return bugs.
 //===----------------------------------------------------------------------===//
 
+#include "../xsan_hooks.h"
 #include "asan_allocator.h"
 #include "asan_poisoning.h"
 #include "asan_thread.h"
@@ -65,6 +66,8 @@ FakeStack *FakeStack::Create(uptr stack_size_log) {
 
 void FakeStack::Destroy(int tid) {
   PoisonAll(0);
+  __xsan::OnFakeStackDestory(reinterpret_cast<uptr>(this),
+                             RequiredSize(stack_size_log()));
   if (Verbosity() >= 2) {
     InternalScopedString str;
     for (uptr class_id = 0; class_id < kNumberOfSizeClasses; class_id++)
