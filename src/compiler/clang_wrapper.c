@@ -331,9 +331,14 @@ static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
     }
   }
 
-  if (is_mllvm_arg && !strncmp(opt, "-tsan-", 6)) {
-    cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", opt + 6);
-    return 1;
+  if (is_mllvm_arg) {
+    if (!strncmp(opt, "-asan-", 6)) {
+      cc_params[cc_par_cnt++] = alloc_printf("-as-%s", opt + 6);
+      return 1;
+    } else if (!strncmp(opt, "-tsan-", 6)) {
+      cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", opt + 6);
+      return 1;
+    }
   }
   return 0;
 }
@@ -367,6 +372,7 @@ static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType 
     return handle_ubsan_options(opt);
   case XSan:
     ret = handle_asan_options(opt, is_mllvm_arg);
+    ret |= handle_tsan_options(opt, is_mllvm_arg);
     return ret;
   case SanNone:
     break;
