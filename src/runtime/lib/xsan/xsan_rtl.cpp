@@ -164,6 +164,8 @@ static void XsanInitInternal() {
 
   __asan::AsanInitFromXsanLate();
 
+  __tsan::TsanInitFromXsanLate();
+
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 

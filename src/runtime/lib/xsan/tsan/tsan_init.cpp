@@ -202,6 +202,12 @@ void TsanInitFromXsan() {
     }
   }
 
+  /// Moved to TsanInitFromXsanLate, i.e., after when TSan has been fully
+  /// initialized.
+  // OnInitialize();
+}
+
+void TsanInitFromXsanLate() {
   OnInitialize();
 }
 
