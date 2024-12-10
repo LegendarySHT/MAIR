@@ -5,7 +5,7 @@ set(ASAN_SOURCES
   asan/orig/asan_debugging.cpp
   asan/orig/asan_descriptions.cpp
   asan/orig/asan_errors.cpp
-  asan/orig/asan_fake_stack.cpp
+  # asan/orig/asan_fake_stack.cpp
   # asan/orig/asan_flags.cpp
   asan/orig/asan_fuchsia.cpp
   asan/orig/asan_globals.cpp
@@ -33,6 +33,7 @@ set(ASAN_SOURCES
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
+  asan/asan_fake_stack.cpp
   asan/asan_flags.cpp
   asan/asan_thread.cpp
   asan/asan_report.cpp
