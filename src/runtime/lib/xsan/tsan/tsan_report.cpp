@@ -282,12 +282,17 @@ static bool FrameIsInternal(const SymbolizedStack *frame) {
     return false;
   const char *file = frame->info.file;
   const char *module = frame->info.module;
-  if (file != 0 &&
-      (internal_strstr(file, "tsan_interceptors_posix.cpp") ||
-       internal_strstr(file, "sanitizer_common_interceptors.inc") ||
-       internal_strstr(file, "tsan_interface_")))
+  if (file && (internal_strstr(file, "/compiler-rt/lib/") ||
+               internal_strstr(file, "/include/c++/") ||
+               internal_strstr(file, "/include/g++") || 
+               internal_strstr(file, "/src/runtime/lib/xsan/")
+               ))
     return true;
-  if (module != 0 && (internal_strstr(module, "libclang_rt.tsan_")))
+  if (file && internal_strstr(file, "\\compiler-rt\\lib\\"))
+    return true;
+  if (module && (internal_strstr(module, "libclang_rt.")))
+    return true;
+  if (module && (internal_strstr(module, "clang_rt.")))
     return true;
   return false;
 }
