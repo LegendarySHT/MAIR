@@ -11,18 +11,12 @@
 #include <sanitizer_common/sanitizer_stackdepot.h>
 
 #include "../xsan_common_defs.h"
+#include "../xsan_hooks.h"
 #include "asan_thread.h"
 #include "lsan/lsan_common.h"
 #include "orig/asan_poisoning.h"
 #include "orig/asan_report.h"
 #include "orig/asan_stack.h"
-
-namespace __xsan {
-// Executes code from other Sanitizers
-void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
-void XsanFreeHook(uptr ptr, bool write, uptr pc);
-void XsanAllocFreeTailHook(uptr pc);
-}  // namespace __xsan
 
 namespace __asan {
 // using XAsanAllocator = __xsan::XsanAllocator;

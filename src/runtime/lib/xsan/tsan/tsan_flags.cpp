@@ -144,4 +144,10 @@ void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
   // }
 }
 
+void InitializeFlags() {
+  const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
+  const char *options = GetEnv(env_name);
+  InitializeFlags(__tsan::flags(), options, env_name);
+}
+
 }  // namespace __tsan

@@ -148,6 +148,7 @@ set(XSAN_SOURCES
   xsan_allocator.cpp
   xsan_disability_dummy.cpp
   xsan_flags.cpp
+  xsan_hooks.cpp
   xsan_interceptors.cpp
   xsan_interceptors_memintrinsics.cpp
   xsan_linux.cpp
@@ -262,6 +263,7 @@ SET(XSAN_HEADERS
   xsan_activation.h
   xsan_allocator.h
   xsan_flags.h
+  xsan_hooks.h
   xsan_interceptors.h
   xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h

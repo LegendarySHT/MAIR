@@ -17,31 +17,11 @@
 #include <sanitizer_common/sanitizer_flag_parser.h>
 #include <sanitizer_common/sanitizer_flags.h>
 
-#include "lsan/lsan_common.h"
 #include "ubsan/ubsan_flags.h"
 #include "ubsan/ubsan_platform.h"
-#include "xsan_activation.h"
+#include "xsan_hooks.h"
 #include "xsan_interface_internal.h"
 #include "xsan_stack.h"
-
-#include "tsan/orig/tsan_flags.h"
-#include "tsan/tsan_rtl.h"
-
-namespace __asan {
-  void InitializeFlags();
-  void SetCommonFlags(CommonFlags &cf);
-  void ValidateFlags();
-}
-
-namespace __tsan {
-  void InitializeFlags() {
-    const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
-    const char *options = GetEnv(env_name);
-    InitializeFlags(flags(), options, env_name);
-  }
-  void SetCommonFlags(CommonFlags &cf);
-  void ValidateFlags();
-}
 
 namespace __xsan {
 
@@ -79,8 +59,7 @@ void InitializeFlags() {
     cf.intercept_tls_get_addr = true;
     // cf.exitcode = 66; // TSan
     cf.exitcode = 1;
-    __asan::SetCommonFlags(cf);
-    __tsan::SetCommonFlags(cf);
+    SetSanitizerCommonFlags(cf);
     OverrideCommonFlags(cf);
   }
   Flags *f = flags();
@@ -118,30 +97,17 @@ void InitializeFlags() {
   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
 #endif
 
-
-
-
-  {
-    ScopedSanitizerToolName tool_name("AddressSanitizer");
-    // Initialize flags. This must be done early, because most of the
-    // initialization steps look at flags().
-    __asan::InitializeFlags();
-  }
-  {
-    ScopedSanitizerToolName tool_name("ThreadSanitizer");
-    __tsan::InitializeFlags();
-  }
+  InitializeSanitizerFlags();
   InitializeCommonFlags();
 
   // Flag validation:
-  
-  if (Verbosity()) ReportUnrecognizedFlags();
-  
-  __asan::ValidateFlags();
-  __tsan::ValidateFlags();
+
+  if (Verbosity())
+    ReportUnrecognizedFlags();
+
+  ValidateSanitizerFlags();
 
   CHECK_LE((uptr)common_flags()->malloc_context_size, kStackTraceMax);
-
 }
 
 }  // namespace __xsan

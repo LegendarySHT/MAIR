@@ -130,14 +130,6 @@ void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 }
 }  // namespace __xsan
 
-namespace __tsan {
-void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
-
-void OnXsanFreeHook(uptr ptr, bool write, uptr pc);
-
-void OnXsanAllocFreeTailHook(uptr pc);
-
-}  // namespace __tsan
 
 namespace __xsan {
 // ---------------------- API exposed by xsan::Alloctor ---------------
@@ -167,20 +159,6 @@ void XsanAllocator::DeallocateInternal(void *ptr, BufferedStackTrace *stack) {
 void XsanAllocator::PrintStats() {
   __asan::PrintInternalAllocatorStats();
 }
-
-// ---------------------- Hook for other Sanitizers -------------------
-void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
-  __tsan::OnXsanAllocHook(ptr, size, write, pc);
-}
-
-void XsanFreeHook(uptr ptr, bool write, uptr pc) {
-  __tsan::OnXsanFreeHook(ptr, write, pc);
-}
-
-void XsanAllocFreeTailHook(uptr pc) {
-  __tsan::OnXsanAllocFreeTailHook(pc);
-}
-
 
 
 void *Alloc(uptr sz) {
