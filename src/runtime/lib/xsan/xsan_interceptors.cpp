@@ -465,6 +465,10 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   int result;
   {
+    ScopedIgnoreInterceptors sii;
+    /// Sanitizers should not intervene the internality ptrhead_create,
+    /// elminating FP in TLS handlings,
+    __tsan::ThreadIgnoreBegin(__tsan::cur_thread(), pc);
     // Ignore all allocations made by pthread_create: thread stack/TLS may be
     // stored by pthread for future reuse even after thread destruction, and
     // the linked list it's stored in doesn't even hold valid pointers to the
@@ -473,6 +477,8 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     __lsan::ScopedInterceptorDisabler disabler;
 #    endif
     result = REAL(pthread_create)(thread, attr, xsan_thread_start, &p);
+    __tsan::ThreadIgnoreEnd(__tsan::cur_thread());
+
   }
 
   if (result == 0) {
