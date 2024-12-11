@@ -11,8 +11,10 @@
 
 #include <sanitizer_common/sanitizer_common.h>
 
+#include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
+#include "xsan_thread.h"
 
 // ---------------------- Memory Management Hooks -------------------
 /// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
@@ -118,4 +120,90 @@ void SetSanitizerThreadNameByUserId(uptr uid, const char *name) {
   // __asan::SetAsanThreadNameByUserId(uid, name);
   __tsan::SetTsanThreadNameByUserId(uid, name);
 }
+}  // namespace __xsan
+
+// ---------- End of Thread-Related Hooks --------------------------
+
+// ---------- Synchronization and File-Related Hooks ------------------------
+extern "C" int fileno_unlocked(void *stream);
+
+namespace __tsan {
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+uptr Dir2addr(const char *path);
+uptr File2addr(const char *path);
+void Acquire(ThreadState *thr, uptr pc, uptr addr);
+void Release(ThreadState *thr, uptr pc, uptr addr);
+
+void FdAcquire(ThreadState *thr, uptr pc, int fd);
+void FdRelease(ThreadState *thr, uptr pc, int fd);
+void FdAccess(ThreadState *thr, uptr pc, int fd);
+void FdClose(ThreadState *thr, uptr pc, int fd, bool write = true);
+void FdFileCreate(ThreadState *thr, uptr pc, int fd);
+void FdSocketAccept(ThreadState *thr, uptr pc, int fd, int newfd);
+}  // namespace __tsan
+
+namespace __xsan {
+void OnAcquire(void *ctx, uptr addr) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::Acquire(thr, pc, addr);
+}
+
+void OnDirAcquire(void *ctx, const char *path) {
+  OnAcquire(ctx, __tsan::Dir2addr(path));
+}
+
+void OnRelease(void *ctx, uptr addr) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::Release(thr, pc, addr);
+}
+
+void OnFdAcquire(void *ctx, int fd) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::FdAcquire(thr, pc, fd);
+}
+
+void OnFdRelease(void *ctx, int fd) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::FdRelease(thr, pc, fd);
+}
+
+void OnFdAccess(void *ctx, int fd) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::FdAccess(thr, pc, fd);
+}
+
+void OnFdSocketAccept(void *ctx, int fd, int newfd) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::FdSocketAccept(thr, pc, fd, newfd);
+}
+
+void OnFileOpen(void *ctx, void *file, const char *path) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  if (path) {
+    __tsan::Acquire(thr, pc, __tsan::File2addr(path));
+  }
+  if (file) {
+    int fd = fileno_unlocked(file);
+    if (fd >= 0) {
+      __tsan::FdFileCreate(thr, pc, fd);
+    }
+  }
+}
+
+void OnFileClose(void *ctx, void *file) {
+  if (file) {
+    int fd = fileno_unlocked(file);
+    XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+    auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+    __tsan::FdClose(thr, pc, fd);
+  }
+}
+
 }  // namespace __xsan

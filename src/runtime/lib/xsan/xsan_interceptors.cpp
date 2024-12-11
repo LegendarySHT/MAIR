@@ -234,18 +234,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     do {                                                      \
       ENSURE_XSAN_INITED();                                   \
     } while (false)
-#  define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
-    do {                                            \
-    } while (false)
-#  define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
-    do {                                         \
-    } while (false)
-#  define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
-    do {                                         \
-    } while (false)
-#  define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
-    do {                                                      \
-    } while (false)
+
 #  define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
     __xsan::SetSanitizerThreadName(name);
 // Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
@@ -310,6 +299,40 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  if CAN_SANITIZE_LEAKS
 #    define COMMON_INTERCEPTOR_STRERROR() \
       __lsan::ScopedInterceptorDisabler disabler
+#  endif
+
+#  if XSAN_CONTAINS_TSAN
+#    define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
+      __xsan::OnFileOpen(ctx, file, path)
+#    define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) __xsan::OnFileClose(ctx, file)
+
+#    define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) __xsan::OnAcquire(ctx, u)
+#    define COMMON_INTERCEPTOR_RELEASE(ctx, u) __xsan::OnRelease(ctx, u)
+
+#    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) __xsan::OnDirAcquire(ctx, path)
+
+#    define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) __xsan::OnFdAcquire(ctx, fd)
+
+#    define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) __xsan::OnFdRelease(ctx, fd)
+
+#    define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) __xsan::OnFdAccess(ctx, fd)
+
+#    define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
+      __xsan::OnFdSocketAccept(ctx, fd, newfd)
+
+#  else
+#    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
+      do {                                            \
+      } while (false)
+#    define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
+      do {                                         \
+      } while (false)
+#    define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
+      do {                                         \
+      } while (false)
+#    define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
+      do {                                                      \
+      } while (false)
 #  endif
 
 #  include <sanitizer_common/sanitizer_common_interceptors.inc>

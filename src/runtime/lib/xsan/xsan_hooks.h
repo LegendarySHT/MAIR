@@ -27,4 +27,15 @@ void ValidateSanitizerFlags();
 void SetSanitizerThreadName(const char *name);
 void SetSanitizerThreadNameByUserId(uptr uid, const char *name);
 
+void OnAcquire(void *ctx, uptr addr);
+void OnDirAcquire(void *ctx, const char *path);
+void OnDirRelease(void *ctx, const char *path);
+void OnRelease(void *ctx, uptr addr);
+void OnFdAcquire(void *ctx, int fd);
+void OnFdRelease(void *ctx, int fd);
+void OnFdAccess(void *ctx, int fd);
+void OnFdSocketAccept(void *ctx, int fd, int newfd);
+void OnFileOpen(void *ctx, void *file, const char *path);
+void OnFileClose(void *ctx, void *file);
+
 }  // namespace __xsan
