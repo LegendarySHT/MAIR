@@ -32,6 +32,8 @@ if config.host_os == 'Darwin':
 
 # Let XSan's stack trace format be the same with TSan's.
 config.environment['XSAN_IN_TSAN_TEST'] = '1'
+# Forbids some ASan's options to pass TSan's testcases
+config.environment['ASAN_OPTIONS'] = 'alloc_dealloc_mismatch=0:detect_leaks=0:detect_odr_violation=0'
 # Platform-specific default TSAN_OPTIONS for lit tests.
 if default_tsan_opts:
   config.environment['TSAN_OPTIONS'] = default_tsan_opts
