@@ -247,7 +247,6 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     } else {                                                               \
       __xsan::SetSanitizerThreadNameByUserId((uptr)(thread), (name));      \
     }
-#  define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
 // Strict init-order checking is dlopen-hostile:
 // https://github.com/google/sanitizers/issues/178
 #  define COMMON_INTERCEPTOR_DLOPEN(filename, flag) \
@@ -302,25 +301,27 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  endif
 
 #  if XSAN_CONTAINS_TSAN
+
+#    define COMMON_INTERCEPTOR_BLOCK_REAL(name) \
+      (__tsan::BlockingCall(xsan_thr->tsan_thread_), REAL(name))
+
 #    define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
       __xsan::OnFileOpen(ctx, file, path)
-#    define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) __xsan::OnFileClose(ctx, file)
-
+#    define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) \
+      __xsan::OnFileClose(ctx, file)
 #    define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) __xsan::OnAcquire(ctx, u)
 #    define COMMON_INTERCEPTOR_RELEASE(ctx, u) __xsan::OnRelease(ctx, u)
-
-#    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) __xsan::OnDirAcquire(ctx, path)
-
+#    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
+      __xsan::OnDirAcquire(ctx, path)
 #    define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) __xsan::OnFdAcquire(ctx, fd)
-
 #    define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) __xsan::OnFdRelease(ctx, fd)
-
 #    define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) __xsan::OnFdAccess(ctx, fd)
-
 #    define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
       __xsan::OnFdSocketAccept(ctx, fd, newfd)
 
 #  else
+#    define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
+
 #    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
       do {                                            \
       } while (false)

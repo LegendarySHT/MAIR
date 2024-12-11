@@ -350,25 +350,21 @@ void ScopedInterceptor::DisableIgnoresImpl() {
 
 #define BLOCK_REAL(name) (BlockingCall(thr), REAL(name))
 
-struct BlockingCall {
-  explicit BlockingCall(ThreadState *thr)
-      : thr(thr) {
-    EnterBlockingFunc(thr);
-    // When we are in a "blocking call", we process signals asynchronously
-    // (right when they arrive). In this context we do not expect to be
-    // executing any user/runtime code. The known interceptor sequence when
-    // this is not true is: pthread_join -> munmap(stack). It's fine
-    // to ignore munmap in this case -- we handle stack shadow separately.
-    thr->ignore_interceptors++;
-  }
+BlockingCall::BlockingCall(ThreadState *thr) : thr(thr) {
+  EnterBlockingFunc(thr);
+  // When we are in a "blocking call", we process signals asynchronously
+  // (right when they arrive). In this context we do not expect to be
+  // executing any user/runtime code. The known interceptor sequence when
+  // this is not true is: pthread_join -> munmap(stack). It's fine
+  // to ignore munmap in this case -- we handle stack shadow separately.
+  thr->ignore_interceptors++;
+}
 
-  ~BlockingCall() {
-    thr->ignore_interceptors--;
-    atomic_store(&thr->in_blocking_func, 0, memory_order_relaxed);
-  }
+BlockingCall::~BlockingCall() {
+  thr->ignore_interceptors--;
+  atomic_store(&thr->in_blocking_func, 0, memory_order_relaxed);
+}
 
-  ThreadState *thr;
-};
 
 TSAN_INTERCEPTOR(unsigned, sleep, unsigned sec) {
   SCOPED_TSAN_INTERCEPTOR(sleep, sec);

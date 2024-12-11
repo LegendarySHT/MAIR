@@ -29,6 +29,14 @@ class ScopedInterceptor {
   void EnableIgnoresImpl();
 };
 
+struct BlockingCall {
+  explicit BlockingCall(ThreadState *thr);
+
+  ~BlockingCall();
+
+  ThreadState *thr;
+};
+
 LibIgnore *libignore();
 
 #if !SANITIZER_GO
