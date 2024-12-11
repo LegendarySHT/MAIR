@@ -84,8 +84,6 @@ class XsanThread {
 
   void *get_arg() { return arg_; }
 
-  void setThreadName(const char *name);
-
   bool isMainThread() { return is_main_thread_; }
 
   TsanArgs getTsanArgs() { return {tsan_thread_, top_pc_}; }

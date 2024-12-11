@@ -12,6 +12,7 @@
 #include "tsan/orig/tsan_fd.h"
 #include "tsan/tsan_interceptors.h"
 #include "tsan/tsan_rtl.h"
+#include "xsan_hooks.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
@@ -36,6 +37,9 @@
 #  elif defined(__mips__) && SANITIZER_LINUX
 #    define XSAN_PTHREAD_CREATE_VERSION "GLIBC_2.2"
 #  endif
+
+extern "C" int pthread_equal(void *t1, void *t2);
+extern "C" void *pthread_self();
 
 namespace __xsan {
 
@@ -137,13 +141,6 @@ static inline uptr MaybeRealStrnlen(const char *s, uptr maxlen) {
   }
 #  endif
   return internal_strnlen(s, maxlen);
-}
-
-void SetThreadName(const char *name) {
-  XsanThread *t = GetCurrentThread();
-  if (t) {
-    t->setThreadName(name);
-  }
 }
 
 }  // namespace __xsan
@@ -249,14 +246,18 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
     do {                                                      \
     } while (false)
-#  define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) SetThreadName(name)
+#  define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
+    __xsan::SetSanitizerThreadName(name);
 // Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
 // But asan does not remember UserId's for threads (pthread_t);
 // and remembers all ever existed threads, so the linear search by UserId
 // can be slow.
-#  define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name) \
-    do {                                                         \
-    } while (false)
+#  define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name)           \
+    if (pthread_equal(pthread_self(), reinterpret_cast<void *>(thread))) { \
+      COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name);                       \
+    } else {                                                               \
+      __xsan::SetSanitizerThreadNameByUserId((uptr)(thread), (name));      \
+    }
 #  define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
 // Strict init-order checking is dlopen-hostile:
 // https://github.com/google/sanitizers/issues/178
@@ -264,6 +265,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     ({                                              \
       XSAN_BEFORE_DLOPEN(filename, flag);           \
       CheckNoDeepBind(filename, flag);              \
+      __xsan::ScopedIgnoreChecks ignore_checks;     \
       REAL(dlopen)(filename, flag);                 \
     })
 #  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit(ctx)

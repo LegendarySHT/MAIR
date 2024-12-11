@@ -322,10 +322,6 @@ __xsan::XsanThread *GetXsanThreadByOsIDLocked(tid_t os_id) {
   UNIMPLEMENTED();
 }
 
-void XsanThread::setThreadName(const char *name) {
-  SetSanitizerThreadName(name);
-}
-
 }  // namespace __xsan
 
 // --- Implementation of LSan-specific functions --- {{{1

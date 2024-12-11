@@ -401,4 +401,10 @@ void SetTsanThreadName(const char *name) {
     ctx->thread_registry.SetThreadName(t->tid, name);
 }
 
+void SetTsanThreadNameByUserId(uptr uid, const char *name) {
+  ThreadState *t = cur_thread();
+  if (t)
+    ctx->thread_registry.SetThreadNameByUserId(uid, name);
+}
+
 }  // namespace __tsan

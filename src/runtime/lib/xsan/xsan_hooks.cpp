@@ -95,15 +95,27 @@ void ValidateSanitizerFlags() {
 namespace __asan {
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
 void SetAsanThreadName(const char *name) {}
+void SetAsanThreadNameByUserId(uptr uid, const char *name) {}
 }  // namespace __asan
 
 namespace __tsan {
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
 void SetTsanThreadName(const char *name) {}
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+void SetTsanThreadNameByUserId(uptr uid, const char *name) {}
 }  // namespace __tsan
 namespace __xsan {
 void SetSanitizerThreadName(const char *name) {
   __asan::SetAsanThreadName(name);
   __tsan::SetTsanThreadName(name);
+}
+
+void SetSanitizerThreadNameByUserId(uptr uid, const char *name) {
+  /// Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
+  /// But asan does not remember UserId's for threads (pthread_t);
+  /// and remembers all ever existed threads, so the linear search by UserId
+  /// can be slow.
+  // __asan::SetAsanThreadNameByUserId(uid, name);
+  __tsan::SetTsanThreadNameByUserId(uid, name);
 }
 }  // namespace __xsan
