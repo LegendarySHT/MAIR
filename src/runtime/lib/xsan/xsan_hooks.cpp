@@ -90,3 +90,20 @@ void ValidateSanitizerFlags() {
 }  // namespace __xsan
 
 // ---------- End of Flags Registration Hooks ---------------
+
+// ---------- Thread-Related Hooks --------------------------
+namespace __asan {
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+void SetAsanThreadName(const char *name) {}
+}  // namespace __asan
+
+namespace __tsan {
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+void SetTsanThreadName(const char *name) {}
+}  // namespace __tsan
+namespace __xsan {
+void SetSanitizerThreadName(const char *name) {
+  __asan::SetAsanThreadName(name);
+  __tsan::SetTsanThreadName(name);
+}
+}  // namespace __xsan

@@ -487,6 +487,12 @@ __asan::AsanThread *GetAsanThreadByOsIDLocked(tid_t os_id) {
   if (!context) return nullptr;
   return context->thread;
 }
+
+void SetAsanThreadName(const char *name) {
+  AsanThread *t = GetCurrentThread();
+  if (t)
+    asanThreadRegistry().SetThreadName(t->tid(), name);
+}
 } // namespace __asan
 
 // --- Implementation of LSan-specific functions --- {{{1

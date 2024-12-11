@@ -44,8 +44,8 @@ class XsanThread {
   void Init(const InitOptions *options = nullptr);
 
   Tid PostCreateTsanThread(uptr pc, uptr uid);
-  void BeforeAsanThreadStart(tid_t os_id);
-  void BeforeTsanThreadStart(tid_t os_id);
+  void AsanBeforeThreadStart(tid_t os_id);
+  void TsanBeforeThreadStart(tid_t os_id);
   /// Semaphore: comes from TSan, controlling the thread create event.
   thread_return_t ThreadStart(tid_t os_id, Semaphore *created = nullptr,
                               Semaphore *started = nullptr);

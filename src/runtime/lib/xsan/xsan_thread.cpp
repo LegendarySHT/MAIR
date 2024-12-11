@@ -15,6 +15,7 @@
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
+#include "xsan_hooks.h"
 namespace __xsan {
 
 XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
@@ -132,11 +133,11 @@ Tid XsanThread::PostCreateTsanThread(uptr pc, uptr uid) {
   return tsan_tid;
 }
 
-void XsanThread::BeforeAsanThreadStart(tid_t os_id) {
+void XsanThread::AsanBeforeThreadStart(tid_t os_id) {
   asan_thread_->BeforeThreadStart(os_id);
 }
 
-void XsanThread::BeforeTsanThreadStart(tid_t os_id) {
+void XsanThread::TsanBeforeThreadStart(tid_t os_id) {
   __tsan::ThreadState *thr = tsan_thread_;
   if (isMainThread()) {
     __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
@@ -159,8 +160,8 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
     __xsan::ScopedIgnoreInterceptors ignore;
     if (created) created->Wait();
 
-    BeforeTsanThreadStart(os_id);
-    BeforeAsanThreadStart(os_id);
+    TsanBeforeThreadStart(os_id);
+    AsanBeforeThreadStart(os_id);
 
     Init();
     if (started) started->Post();
@@ -322,10 +323,7 @@ __xsan::XsanThread *GetXsanThreadByOsIDLocked(tid_t os_id) {
 }
 
 void XsanThread::setThreadName(const char *name) {
-  auto *asan_thread = this->asan_thread_;
-  if (asan_thread) {
-    __asan::asanThreadRegistry().SetThreadName(asan_thread->tid(), name);
-  }
+  SetSanitizerThreadName(name);
 }
 
 }  // namespace __xsan

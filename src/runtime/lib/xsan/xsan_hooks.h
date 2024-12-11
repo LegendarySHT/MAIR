@@ -24,4 +24,6 @@ void InitializeSanitizerFlags();
 void SetSanitizerCommonFlags(CommonFlags &cf);
 void ValidateSanitizerFlags();
 
+void SetSanitizerThreadName(const char *name);
+
 }  // namespace __xsan

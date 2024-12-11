@@ -12,6 +12,7 @@
 
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "tsan/rtl/tsan_defs.h"
+#include "tsan_defs.h"
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_report.h"
@@ -393,5 +394,11 @@ void FiberSwitch(ThreadState *thr, uptr pc,
     Acquire(fiber, pc, (uptr)fiber);
 }
 #endif
+
+void SetTsanThreadName(const char *name) {
+  ThreadState *t = cur_thread();
+  if (t)
+    ctx->thread_registry.SetThreadName(t->tid, name);
+}
 
 }  // namespace __tsan
