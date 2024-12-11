@@ -140,6 +140,8 @@ void FdAccess(ThreadState *thr, uptr pc, int fd);
 void FdClose(ThreadState *thr, uptr pc, int fd, bool write = true);
 void FdFileCreate(ThreadState *thr, uptr pc, int fd);
 void FdSocketAccept(ThreadState *thr, uptr pc, int fd, int newfd);
+void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
+                                         uptr size);
 }  // namespace __tsan
 
 namespace __xsan {
@@ -204,6 +206,14 @@ void OnFileClose(void *ctx, void *file) {
     auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
     __tsan::FdClose(thr, pc, fd);
   }
+}
+
+void AfterMmap(void *ctx, void *res, uptr size, int fd) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  if (fd > 0)
+    OnFdAccess(ctx, fd);
+  __tsan::MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, size);
 }
 
 }  // namespace __xsan

@@ -38,4 +38,5 @@ void OnFdSocketAccept(void *ctx, int fd, int newfd);
 void OnFileOpen(void *ctx, void *file, const char *path);
 void OnFileClose(void *ctx, void *file);
 
+void AfterMmap(void *ctx, void *res, uptr size, int fd);
 }  // namespace __xsan

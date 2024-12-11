@@ -8,6 +8,7 @@
 #include "asan/orig/asan_poisoning.h"
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
+#include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "tsan/orig/tsan_fd.h"
 #include "tsan/tsan_interceptors.h"
@@ -75,6 +76,43 @@ inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
          /// TODO: to support libignore, we plan to migrate it to Xsan.
          /// xsan_suppressions.cpp is required accordingly.
          __tsan::MustIgnoreInterceptor(thread->tsan_thread_);
+}
+
+// Zero out addr if it points into shadow memory and was provided as a hint
+// only, i.e., MAP_FIXED is not set.
+static bool fix_mmap_addr(void **addr, long_t sz, int flags) {
+  const int MAP_FIXED = 0x10;
+  if (*addr) {
+    if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
+      if (flags & MAP_FIXED) {
+        errno = errno_EINVAL;
+        return false;
+      } else {
+        *addr = 0;
+      }
+    }
+  }
+  return true;
+}
+
+template <class Mmap>
+static void *mmap_interceptor(void *ctx, Mmap real_mmap,
+                              void *addr, SIZE_T sz, int prot, int flags,
+                              int fd, OFF64_T off) {
+  void *const MAP_FAILED = (void *)-1;
+  /// FIXME: conflicts with cuda_test.cpp. Should we really return -1 when addr
+  /// is not in app memory?
+  if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+  void *res = real_mmap(addr, sz, prot, flags, fd, off);
+  if (res != MAP_FAILED) {
+    if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
+      Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
+             addr, (void*)sz, res);
+      Die();
+    }
+    AfterMmap(ctx, res, sz, fd);
+  }
+  return res;
 }
 
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
@@ -257,8 +295,14 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
       REAL(dlopen)(filename, flag);                 \
     })
 #  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit(ctx)
-// #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle)
-// #  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()
+
+#  define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd, \
+                                       off)                                  \
+    do {                                                                     \
+      return mmap_interceptor(ctx, REAL(mmap), addr, sz, prot, flags, fd,    \
+                              off);                                          \
+    } while (false)
+
 /// TODO: move libignore to Xsan.
 #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
   __tsan::libignore()->OnLibraryLoaded(filename)

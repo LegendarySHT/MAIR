@@ -3,25 +3,25 @@
 #include <sanitizer_common/sanitizer_internal_defs.h>
 #include <sanitizer_common/sanitizer_libc.h>
 #include <sanitizer_common/sanitizer_mutex.h>
+#include <sanitizer_common/sanitizer_platform.h>
 #include <ubsan/ubsan_platform.h>
 
-#include "xsan_internal.h"
+#include "sanitizer_common/sanitizer_platform_limits_netbsd.h"
+#include "sanitizer_common/sanitizer_platform_limits_posix.h"
 
 #ifndef XSAN_CONTAINS_UBSAN
-# if CAN_SANITIZE_UB && !SANITIZER_GO
-#  define XSAN_CONTAINS_UBSAN 1
-# else
-#  define XSAN_CONTAINS_UBSAN 0
-# endif
+#  if CAN_SANITIZE_UB && !SANITIZER_GO
+#    define XSAN_CONTAINS_UBSAN 1
+#  else
+#    define XSAN_CONTAINS_UBSAN 0
+#  endif
 #endif
-
 
 #ifndef XSAN_CONTAINS_TSAN
-# if !SANITIZER_GO
-#  define XSAN_CONTAINS_TSAN 1
-# endif
+#  if !SANITIZER_GO
+#    define XSAN_CONTAINS_TSAN 1
+#  endif
 #endif
-
 
 
 namespace __xsan {
