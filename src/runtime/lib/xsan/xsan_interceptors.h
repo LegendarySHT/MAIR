@@ -157,6 +157,8 @@ DECLARE_REAL(char *, strstr, const char *s1, const char *s2)
 
 namespace __xsan {
 
+/// Ignore interceptors in the scope
+/// TSan's ScopedIgnoreInterceptors is also affected.
 class ScopedIgnoreInterceptors {
  public:
   ScopedIgnoreInterceptors(bool in_report = false);
@@ -167,6 +169,17 @@ class ScopedIgnoreInterceptors {
   __tsan::ScopedIgnoreTsan sit;
 };
 
+/// Ignore checks in the scope
+/// Now only used for TSan.
+class ScopedIgnoreChecks {
+ public:
+  ScopedIgnoreChecks();
+  ScopedIgnoreChecks(uptr pc);
+  ~ScopedIgnoreChecks();
+ private:
+};
+
+/// Used in Interceptros to manage the resources uniformly.
 class ScopedInterceptor {
  public:
   ScopedInterceptor(XsanThread *xsan_thr, const char *func, uptr caller_pc);

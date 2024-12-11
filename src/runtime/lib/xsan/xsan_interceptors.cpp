@@ -50,6 +50,16 @@ ScopedIgnoreInterceptors::~ScopedIgnoreInterceptors() {
   xsan_ignore_interceptors--;
 }
 
+ScopedIgnoreChecks::ScopedIgnoreChecks() : ScopedIgnoreChecks(GET_CALLER_PC()) {}
+
+ScopedIgnoreChecks::ScopedIgnoreChecks(uptr pc) {
+  __tsan::ThreadIgnoreBegin(__tsan::cur_thread(), pc);
+}
+
+ScopedIgnoreChecks::~ScopedIgnoreChecks() {
+  __tsan::ThreadIgnoreEnd(__tsan::cur_thread());
+}
+
 ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func,
                                      uptr caller_pc)
     : tsan_si(xsan_thr ? xsan_thr->tsan_thread_ : __tsan::cur_thread_init(),
@@ -468,7 +478,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     ScopedIgnoreInterceptors sii;
     /// Sanitizers should not intervene the internality ptrhead_create,
     /// elminating FP in TLS handlings,
-    __tsan::ThreadIgnoreBegin(__tsan::cur_thread(), pc);
+    ScopedIgnoreChecks sic(pc);
     // Ignore all allocations made by pthread_create: thread stack/TLS may be
     // stored by pthread for future reuse even after thread destruction, and
     // the linked list it's stored in doesn't even hold valid pointers to the
@@ -477,8 +487,6 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     __lsan::ScopedInterceptorDisabler disabler;
 #    endif
     result = REAL(pthread_create)(thread, attr, xsan_thread_start, &p);
-    __tsan::ThreadIgnoreEnd(__tsan::cur_thread());
-
   }
 
   if (result == 0) {
@@ -984,7 +992,7 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
   __tsan::Release(thr, pc, (uptr)ctx);
   // Memory allocation in __cxa_atexit will race with free during exit,
   // because we do not see synchronization around atexit callback list.
-  __tsan::ThreadIgnoreBegin(thr, pc);
+  ScopedIgnoreChecks sic(pc);
   int res;
   if (!dso) {
     // NetBSD does not preserve the 2nd argument if dso is equal to 0
@@ -1009,7 +1017,6 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
     res = REAL(on_exit)(XSanOnExitWrapper, ctx);
   }
 #  endif
-  __tsan::ThreadIgnoreEnd(thr);
   return res;
 }
 
