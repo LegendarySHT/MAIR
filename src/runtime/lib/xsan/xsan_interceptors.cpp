@@ -945,7 +945,7 @@ INTERCEPTOR(int, on_exit, void (*func)(int, void *), void *arg) {
   // int res = REAL(__cxa_atexit)((void (*)(void *a))func, nullptr, nullptr);
   // REAL(__cxa_atexit)(AtCxaAtexit, nullptr, nullptr);
   // return res;
-  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, true);
+  return setup_at_exit_wrapper(GET_CALLER_PC(), (AtExitFuncTy)func, true, arg);
 }
 #  endif
 
@@ -1019,6 +1019,11 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
   // because we do not see synchronization around atexit callback list.
   ScopedIgnoreChecks sic(pc);
   int res;
+#  if XSAN_INTERCEPT_ON_EXIT
+  if (is_on_exit) {
+    res = REAL(on_exit)(XSanOnExitWrapper, ctx);
+  } else
+#  endif
   if (!dso) {
     // NetBSD does not preserve the 2nd argument if dso is equal to 0
     // Store ctx in a local stack-like structure
@@ -1034,14 +1039,10 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
     if (!res) {
       interceptor_ctx()->AtExitStack.PushBack(ctx);
     }
-  } else if (!is_on_exit) {
+  } else {
     res = REAL(__cxa_atexit)(XSanCxaAtExitWrapper, ctx, dso);
   }
-#  if XSAN_INTERCEPT_ON_EXIT
-  else {
-    res = REAL(on_exit)(XSanOnExitWrapper, ctx);
-  }
-#  endif
+
   return res;
 }
 
