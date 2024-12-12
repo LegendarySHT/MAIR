@@ -213,7 +213,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
         FATAL("Unsupported -fno-sanitize option: %s", val);
       }
 
-      if (xsanTy == disableTy) {
+      if (xsanTy == disableTy || disableTy == XSan) {
         xsanTy = SanNone;
       } else if (xsanTy == XSan) {
         /// TDDO: use bit-op to support more sanitizers
