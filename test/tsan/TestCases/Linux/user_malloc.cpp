@@ -1,4 +1,4 @@
-// RUN: %clangxx_tsan -c -O1 -fno-sanitize=thread %s -o %t.o
+// RUN: %clangxx_tsan -c -O1 -fno-sanitize=all %s -o %t.o
 // RUN: %clangxx_tsan -O1 %s %t.o -o %t && %run %t 2>&1 | FileCheck %s
 
 #include <stdio.h>
