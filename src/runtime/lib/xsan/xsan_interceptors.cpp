@@ -80,7 +80,7 @@ inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
 
 // Zero out addr if it points into shadow memory and was provided as a hint
 // only, i.e., MAP_FIXED is not set.
-static bool fix_mmap_addr(void **addr, long_t sz, int flags) {
+static bool fix_mmap_addr(void **addr, uptr sz, int flags) {
   const int MAP_FIXED = 0x10;
   if (*addr) {
     if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
@@ -102,15 +102,17 @@ static void *mmap_interceptor(void *ctx, Mmap real_mmap,
   void *const MAP_FAILED = (void *)-1;
   /// FIXME: conflicts with cuda_test.cpp. Should we really return -1 when addr
   /// is not in app memory?
-  if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+  // if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
   void *res = real_mmap(addr, sz, prot, flags, fd, off);
   if (res != MAP_FAILED) {
-    if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
-      Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
-             addr, (void*)sz, res);
-      Die();
+    // if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
+    //   Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
+    //          addr, (void*)sz, res);
+    //   Die();
+    // }
+    if (IsAppMem((uptr)res) && IsAppMem((uptr)res + sz - 1)) {
+      AfterMmap(ctx, res, sz, fd);
     }
-    AfterMmap(ctx, res, sz, fd);
   }
   return res;
 }
