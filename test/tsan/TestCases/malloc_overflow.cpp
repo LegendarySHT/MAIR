@@ -20,4 +20,4 @@ int main() {
 }
 
 // CHECK-NOT: FAIL
-// CHECK-NOT: failed to allocate
+// CHECK-NOT: exceeds maximum supported size of 
