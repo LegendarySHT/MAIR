@@ -15,7 +15,7 @@ void *Thread(void *p) {
 int main() {
   barrier_init(&barrier, 2);
   int const kHeapSize = 1024 * 1024;
-  jptr jheap = (jptr)malloc(kHeapSize + 8) + 8;
+  jptr jheap = (jptr)calloc(kHeapSize + 8, 1) + 8;
   __tsan_java_init(jheap, kHeapSize);
   const int kBlockSize = 16;
   __tsan_java_alloc(jheap, kBlockSize);
