@@ -18,7 +18,7 @@ set(ASAN_SOURCES
   asan/orig/asan_mac.cpp
   asan/orig/asan_malloc_win.cpp
   asan/orig/asan_memory_profile.cpp
-  asan/orig/asan_poisoning.cpp
+  # asan/orig/asan_poisoning.cpp
   #asan/orig/asan_posix.cpp
   asan/orig/asan_premap_shadow.cpp
   #asan/orig/asan_report.cpp
@@ -39,6 +39,7 @@ set(XSAN_ASAN_SOURCES
   asan/asan_report.cpp
   asan/asan_init.cpp
   asan/asan_posix.cpp
+  asan/asan_poisoning.cpp
   ${ASAN_SOURCES}
 )
 
