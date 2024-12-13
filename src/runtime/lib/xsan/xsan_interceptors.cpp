@@ -602,6 +602,8 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   EnsureMainThreadIDIsCorrect();
 
+  __xsan::OnPthreadCreate();
+
   /// TODO: Extract this to a separate function?
   // Strict init-order checking is thread-hostile.
   if (__asan::flags()->strict_init_order)

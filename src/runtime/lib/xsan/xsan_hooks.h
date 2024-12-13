@@ -22,6 +22,8 @@ void XsanFreeHook(uptr ptr, bool write, uptr pc);
 void XsanAllocFreeTailHook(uptr pc);
 void OnFakeStackDestory(uptr addr, uptr size);
 
+void OnPthreadCreate();
+
 void InitializeSanitizerFlags();
 void SetSanitizerCommonFlags(CommonFlags &cf);
 void ValidateSanitizerFlags();

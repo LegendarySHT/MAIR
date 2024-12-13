@@ -53,6 +53,19 @@ void OnFakeStackDestory(uptr addr, uptr size) {
 
 // ---------- End of Memory Management Hooks -------------------
 
+// ---------------------- Special Function Hooks -----------------
+namespace __tsan {
+/// TSan may spawn a background thread to recycle resource in pthread_create.
+/// What's more, TSan does not support starting new threads after multi-threaded
+/// fork.
+void OnPthreadCreate();
+}  // namespace __tsan
+namespace __xsan {
+void OnPthreadCreate() { __tsan::OnPthreadCreate(); }
+}  // namespace __xsan
+
+// --------------- End of Special Function Hooks -----------------
+
 // ---------------------- Flags Registration Hooks ---------------
 namespace __asan {
 void InitializeFlags();
