@@ -39,6 +39,8 @@
 #    define XSAN_PTHREAD_CREATE_VERSION "GLIBC_2.2"
 #  endif
 
+extern "C" int pthread_attr_init(void *attr);
+extern "C" int pthread_attr_destroy(void *attr);
 extern "C" int pthread_equal(void *t1, void *t2);
 extern "C" void *pthread_self();
 
@@ -603,7 +605,15 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   __xsan::OnPthreadCreate();
 
+  __sanitizer_pthread_attr_t myattr;
+  if (!attr) {
+    pthread_attr_init(&myattr);
+    attr = &myattr;
+  }
 
+  /// Ensure that we have enough stack space to store TLS.
+  AdjustStackSize(attr);
+  
   int detached = 0;
   if (attr)
     REAL(pthread_attr_getdetachstate)(attr, &detached);
@@ -652,6 +662,8 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     // that was just created for the AsanThread is wasted.
     sub_thread->Destroy();
   }
+  if (attr == &myattr)
+    pthread_attr_destroy(&myattr);
   return result;
 }
 
