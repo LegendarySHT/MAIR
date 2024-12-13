@@ -152,6 +152,7 @@ set(XSAN_SOURCES
   xsan_hooks.cpp
   xsan_interceptors.cpp
   xsan_interceptors_memintrinsics.cpp
+  xsan_interface.cpp
   xsan_linux.cpp
   xsan_malloc_linux.cpp
   xsan_rtl.cpp
