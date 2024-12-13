@@ -600,14 +600,9 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   const uptr pc = stack.trace_buffer[0];
   xsan_thr->setTsanArgs(pc);
 
-  EnsureMainThreadIDIsCorrect();
 
   __xsan::OnPthreadCreate();
 
-  /// TODO: Extract this to a separate function?
-  // Strict init-order checking is thread-hostile.
-  if (__asan::flags()->strict_init_order)
-    __asan::StopInitOrderChecking();
 
   int detached = 0;
   if (attr)

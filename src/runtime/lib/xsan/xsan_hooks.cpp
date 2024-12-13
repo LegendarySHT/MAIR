@@ -54,14 +54,23 @@ void OnFakeStackDestory(uptr addr, uptr size) {
 // ---------- End of Memory Management Hooks -------------------
 
 // ---------------------- Special Function Hooks -----------------
+namespace __asan {
+/// ASan 1) checks the correctness of main thread ID, 2) checks the init orders.
+void OnPthreadCreate();
+}  // namespace __asan
+
 namespace __tsan {
 /// TSan may spawn a background thread to recycle resource in pthread_create.
 /// What's more, TSan does not support starting new threads after multi-threaded
 /// fork.
 void OnPthreadCreate();
 }  // namespace __tsan
+
 namespace __xsan {
-void OnPthreadCreate() { __tsan::OnPthreadCreate(); }
+void OnPthreadCreate() {
+  __asan::OnPthreadCreate();
+  __tsan::OnPthreadCreate();
+}
 }  // namespace __xsan
 
 // --------------- End of Special Function Hooks -----------------

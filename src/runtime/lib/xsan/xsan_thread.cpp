@@ -310,7 +310,6 @@ u32 GetCurrentTidOrInvalid() {
 
 XsanThread *FindThreadByStackAddress(uptr addr) { UNIMPLEMENTED(); }
 
-void EnsureMainThreadIDIsCorrect() { __asan::EnsureMainThreadIDIsCorrect(); }
 
 /// Seems this function is not useful for XSan.
 /// ASan use threadContextRegistry to map os_id to AsanThreadContext, and futher

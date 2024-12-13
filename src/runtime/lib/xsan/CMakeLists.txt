@@ -35,11 +35,12 @@ set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
   asan/asan_fake_stack.cpp
   asan/asan_flags.cpp
-  asan/asan_thread.cpp
-  asan/asan_report.cpp
   asan/asan_init.cpp
   asan/asan_posix.cpp
   asan/asan_poisoning.cpp
+  asan/asan_report.cpp
+  asan/asan_rtl_extra.cpp
+  asan/asan_thread.cpp
   ${ASAN_SOURCES}
 )
 

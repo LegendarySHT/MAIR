@@ -146,6 +146,4 @@ void SetCurrentThread(XsanThread *t);
 u32 GetCurrentTidOrInvalid();
 XsanThread *FindThreadByStackAddress(uptr addr);
 
-// Used to handle fork().
-void EnsureMainThreadIDIsCorrect();
 }  // namespace __xsan
