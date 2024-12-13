@@ -14,6 +14,8 @@ struct CommonFlags;
 }
 
 namespace __xsan {
+class XsanThread;
+
 // ---------------------- Hook for other Sanitizers -------------------
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
@@ -39,4 +41,7 @@ void OnFileOpen(void *ctx, void *file, const char *path);
 void OnFileClose(void *ctx, void *file);
 
 void AfterMmap(void *ctx, void *res, uptr size, int fd);
+
+bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);
+bool ShouldSanitzerIgnoreAllocFreeHook();
 }  // namespace __xsan

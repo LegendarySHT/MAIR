@@ -42,6 +42,82 @@
 extern "C" int pthread_equal(void *t1, void *t2);
 extern "C" void *pthread_self();
 
+
+#if SANITIZER_FREEBSD || SANITIZER_APPLE
+#  define stdout __stdoutp
+#  define stderr __stderrp
+#endif
+#if !SANITIZER_NETBSD
+extern "C" int fileno_unlocked(void *stream);
+extern "C" int dirfd(void *dirp);
+#endif
+#if SANITIZER_NETBSD
+#  define dirfd(dirp) (*(int *)(dirp))
+#  define fileno_unlocked(fp)              \
+    (((__sanitizer_FILE *)fp)->_file == -1 \
+         ? -1                              \
+         : (int)(unsigned short)(((__sanitizer_FILE *)fp)->_file))
+
+#  define stdout ((__sanitizer_FILE *)&__sF[1])
+#  define stderr ((__sanitizer_FILE *)&__sF[2])
+
+#  define nanosleep __nanosleep50
+#  define vfork __vfork14
+#endif
+
+#ifdef __mips__
+const int kSigCount = 129;
+#else
+const int kSigCount = 65;
+#endif
+
+#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
+const int PTHREAD_MUTEX_RECURSIVE = 1;
+const int PTHREAD_MUTEX_RECURSIVE_NP = 1;
+#else
+const int PTHREAD_MUTEX_RECURSIVE = 2;
+const int PTHREAD_MUTEX_RECURSIVE_NP = 2;
+#endif
+#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
+const int EPOLL_CTL_ADD = 1;
+#endif
+const int SIGILL = 4;
+const int SIGTRAP = 5;
+const int SIGABRT = 6;
+const int SIGFPE = 8;
+const int SIGSEGV = 11;
+const int SIGPIPE = 13;
+const int SIGTERM = 15;
+#if defined(__mips__) || SANITIZER_FREEBSD || SANITIZER_APPLE || \
+    SANITIZER_NETBSD
+const int SIGBUS = 10;
+const int SIGSYS = 12;
+#else
+const int SIGBUS = 7;
+const int SIGSYS = 31;
+#endif
+#if SANITIZER_NETBSD
+const int PTHREAD_BARRIER_SERIAL_THREAD = 1234567;
+#elif !SANITIZER_APPLE
+const int PTHREAD_BARRIER_SERIAL_THREAD = -1;
+#endif
+void *const MAP_FAILED = (void *)-1;
+const int MAP_FIXED = 0x10;
+typedef long long_t;
+typedef __sanitizer::u16 mode_t;
+
+#if SANITIZER_FREEBSD || SANITIZER_APPLE || SANITIZER_NETBSD
+const int SA_SIGINFO = 0x40;
+const int SIG_SETMASK = 3;
+#elif defined(__mips__)
+const int SA_SIGINFO = 8;
+const int SIG_SETMASK = 3;
+#else
+const int SA_SIGINFO = 4;
+const int SIG_SETMASK = 2;
+#endif
+
+
 namespace __xsan {
 
 THREADLOCAL uptr xsan_ignore_interceptors = 0;
@@ -70,12 +146,12 @@ ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func,
     : tsan_si(xsan_thr ? xsan_thr->tsan_thread_ : __tsan::cur_thread_init(),
               func, caller_pc) {}
 
-inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
+
+[[gnu::always_inline]]
+bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
   return xsan_ignore_interceptors || !thread || !thread->is_inited_ ||
          thread->in_ignored_lib_ || 
-         /// TODO: to support libignore, we plan to migrate it to Xsan.
-         /// xsan_suppressions.cpp is required accordingly.
-         __tsan::MustIgnoreInterceptor(thread->tsan_thread_);
+         __xsan::ShouldSanitzerIgnoreInterceptors(thread);
 }
 
 // Zero out addr if it points into shadow memory and was provided as a hint

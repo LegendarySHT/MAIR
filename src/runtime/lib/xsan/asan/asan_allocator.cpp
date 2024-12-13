@@ -672,7 +672,8 @@ struct Allocator {
       return;
     }
 
-    RunFreeHooks(ptr);
+    if (!__xsan::ShouldSanitzerIgnoreAllocFreeHook())
+      RunFreeHooks(ptr);
 
     // Must mark the chunk as quarantined before any changes to its metadata.
     // Do not quarantine given chunk if we failed to set CHUNK_QUARANTINE flag.
@@ -977,7 +978,8 @@ struct Allocator {
       return;
     }
 
-    RunFreeHooks(ptr);
+    if (!__xsan::ShouldSanitzerIgnoreAllocFreeHook())
+      RunFreeHooks(ptr);
     __xsan::XsanFreeHook(p, true, stack->trace[0]);
 
     AsanThread *t = GetCurrentThread();

@@ -217,3 +217,33 @@ void AfterMmap(void *ctx, void *res, uptr size, int fd) {
 }
 
 }  // namespace __xsan
+
+// ---------- End of Synchronization and File-Related Hooks ----------------
+
+// ---------- Ignoration Hooks -----------------------------------------------
+/*
+ The sub-sanitizers implement the following ignore predicates to ignore
+  - Interceptors
+  - Allocation/Free Hooks
+ which are shared by all sub-sanitizers.
+ */
+namespace __tsan {
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ShouldIgnoreInterceptors(ThreadState *thr) { return false; }
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ShouldIgnoreAllocFreeHook() { return false; }
+}  // namespace __tsan
+
+namespace __xsan {
+bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
+  /// TODO: to support libignore, we plan to migrate it to Xsan.
+  /// xsan_suppressions.cpp is required accordingly.
+  return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);
+}
+
+bool ShouldSanitzerIgnoreAllocFreeHook() {
+  return __tsan::ShouldIgnoreAllocFreeHook();
+}
+}  // namespace __xsan
+
+// ---------- End of Ignoration Hooks -------------------------------
