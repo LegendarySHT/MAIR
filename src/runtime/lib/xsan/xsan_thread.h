@@ -87,7 +87,13 @@ class XsanThread {
   bool isMainThread() { return is_main_thread_; }
 
   TsanArgs getTsanArgs() { return {tsan_thread_, top_pc_}; }
-  void setTsanArgs(uptr top_pc) { top_pc_ = top_pc; }
+  void setTsanArgs(uptr top_pc) {
+    /// As the existence of TSan fiber, the current tsan thread may not be the
+    /// one in TLS. Hence, we need to update the current tsan thread dynamically
+    /// here.
+    tsan_thread_ = __tsan::cur_thread_init();
+    top_pc_ = top_pc;
+  }
 
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
