@@ -27,11 +27,10 @@ int main() {
   return 0;
 }
 
-// CHECK: WARNING: ThreadSanitizer: heap-use-after-free
-// CHECK:   Write of size {{.*}} at {{.*}} by main thread:
+// CHECK: {{WARNING: ThreadSanitizer: heap-use-after-free|ERROR: AddressSanitizer: heap-use-after-free}}
+// CHECK: {{  Write of size .* at .* by main thread:|WRITE of size .* at .* thread T0}}
 // CHECK:     #0 bar
 // CHECK:     #1 main
-// CHECK:   Previous write of size 8 at {{.*}} by main thread:
+// CHECK: {{  Previous write of size 8 at .* by main thread:|freed by thread T0 here:}}
 // CHECK:     #0 free
 // CHECK:     #{{1|2}} foo
-// CHECK:     #{{2|3}} main

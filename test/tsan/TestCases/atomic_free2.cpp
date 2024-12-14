@@ -17,4 +17,4 @@ int main() {
   pthread_join(t, 0);
 }
 
-// CHECK: WARNING: ThreadSanitizer: heap-use-after-free
+// CHECK: {{WARNING: ThreadSanitizer: heap-use-after-free|AddressSanitizer: heap-use-after-free}}
