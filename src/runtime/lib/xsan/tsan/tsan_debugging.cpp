@@ -14,6 +14,8 @@
 #include "tsan_report.h"
 #include "tsan_rtl.h"
 
+#include "../xsan_report.h"
+
 #include "sanitizer_common/sanitizer_stackdepot.h"
 
 using namespace __tsan;
@@ -224,6 +226,7 @@ const char *__tsan_locate_address(uptr addr, char *name, uptr name_size,
         region_kind = "global";
         DataInfo info;
         if (Symbolizer::GetOrInit()->SymbolizeData(addr, &info)) {
+          __xsan::CorrectGlobalVariableDesc(addr, info);
           internal_strncpy(name, info.name, name_size);
           region_address = info.start;
           region_size = info.size;
