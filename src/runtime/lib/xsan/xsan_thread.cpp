@@ -34,7 +34,6 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->is_main_thread_ =
       (start_routine == nullptr && parent_tid == kMainTid);
 
-  /// TODO: add TSan thread support.
   auto *asan_thread = __asan::AsanThread::Create(
       /* start_routine */ start_routine, /* arg */ arg,
       /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);

@@ -342,8 +342,7 @@ uptr user_alloc_usable_size(const void *p) {
   return b->siz;
 }
 
-
-/// TODO: Unify the malloc hook invoke on XSan
+/// Now these TSan's malloc/free hooks are deprecated.
 void invoke_malloc_hook(void *ptr, uptr size) {
   ThreadState *thr = cur_thread();
   if (ctx == 0 || !ctx->initialized || thr->ignore_interceptors)

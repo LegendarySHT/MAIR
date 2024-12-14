@@ -127,7 +127,7 @@ void TsanInitFromXsan() {
   is_initialized = true;
   // We are not ready to handle interceptors yet.
   ScopedIgnoreInterceptors ignore;
-  /// TODO: Move this from ASan and TSan to XSan
+  /// Moved this to XSan
   // Install tool-specific callbacks in sanitizer_common.
   // SetCheckUnwindCallback(CheckUnwind);
 
@@ -135,19 +135,19 @@ void TsanInitFromXsan() {
   // ctx = new (ctx_placeholder) Context;
   // const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
   // const char *options = GetEnv(env_name);
-  /// TODO: Move this from ASan and TSan to XSan
+  /// Moved this to XSan
   //   CacheBinaryName();
   //   CheckASLR();
-  /// TODO: Move this to XSan
+  /// Moved this to XSan
   //   InitializeFlags(&ctx->flags, options, env_name);
   // AvoidCVE_2016_2143();
   // __sanitizer::InitializePlatformEarly();
   __tsan::InitializePlatformEarly();
 
 #if !SANITIZER_GO
-/// TODO: Move this from ASan and TSan to XSan
-//   InitializeAllocator();
-//   ReplaceSystemMalloc();
+  /// Moved this to XSan
+  // InitializeAllocator();
+  // ReplaceSystemMalloc();
 #endif
   if (common_flags()->detect_deadlocks)
     ctx->dd = DDetector::Create(flags());
@@ -165,7 +165,7 @@ void TsanInitFromXsan() {
 //   InstallDeadlySignalHandlers(TsanOnDeadlySignal);
 #endif
   // Setup correct file descriptor for error reports.
-  /// TODO: Move this from ASan and TSan to XSan
+  /// Moved this to XSan
   //   __sanitizer_set_report_path(common_flags()->log_path);
   InitializeSuppressions();
 #if !SANITIZER_GO
@@ -180,13 +180,13 @@ void TsanInitFromXsan() {
   //   Tid tid = ThreadCreate(nullptr, 0, 0, true);
   //   CHECK_EQ(tid, kMainTid);
   //   ThreadStart(thr, tid, GetTid(), ThreadType::Regular);
-  /// TODO: Move this from ASan and TSan to XSan
+  /// Moved this to XSan
   // #if TSAN_CONTAINS_UBSAN
   //   __ubsan::InitAsPlugin();
   // #endif
 
 #if !SANITIZER_GO
-  /// TODO: Move this from ASan and TSan to XSan
+  /// Moved this to XSan
   //   Symbolizer::LateInitialize();
   if (InitializeMemoryProfiler() || flags()->force_background_thread)
     MaybeSpawnBackgroundThread();

@@ -115,7 +115,7 @@ ALWAYS_INLINE USED void __tsan_unaligned_write8(void *addr) {
 }
 
 extern "C" {
-/// TODO: Delegate these interface implemantations to XSan.
+/// Delegated these interface implemantations to XSan.
 // // __sanitizer_unaligned_load/store are for user instrumentation.
 // SANITIZER_INTERFACE_ATTRIBUTE
 // u16 __sanitizer_unaligned_load16(const uu16 *addr) {

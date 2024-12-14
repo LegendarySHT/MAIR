@@ -613,7 +613,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   /// Ensure that we have enough stack space to store TLS.
   AdjustStackSize(attr);
-  
+
   int detached = 0;
   if (attr)
     REAL(pthread_attr_getdetachstate)(attr, &detached);
@@ -667,10 +667,12 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   return result;
 }
 
-/// TODO: If not compose TSan, intercept join here
-// INTERCEPTOR(int, pthread_join, void *t, void **arg) {
-//   return real_pthread_join(t, arg);
-// }
+/// If not compose TSan, intercept join here
+#if !XSAN_CONTAINS_TSAN
+INTERCEPTOR(int, pthread_join, void *t, void **arg) {
+  return real_pthread_join(t, arg);
+}
+#endif
 
 // DEFINE_REAL_PTHREAD_FUNCTIONS
 #  endif  // XSAN_INTERCEPT_PTHREAD_CREATE
@@ -1280,8 +1282,10 @@ void InitializeXsanInterceptors() {
 #    else
   XSAN_INTERCEPT_FUNC(pthread_create);
 #    endif
-  /// TODO: If not compose TSan, intercept join here
-  // XSAN_INTERCEPT_FUNC(pthread_join);
+#    if !XSAN_CONTAINS_TSAN
+  /// If not compose TSan, intercept join here
+  XSAN_INTERCEPT_FUNC(pthread_join);
+#    endif
 #  endif
 
   // Intercept atexit function.
