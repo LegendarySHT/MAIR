@@ -157,6 +157,7 @@ set(XSAN_SOURCES
   xsan_linux.cpp
   xsan_malloc_linux.cpp
   xsan_rtl.cpp
+  xsan_report.cpp
   xsan_thread.cpp
   ${XSAN_ASAN_SOURCES}
   ${XSAN_TSAN_SOURCES}
@@ -271,6 +272,7 @@ SET(XSAN_HEADERS
   xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h
   xsan_internal.h
+  xsan_report.h
   xsan_thread.h
   ${XSAN_ASAN_HEADERS}
   ${XSAN_TSAN_HEADERS}

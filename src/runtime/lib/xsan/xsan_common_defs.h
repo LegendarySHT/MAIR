@@ -23,6 +23,9 @@
 #  endif
 #endif
 
+#ifndef XSAN_CONTAINS_ASAN
+#  define XSAN_CONTAINS_ASAN 1
+#endif
 
 namespace __xsan {
 

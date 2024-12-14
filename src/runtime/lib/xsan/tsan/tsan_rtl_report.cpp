@@ -9,6 +9,7 @@
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
 //===----------------------------------------------------------------------===//
+#include "../xsan_report.h"
 #include "../xsan_thread.h"
 
 #include "sanitizer_common/sanitizer_libc.h"
@@ -340,6 +341,11 @@ void ScopedReportBase::AddLocation(uptr addr, uptr size) {
   }
 #endif
   if (ReportLocation *loc = SymbolizeData(addr)) {
+    /// TODO: Move the patch to inner of `SymbolizeData`, although
+    /// `SymbolizeData` is only used here.
+    /// The global structure may be modified by otehr sanitizers (e.g., ASan),
+    /// so we need to correct the global variable descriptor before adding it.
+    __xsan::CorrectGlobalVariableDesc(addr, loc->global);
     loc->suppressable = true;
     rep_->locs.PushBack(loc);
     return;
