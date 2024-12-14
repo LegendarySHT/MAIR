@@ -66,8 +66,8 @@ class XsanThread {
   bool AddrIsInRealStack(uptr addr);
   /// ASan uses FakeStack to detect use-after-return bugs just like what it does
   /// to detect use-after-free bugs.
-  /// Based on ASan, XSan also provides API to query if an address is in the fake
-  /// stack.
+  /// Based on ASan, XSan also provides API to query if an address is in the
+  /// fake stack.
   bool AddrIsInFakeStack(uptr addr);
   bool AddrIsInStack(uptr addr);
   bool AddrIsInTls(uptr addr);

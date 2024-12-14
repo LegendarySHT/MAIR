@@ -159,6 +159,7 @@ namespace __xsan {
 
 /// Ignore interceptors in the scope
 /// TSan's ScopedIgnoreInterceptors is also affected.
+/// TODO: use this to ignore interceptors in the scope of inner logic of Xsan.
 class ScopedIgnoreInterceptors {
  public:
   ScopedIgnoreInterceptors(bool in_report = false);
@@ -171,6 +172,7 @@ class ScopedIgnoreInterceptors {
 
 /// Ignore checks in the scope
 /// Now only used for TSan.
+/// TODO: use this to ignore interceptors in the scope of inner logic of Xsan.
 class ScopedIgnoreChecks {
  public:
   ScopedIgnoreChecks();

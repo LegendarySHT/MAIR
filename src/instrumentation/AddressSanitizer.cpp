@@ -148,6 +148,7 @@ const char kAsanInitName[] = "__asan_init";
 const char kAsanVersionCheckNamePrefix[] = "__asan_version_mismatch_check_v";
 const char kAsanPtrCmp[] = "__sanitizer_ptr_cmp";
 const char kAsanPtrSub[] = "__sanitizer_ptr_sub";
+/// TODO: use XSan's one
 const char kAsanHandleNoReturnName[] = "__asan_handle_no_return";
 static const int kMaxAsanStackMallocSizeClass = 10;
 const char kAsanStackMallocNameTemplate[] = "__asan_stack_malloc_";

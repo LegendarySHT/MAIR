@@ -1359,6 +1359,7 @@ void *__xsan_memmove(void *dst, const void *src, uptr size) {
   COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
 }
 
+/// XSan does own an intrinsic, and thus use ASan's implementation.
 void *__asan_memcpy(void *dst, const void *src, uptr size) {
   void *ctx;
 #if PLATFORM_HAS_DIFFERENT_MEMCPY_AND_MEMMOVE
