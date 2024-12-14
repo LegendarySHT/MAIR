@@ -32,6 +32,7 @@
 #  include "sanitizer_common/sanitizer_posix.h"
 #  include "sanitizer_common/sanitizer_procmaps.h"
 
+DECLARE_REAL(int, sigaltstack, void *ss, void *oss);
 namespace __asan {
 
 void AsanOnDeadlySignal(int signo, void *siginfo, void *context) {
@@ -42,7 +43,11 @@ void AsanOnDeadlySignal(int signo, void *siginfo, void *context) {
 
 bool PlatformUnpoisonStacks() {
   stack_t signal_stack;
-  CHECK_EQ(0, sigaltstack(nullptr, &signal_stack));
+  /// Should not do sanity checks here, as it is in the inner of XSan.
+  /// Otherwise, it would raise an FP of TSan's race (fiber_longjmp.cpp).
+  /// In that testcase, i.e., fiber_longjmp.cpp, ASan always gives a warning:
+  /// "ASan is ignoring requested __asan_handle_no_return:..."
+  CHECK_EQ(0, REAL(sigaltstack)(nullptr, &signal_stack));
   uptr sigalt_bottom = (uptr)signal_stack.ss_sp;
   uptr sigalt_top = (uptr)((char *)signal_stack.ss_sp + signal_stack.ss_size);
   // If we're executing on the signal alternate stack AND the Linux flag
