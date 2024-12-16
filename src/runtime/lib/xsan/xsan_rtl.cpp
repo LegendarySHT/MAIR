@@ -21,7 +21,12 @@ constexpr uptr ZeroBaseMaxShadowStart = 1 << 18;
 
 // -------------------------- Globals --------------------- {{{1
 int xsan_inited;
+/// Indicate whether XSan's initialization is in progress.
+/// Set to false before sub-santizers's initialization.
 bool xsan_init_is_running;
+/// Whether we are currently in XSan initialization.
+/// Only set to false after all sub-santizers's initialization.
+bool xsan_in_init;
 
 #if !ASAN_FIXED_MAPPING
 uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
@@ -103,6 +108,7 @@ static void XsanInitInternal() {
   ScopedSanitizerToolName tool_name("XSan");
   CHECK(!xsan_init_is_running && "XSan init calls itself!");
   xsan_init_is_running = true;
+  xsan_in_init = true;
 
   __tsan::TsanInitFromXsanEarly();
   /// note that place this after cur_thread_init()
@@ -182,6 +188,7 @@ static void XsanInitInternal() {
   } else {
     Symbolizer::LateInitialize();
   }
+  xsan_in_init = false;
 }
 
 // Initialize as requested from some part of ASan runtime library (interceptors,

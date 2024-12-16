@@ -144,6 +144,8 @@ void InstallAtExitCheckLeaks();
 extern int xsan_inited;
 // Used to avoid infinite recursion in __xsan_init().
 extern bool xsan_init_is_running;
+extern bool xsan_in_init;
+
 extern void (*death_callback)(void);
 
 }  // namespace __xsan
