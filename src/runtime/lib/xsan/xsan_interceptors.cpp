@@ -1147,11 +1147,7 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
   ctx->f = f;
   ctx->arg = arg;
   ctx->pc = pc;
-  __tsan::ThreadState *thr = __tsan::cur_thread();
-  __tsan::Release(thr, pc, (uptr)ctx);
-  // Memory allocation in __cxa_atexit will race with free during exit,
-  // because we do not see synchronization around atexit callback list.
-  ScopedIgnoreChecks sic(pc);
+  ScopedAtExitWrapper saew(pc, ctx);
   int res;
 #  if XSAN_INTERCEPT_ON_EXIT
   if (is_on_exit) {

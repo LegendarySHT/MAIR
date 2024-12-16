@@ -42,6 +42,12 @@ void OnFdSocketAccept(void *ctx, int fd, int newfd);
 void OnFileOpen(void *ctx, void *file, const char *path);
 void OnFileClose(void *ctx, void *file);
 
+/// Used in the Atexit registration.
+class ScopedAtExitWrapper {
+ public:
+  ScopedAtExitWrapper(uptr pc, void *ctx);
+  ~ScopedAtExitWrapper();
+};
 void AfterMmap(void *ctx, void *res, uptr size, int fd);
 
 bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);

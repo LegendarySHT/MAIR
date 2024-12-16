@@ -1,5 +1,4 @@
-//===-- xsan_hooks.cpp ------------------------------------------*- C++
-//-*-===//
+//===-- xsan_hooks.cpp ---------------------------------------------------===//
 //
 // This file is a part of XSan, an composition of several sanitizers.
 //
@@ -64,6 +63,11 @@ namespace __tsan {
 /// What's more, TSan does not support starting new threads after multi-threaded
 /// fork.
 void OnPthreadCreate();
+
+void Release(ThreadState *thr, uptr pc, uptr addr);
+
+void ThreadIgnoreBegin(ThreadState *thr, uptr pc);
+void ThreadIgnoreEnd(ThreadState *thr);
 }  // namespace __tsan
 
 namespace __xsan {
@@ -71,6 +75,20 @@ void OnPthreadCreate() {
   __asan::OnPthreadCreate();
   __tsan::OnPthreadCreate();
 }
+
+ScopedAtExitWrapper::ScopedAtExitWrapper(uptr pc, void *ctx) {
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  __tsan::Release(thr, pc, (uptr)ctx);
+  // Memory allocation in __cxa_atexit will race with free during exit,
+  // because we do not see synchronization around atexit callback list.
+  __tsan::ThreadIgnoreBegin(thr, pc);
+}
+
+ScopedAtExitWrapper::~ScopedAtExitWrapper() {
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  __tsan::ThreadIgnoreEnd(thr);
+}
+
 }  // namespace __xsan
 
 // --------------- End of Special Function Hooks -----------------
