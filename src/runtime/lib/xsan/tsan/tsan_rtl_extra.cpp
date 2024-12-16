@@ -29,4 +29,54 @@ void OnPthreadCreate() {
   }
 }
 
+THREADLOCAL int last_ignore_interceptors = 0;
+THREADLOCAL bool disabled_tsan = false;
+
+/// See the following comment in tsan_interceptors_posix.cpp:vfork for details.
+// Some programs (e.g. openjdk) call close for all file descriptors
+// in the child process. Under tsan it leads to false positives, because
+// address space is shared, so the parent process also thinks that
+// the descriptors are closed (while they are actually not).
+// This leads to false positives due to missed synchronization.
+// Strictly saying this is undefined behavior, because vfork child is not
+// allowed to call any functions other than exec/exit. But this is what
+// openjdk does, so we want to handle it.
+// We could disable interceptors in the child process. But it's not possible
+// to simply intercept and wrap vfork, because vfork child is not allowed
+// to return from the function that calls vfork, and that's exactly what
+// we would do. So this would require some assembly trickery as well.
+// Instead we simply turn vfork into fork.
+void DisableTsanForVfork() {
+  /* VFORK is epected to call exit/exec soon, so we should not do TSan's sanity
+   * checks for its child. */
+  if (disabled_tsan)
+    return;
+  disabled_tsan = true;
+  ThreadState *thr = cur_thread();
+  last_ignore_interceptors = thr->ignore_interceptors;
+  thr->ignore_interceptors = true;
+  // We've just forked a multi-threaded process. We cannot reasonably function
+  // after that (some mutexes may be locked before fork). So just enable
+  // ignores for everything in the hope that we will exec soon.
+  thr->ignore_interceptors++;
+  thr->suppress_reports++;
+  thr->in_vfork_child = true;
+  ThreadIgnoreBegin(thr, 0);
+  ThreadIgnoreSyncBegin(thr, 0);
+}
+
+void RecoverTsanAfterVforkParent() {
+  ThreadState *thr = cur_thread();
+  thr->ignore_interceptors = last_ignore_interceptors;
+  // We've just forked a multi-threaded process. We cannot reasonably function
+  // after that (some mutexes may be locked before fork). So just enable
+  // ignores for everything in the hope that we will exec soon.
+  thr->ignore_interceptors--;
+  thr->suppress_reports--;
+  thr->in_vfork_child = false;
+  ThreadIgnoreEnd(thr);
+  ThreadIgnoreSyncEnd(thr);
+  disabled_tsan = false;
+}
+
 }  // namespace __tsan

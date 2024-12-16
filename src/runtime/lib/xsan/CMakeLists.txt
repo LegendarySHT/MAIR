@@ -168,8 +168,8 @@ set(XSAN_SOURCES
 
 if (NOT WIN32 AND NOT APPLE)
   list(APPEND XSAN_SOURCES
-    # xsan_interceptors_vfork.S
-    asan/orig/asan_interceptors_vfork.S
+    xsan_interceptors_vfork.S # FIXME: TSan uses fork to replace vfork. Should we do the same?
+    # asan/orig/asan_interceptors_vfork.S
     )
 endif()
 

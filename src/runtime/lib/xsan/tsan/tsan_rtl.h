@@ -201,6 +201,7 @@ struct ThreadState {
 #endif
   MutexSet mset;
   bool is_dead;
+  bool in_vfork_child;
   const Tid tid;
   uptr stk_addr;
   uptr stk_size;

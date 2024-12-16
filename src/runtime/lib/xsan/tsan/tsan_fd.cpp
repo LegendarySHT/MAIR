@@ -179,7 +179,9 @@ bool FdLocation(uptr addr, int *fd, Tid *tid, StackID *stack, bool *closed) {
 }
 
 void FdAcquire(ThreadState *thr, uptr pc, int fd) {
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   FdDesc *d = fddesc(thr, pc, fd);
   FdSync *s = d->sync;
@@ -190,7 +192,9 @@ void FdAcquire(ThreadState *thr, uptr pc, int fd) {
 }
 
 void FdRelease(ThreadState *thr, uptr pc, int fd) {
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   FdDesc *d = fddesc(thr, pc, fd);
   FdSync *s = d->sync;
@@ -204,7 +208,9 @@ void FdRelease(ThreadState *thr, uptr pc, int fd) {
 
 void FdAccess(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdAccess(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   FdDesc *d = fddesc(thr, pc, fd);
   MemoryAccess(thr, pc, (uptr)d, 8, kAccessRead);
@@ -212,7 +218,9 @@ void FdAccess(ThreadState *thr, uptr pc, int fd) {
 
 void FdClose(ThreadState *thr, uptr pc, int fd, bool write) {
   DPrintf("#%d: FdClose(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   FdDesc *d = fddesc(thr, pc, fd);
   {
@@ -255,7 +263,9 @@ void FdClose(ThreadState *thr, uptr pc, int fd, bool write) {
 
 void FdFileCreate(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdFileCreate(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   init(thr, pc, fd, &fdctx.filesync);
 }
@@ -281,35 +291,45 @@ void FdPipeCreate(ThreadState *thr, uptr pc, int rfd, int wfd) {
 
 void FdEventCreate(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdEventCreate(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   init(thr, pc, fd, allocsync(thr, pc));
 }
 
 void FdSignalCreate(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdSignalCreate(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   init(thr, pc, fd, 0);
 }
 
 void FdInotifyCreate(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdInotifyCreate(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   init(thr, pc, fd, 0);
 }
 
 void FdPollCreate(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdPollCreate(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   init(thr, pc, fd, allocsync(thr, pc));
 }
 
 void FdPollAdd(ThreadState *thr, uptr pc, int epfd, int fd) {
   DPrintf("#%d: FdPollAdd(%d, %d)\n", thr->tid, epfd, fd);
-  if (bogusfd(epfd) || bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.if (bogusfd(epfd)
+  if (bogusfd(epfd) || bogusfd(fd) || thr->in_vfork_child)
     return;
   FdDesc *d = fddesc(thr, pc, fd);
   // Associate fd with epoll fd only once.
@@ -333,7 +353,9 @@ void FdPollAdd(ThreadState *thr, uptr pc, int epfd, int fd) {
 
 void FdSocketCreate(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdSocketCreate(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   // It can be a UDP socket.
   init(thr, pc, fd, &fdctx.socksync);
@@ -341,7 +363,9 @@ void FdSocketCreate(ThreadState *thr, uptr pc, int fd) {
 
 void FdSocketAccept(ThreadState *thr, uptr pc, int fd, int newfd) {
   DPrintf("#%d: FdSocketAccept(%d, %d)\n", thr->tid, fd, newfd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   // Synchronize connect->accept.
   Acquire(thr, pc, (uptr)&fdctx.connectsync);
@@ -350,7 +374,9 @@ void FdSocketAccept(ThreadState *thr, uptr pc, int fd, int newfd) {
 
 void FdSocketConnecting(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdSocketConnecting(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   // Synchronize connect->accept.
   Release(thr, pc, (uptr)&fdctx.connectsync);
@@ -358,7 +384,9 @@ void FdSocketConnecting(ThreadState *thr, uptr pc, int fd) {
 
 void FdSocketConnect(ThreadState *thr, uptr pc, int fd) {
   DPrintf("#%d: FdSocketConnect(%d)\n", thr->tid, fd);
-  if (bogusfd(fd))
+  /// vfork child should not affect the parent's fd table.
+  /// See comment of tsan_interceptors_posix.cpp:vfork for details.
+  if (bogusfd(fd) || thr->in_vfork_child)
     return;
   init(thr, pc, fd, &fdctx.socksync);
 }

@@ -49,6 +49,12 @@ class ScopedAtExitWrapper {
   ~ScopedAtExitWrapper();
 };
 void AfterMmap(void *ctx, void *res, uptr size, int fd);
+/// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
+/// Notably, this function is called TWICE at the attitude per process.
+extern "C" void * __xsan_vfork_before_and_after();
+/// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
+extern "C" void __xsan_vfork_parent_after(void *sp);
+
 
 bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);
 bool ShouldSanitzerIgnoreAllocFreeHook();

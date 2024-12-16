@@ -53,6 +53,10 @@ void OnFakeStackDestory(uptr addr, uptr size) {
 // ---------- End of Memory Management Hooks -------------------
 
 // ---------------------- Special Function Hooks -----------------
+extern "C" {
+void *__asan_extra_spill_area();
+void __asan_handle_vfork(void *sp);
+}
 namespace __asan {
 /// ASan 1) checks the correctness of main thread ID, 2) checks the init orders.
 void OnPthreadCreate();
@@ -68,6 +72,9 @@ void Release(ThreadState *thr, uptr pc, uptr addr);
 
 void ThreadIgnoreBegin(ThreadState *thr, uptr pc);
 void ThreadIgnoreEnd(ThreadState *thr);
+
+void DisableTsanForVfork();
+void RecoverTsanAfterVforkParent();
 }  // namespace __tsan
 
 namespace __xsan {
@@ -89,6 +96,22 @@ ScopedAtExitWrapper::ScopedAtExitWrapper(uptr pc, void *ctx) {
 ScopedAtExitWrapper::~ScopedAtExitWrapper() {
   __tsan::ThreadState *thr = __tsan::cur_thread();
   __tsan::ThreadIgnoreEnd(thr);
+}
+
+/// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
+/// Notably, this function is called TWICE at the attitude per process.
+extern "C" void *__xsan_vfork_before_and_after() {
+  __tsan::DisableTsanForVfork();
+  /// Invoked TRIPLE totally, once before vfork to store the sp, twice after
+  /// vfork child/parent to restore the sp.
+  return __asan_extra_spill_area();
+}
+
+/// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
+extern "C" void __xsan_vfork_parent_after(void *sp) {
+  __tsan::RecoverTsanAfterVforkParent();
+  /// Unpoison vfork child's new stack space : [stack_bottom, sp]
+  __asan_handle_vfork(sp);
 }
 
 }  // namespace __xsan
