@@ -14,30 +14,9 @@ unsigned& finalize_key();
 
 class ScopedIgnoreTsan {
  public:
-  ScopedIgnoreTsan(bool enable) : enable_(enable) {
-#if !SANITIZER_GO
-    if (enable_) {
-      ThreadState* thr = cur_thread();
-      nomalloc_ = thr->nomalloc;
-      thr->nomalloc = false;
-      thr->ignore_sync++;
-      thr->ignore_reads_and_writes++;
-      atomic_store_relaxed(&thr->in_signal_handler, 0);
-    }
-#endif
-  }
+  ScopedIgnoreTsan(bool enable);
 
-  ~ScopedIgnoreTsan() {
-#if !SANITIZER_GO
-    if (enable_) {
-      ThreadState* thr = cur_thread();
-      thr->nomalloc = nomalloc_;
-      thr->ignore_sync--;
-      thr->ignore_reads_and_writes--;
-      atomic_store_relaxed(&thr->in_signal_handler, 0);
-    }
-#endif
-  }
+  ~ScopedIgnoreTsan();
 
  private:
   bool nomalloc_;

@@ -1,7 +1,33 @@
 #include "tsan_rtl_extra.h"
 
+#include "sanitizer_common/sanitizer_internal_defs.h"
 #include "tsan_rtl.h"
 namespace __tsan {
+ScopedIgnoreTsan::ScopedIgnoreTsan(bool enable) : enable_(enable) {
+#if !SANITIZER_GO
+  if (enable_) {
+    ThreadState *thr = cur_thread();
+    nomalloc_ = thr->nomalloc;
+    thr->nomalloc = false;
+    thr->ignore_sync++;
+    thr->ignore_reads_and_writes++;
+    atomic_store_relaxed(&thr->in_signal_handler, 0);
+  }
+#endif
+}
+
+ScopedIgnoreTsan::~ScopedIgnoreTsan() {
+#if !SANITIZER_GO
+  if (enable_) {
+    ThreadState *thr = cur_thread();
+    thr->nomalloc = nomalloc_;
+    thr->ignore_sync--;
+    thr->ignore_reads_and_writes--;
+    atomic_store_relaxed(&thr->in_signal_handler, 0);
+  }
+#endif
+}
+
 bool ShouldIgnoreInterceptors(ThreadState *thr) {
   return !thr->is_inited || thr->ignore_interceptors || thr->in_ignored_lib;
 }
