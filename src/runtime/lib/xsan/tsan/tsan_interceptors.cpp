@@ -2115,35 +2115,38 @@ DECLARE_REAL(int, vfork, int fake)
 #if SANITIZER_LINUX
 TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
                  void *arg, int *parent_tid, void *tls, pid_t *child_tid) {
-
-/// FIXME: TSan does not support CLONE_VM, so we temporarily remove it from flags.
-#define CLONE_VM  0x00000100
-  if (flags | CLONE_VM) {
-    // TSan does not support CLONE_VM, so we remove it from flags.
-    flags &= ~CLONE_VM;
-  }
-#undef CLONE_VM
   SCOPED_INTERCEPTOR_RAW(clone, fn, stack, flags, arg, parent_tid, tls,
                          child_tid);
   struct Arg {
     int (*fn)(void *);
     void *arg;
+    bool is_clone_vm;
   };
   auto wrapper = +[](void *p) -> int {
     auto *thr = cur_thread();
     uptr pc = GET_CURRENT_PC();
-    // Start the background thread for fork, but not for clone.
-    // For fork we did this always and it's known to work (or user code has
-    // adopted). But if we do this for the new clone interceptor some code
-    // (sandbox2) fails. So model we used to do for years and don't start the
-    // background thread after clone.
-    ForkChildAfter(thr, pc, false);
-    FdOnFork(thr, pc);
     auto *arg = static_cast<Arg *>(p);
+    /// FIXME: TSan does not support CLONE_VM
+    /// Duplicated Fork*After in flag CLONE_VM case leads to deadlock.
+    if (!arg->is_clone_vm) {
+      // Start the background thread for fork, but not for clone.
+      // For fork we did this always and it's known to work (or user code has
+      // adopted). But if we do this for the new clone interceptor some code
+      // (sandbox2) fails. So model we used to do for years and don't start the
+      // background thread after clone.
+      ForkChildAfter(thr, pc, false);
+    } else {
+      Report(
+          "ThreadSanitizer: imcompatiable support for clone with flags "
+          "CLONE_VM\n");
+    }
+    FdOnFork(thr, pc);
     return arg->fn(arg->arg);
   };
   ForkBefore(thr, pc);
-  Arg arg_wrapper = {fn, arg};
+#  define CLONE_VM 0x00000100
+  Arg arg_wrapper = {fn, arg, (flags & CLONE_VM) != 0};
+#  undef CLONE_VM
   int pid = REAL(clone)(wrapper, stack, flags, &arg_wrapper, parent_tid, tls,
                         child_tid);
   ForkParentAfter(thr, pc);
