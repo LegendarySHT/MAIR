@@ -379,6 +379,15 @@ endif()
 
 add_compiler_rt_component(xsan)
 
+# TODO: only add this link flags when both TSan and LSan are activated.
+# If LSan and TSan are enabled togother, we need to intercept the LSan's symbols DoLeakCheck and DoRecoverableLeakCheck.
+set(XSAN_LINK_FLAGS "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv" 
+                    "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv"
+                    "-Wl,-wrap,__lsan_do_leak_check"
+                    "-Wl,-wrap,__lsan_do_recoverable_leak_check"
+                    )
+
+
 if(NOT APPLE)
 
   add_compiler_rt_runtime(clang_rt.xsan
@@ -388,6 +397,7 @@ if(NOT APPLE)
                   RTXsan          
                   ${XSAN_COMMON_RUNTIME_OBJECT_LIBS}
       CFLAGS ${XSAN_RTL_CFLAGS}
+      LINK_FLAGS ${XSAN_LINK_FLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
 
@@ -397,6 +407,7 @@ if(NOT APPLE)
       OBJECT_LIBS RTXsan_cxx
                   RTUbsan_cxx
       CFLAGS ${XSAN_RTL_CFLAGS}
+      LINK_FLAGS ${XSAN_LINK_FLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
   
@@ -405,6 +416,7 @@ if(NOT APPLE)
       ARCHS ${XSAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTXsan_static
       CFLAGS ${XSAN_RTL_CFLAGS}
+      LINK_FLAGS ${XSAN_LINK_FLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
   
@@ -413,6 +425,7 @@ if(NOT APPLE)
       ARCHS ${XSAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTXsan_preinit
       CFLAGS ${XSAN_RTL_CFLAGS}
+      LINK_FLAGS ${XSAN_LINK_FLAGS}
       DEFS ${XSAN_COMMON_DEFINITIONS}
       PARENT_TARGET xsan)
 

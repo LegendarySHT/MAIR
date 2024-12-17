@@ -103,3 +103,70 @@ void RecoverTsanAfterVforkParent() {
 }
 
 }  // namespace __tsan
+
+extern "C" {
+
+/// TODO: define these functions only if LSan is used.
+/*
+  TSan intercepts dl_iterate_phdr, and leads to unexpected crashes in LSan,
+which uses dl_iterate_phdr. The ideal solution is that ignore the
+interceptors after LSan's checks are activated. However, LSan indeed
+provides no interface for us to instrument a ScopedIgnoreInterceptors.
+Therefore, we need to use other approaches to sense whether LSan's checks
+are active. Here are some ideas:
+  1. (Intrusive) Modify LSan's source code to provide interface to query its
+    status.
+  2. (Intrusive & Incompatible) Modify LSan's source code to replace
+    dl_iterate_phdr with internal_dl_iterate_phdr.
+  3. (Intrusive & Incompatible) Modify LSan's source code and register a
+    ScopedIgnoreInterceptors before checks.
+  4. (Non-intrusive) Use -Wl,-wrap,<symbol> to replace the symbols.
+  5. (Non-intrusive & tricky) Use entry 'hook' __lsan_is_turned_off to
+    obtain the caller ra of its caller, which could be considered as exit.,
+  6. (Non-intrusive & heary) Use -finstrument-functions to register a
+    callback for each function call.
+Excluding all intrusive approaches, the only non-tricky simple solution is
+to use -Wl,-wrap,<symbolc> (approach 4).
+
+  The only trouble is that we need to intercept all the exported symbols about
+LSan's check, as this approach does not work for those calls that locate in
+the same file defining the called symbols.
+*/
+
+#define LSAN_REAL(f) __real_##f
+#define LSAN_WRAP(f) __wrap_##f
+
+// __lsan::DoLeakCheck 
+void LSAN_REAL(_ZN6__lsan11DoLeakCheckEv)();
+// __lsan::DoRecoverableLeakCheck 
+void LSAN_REAL(_ZN6__lsan26DoRecoverableLeakCheckVoidEv)();
+void LSAN_REAL(__lsan_do_leak_check)();
+void LSAN_REAL(__lsan_do_recoverable_leak_check)();
+using namespace __asan;
+// interceptor of __lsan::DoLeakCheck 
+void LSAN_WRAP(_ZN6__lsan11DoLeakCheckEv)() {
+  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
+  LSAN_REAL(_ZN6__lsan11DoLeakCheckEv)();
+}
+
+// interceptor of __lsan::DoRecoverableLeakCheck 
+void LSAN_WRAP(_ZN6__lsan26DoRecoverableLeakCheckVoidEv)() {
+  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
+  LSAN_REAL(_ZN6__lsan26DoRecoverableLeakCheckVoidEv)();
+}
+
+// interceptor of __lsan_do_leak_check 
+void LSAN_WRAP(__lsan_do_leak_check)() {
+  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
+  LSAN_REAL(__lsan_do_leak_check)();
+}
+
+// interceptor of __lsan_do_recoverable_leak_check 
+void LSAN_WRAP(__lsan_do_recoverable_leak_check)() {
+  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
+  LSAN_REAL(__lsan_do_recoverable_leak_check)();
+}
+
+#undef LSAN_WRAP
+#undef LSAN_REAL
+}
