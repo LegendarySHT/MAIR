@@ -2127,7 +2127,7 @@ TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
     uptr pc = GET_CURRENT_PC();
     auto *arg = static_cast<Arg *>(p);
     /// FIXME: TSan does not support CLONE_VM
-    /// Duplicated Fork*After in flag CLONE_VM case leads to deadlock.
+    /// Duplicated ForkAfter in flag CLONE_VM case leads to deadlock.
     if (!arg->is_clone_vm) {
       // Start the background thread for fork, but not for clone.
       // For fork we did this always and it's known to work (or user code has
@@ -2189,28 +2189,14 @@ static int dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
 }
 
 TSAN_INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb_t cb, void *data) {
-  // SCOPED_TSAN_INTERCEPTOR(dl_iterate_phdr, cb, data);
+  SCOPED_TSAN_INTERCEPTOR(dl_iterate_phdr, cb, data);
 
-  /// FIXME: bug in ScopedIgnoreInterptors and ScopedInterceptor
-  // __tsan::ThreadState *thr = __tsan::cur_thread_init();              
-  // Printf("------------- %d : %d, %d, %d\n\n", MustIgnoreInterceptor(thr),  thr->is_inited, thr->ignore_interceptors, thr->in_ignored_lib);
-  // UNUSED const uptr caller_pc = GET_CALLER_PC();
-
-  // __tsan::ScopedInterceptor si(thr, "dl_iterate_phdr", GET_CALLER_PC()); 
-  // UNUSED const uptr pc = GET_CURRENT_PC();
-  // // CHECK_REAL_FUNC(dl_iterate_phdr);                   
-
-  // if (MustIgnoreInterceptor(thr)) {
-  //   return REAL(dl_iterate_phdr)(cb, data);
-  // }  
-
-  // dl_iterate_phdr_data cbdata;
-  // cbdata.thr = thr;
-  // cbdata.pc = pc;
-  // cbdata.cb = cb;
-  // cbdata.data = data;
-  // int res = REAL(dl_iterate_phdr)(dl_iterate_phdr_cb, &cbdata);
-  int res = REAL(dl_iterate_phdr)(cb, data);
+  dl_iterate_phdr_data cbdata;
+  cbdata.thr = thr;
+  cbdata.pc = pc;
+  cbdata.cb = cb;
+  cbdata.data = data;
+  int res = REAL(dl_iterate_phdr)(dl_iterate_phdr_cb, &cbdata);
   return res;
 }
 #endif
