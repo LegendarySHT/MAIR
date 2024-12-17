@@ -168,35 +168,60 @@ static void find_obj(u8* argv0) {
 
 }
 
-// TODO: support sanitizer composition
+typedef struct kXsanOption {
+  u64 mask;
+} XsanOption;
+
+XsanOption xsan_options;
+
+void init(XsanOption *opt) {
+#if XSAN_UBSAN
+  opt->mask |= (u64)1 << UBSan;
+#endif
+#if XSAN_TSAN
+  opt->mask |= (u64)1 << TSan;
+#endif
+#if XSAN_ASAN
+  opt->mask |= (u64)1 << ASan;
+#endif
+  opt->mask |= (u64)1 << XSan;
+}
+
+void set(XsanOption *opt, enum SanitizerType sanTy) {
+  opt->mask |= (u64)1 << sanTy;
+}
+
+void clear(XsanOption *opt, enum SanitizerType sanTy) {
+  opt->mask &= ~((u64)1 << sanTy);
+}
+
+u8 has(XsanOption *opt, enum SanitizerType sanTy) {
+  return (opt->mask & (((u64)1 << sanTy))) != 0;
+}
+
 static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     u8* cur = argv[i];
     if (!strcmp(cur, "-tsan")) {
-      if (xsanTy != SanNone && xsanTy != UBSan)
+      if (has(&xsan_options, ASan))
         FATAL("'-tsan' could not be used with '-asan'");
-      // Reuse the frontend code relevant to sanitizer
-      cc_params[cc_par_cnt++] = "-fsanitize=thread";
       xsanTy = TSan;
+      set(&xsan_options, TSan);
       continue;
     } else if (!strcmp(cur, "-asan")) {
-      if (xsanTy != SanNone && xsanTy != UBSan)
+      if (has(&xsan_options, TSan))
         FATAL("'-asan' could not be used with '-tsan'");
-      // Reuse the frontend code relevant to sanitizer
-      cc_params[cc_par_cnt++] = "-fsanitize=address";
       xsanTy = ASan;
+      set(&xsan_options, ASan);
       continue;
     } else if (!strcmp(cur, "-ubsan")) {
-      // Reuse the frontend code relevant to sanitizer
-      cc_params[cc_par_cnt++] = "-fsanitize=undefined";
       xsanTy = UBSan;
+      set(&xsan_options, UBSan);
       continue;
     } else if (!strcmp(cur, "-xsan")) {
-      /// TODO: support more sanitizers
-      cc_params[cc_par_cnt++] = "-fsanitize=address";
-      cc_params[cc_par_cnt++] = "-fsanitize=thread";
       xsanTy = XSan;
+      init(&xsan_options);
       continue;
     } else if (!strncmp(cur, "-fno-sanitize=", 14)){
       u8 *val = cur + 14;
@@ -213,15 +238,9 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
         FATAL("Unsupported -fno-sanitize option: %s", val);
       }
 
+      clear(&xsan_options, disableTy);
       if (xsanTy == disableTy || disableTy == XSan) {
         xsanTy = SanNone;
-      } else if (xsanTy == XSan) {
-        /// TDDO: use bit-op to support more sanitizers
-        if (disableTy == ASan) {
-          xsanTy = TSan;
-        } else if (disableTy == TSan) {
-          xsanTy = ASan;
-        }
       }
     }
   }
@@ -245,6 +264,9 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
     2. -fsanitize=address,pointer-subtract
  */
 static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
+  if (!strcmp(opt, "-fsanitize=address"))
+    return 1;
+
   if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
     // TODO
     return 1;
@@ -302,6 +324,8 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
  Refer to SanitizerArgs.cpp:1142~1155
  */
 static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
+  if (!strcmp(opt, "-fsanitize=thread"))
+    return 1;
   if (!strcmp(opt, "-fsanitize-thread-atomics")) {
     return 1;
   } else if (!strcmp(opt, "-fno-sanitize-thread-atomics")) {
@@ -344,6 +368,8 @@ static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
 }
 
 static u8 handle_ubsan_options(u8* opt) {
+  if (!strcmp(opt, "-fsanitize=undefined"))
+    return 1;
   return 0;
 }
 
@@ -353,8 +379,6 @@ static u8 handle_ubsan_options(u8* opt) {
   Ports the arguments for sanitizers to our plugin sanitizers
   Dicards the original argument if return 1.
 
-  TODO: handle those -fno-sanitize-xxx properly, which could cancel the 
-        corresponding argument -fsanitize-xxx theoretically.
 */
 static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
   if (!strcmp(opt, "-asan") || !strcmp(opt, "-tsan") 
@@ -362,7 +386,6 @@ static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType 
     return 1;
   }
 
-  u8 ret;
   switch (sanTy) {
   case ASan:
     return handle_asan_options(opt, is_mllvm_arg);
@@ -371,9 +394,8 @@ static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType 
   case UBSan:
     return handle_ubsan_options(opt);
   case XSan:
-    ret = handle_asan_options(opt, is_mllvm_arg);
-    ret |= handle_tsan_options(opt, is_mllvm_arg);
-    return ret;
+    return handle_asan_options(opt, is_mllvm_arg) |
+           handle_tsan_options(opt, is_mllvm_arg) | handle_ubsan_options(opt);
   case SanNone:
     break;
   }
@@ -391,6 +413,16 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     // Use env var to control clang only perform frontend 
     // transformation for sanitizers.
     setenv("XSAN_ONLY_FRONTEND", "1", 1);
+    // Reuse the frontend code relevant to sanitizer
+    if (has(&xsan_options, ASan)) {
+      cc_params[cc_par_cnt++] = "-fsanitize=address";
+    }
+    if (has(&xsan_options, TSan)) {
+      cc_params[cc_par_cnt++] = "-fsanitize=thread";
+    }
+    if (has(&xsan_options, UBSan)) {
+      cc_params[cc_par_cnt++] = "-fsanitize=undefined";
+    }
     break;
   case SanNone:
     return;
@@ -454,9 +486,16 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   /**
    * Transfer the option to pass by `-mllvm -<opt>`
    */
-  // cc_params[cc_par_cnt++] = "-mllvm";
-  // cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
-
+  if (sanTy != XSan)
+    return;
+  if (!has(&xsan_options, ASan)) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-xsan-disable-asan";
+  }
+  if (!has(&xsan_options, TSan)) {
+    cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = "-xsan-disable-tsan";
+  }
 }
 
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso) {
