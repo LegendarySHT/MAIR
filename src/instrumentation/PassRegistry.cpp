@@ -12,7 +12,15 @@
 using namespace llvm;
 
 namespace __xsan {
+
+LLVM_ATTRIBUTE_WEAK
+bool isAsanTurnedOff() { return false; }
+LLVM_ATTRIBUTE_WEAK
+bool isTsanTurnedOff() { return false; }
+
 static void addAsanToMPM(ModulePassManager &MPM) {
+  if (isAsanTurnedOff())
+    return;
   /*
    The relevant code in clang BackendUtil.cpp::addSanitizer
     ```cpp
@@ -45,6 +53,8 @@ static void addAsanToMPM(ModulePassManager &MPM) {
 }
 
 static void addTsanToMPM(ModulePassManager &MPM) {
+  if (isTsanTurnedOff())
+    return;
   // Create ctor and init functions.
   MPM.addPass(ModuleThreadSanitizerPass());
   // Function Pass to Module Pass. Instruments functions to detect race

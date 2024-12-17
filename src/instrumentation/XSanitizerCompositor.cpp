@@ -1,8 +1,25 @@
 #include "PassRegistry.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassPlugin.h"
+#include "llvm/Support/CommandLine.h"
+
+using namespace llvm;
+
+static cl::opt<bool> ClDisableAsan(
+    "xsan-disable-asan", cl::init(false),
+    cl::desc("Do not use ASan's instrumentation"),
+    cl::Hidden);
+
+static cl::opt<bool> ClDisableTsan(
+    "xsan-disable-tsan", cl::init(false),
+    cl::desc("Do not use TSan's instrumentation"),
+    cl::Hidden);
 
 namespace __xsan {
+
+bool isAsanTurnedOff() { return ClDisableAsan; }
+bool isTsanTurnedOff() { return ClDisableTsan; }
+
 class SanitizerCompositorPass
     : public llvm::PassInfoMixin<SanitizerCompositorPass> {
 public:
@@ -15,7 +32,6 @@ public:
 };
 } // namespace __xsan
 
-using namespace llvm;
 using namespace __xsan;
 
 SanitizerCompositorPass::SanitizerCompositorPass() {}
