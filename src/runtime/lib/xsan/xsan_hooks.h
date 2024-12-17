@@ -9,6 +9,8 @@
 
 #include "xsan_interface_internal.h"
 
+#include <sanitizer_common/sanitizer_platform_limits_posix.h>
+
 namespace __sanitizer {
 struct CommonFlags;
 }
@@ -41,7 +43,7 @@ void OnFdAccess(void *ctx, int fd);
 void OnFdSocketAccept(void *ctx, int fd, int newfd);
 void OnFileOpen(void *ctx, void *file, const char *path);
 void OnFileClose(void *ctx, void *file);
-
+void OnHandleRecvmsg(void *ctx,  __sanitizer_msghdr *msg);
 /// Used in the Atexit registration.
 class ScopedAtExitWrapper {
  public:

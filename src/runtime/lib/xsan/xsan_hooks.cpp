@@ -207,6 +207,8 @@ void FdFileCreate(ThreadState *thr, uptr pc, int fd);
 void FdSocketAccept(ThreadState *thr, uptr pc, int fd, int newfd);
 void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
                                          uptr size);
+
+void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg);
 }  // namespace __tsan
 
 namespace __xsan {
@@ -272,6 +274,14 @@ void OnFileClose(void *ctx, void *file) {
     __tsan::FdClose(thr, pc, fd);
   }
 }
+
+#if !SANITIZER_APPLE
+void OnHandleRecvmsg(void *ctx, __sanitizer_msghdr *msg) {
+  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  __tsan::HandleRecvmsg(thr, pc, msg);
+}
+#endif
 
 void AfterMmap(void *ctx, void *res, uptr size, int fd) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;

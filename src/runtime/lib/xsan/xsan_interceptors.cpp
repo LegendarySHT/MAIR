@@ -442,6 +442,12 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #    define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) __xsan::OnFdAccess(ctx, fd)
 #    define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
       __xsan::OnFdSocketAccept(ctx, fd, newfd)
+#    define COMMON_INTERCEPTOR_USER_CALLBACK_START() xsi.DisableIgnores();
+#    define COMMON_INTERCEPTOR_USER_CALLBACK_END() xsi.EnableIgnores();
+#    if !SANITIZER_APPLE
+#      define COMMON_INTERCEPTOR_HANDLE_RECVMSG(ctx, msg) \
+        __xsan::OnHandleRecvmsg((ctx), (msg));
+#    endif
 
 #  else
 #    define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)

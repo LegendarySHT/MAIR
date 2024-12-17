@@ -2213,13 +2213,13 @@ struct TsanInterceptorContext {
 };
 
 #if !SANITIZER_APPLE
-static void HandleRecvmsg(ThreadState *thr, uptr pc,
-    __sanitizer_msghdr *msg) {
+namespace __tsan {
+void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
   int fds[64];
   int cnt = ExtractRecvmsgFDs(msg, fds, ARRAY_SIZE(fds));
-  for (int i = 0; i < cnt; i++)
-    FdEventCreate(thr, pc, fds[i]);
+  for (int i = 0; i < cnt; i++) FdEventCreate(thr, pc, fds[i]);
 }
+}  // namespace __tsan
 #endif
 
 #include "sanitizer_common/sanitizer_platform_interceptors.h"

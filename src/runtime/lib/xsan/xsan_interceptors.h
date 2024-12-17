@@ -186,7 +186,12 @@ class ScopedInterceptor {
  public:
   ScopedInterceptor(XsanThread *xsan_thr, const char *func, uptr caller_pc);
   ~ScopedInterceptor() {}
-
+  void DisableIgnores() {
+    tsan_si.DisableIgnores();
+  }
+  void EnableIgnores() {
+    tsan_si.EnableIgnores();
+  }
  private:
   __tsan::ScopedInterceptor tsan_si;
 };
