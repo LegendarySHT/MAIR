@@ -1,6 +1,8 @@
 #include "PassRegistry.h"
 #include "AttributeTaggingPass.hpp"
 
+#include "llvm/Passes/PassBuilder.h"
+
 #include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerCommon.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"

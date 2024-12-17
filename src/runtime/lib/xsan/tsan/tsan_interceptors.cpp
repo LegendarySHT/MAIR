@@ -119,12 +119,14 @@ const int SIGSYS = 12;
 const int SIGBUS = 7;
 const int SIGSYS = 31;
 #endif
+[[maybe_unused]]
 void *const MAP_FAILED = (void*)-1;
 #if SANITIZER_NETBSD
 const int PTHREAD_BARRIER_SERIAL_THREAD = 1234567;
 #elif !SANITIZER_APPLE
 const int PTHREAD_BARRIER_SERIAL_THREAD = -1;
 #endif
+[[maybe_unused]]
 const int MAP_FIXED = 0x10;
 typedef long long_t;
 typedef __sanitizer::u16 mode_t;
@@ -392,41 +394,41 @@ TSAN_INTERCEPTOR(int, pause, int fake) {
   return BLOCK_REAL(pause)(fake);
 }
 
-// Note: we specifically call the function in such strange way
-// with "installed_at" because in reports it will appear between
-// callback frames and the frame that installed the callback.
-static void at_exit_callback_installed_at() {
-  AtExitCtx *ctx;
-  {
-    // Ensure thread-safety.
-    Lock l(&interceptor_ctx()->atexit_mu);
+// // Note: we specifically call the function in such strange way
+// // with "installed_at" because in reports it will appear between
+// // callback frames and the frame that installed the callback.
+// static void at_exit_callback_installed_at() {
+//   AtExitCtx *ctx;
+//   {
+//     // Ensure thread-safety.
+//     Lock l(&interceptor_ctx()->atexit_mu);
 
-    // Pop AtExitCtx from the top of the stack of callback functions
-    uptr element = interceptor_ctx()->AtExitStack.Size() - 1;
-    ctx = interceptor_ctx()->AtExitStack[element];
-    interceptor_ctx()->AtExitStack.PopBack();
-  }
+//     // Pop AtExitCtx from the top of the stack of callback functions
+//     uptr element = interceptor_ctx()->AtExitStack.Size() - 1;
+//     ctx = interceptor_ctx()->AtExitStack[element];
+//     interceptor_ctx()->AtExitStack.PopBack();
+//   }
 
-  ThreadState *thr = cur_thread();
-  Acquire(thr, ctx->pc, (uptr)ctx);
-  FuncEntry(thr, ctx->pc);
-  ((void(*)())ctx->f)();
-  FuncExit(thr);
-  Free(ctx);
-}
+//   ThreadState *thr = cur_thread();
+//   Acquire(thr, ctx->pc, (uptr)ctx);
+//   FuncEntry(thr, ctx->pc);
+//   ((void(*)())ctx->f)();
+//   FuncExit(thr);
+//   Free(ctx);
+// }
 
-static void cxa_at_exit_callback_installed_at(void *arg) {
-  ThreadState *thr = cur_thread();
-  AtExitCtx *ctx = (AtExitCtx*)arg;
-  Acquire(thr, ctx->pc, (uptr)arg);
-  FuncEntry(thr, ctx->pc);
-  ((void(*)(void *arg))ctx->f)(ctx->arg);
-  FuncExit(thr);
-  Free(ctx);
-}
+// static void cxa_at_exit_callback_installed_at(void *arg) {
+//   ThreadState *thr = cur_thread();
+//   AtExitCtx *ctx = (AtExitCtx*)arg;
+//   Acquire(thr, ctx->pc, (uptr)arg);
+//   FuncEntry(thr, ctx->pc);
+//   ((void(*)(void *arg))ctx->f)(ctx->arg);
+//   FuncExit(thr);
+//   Free(ctx);
+// }
 
-static int setup_at_exit_wrapper(ThreadState *thr, uptr pc, void(*f)(),
-      void *arg, void *dso);
+// static int setup_at_exit_wrapper(ThreadState *thr, uptr pc, void(*f)(),
+//       void *arg, void *dso);
       
 #if !SANITIZER_ANDROID
 DECLARE_REAL(int, atexit, void (*f)())
@@ -434,50 +436,50 @@ DECLARE_REAL(int, atexit, void (*f)())
 
 DECLARE_REAL(int, __cxa_atexit, void (*f)(void *a), void *arg, void *dso)
 
-static int setup_at_exit_wrapper(ThreadState *thr, uptr pc, void(*f)(),
-      void *arg, void *dso) {
-  auto *ctx = New<AtExitCtx>();
-  ctx->f = f;
-  ctx->arg = arg;
-  ctx->pc = pc;
-  Release(thr, pc, (uptr)ctx);
-  // Memory allocation in __cxa_atexit will race with free during exit,
-  // because we do not see synchronization around atexit callback list.
-  ThreadIgnoreBegin(thr, pc);
-  int res;
-  if (!dso) {
-    // NetBSD does not preserve the 2nd argument if dso is equal to 0
-    // Store ctx in a local stack-like structure
+// static int setup_at_exit_wrapper(ThreadState *thr, uptr pc, void(*f)(),
+//       void *arg, void *dso) {
+//   auto *ctx = New<AtExitCtx>();
+//   ctx->f = f;
+//   ctx->arg = arg;
+//   ctx->pc = pc;
+//   Release(thr, pc, (uptr)ctx);
+//   // Memory allocation in __cxa_atexit will race with free during exit,
+//   // because we do not see synchronization around atexit callback list.
+//   ThreadIgnoreBegin(thr, pc);
+//   int res;
+//   if (!dso) {
+//     // NetBSD does not preserve the 2nd argument if dso is equal to 0
+//     // Store ctx in a local stack-like structure
 
-    // Ensure thread-safety.
-    Lock l(&interceptor_ctx()->atexit_mu);
-    // __cxa_atexit calls calloc. If we don't ignore interceptors, we will fail
-    // due to atexit_mu held on exit from the calloc interceptor.
-    ScopedIgnoreInterceptors ignore;
+//     // Ensure thread-safety.
+//     Lock l(&interceptor_ctx()->atexit_mu);
+//     // __cxa_atexit calls calloc. If we don't ignore interceptors, we will fail
+//     // due to atexit_mu held on exit from the calloc interceptor.
+//     ScopedIgnoreInterceptors ignore;
 
-    res = REAL(__cxa_atexit)((void (*)(void *a))at_exit_callback_installed_at,
-                             0, 0);
-    // Push AtExitCtx on the top of the stack of callback functions
-    if (!res) {
-      interceptor_ctx()->AtExitStack.PushBack(ctx);
-    }
-  } else {
-    res = REAL(__cxa_atexit)(cxa_at_exit_callback_installed_at, ctx, dso);
-  }
-  ThreadIgnoreEnd(thr);
-  return res;
-}
+//     res = REAL(__cxa_atexit)((void (*)(void *a))at_exit_callback_installed_at,
+//                              0, 0);
+//     // Push AtExitCtx on the top of the stack of callback functions
+//     if (!res) {
+//       interceptor_ctx()->AtExitStack.PushBack(ctx);
+//     }
+//   } else {
+//     res = REAL(__cxa_atexit)(cxa_at_exit_callback_installed_at, ctx, dso);
+//   }
+//   ThreadIgnoreEnd(thr);
+//   return res;
+// }
 
 #if !SANITIZER_APPLE && !SANITIZER_NETBSD
-static void on_exit_callback_installed_at(int status, void *arg) {
-  ThreadState *thr = cur_thread();
-  AtExitCtx *ctx = (AtExitCtx*)arg;
-  Acquire(thr, ctx->pc, (uptr)arg);
-  FuncEntry(thr, ctx->pc);
-  ((void(*)(int status, void *arg))ctx->f)(status, ctx->arg);
-  FuncExit(thr);
-  Free(ctx);
-}
+// static void on_exit_callback_installed_at(int status, void *arg) {
+//   ThreadState *thr = cur_thread();
+//   AtExitCtx *ctx = (AtExitCtx*)arg;
+//   Acquire(thr, ctx->pc, (uptr)arg);
+//   FuncEntry(thr, ctx->pc);
+//   ((void(*)(int status, void *arg))ctx->f)(status, ctx->arg);
+//   FuncExit(thr);
+//   Free(ctx);
+// }
 
 DECLARE_REAL(int, on_exit, void(*f)(int, void*), void *arg);
 
@@ -667,39 +669,39 @@ DECLARE_REAL(char *, strcpy, char *dst, const char *src)
 
 DECLARE_REAL(char*, strdup, const char *str)
 
-// Zero out addr if it points into shadow memory and was provided as a hint
-// only, i.e., MAP_FIXED is not set.
-static bool fix_mmap_addr(void **addr, long_t sz, int flags) {
-  if (*addr) {
-    if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
-      if (flags & MAP_FIXED) {
-        errno = errno_EINVAL;
-        return false;
-      } else {
-        *addr = 0;
-      }
-    }
-  }
-  return true;
-}
+// // Zero out addr if it points into shadow memory and was provided as a hint
+// // only, i.e., MAP_FIXED is not set.
+// static bool fix_mmap_addr(void **addr, long_t sz, int flags) {
+//   if (*addr) {
+//     if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
+//       if (flags & MAP_FIXED) {
+//         errno = errno_EINVAL;
+//         return false;
+//       } else {
+//         *addr = 0;
+//       }
+//     }
+//   }
+//   return true;
+// }
 
-template <class Mmap>
-static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
-                              void *addr, SIZE_T sz, int prot, int flags,
-                              int fd, OFF64_T off) {
-  if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
-  void *res = real_mmap(addr, sz, prot, flags, fd, off);
-  if (res != MAP_FAILED) {
-    if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
-      Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
-             addr, (void*)sz, res);
-      Die();
-    }
-    if (fd > 0) FdAccess(thr, pc, fd);
-    MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, sz);
-  }
-  return res;
-}
+// template <class Mmap>
+// static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
+//                               void *addr, SIZE_T sz, int prot, int flags,
+//                               int fd, OFF64_T off) {
+//   if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+//   void *res = real_mmap(addr, sz, prot, flags, fd, off);
+//   if (res != MAP_FAILED) {
+//     if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
+//       Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
+//              addr, (void*)sz, res);
+//       Die();
+//     }
+//     if (fd > 0) FdAccess(thr, pc, fd);
+//     MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, sz);
+//   }
+//   return res;
+// }
 
 TSAN_INTERCEPTOR(int, munmap, void *addr, long_t sz) {
   SCOPED_TSAN_INTERCEPTOR(munmap, addr, sz);
@@ -2201,11 +2203,11 @@ TSAN_INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb_t cb, void *data) {
 }
 #endif
 
-static int OnExit(ThreadState *thr) {
-  int status = Finalize(thr);
-  FlushStreams();
-  return status;
-}
+// static int OnExit(ThreadState *thr) {
+//   int status = Finalize(thr);
+//   FlushStreams();
+//   return status;
+// }
 
 struct TsanInterceptorContext {
   ThreadState *thr;
@@ -2222,18 +2224,18 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
 }  // namespace __tsan
 #endif
 
-#include "sanitizer_common/sanitizer_platform_interceptors.h"
-// Causes interceptor recursion (getaddrinfo() and fopen())
-#undef SANITIZER_INTERCEPT_GETADDRINFO
-// We define our own.
-#if SANITIZER_INTERCEPT_TLS_GET_ADDR
-#define NEED_TLS_GET_ADDR
-#endif
-#undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-#define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+// #include "sanitizer_common/sanitizer_platform_interceptors.h"
+// // Causes interceptor recursion (getaddrinfo() and fopen())
+// #undef SANITIZER_INTERCEPT_GETADDRINFO
+// // We define our own.
+// #if SANITIZER_INTERCEPT_TLS_GET_ADDR
+// #define NEED_TLS_GET_ADDR
+// #endif
+// #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+// #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 
-/// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
-#undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
+// /// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
+// #undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
 
 #define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver)                          \
@@ -2241,118 +2243,118 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
 #define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
   (INTERCEPT_FUNCTION_VER(name, ver) || INTERCEPT_FUNCTION(name))
 
-#define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size)                    \
-  MemoryAccessRange(((TsanInterceptorContext *)ctx)->thr,                 \
-                    ((TsanInterceptorContext *)ctx)->pc, (uptr)ptr, size, \
-                    true)
+// #define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size)                    \
+//   MemoryAccessRange(((TsanInterceptorContext *)ctx)->thr,                 \
+//                     ((TsanInterceptorContext *)ctx)->pc, (uptr)ptr, size, \
+//                     true)
 
-#define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size)                       \
-  MemoryAccessRange(((TsanInterceptorContext *) ctx)->thr,                  \
-                    ((TsanInterceptorContext *) ctx)->pc, (uptr) ptr, size, \
-                    false)
+// #define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size)                       \
+//   MemoryAccessRange(((TsanInterceptorContext *) ctx)->thr,                  \
+//                     ((TsanInterceptorContext *) ctx)->pc, (uptr) ptr, size, \
+//                     false)
 
-#define COMMON_INTERCEPTOR_ENTER(ctx, func, ...) \
-  SCOPED_TSAN_INTERCEPTOR(func, __VA_ARGS__);    \
-  TsanInterceptorContext _ctx = {thr, pc};       \
-  ctx = (void *)&_ctx;                           \
-  (void)ctx;
+// #define COMMON_INTERCEPTOR_ENTER(ctx, func, ...) \
+//   SCOPED_TSAN_INTERCEPTOR(func, __VA_ARGS__);    \
+//   TsanInterceptorContext _ctx = {thr, pc};       \
+//   ctx = (void *)&_ctx;                           \
+//   (void)ctx;
 
-#define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...) \
-  SCOPED_INTERCEPTOR_RAW(func, __VA_ARGS__);              \
-  TsanInterceptorContext _ctx = {thr, pc};                \
-  ctx = (void *)&_ctx;                                    \
-  (void)ctx;
+// #define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...) \
+//   SCOPED_INTERCEPTOR_RAW(func, __VA_ARGS__);              \
+//   TsanInterceptorContext _ctx = {thr, pc};                \
+//   ctx = (void *)&_ctx;                                    \
+//   (void)ctx;
 
-#define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
-  if (path)                                           \
-    Acquire(thr, pc, File2addr(path));                \
-  if (file) {                                         \
-    int fd = fileno_unlocked(file);                   \
-    if (fd >= 0) FdFileCreate(thr, pc, fd);           \
-  }
+// #define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
+//   if (path)                                           \
+//     Acquire(thr, pc, File2addr(path));                \
+//   if (file) {                                         \
+//     int fd = fileno_unlocked(file);                   \
+//     if (fd >= 0) FdFileCreate(thr, pc, fd);           \
+//   }
 
-#define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) \
-  if (file) {                                    \
-    int fd = fileno_unlocked(file);              \
-    FdClose(thr, pc, fd);                        \
-  }
+// #define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) \
+//   if (file) {                                    \
+//     int fd = fileno_unlocked(file);              \
+//     FdClose(thr, pc, fd);                        \
+//   }
 
-#define COMMON_INTERCEPTOR_DLOPEN(filename, flag) \
-  ({                                              \
-    CheckNoDeepBind(filename, flag);              \
-    ThreadIgnoreBegin(thr, 0);                    \
-    void *res = REAL(dlopen)(filename, flag);     \
-    ThreadIgnoreEnd(thr);                         \
-    res;                                          \
-  })
+// #define COMMON_INTERCEPTOR_DLOPEN(filename, flag) \
+//   ({                                              \
+//     CheckNoDeepBind(filename, flag);              \
+//     ThreadIgnoreBegin(thr, 0);                    \
+//     void *res = REAL(dlopen)(filename, flag);     \
+//     ThreadIgnoreEnd(thr);                         \
+//     res;                                          \
+//   })
 
-#define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
-  libignore()->OnLibraryLoaded(filename)
+// #define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
+//   libignore()->OnLibraryLoaded(filename)
 
-#define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() \
-  libignore()->OnLibraryUnloaded()
+// #define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() \
+//   libignore()->OnLibraryUnloaded()
 
-#define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) \
-  Acquire(((TsanInterceptorContext *) ctx)->thr, pc, u)
+// #define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) \
+//   Acquire(((TsanInterceptorContext *) ctx)->thr, pc, u)
 
-#define COMMON_INTERCEPTOR_RELEASE(ctx, u) \
-  Release(((TsanInterceptorContext *) ctx)->thr, pc, u)
+// #define COMMON_INTERCEPTOR_RELEASE(ctx, u) \
+//   Release(((TsanInterceptorContext *) ctx)->thr, pc, u)
 
-#define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
-  Acquire(((TsanInterceptorContext *) ctx)->thr, pc, Dir2addr(path))
+// #define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
+//   Acquire(((TsanInterceptorContext *) ctx)->thr, pc, Dir2addr(path))
 
-#define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
-  FdAcquire(((TsanInterceptorContext *) ctx)->thr, pc, fd)
+// #define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
+//   FdAcquire(((TsanInterceptorContext *) ctx)->thr, pc, fd)
 
-#define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
-  FdRelease(((TsanInterceptorContext *) ctx)->thr, pc, fd)
+// #define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
+//   FdRelease(((TsanInterceptorContext *) ctx)->thr, pc, fd)
 
-#define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) \
-  FdAccess(((TsanInterceptorContext *) ctx)->thr, pc, fd)
+// #define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) \
+//   FdAccess(((TsanInterceptorContext *) ctx)->thr, pc, fd)
 
-#define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
-  FdSocketAccept(((TsanInterceptorContext *) ctx)->thr, pc, fd, newfd)
+// #define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
+//   FdSocketAccept(((TsanInterceptorContext *) ctx)->thr, pc, fd, newfd)
 
-#define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
-  ThreadSetName(((TsanInterceptorContext *) ctx)->thr, name)
+// #define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
+//   ThreadSetName(((TsanInterceptorContext *) ctx)->thr, name)
 
-#define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name)         \
-  if (pthread_equal(pthread_self(), reinterpret_cast<void *>(thread))) \
-    COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name);                     \
-  else                                                                 \
-    __tsan::ctx->thread_registry.SetThreadNameByUserId(thread, name)
+// #define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name)         \
+//   if (pthread_equal(pthread_self(), reinterpret_cast<void *>(thread))) \
+//     COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name);                     \
+//   else                                                                 \
+//     __tsan::ctx->thread_registry.SetThreadNameByUserId(thread, name)
 
-#define COMMON_INTERCEPTOR_BLOCK_REAL(name) BLOCK_REAL(name)
+// #define COMMON_INTERCEPTOR_BLOCK_REAL(name) BLOCK_REAL(name)
 
-#define COMMON_INTERCEPTOR_ON_EXIT(ctx) \
-  OnExit(((TsanInterceptorContext *) ctx)->thr)
+// #define COMMON_INTERCEPTOR_ON_EXIT(ctx) \
+//   OnExit(((TsanInterceptorContext *) ctx)->thr)
 
-#define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd,  \
-                                     off)                                   \
-  do {                                                                      \
-    return mmap_interceptor(thr, pc, REAL(mmap), addr, sz, prot, flags, fd, \
-                            off);                                           \
-  } while (false)
+// #define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd,  \
+//                                      off)                                   \
+//   do {                                                                      \
+//     return mmap_interceptor(thr, pc, REAL(mmap), addr, sz, prot, flags, fd, \
+//                             off);                                           \
+//   } while (false)
 
-#if !SANITIZER_APPLE
-#define COMMON_INTERCEPTOR_HANDLE_RECVMSG(ctx, msg) \
-  HandleRecvmsg(((TsanInterceptorContext *)ctx)->thr, \
-      ((TsanInterceptorContext *)ctx)->pc, msg)
-#endif
+// #if !SANITIZER_APPLE
+// #define COMMON_INTERCEPTOR_HANDLE_RECVMSG(ctx, msg) \
+//   HandleRecvmsg(((TsanInterceptorContext *)ctx)->thr, \
+//       ((TsanInterceptorContext *)ctx)->pc, msg)
+// #endif
 
-#define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end)                           \
-  if (TsanThread *t = GetCurrentThread()) {                                    \
-    *begin = t->tls_begin();                                                   \
-    *end = t->tls_end();                                                       \
-  } else {                                                                     \
-    *begin = *end = 0;                                                         \
-  }
+// #define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end)                           \
+//   if (TsanThread *t = GetCurrentThread()) {                                    \
+//     *begin = t->tls_begin();                                                   \
+//     *end = t->tls_end();                                                       \
+//   } else {                                                                     \
+//     *begin = *end = 0;                                                         \
+//   }
 
-#define COMMON_INTERCEPTOR_USER_CALLBACK_START() \
-  SCOPED_TSAN_INTERCEPTOR_USER_CALLBACK_START()
+// #define COMMON_INTERCEPTOR_USER_CALLBACK_START() \
+//   SCOPED_TSAN_INTERCEPTOR_USER_CALLBACK_START()
 
-#define COMMON_INTERCEPTOR_USER_CALLBACK_END() \
-  SCOPED_TSAN_INTERCEPTOR_USER_CALLBACK_END()
+// #define COMMON_INTERCEPTOR_USER_CALLBACK_END() \
+//   SCOPED_TSAN_INTERCEPTOR_USER_CALLBACK_END()
 
 // #include "sanitizer_common/sanitizer_common_interceptors.inc"
 
@@ -2639,21 +2641,21 @@ TSAN_INTERCEPTOR_NETBSD_ALIAS_THR2(int, sigsetmask, sigmask, int a, void *b,
 
 namespace __tsan {
 
-static void finalize(void *arg) {
-  ThreadState *thr = cur_thread();
-  int status = Finalize(thr);
-  // Make sure the output is not lost.
-  FlushStreams();
-  if (status)
-    Die();
-}
+// static void finalize(void *arg) {
+//   ThreadState *thr = cur_thread();
+//   int status = Finalize(thr);
+//   // Make sure the output is not lost.
+//   FlushStreams();
+//   if (status)
+//     Die();
+// }
 
-#if !SANITIZER_APPLE && !SANITIZER_ANDROID
-static void unreachable() {
-  Report("FATAL: ThreadSanitizer: unreachable called\n");
-  Die();
-}
-#endif
+// #if !SANITIZER_APPLE && !SANITIZER_ANDROID
+// static void unreachable() {
+//   Report("FATAL: ThreadSanitizer: unreachable called\n");
+//   Die();
+// }
+// #endif
 
 // Define default implementation since interception of libdispatch  is optional.
 SANITIZER_WEAK_ATTRIBUTE void InitializeLibdispatchInterceptors() {}

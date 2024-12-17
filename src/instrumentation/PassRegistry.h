@@ -1,7 +1,11 @@
 #pragma once
 
-#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
+
+
+namespace llvm {
+class PassBuilder;
+}
 
 namespace __xsan {
 

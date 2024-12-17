@@ -1,7 +1,6 @@
 #include "PassRegistry.h"
-#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
-#include "llvm/Transforms/Instrumentation/AddressSanitizerCommon.h"
-#include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
+#include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassPlugin.h"
 
 namespace __xsan {
 class SanitizerCompositorPass

@@ -41,86 +41,86 @@ static bool InitializeMemoryProfiler() {
   return true;
 }
 
-static void *BackgroundThread(void *arg) {
-  // This is a non-initialized non-user thread, nothing to see here.
-  // We don't use ScopedIgnoreInterceptors, because we want ignores to be
-  // enabled even when the thread function exits (e.g. during pthread thread
-  // shutdown code).
-  cur_thread_init()->ignore_interceptors++;
-  const u64 kMs2Ns = 1000 * 1000;
-  const u64 start = NanoTime();
+// static void *BackgroundThread(void *arg) {
+//   // This is a non-initialized non-user thread, nothing to see here.
+//   // We don't use ScopedIgnoreInterceptors, because we want ignores to be
+//   // enabled even when the thread function exits (e.g. during pthread thread
+//   // shutdown code).
+//   cur_thread_init()->ignore_interceptors++;
+//   const u64 kMs2Ns = 1000 * 1000;
+//   const u64 start = NanoTime();
 
-  u64 last_flush = start;
-  uptr last_rss = 0;
-  while (!atomic_load_relaxed(&ctx->stop_background_thread)) {
-    SleepForMillis(100);
-    u64 now = NanoTime();
+//   u64 last_flush = start;
+//   uptr last_rss = 0;
+//   while (!atomic_load_relaxed(&ctx->stop_background_thread)) {
+//     SleepForMillis(100);
+//     u64 now = NanoTime();
 
-    // Flush memory if requested.
-    if (flags()->flush_memory_ms > 0) {
-      if (last_flush + flags()->flush_memory_ms * kMs2Ns < now) {
-        VReport(1, "ThreadSanitizer: periodic memory flush\n");
-        FlushShadowMemory();
-        now = last_flush = NanoTime();
-      }
-    }
-    if (flags()->memory_limit_mb > 0) {
-      uptr rss = GetRSS();
-      uptr limit = uptr(flags()->memory_limit_mb) << 20;
-      VReport(1,
-              "ThreadSanitizer: memory flush check"
-              " RSS=%llu LAST=%llu LIMIT=%llu\n",
-              (u64)rss >> 20, (u64)last_rss >> 20, (u64)limit >> 20);
-      if (2 * rss > limit + last_rss) {
-        VReport(1, "ThreadSanitizer: flushing memory due to RSS\n");
-        FlushShadowMemory();
-        rss = GetRSS();
-        now = NanoTime();
-        VReport(1, "ThreadSanitizer: memory flushed RSS=%llu\n",
-                (u64)rss >> 20);
-      }
-      last_rss = rss;
-    }
+//     // Flush memory if requested.
+//     if (flags()->flush_memory_ms > 0) {
+//       if (last_flush + flags()->flush_memory_ms * kMs2Ns < now) {
+//         VReport(1, "ThreadSanitizer: periodic memory flush\n");
+//         FlushShadowMemory();
+//         now = last_flush = NanoTime();
+//       }
+//     }
+//     if (flags()->memory_limit_mb > 0) {
+//       uptr rss = GetRSS();
+//       uptr limit = uptr(flags()->memory_limit_mb) << 20;
+//       VReport(1,
+//               "ThreadSanitizer: memory flush check"
+//               " RSS=%llu LAST=%llu LIMIT=%llu\n",
+//               (u64)rss >> 20, (u64)last_rss >> 20, (u64)limit >> 20);
+//       if (2 * rss > limit + last_rss) {
+//         VReport(1, "ThreadSanitizer: flushing memory due to RSS\n");
+//         FlushShadowMemory();
+//         rss = GetRSS();
+//         now = NanoTime();
+//         VReport(1, "ThreadSanitizer: memory flushed RSS=%llu\n",
+//                 (u64)rss >> 20);
+//       }
+//       last_rss = rss;
+//     }
 
-    MemoryProfiler(now - start);
+//     MemoryProfiler(now - start);
 
-    // Flush symbolizer cache if requested.
-    if (flags()->flush_symbolizer_ms > 0) {
-      u64 last =
-          atomic_load(&ctx->last_symbolize_time_ns, memory_order_relaxed);
-      if (last != 0 && last + flags()->flush_symbolizer_ms * kMs2Ns < now) {
-        Lock l(&ctx->report_mtx);
-        ScopedErrorReportLock l2;
-        SymbolizeFlush();
-        atomic_store(&ctx->last_symbolize_time_ns, 0, memory_order_relaxed);
-      }
-    }
-  }
-  return nullptr;
-}
+//     // Flush symbolizer cache if requested.
+//     if (flags()->flush_symbolizer_ms > 0) {
+//       u64 last =
+//           atomic_load(&ctx->last_symbolize_time_ns, memory_order_relaxed);
+//       if (last != 0 && last + flags()->flush_symbolizer_ms * kMs2Ns < now) {
+//         Lock l(&ctx->report_mtx);
+//         ScopedErrorReportLock l2;
+//         SymbolizeFlush();
+//         atomic_store(&ctx->last_symbolize_time_ns, 0, memory_order_relaxed);
+//       }
+//     }
+//   }
+//   return nullptr;
+// }
 
-static void StartBackgroundThread() {
-  ctx->background_thread = internal_start_thread(&BackgroundThread, 0);
-}
+// static void StartBackgroundThread() {
+//   ctx->background_thread = internal_start_thread(&BackgroundThread, 0);
+// }
 
-#  ifndef __mips__
-static void StopBackgroundThread() {
-  atomic_store(&ctx->stop_background_thread, 1, memory_order_relaxed);
-  internal_join_thread(ctx->background_thread);
-  ctx->background_thread = 0;
-}
-#  endif
+// #  ifndef __mips__
+// static void StopBackgroundThread() {
+//   atomic_store(&ctx->stop_background_thread, 1, memory_order_relaxed);
+//   internal_join_thread(ctx->background_thread);
+//   ctx->background_thread = 0;
+// }
+// #  endif
 #endif
 
 void TsanInitFromXsanEarly() {
   ctx = new (ctx_placeholder) Context;
-  ThreadState *thr = cur_thread_init();
+  cur_thread_init();
 }
 
 void TsanInitFromXsan() {
   __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
 
-  ThreadState *thr = cur_thread_init();
+  cur_thread_init();
   // Thread safe because done before all threads exist.
   if (is_initialized)
     return;

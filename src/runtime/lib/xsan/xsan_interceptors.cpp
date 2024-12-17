@@ -67,57 +67,6 @@ extern "C" int dirfd(void *dirp);
 #  define vfork __vfork14
 #endif
 
-#ifdef __mips__
-const int kSigCount = 129;
-#else
-const int kSigCount = 65;
-#endif
-
-#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
-const int PTHREAD_MUTEX_RECURSIVE = 1;
-const int PTHREAD_MUTEX_RECURSIVE_NP = 1;
-#else
-const int PTHREAD_MUTEX_RECURSIVE = 2;
-const int PTHREAD_MUTEX_RECURSIVE_NP = 2;
-#endif
-#if !SANITIZER_FREEBSD && !SANITIZER_APPLE && !SANITIZER_NETBSD
-const int EPOLL_CTL_ADD = 1;
-#endif
-const int SIGILL = 4;
-const int SIGTRAP = 5;
-const int SIGABRT = 6;
-const int SIGFPE = 8;
-const int SIGSEGV = 11;
-const int SIGPIPE = 13;
-const int SIGTERM = 15;
-#if defined(__mips__) || SANITIZER_FREEBSD || SANITIZER_APPLE || \
-    SANITIZER_NETBSD
-const int SIGBUS = 10;
-const int SIGSYS = 12;
-#else
-const int SIGBUS = 7;
-const int SIGSYS = 31;
-#endif
-#if SANITIZER_NETBSD
-const int PTHREAD_BARRIER_SERIAL_THREAD = 1234567;
-#elif !SANITIZER_APPLE
-const int PTHREAD_BARRIER_SERIAL_THREAD = -1;
-#endif
-void *const MAP_FAILED = (void *)-1;
-const int MAP_FIXED = 0x10;
-typedef long long_t;
-typedef __sanitizer::u16 mode_t;
-
-#if SANITIZER_FREEBSD || SANITIZER_APPLE || SANITIZER_NETBSD
-const int SA_SIGINFO = 0x40;
-const int SIG_SETMASK = 3;
-#elif defined(__mips__)
-const int SA_SIGINFO = 8;
-const int SIG_SETMASK = 3;
-#else
-const int SA_SIGINFO = 4;
-const int SIG_SETMASK = 2;
-#endif
 
 
 namespace __xsan {
@@ -158,6 +107,7 @@ bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
 
 // Zero out addr if it points into shadow memory and was provided as a hint
 // only, i.e., MAP_FIXED is not set.
+[[maybe_unused]]
 static bool fix_mmap_addr(void **addr, uptr sz, int flags) {
   const int MAP_FIXED = 0x10;
   if (*addr) {

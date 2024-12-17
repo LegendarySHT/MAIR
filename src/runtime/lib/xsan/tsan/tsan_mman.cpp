@@ -132,8 +132,8 @@ void GlobalProcessorUnlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
   global_proc()->mtx.Unlock();
 }
 
-static constexpr uptr kMaxAllowedMallocSize = 1ull << 40;
-static uptr max_user_defined_malloc_size;
+// static constexpr uptr kMaxAllowedMallocSize = 1ull << 40;
+// static uptr max_user_defined_malloc_size;
 
 void InitializeAllocator() {
   // SetAllocatorMayReturnNull(common_flags()->allocator_may_return_null);
