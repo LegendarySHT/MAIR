@@ -11,7 +11,7 @@
 
 #include "llvm/IR/PassManager.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
-#include "common-enum.h"
+#include "xsan_common.h"
 
 namespace llvm {
 class Module;

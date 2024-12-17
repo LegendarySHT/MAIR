@@ -10,7 +10,7 @@
 #include "include/types.h"
 #include "include/debug.h"
 #include "include/alloc-inl.h"
-#include "common-enum.h"
+#include "xsan_common.h"
 
 #include <stdio.h>
 #include <unistd.h>
