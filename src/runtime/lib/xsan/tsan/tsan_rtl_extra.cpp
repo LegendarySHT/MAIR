@@ -55,7 +55,6 @@ void OnPthreadCreate() {
   }
 }
 
-THREADLOCAL int last_ignore_interceptors = 0;
 THREADLOCAL bool disabled_tsan = false;
 
 /// See the following comment in tsan_interceptors_posix.cpp:vfork for details.
@@ -79,7 +78,6 @@ void DisableTsanForVfork() {
     return;
   disabled_tsan = true;
   ThreadState *thr = cur_thread();
-  last_ignore_interceptors = thr->ignore_interceptors;
   thr->ignore_interceptors = true;
   // We've just forked a multi-threaded process. We cannot reasonably function
   // after that (some mutexes may be locked before fork). So just enable
@@ -93,7 +91,6 @@ void DisableTsanForVfork() {
 
 void RecoverTsanAfterVforkParent() {
   ThreadState *thr = cur_thread();
-  thr->ignore_interceptors = last_ignore_interceptors;
   // We've just forked a multi-threaded process. We cannot reasonably function
   // after that (some mutexes may be locked before fork). So just enable
   // ignores for everything in the hope that we will exec soon.
