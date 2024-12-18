@@ -544,6 +544,21 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
   }
 
+  /// TODO: only add this link arguments while TSan is enabled togother with LSan.
+  if (sanTy == XSan) {
+    //   As LSan's sanity check conflicts with TSan's interceptor
+    // (dl_iterate_phdr), we need to disable TSan's interceptor while LSan is
+    // performing its checks.
+    //   We non-intrusively intercept LSan's check entry in link-time while
+    // both TSan and LSan are enabled.
+    //   See the comments in tsan_rtl_extra.cpp:__wrap__ZN6__lsan11DoLeakCheckEv
+    // for details.
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv";
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv";
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_leak_check";
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_recoverable_leak_check";
+  }
+
   if (is_dso) {
     return;
   }
@@ -571,20 +586,6 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     cc_params[cc_par_cnt++] = "-lstdc++";
   }
 
-  /// TODO: only add this link arguments while TSan is enabled togother with LSan.
-  if (sanTy == XSan) {
-    //   As LSan's sanity check conflicts with TSan's interceptor
-    // (dl_iterate_phdr), we need to disable TSan's interceptor while LSan is
-    // performing its checks.
-    //   We non-intrusively intercept LSan's check entry in link-time while
-    // both TSan and LSan are enabled.
-    //   See the comments in tsan_rtl_extra.cpp:__wrap__ZN6__lsan11DoLeakCheckEv
-    // for details.
-    cc_params[cc_par_cnt++] = "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv";
-    cc_params[cc_par_cnt++] = "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv";
-    cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_leak_check";
-    cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_recoverable_leak_check";
-  }
 
   /**
    * Transfer the option to pass by `-mllvm -<opt>`
