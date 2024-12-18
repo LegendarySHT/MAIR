@@ -2239,18 +2239,18 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
 }  // namespace __tsan
 #endif
 
-// #include "sanitizer_common/sanitizer_platform_interceptors.h"
-// // Causes interceptor recursion (getaddrinfo() and fopen())
-// #undef SANITIZER_INTERCEPT_GETADDRINFO
-// // We define our own.
-// #if SANITIZER_INTERCEPT_TLS_GET_ADDR
-// #define NEED_TLS_GET_ADDR
-// #endif
-// #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-// #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+#include "sanitizer_common/sanitizer_platform_interceptors.h"
+// Causes interceptor recursion (getaddrinfo() and fopen())
+#undef SANITIZER_INTERCEPT_GETADDRINFO
+// We define our own.
+#if SANITIZER_INTERCEPT_TLS_GET_ADDR
+#define NEED_TLS_GET_ADDR
+#endif
+#undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+#define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 
-// /// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
-// #undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
+/// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
+#undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
 
 #define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver)                          \
