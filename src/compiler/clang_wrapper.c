@@ -557,6 +557,11 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     cc_params[cc_par_cnt++] = "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv";
     cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_leak_check";
     cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_recoverable_leak_check";
+    
+    /// Intercepts the initialization functions of ASan and TSan, and redirects
+    /// them to XSan's initialization function __xsan_init.
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,__asan_init";
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,__tsan_init";
   }
 
   if (is_dso) {

@@ -180,6 +180,7 @@ set(XSAN_CXX_SOURCES
 
 set(XSAN_STATIC_SOURCES
   asan/orig/asan_rtl_static.cpp
+  xsan_rtl_static.cpp
   )
 
 if (NOT WIN32 AND NOT APPLE)
@@ -385,6 +386,8 @@ set(XSAN_LINK_FLAGS "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv"
                     "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv"
                     "-Wl,-wrap,__lsan_do_leak_check"
                     "-Wl,-wrap,__lsan_do_recoverable_leak_check"
+                    "-Wl,-wrap,__asan_init"
+                    "-Wl,-wrap,__tsan_init"
                     )
 
 
