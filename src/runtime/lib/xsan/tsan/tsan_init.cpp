@@ -118,12 +118,12 @@ void TsanInitFromXsanEarly() {
 }
 
 void TsanInitFromXsan() {
-  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
-
-  cur_thread_init();
   // Thread safe because done before all threads exist.
   if (is_initialized)
     return;
+  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
+
+  cur_thread_init();
   is_initialized = true;
   // We are not ready to handle interceptors yet.
   ScopedIgnoreInterceptors ignore;
