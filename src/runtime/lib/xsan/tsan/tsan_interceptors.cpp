@@ -2119,15 +2119,20 @@ TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
                  void *arg, int *parent_tid, void *tls, pid_t *child_tid) {
   SCOPED_INTERCEPTOR_RAW(clone, fn, stack, flags, arg, parent_tid, tls,
                          child_tid);
+  using FnTy = decltype(fn);
   struct Arg {
-    int (*fn)(void *);
+    FnTy fn;
     void *arg;
     bool is_clone_vm;
+    Semaphore moved;
   };
   auto wrapper = +[](void *p) -> int {
     auto *thr = cur_thread();
     uptr pc = GET_CURRENT_PC();
     auto *arg = static_cast<Arg *>(p);
+    FnTy fn_ = arg->fn;
+    void *arg_ = arg->arg;
+
     /// FIXME: TSan does not support CLONE_VM
     /// Duplicated ForkAfter in flag CLONE_VM case leads to deadlock.
     if (!arg->is_clone_vm) {
@@ -2138,20 +2143,30 @@ TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
       // background thread after clone.
       ForkChildAfter(thr, pc, false);
     } else {
+      /// All data in arg_wrapper is moved to the new thread, so we can safely
+      /// notify the parent thread that it can proceed.
+      arg->moved.Post();
+      // A clone with CLONE_VM flag is similar to a pthread_create, TSan's
+      // should not invoke ForkAfter.
       Report(
           "ThreadSanitizer: imcompatiable support for clone with flags "
           "CLONE_VM\n");
     }
     FdOnFork(thr, pc);
-    return arg->fn(arg->arg);
+    return fn_(arg_);
   };
   ForkBefore(thr, pc);
 #  define CLONE_VM 0x00000100
-  Arg arg_wrapper = {fn, arg, (flags & CLONE_VM) != 0};
+  bool is_clone_vm = (flags & CLONE_VM) == CLONE_VM;
 #  undef CLONE_VM
+  Arg arg_wrapper = {fn, arg, is_clone_vm};
   int pid = REAL(clone)(wrapper, stack, flags, &arg_wrapper, parent_tid, tls,
                         child_tid);
   ForkParentAfter(thr, pc);
+  if (is_clone_vm) {
+    /// Wait for the child to move the data in arg_wrapper.
+    arg_wrapper.moved.Wait();
+  }
   return pid;
 }
 #endif
