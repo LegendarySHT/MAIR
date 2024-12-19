@@ -33,6 +33,13 @@ SANITIZER_WEAK_CXX_DEFAULT_IMPL
 void OnFakeStackDestory(uptr addr, uptr size) {}
 }  // namespace __tsan
 
+namespace __asan {
+  
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id){return false;}
+
+}// namespace __asan
+
 namespace __xsan {
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
   __tsan::OnXsanAllocHook(ptr, size, write, pc);
@@ -46,6 +53,10 @@ void XsanAllocFreeTailHook(uptr pc) { __tsan::OnXsanAllocFreeTailHook(pc); }
 
 void OnFakeStackDestory(uptr addr, uptr size) {
   __tsan::OnFakeStackDestory(addr, size);
+}
+
+bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id){
+return __asan::GetASanMellocStackTrace(stack_trace_id, addr, set_stack_trace_id);
 }
 
 }  // namespace __xsan

@@ -33,6 +33,8 @@ void ValidateSanitizerFlags();
 void SetSanitizerThreadName(const char *name);
 void SetSanitizerThreadNameByUserId(uptr uid, const char *name);
 
+bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id);
+
 void OnAcquire(void *ctx, uptr addr);
 void OnDirAcquire(void *ctx, const char *path);
 void OnDirRelease(void *ctx, const char *path);

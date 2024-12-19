@@ -1237,6 +1237,18 @@ void asan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
   instance.ForceUnlock();
 }
 
+// ---------------------- Hook for other Sanitizers -------------------
+bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id) {
+  __asan::AsanChunkView chunk = __asan::FindHeapChunkByAddress(addr);
+  if(chunk.IsValid()) {
+    if(set_stack_trace_id){
+      stack_trace_id = chunk.GetAllocStackId();
+    }
+  return true;
+  }
+  return false;  
+}
+
 }  // namespace __asan
 
 // --- Implementation of LSan-specific functions --- {{{1
