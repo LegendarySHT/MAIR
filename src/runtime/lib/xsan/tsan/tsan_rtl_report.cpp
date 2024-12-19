@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 #include "../xsan_report.h"
 #include "../xsan_thread.h"
-
+#include "../xsan_hooks.h"
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
@@ -100,6 +100,31 @@ ReportStack *SymbolizeStackId(u32 stack_id) {
   if (stack.trace == nullptr)
     return nullptr;
   return SymbolizeStack(stack);
+}
+
+ReportStack *SymbolizeReverseStackId(u32 stack_id) {
+  if (stack_id == 0)
+    return 0;
+  StackTrace stack = StackDepotGet(stack_id);
+  if (stack.trace == nullptr)
+    return nullptr;
+  auto ReverseTrace = [](const uptr *trace, u32 size) {
+    if (size > 1) {
+      uptr *start = const_cast<uptr*>(trace);
+      uptr *end = const_cast<uptr*>(trace + size - 1);
+      while (start < end) {
+        uptr temp = *start;
+        *start = *end;
+        *end = temp;
+        ++start;
+        --end;
+      }
+    }
+  };
+  ReverseTrace(stack.trace, stack.size);
+  ReportStack *result = SymbolizeStack(stack);
+  ReverseTrace(stack.trace, stack.size);
+  return result;
 }
 
 static ReportStack *SymbolizeStack(StackTrace trace) {
@@ -325,7 +350,11 @@ void ScopedReportBase::AddLocation(uptr addr, uptr size) {
     loc->heap_chunk_size = b->siz;
     loc->external_tag = b->tag;
     loc->tid = b->tid;
+    if(__xsan::GetMellocStackTrace(b->stk,addr,true)){
+    loc->stack = SymbolizeReverseStackId(b->stk);
+    }else{
     loc->stack = SymbolizeStackId(b->stk);
+    }
     rep_->locs.PushBack(loc);
     if (ThreadContext *tctx = FindThreadByTidLocked(b->tid))
       AddThread(tctx);

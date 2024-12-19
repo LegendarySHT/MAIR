@@ -13,7 +13,7 @@
 #include "tsan_sync.h"
 #include "tsan_rtl.h"
 #include "tsan_mman.h"
-
+#include "../xsan_hooks.h"
 namespace __tsan {
 
 void DDMutexInit(ThreadState *thr, uptr pc, SyncVar *s);
@@ -50,7 +50,10 @@ void MetaMap::AllocBlock(ThreadState *thr, uptr pc, uptr p, uptr sz) {
   b->siz = sz;
   b->tag = 0;
   b->tid = thr->tid;
-  b->stk = CurrentStackId(thr, pc);
+  
+  if(!__xsan::GetMellocStackTrace(b->stk,p,false)) {
+    b->stk = CurrentStackId(thr, pc);
+  }
   u32 *meta = MemToMeta(p);
   DCHECK_EQ(*meta, 0);
   *meta = idx | kFlagBlock;
