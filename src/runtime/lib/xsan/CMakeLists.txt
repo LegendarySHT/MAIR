@@ -71,7 +71,7 @@ set(TSAN_SOURCES
   # tsan/orig/tsan_stack_trace.cpp
   tsan/orig/tsan_suppressions.cpp
   tsan/orig/tsan_symbolize.cpp
-  tsan/orig/tsan_sync.cpp
+  #tsan/orig/tsan_sync.cpp
   tsan/orig/tsan_vector_clock.cpp
 )
 
@@ -142,6 +142,7 @@ set(XSAN_TSAN_SOURCES
   tsan/tsan_rtl_report.cpp
   tsan/tsan_rtl_thread.cpp
   tsan/tsan_stack_trace.cpp
+  tsan/tsan_sync.cpp
   ${TSAN_SOURCES}
   ${TSAN_ASM_SOURCES}
 )
