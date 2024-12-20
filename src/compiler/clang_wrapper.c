@@ -422,6 +422,24 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     }
     if (has(&xsan_options, UBSan)) {
       cc_params[cc_par_cnt++] = "-fsanitize=undefined";
+      if (!!getenv("XSAN_IN_ASAN_TEST") || !!getenv("XSAN_IN_TSAN_TEST")) {
+        /// There are so many C testcases of TSan/ASan end with suffix ".cpp",
+        /// leading to the compiler frontend set `getLangOpts().CPlusPlus =
+        /// true`. Subsequently, the C++ only check `-fsanitize=function` is
+        /// applied, and its dependency on RTTI makes the C testcases fail to
+        /// compile. Therefore, to make test pipepline happy, we need to disable
+        /// the `-fsanitize=function` option.
+
+        /// Notably, LLVM 17 uses type hash instead of RTTI to check function
+        /// type, and thus supports both C/C++ code without RTTI. See the
+        /// following commit for details:
+        ///   - No RTTI:
+        ///   https://github.com/llvm/llvm-project/commit/46f366494f3ca8cc98daa6fb4f29c7c446c176b6#diff-da4776ddc2b1fa6aaa0d2e00ff8a835dbec6d0606d2960c94875dc0502d222b8
+        ///   - Support C:
+        ///   https://github.com/llvm/llvm-project/commit/279a4d0d67c874e80c171666822f2fabdd6fa926#diff-9f23818ed51d0b117b5692129d0801721283d0f128a01cbc562353da0266d7adL948
+      
+        cc_params[cc_par_cnt++] = "-fno-sanitize=function";
+      }
     }
     break;
   case SanNone:
