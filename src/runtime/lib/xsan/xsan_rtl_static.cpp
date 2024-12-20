@@ -9,9 +9,12 @@ extern "C" {
 /// them to __xsan_init.
 #define RTL_WRAP(f) __wrap_##f
 
-void RTL_WRAP(__asan_init)() { __xsan_init(); }
+#define INTERCEPT_AND_REDIRECT(ret, f, ...) \
+  ret RTL_WRAP(f)(__VA_ARGS__) { __xsan_init(); }
 
-void RTL_WRAP(__tsan_init)() { __xsan_init(); }
+INTERCEPT_AND_REDIRECT(void, __asan_init)
+INTERCEPT_AND_REDIRECT(void, __tsan_init)
 
+#undef INTERCEPT_AND_REDIRECT
 #undef RTL_WRAP
 }

@@ -42,7 +42,8 @@ void OnPthreadCreate() {
 
   if (ctx->after_multithreaded_fork) {
     if (flags()->die_after_fork) {
-      Report("ThreadSanitizer: starting new threads after multi-threaded "
+      Report(
+          "ThreadSanitizer: starting new threads after multi-threaded "
           "fork is not supported. Dying (set die_after_fork=0 to override)\n");
       Die();
     } else {
@@ -133,40 +134,26 @@ LSan's check, as this approach does not work for those calls that locate in
 the same file defining the called symbols.
 */
 
-#define LSAN_REAL(f) __real_##f
-#define LSAN_WRAP(f) __wrap_##f
+#define SYM_REAL(f) __real_##f
+#define SYM_WRAP(f) __wrap_##f
 
-// __lsan::DoLeakCheck 
-void LSAN_REAL(_ZN6__lsan11DoLeakCheckEv)();
-// __lsan::DoRecoverableLeakCheck 
-void LSAN_REAL(_ZN6__lsan26DoRecoverableLeakCheckVoidEv)();
-void LSAN_REAL(__lsan_do_leak_check)();
-void LSAN_REAL(__lsan_do_recoverable_leak_check)();
-using namespace __asan;
-// interceptor of __lsan::DoLeakCheck 
-void LSAN_WRAP(_ZN6__lsan11DoLeakCheckEv)() {
-  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
-  LSAN_REAL(_ZN6__lsan11DoLeakCheckEv)();
-}
+#define INTERCEPT_AND_IGNORE_VOID(ret, f)                 \
+  ret SYM_REAL(f)(void);                                  \
+  ret SYM_WRAP(f)(void) {                                 \
+    __tsan::ScopedIgnoreInterceptors ignore_interceptors; \
+    return SYM_REAL(f)();                                 \
+  }
 
-// interceptor of __lsan::DoRecoverableLeakCheck 
-void LSAN_WRAP(_ZN6__lsan26DoRecoverableLeakCheckVoidEv)() {
-  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
-  LSAN_REAL(_ZN6__lsan26DoRecoverableLeakCheckVoidEv)();
-}
+// __lsan::DoLeakCheck
+INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan11DoLeakCheckEv)
+// __lsan::DoRecoverableLeakCheck
+INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan26DoRecoverableLeakCheckVoidEv)
+// __lsan_do_leak_check
+INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_leak_check)
+// __lsan_do_recoverable_leak_check
+INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_recoverable_leak_check)
 
-// interceptor of __lsan_do_leak_check 
-void LSAN_WRAP(__lsan_do_leak_check)() {
-  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
-  LSAN_REAL(__lsan_do_leak_check)();
-}
-
-// interceptor of __lsan_do_recoverable_leak_check 
-void LSAN_WRAP(__lsan_do_recoverable_leak_check)() {
-  __tsan::ScopedIgnoreInterceptors ignore_interceptors;
-  LSAN_REAL(__lsan_do_recoverable_leak_check)();
-}
-
-#undef LSAN_WRAP
-#undef LSAN_REAL
+#undef INTERCEPT_AND_IGNORE_VOID
+#undef SYM_WRAP
+#undef SYM_REAL
 }
