@@ -144,6 +144,14 @@ the same file defining the called symbols.
     return SYM_REAL(f)();                                 \
   }
 
+#define INTERCEPT_AND_IGNORE(ret, f, params, args)        \
+  ret SYM_REAL(f) params;                                 \
+  ret SYM_WRAP(f) params {                                \
+    __tsan::ScopedIgnoreInterceptors ignore_interceptors; \
+    return SYM_REAL(f) args;                              \
+  }
+
+
 // __lsan::DoLeakCheck
 INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan11DoLeakCheckEv)
 // __lsan::DoRecoverableLeakCheck
@@ -153,6 +161,19 @@ INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_leak_check)
 // __lsan_do_recoverable_leak_check
 INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_recoverable_leak_check)
 
+
+
+/// TODO: define these functions only if UBSan is used.
+/// UBSan uses this function to check if a memory range is accessible, where
+/// `pipe` is called internally. Meanwhile, TSan's interceptor of `pipe` will
+/// lead to unexpected behaviors. To avoid this, we need to intercept this
+/// function and ignore the TSan's interceptor.
+// __santizer::IsAccessibleMemoryRange
+INTERCEPT_AND_IGNORE(bool, _ZN11__sanitizer23IsAccessibleMemoryRangeEmm,
+                     (uptr beg, uptr size), (beg, size))
+
+
+#undef INTERCEPT_AND_IGNORE
 #undef INTERCEPT_AND_IGNORE_VOID
 #undef SYM_WRAP
 #undef SYM_REAL

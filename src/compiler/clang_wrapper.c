@@ -516,6 +516,7 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   }
 }
 
+
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso) {
 
   /**
@@ -576,6 +577,14 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_leak_check";
     cc_params[cc_par_cnt++] = "-Wl,-wrap,__lsan_do_recoverable_leak_check";
     
+    // TSan's interceptor of `pipe` conflicts with UBSan's handling.
+    // UBSan's handling uses `__sanitizer::IsAccessibleMemoryRange`, which
+    // leverages `pipe` to check the accessibility of memory.
+
+    // __sanitizer::IsAccessibleMemoryRange
+    cc_params[cc_par_cnt++] = "-Wl,-wrap,_ZN11__sanitizer23IsAccessibleMemoryRangeEmm";
+
+
     /// Intercepts the initialization functions of ASan and TSan, and redirects
     /// them to XSan's initialization function __xsan_init.
     cc_params[cc_par_cnt++] = "-Wl,-wrap,__asan_init";

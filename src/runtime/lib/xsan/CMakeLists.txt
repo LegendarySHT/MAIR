@@ -147,6 +147,7 @@ set(XSAN_TSAN_SOURCES
   ${TSAN_ASM_SOURCES}
 )
 
+
 set(XSAN_SOURCES
   xsan_activation.cpp
   xsan_allocator.cpp
@@ -387,6 +388,9 @@ set(XSAN_LINK_FLAGS "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv"
                     "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv"
                     "-Wl,-wrap,__lsan_do_leak_check"
                     "-Wl,-wrap,__lsan_do_recoverable_leak_check"
+
+                    "-Wl,-wrap,_ZN11__sanitizer23IsAccessibleMemoryRangeEmm"
+                    
                     "-Wl,-wrap,__asan_init"
                     "-Wl,-wrap,__tsan_init"
                     )
