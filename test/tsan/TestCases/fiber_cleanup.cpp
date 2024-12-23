@@ -46,11 +46,20 @@ void fiber_iteration() {
 // as tsan maps some memory for the first runs.
 const size_t num_warmup = 100;
 
+__attribute__((noinline))
+void allocate_and_free()  {
+  volatile void *ptr = malloc(0x333);
+  // Use inline assembly to avoid optimizing away the malloc.
+  __asm__ volatile("" : : "r" (ptr) : "memory");
+  free((void*)ptr);
+}
+
 int main() {
   for (size_t i = 0; i < num_warmup; i++) {
     fiber_iteration();
   }
-
+  // Trigger ASan's quarantine in advance to avoid false positives.
+  allocate_and_free();
   long memory_mappings_before = count_memory_mappings();
   fiber_iteration();
   fiber_iteration();
