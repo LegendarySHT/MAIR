@@ -15,6 +15,19 @@
 #include "xsan_internal.h"
 #include "xsan_thread.h"
 
+// ---------------------- State Management Hooks --------------------
+namespace __xsan {
+THREADLOCAL int xsan_in_intenal = 0;
+
+bool IsInXsanInternal() { return xsan_in_intenal != 0; }
+
+ScopedXsanInternal::ScopedXsanInternal() { xsan_in_intenal++; }
+
+ScopedXsanInternal::~ScopedXsanInternal() { xsan_in_intenal--; }
+}  // namespace __xsan
+
+// ---------- End of State Management Hooks -----------------
+
 // ---------------------- Memory Management Hooks -------------------
 /// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
 /// need to invoke ASan's hooks here.
@@ -317,11 +330,17 @@ namespace __tsan {
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
 bool ShouldIgnoreInterceptors(ThreadState *thr) { return false; }
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ShouldIgnoreInterceptors() { return false; }
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
 bool ShouldIgnoreAllocFreeHook() { return false; }
 }  // namespace __tsan
 
 namespace __xsan {
 bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
+  /// Avoid sanity checks in XSan internal.
+  if (IsInXsanInternal()) {
+    return true;
+  }
   /// TODO: to support libignore, we plan to migrate it to Xsan.
   /// xsan_suppressions.cpp is required accordingly.
   return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);

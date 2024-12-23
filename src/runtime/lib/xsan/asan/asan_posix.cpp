@@ -32,6 +32,8 @@
 #  include "sanitizer_common/sanitizer_posix.h"
 #  include "sanitizer_common/sanitizer_procmaps.h"
 
+#include "../xsan_hooks.h"
+
 DECLARE_REAL(int, sigaltstack, void *ss, void *oss);
 namespace __asan {
 
@@ -42,6 +44,8 @@ void AsanOnDeadlySignal(int signo, void *siginfo, void *context) {
 }
 
 bool PlatformUnpoisonStacks() {
+  /// To avoid sanity checks.
+  __xsan::ScopedXsanInternal sxi;
   stack_t signal_stack;
   /// Should not do sanity checks here, as it is in the inner of XSan.
   /// Otherwise, it would raise an FP of TSan's race (fiber_longjmp.cpp).

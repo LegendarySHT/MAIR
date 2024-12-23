@@ -19,6 +19,17 @@ namespace __xsan {
 class XsanThread;
 
 // ---------------------- Hook for other Sanitizers -------------------
+/// Notifies Xsan that the current thread is entering an completely internal
+/// Xsan function, e.g., __asan_handle_no_return.
+/// In such cases, Xsan should not do sanity checks.
+/// Compared to ShouldIgnoreInterceptos(), this function ignores in_ignore_lib.
+bool IsInXsanInternal();
+class ScopedXsanInternal {
+ public:
+  ScopedXsanInternal();
+  ~ScopedXsanInternal();
+};
+
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
 void XsanAllocFreeTailHook(uptr pc);
