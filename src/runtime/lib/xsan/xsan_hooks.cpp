@@ -343,7 +343,11 @@ bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
   }
   /// TODO: to support libignore, we plan to migrate it to Xsan.
   /// xsan_suppressions.cpp is required accordingly.
-  return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);
+  if (xsan_thr == nullptr) {
+    return __tsan::ShouldIgnoreInterceptors();
+  } else {
+    return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);
+  }
 }
 
 bool ShouldSanitzerIgnoreAllocFreeHook() {

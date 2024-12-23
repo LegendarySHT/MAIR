@@ -32,6 +32,10 @@ bool ShouldIgnoreInterceptors(ThreadState *thr) {
   return !thr->is_inited || thr->ignore_interceptors || thr->in_ignored_lib;
 }
 
+bool ShouldIgnoreInterceptors() {
+  return ShouldIgnoreInterceptors(cur_thread());
+}
+
 bool ShouldIgnoreAllocFreeHook() {
   ThreadState *thr = cur_thread();
   return (ctx == 0 || !ctx->initialized || thr->ignore_interceptors);

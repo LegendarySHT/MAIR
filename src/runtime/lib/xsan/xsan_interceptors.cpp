@@ -100,8 +100,8 @@ ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func,
 
 [[gnu::always_inline]]
 bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
-  return xsan_ignore_interceptors || !thread || !thread->is_inited_ ||
-         thread->in_ignored_lib_ || 
+  return xsan_ignore_interceptors || !xsan_inited ||
+         (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
          __xsan::ShouldSanitzerIgnoreInterceptors(thread);
 }
 
