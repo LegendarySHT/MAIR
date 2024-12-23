@@ -37,9 +37,8 @@ void XsanActivate() {
     __asan::AsanActivate();
   }
 
-  /// FIXME: xsan_is_deactivated is always false,
-  //        so the following code is never executed in preinit.
-  //       ASan faces the same problem.
+  /// Now XsanActivate is just a redirect to AsanActivate.
+  /// That means xsan_is_deactivated is always false.
   if (!xsan_is_deactivated)
     return;
   VReport(1, "Activating XSan\n");

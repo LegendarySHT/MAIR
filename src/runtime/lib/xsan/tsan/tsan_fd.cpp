@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 
-/// TODO: figrue out should we use ASan's alloc for this? or just use allocator.Alloc
 
 #include "orig/tsan_fd.h"
 

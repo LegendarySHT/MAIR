@@ -1,5 +1,3 @@
-/// TODO: implement this file
-
 #include <sanitizer_common/sanitizer_allocator_internal.h>
 #include <sanitizer_common/sanitizer_platform.h>
 #if SANITIZER_FREEBSD || SANITIZER_FUCHSIA || SANITIZER_LINUX || \

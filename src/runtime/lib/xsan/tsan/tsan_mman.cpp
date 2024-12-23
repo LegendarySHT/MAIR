@@ -379,7 +379,6 @@ void FreeImpl(void *p) {
 
 // ---------------------- Hook for other Sanitizers -------------------
 void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
-  // auto [thr, pc] = GetCurrentThread()->getTsanArgs();
   if (__tsan::is_tsan_initialized()) {
     /// TODO: remove code related to tsan's uaf checking
     __tsan::OnUserAlloc(__tsan::cur_thread(), pc, ptr, size, write);
@@ -391,7 +390,6 @@ void OnXsanFreeHook(uptr ptr, bool write, uptr pc) {
   /// pthread_deattach makes TSD destructor run before free.
   /// Hence, we need to add a fallback, just like ASan's `if(!t)` or TSan's
   /// `ScopedGlobalProcessor`
-  // auto [thr, pc] = GetCurrentThread()->getTsanArgs();
   if (__tsan::is_tsan_initialized()) {
     /// TODO: remove code related to tsan's uaf checking
     __tsan::OnUserFree(__tsan::cur_thread(), pc, ptr, write);
@@ -399,8 +397,6 @@ void OnXsanFreeHook(uptr ptr, bool write, uptr pc) {
 }
 
 void OnXsanAllocFreeTailHook(uptr pc) {
-  // auto [thr, pc] = GetCurrentThread()->getTsanArgs();
-  /// TODO: handle calls from tsan_fd.cpp
   __tsan::SignalUnsafeCall(__tsan::cur_thread(), pc);
 }
 

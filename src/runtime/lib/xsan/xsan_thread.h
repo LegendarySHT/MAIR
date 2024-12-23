@@ -140,9 +140,6 @@ class XsanThread {
   /// TSan uses this to track the stack trace.
   uptr top_pc_;
 
-  /// Records the current stack trace.
-  /// ASan uses this to track the stack trace.
-  BufferedStackTrace *stack;
 };
 
 // Get the current thread. May return 0.

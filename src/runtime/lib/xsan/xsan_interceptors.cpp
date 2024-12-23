@@ -1270,11 +1270,10 @@ void InitializeXsanInterceptors() {
 
   /// FIXME: bug in clone_test.cpp
   /// Multiple Die() cause Asan_Die dead loop
-  /// Original TSan also report the similar problem 
+  /// Original TSan also report the similar problem
   /// The root cause is that TSan cannot handle clone with CLONE_VM flag,
-  /// which is similar to vfork
-  /// The temporary fix is disable CLONE_VM flag, which has been applied in
-  /// the clone interceptor in tsan_interceptors.cpp.
+  /// which is similar to vfork/pthread_create, sharing the same address space
+  /// with the parent process.
   if (REAL(__cxa_atexit)(&finalize, 0, 0)) {
     Printf("XSan: failed to setup atexit callback\n");
     Die();

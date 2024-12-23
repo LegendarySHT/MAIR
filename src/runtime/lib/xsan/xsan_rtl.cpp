@@ -165,8 +165,6 @@ static void XsanInitInternal() {
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-  /// TODO: this is registed in ASan's initialization
-  // InstallAtExitCheckLeaks();
 
   __asan::AsanInitFromXsanLate();
 
@@ -204,7 +202,6 @@ void NOINLINE __xsan_handle_no_return() {
   if (xsan_init_is_running)
     return;
 
-  /// TODO: complete handle_no_return
   __asan_handle_no_return();
 }
 
