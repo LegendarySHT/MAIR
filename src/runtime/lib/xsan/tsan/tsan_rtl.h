@@ -165,6 +165,7 @@ struct ThreadState {
   int ignore_interceptors;
 #endif
   uptr *shadow_stack_pos;
+  u32 stack_overflow = 0;
 
   // Current position in tctx->trace.Back()->events (Event*).
   atomic_uintptr_t trace_pos;
@@ -795,8 +796,18 @@ void FuncEntry(ThreadState *thr, uptr pc) {
   if (thr->shadow_stack_pos == thr->shadow_stack_end)
     GrowShadowStack(thr);
 #endif
-  thr->shadow_stack_pos[0] = pc;
-  thr->shadow_stack_pos++;
+  /// Avoid buffer overflow in the scenario of stack overflow.
+  /// Reserve one more slot to store current PC.
+  bool stack_overflow = thr->shadow_stack_pos >= thr->shadow_stack_end - 1;
+  uptr *pos =
+      stack_overflow ? thr->shadow_stack_end - 2 : thr->shadow_stack_pos;
+  pos[0] = pc;
+  if (stack_overflow) {
+    // store the overflow count
+    thr->stack_overflow++;
+  } else {
+    thr->shadow_stack_pos++;
+  }
 }
 
 ALWAYS_INLINE
@@ -808,7 +819,11 @@ void FuncExit(ThreadState *thr) {
 #if !SANITIZER_GO
   DCHECK_LT(thr->shadow_stack_pos, thr->shadow_stack_end);
 #endif
-  thr->shadow_stack_pos--;
+  if (thr->stack_overflow) {
+    thr->stack_overflow--;
+  } else {
+    thr->shadow_stack_pos--;
+  }
 }
 
 #if !SANITIZER_GO
