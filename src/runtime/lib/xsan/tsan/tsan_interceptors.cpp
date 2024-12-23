@@ -490,8 +490,16 @@ DECLARE_REAL(int, on_exit, void(*f)(int, void*), void *arg);
 
 // Cleanup old bufs.
 static void JmpBufGarbageCollect(ThreadState *thr, uptr sp) {
+  bool cur_in_sighandler =
+      atomic_load(&thr->in_signal_handler, memory_order_relaxed) != 0;
   for (uptr i = 0; i < thr->jmp_bufs.Size(); i++) {
     JmpBuf *buf = &thr->jmp_bufs[i];
+    bool buf_in_sighandler = buf->in_signal_handler;
+    // setjmp/longjmp from normal stack should not release JmpBuf stored from
+    // signal stack, and vice versa, as signal stack and normal stack are
+    // independent.
+    if (buf_in_sighandler != cur_in_sighandler)
+      continue;
     if (buf->sp <= sp) {
       uptr sz = thr->jmp_bufs.Size();
       internal_memcpy(buf, &thr->jmp_bufs[sz - 1], sizeof(*buf));
