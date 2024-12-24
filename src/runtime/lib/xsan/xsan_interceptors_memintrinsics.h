@@ -4,6 +4,7 @@
 #include "asan/asan_mapping.h"
 #include "asan/orig/asan_internal.h"
 #include "interception/interception.h"
+#include "xsan_hooks.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
 
@@ -20,8 +21,8 @@ namespace __xsan {
 
 struct XsanInterceptorContext {
   const char *interceptor_name;
-
-  XsanThread *xsan_thr;
+  /// TODO: should use pointer or reference?
+  XsanContext xsan_ctx;
 };
 
 #define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2) \
@@ -78,8 +79,8 @@ struct XsanInterceptorContext {
 #define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                 \
   do {                                                                       \
     XsanInterceptorContext *_ctx = (XsanInterceptorContext *)(ctx);          \
-    if (_ctx && _ctx->xsan_thr) {                                            \
-      auto [thr, pc] = _ctx->xsan_thr->getTsanArgs();                        \
+    auto [thr, pc] = _ctx->xsan_ctx.tsan_ctx_;                               \
+    if (_ctx) {                                                              \
       __tsan::MemoryAccessRange(thr, pc, (uptr)(offset), (size), (isWrite)); \
     } else {                                                                 \
       __tsan::MemoryAccessRange(__tsan::cur_thread_init(), GET_CURRENT_PC(), \

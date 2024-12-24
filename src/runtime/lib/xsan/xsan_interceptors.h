@@ -184,7 +184,7 @@ class ScopedIgnoreChecks {
 /// Used in Interceptros to manage the resources uniformly.
 class ScopedInterceptor {
  public:
-  ScopedInterceptor(XsanThread *xsan_thr, const char *func, uptr caller_pc);
+  ScopedInterceptor(XsanContext &xsan_ctx, const char *func, uptr caller_pc);
   ~ScopedInterceptor() {}
   void DisableIgnores() {
     tsan_si.DisableIgnores();
@@ -196,14 +196,13 @@ class ScopedInterceptor {
   __tsan::ScopedInterceptor tsan_si;
 };
 
-inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread);
+inline bool ShouldXsanIgnoreInterceptor(XsanContext &xsan_ctx);
 
 }  // namespace __xsan
 
 #define SCOPED_XSAN_INTERCEPTOR_INTERNAL(func, caller_pc, curr_pc) \
-  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();       \
-  __xsan::ScopedInterceptor xsi(xsan_thr, #func, caller_pc);       \
-  if (xsan_thr) xsan_thr->setTsanArgs(curr_pc);
+  __xsan::XsanContext xsan_ctx(curr_pc);       \
+  __xsan::ScopedInterceptor xsi(xsan_ctx, #func, caller_pc);
 
 #define SCOPED_XSAN_INTERCEPTOR_MALLOC(func, ...) \
   GET_STACK_TRACE_MALLOC;                         \
@@ -232,5 +231,5 @@ inline bool ShouldXsanIgnoreInterceptor(XsanThread *thread);
 #define SCOPED_XSAN_INTERCEPTOR(func, ...)           \
   SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);    \
   XSAN_CHECK_REAL_FUNC(func);                        \
-  if (__xsan::ShouldXsanIgnoreInterceptor(xsan_thr)) \
+  if (__xsan::ShouldXsanIgnoreInterceptor(xsan_ctx)) \
     return REAL(func)(__VA_ARGS__);

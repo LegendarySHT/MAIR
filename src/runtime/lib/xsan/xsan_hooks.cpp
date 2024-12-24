@@ -63,18 +63,19 @@ void ExitSymbolizer() {
   __tsan::ExitSymbolizer();
 }
 
-bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
+bool ShouldSanitzerIgnoreInterceptors(XsanContext &xsan_ctx) {
   /// Avoid sanity checks in XSan internal.
   if (IsInXsanInternal()) {
     return true;
   }
+
+  bool should_ignore = false;
+  
   /// TODO: to support libignore, we plan to migrate it to Xsan.
   /// xsan_suppressions.cpp is required accordingly.
-  if (xsan_thr == nullptr) {
-    return __tsan::ShouldIgnoreInterceptors();
-  } else {
-    return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);
-  }
+  should_ignore = __tsan::ShouldIgnoreInterceptors(xsan_ctx.tsan_ctx_.thr_);
+
+  return should_ignore;
 }
 
 bool ShouldSanitzerIgnoreAllocFreeHook() {
@@ -90,7 +91,7 @@ int get_exit_code(void *ctx) {
 
   auto *tsan_thr =
       ctx == nullptr ? __tsan::cur_thread()
-                     : ((XsanInterceptorContext *)ctx)->xsan_thr->tsan_thread_;
+                     : ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan_ctx_.thr_;
   exit_code = __tsan::Finalize(tsan_thr);
   return exit_code;
 }
@@ -349,7 +350,7 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg);
 namespace __xsan {
 void OnAcquire(void *ctx, uptr addr) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::Acquire(thr, pc, addr);
 }
 
@@ -359,37 +360,37 @@ void OnDirAcquire(void *ctx, const char *path) {
 
 void OnRelease(void *ctx, uptr addr) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::Release(thr, pc, addr);
 }
 
 void OnFdAcquire(void *ctx, int fd) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdAcquire(thr, pc, fd);
 }
 
 void OnFdRelease(void *ctx, int fd) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdRelease(thr, pc, fd);
 }
 
 void OnFdAccess(void *ctx, int fd) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdAccess(thr, pc, fd);
 }
 
 void OnFdSocketAccept(void *ctx, int fd, int newfd) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdSocketAccept(thr, pc, fd, newfd);
 }
 
 void OnFileOpen(void *ctx, void *file, const char *path) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   if (path) {
     __tsan::Acquire(thr, pc, __tsan::File2addr(path));
   }
@@ -405,7 +406,7 @@ void OnFileClose(void *ctx, void *file) {
   if (file) {
     int fd = fileno_unlocked(file);
     XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-    auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+    auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
     __tsan::FdClose(thr, pc, fd);
   }
 }
@@ -413,14 +414,14 @@ void OnFileClose(void *ctx, void *file) {
 #if !SANITIZER_APPLE
 void OnHandleRecvmsg(void *ctx, __sanitizer_msghdr *msg) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::HandleRecvmsg(thr, pc, msg);
 }
 #endif
 
 void AfterMmap(void *ctx, void *res, uptr size, int fd) {
   XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_thr->getTsanArgs();
+  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   if (fd > 0)
     OnFdAccess(ctx, fd);
   __tsan::MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, size);

@@ -86,15 +86,6 @@ class XsanThread {
 
   bool isMainThread() { return is_main_thread_; }
 
-  TsanArgs getTsanArgs() { return {tsan_thread_, top_pc_}; }
-  void setTsanArgs(uptr top_pc) {
-    /// As the existence of TSan fiber, the current tsan thread may not be the
-    /// one in TLS. Hence, we need to update the current tsan thread dynamically
-    /// here.
-    tsan_thread_ = __tsan::cur_thread_init();
-    top_pc_ = top_pc;
-  }
-
   int destructor_iterations_;
   __asan::AsanThread *asan_thread_;
   __tsan::ThreadState *tsan_thread_;
@@ -135,10 +126,6 @@ class XsanThread {
   bool detached_;
   bool is_main_thread_;
   Tid tsan_tid_;
-
-  /// Records the pc of the interceptor, similar to TSan's pc.
-  /// TSan uses this to track the stack trace.
-  uptr top_pc_;
 
 };
 

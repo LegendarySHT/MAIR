@@ -92,17 +92,15 @@ ScopedIgnoreChecks::~ScopedIgnoreChecks() {
   __tsan::ThreadIgnoreEnd(__tsan::cur_thread());
 }
 
-ScopedInterceptor::ScopedInterceptor(XsanThread *xsan_thr, const char *func,
-                                     uptr caller_pc)
-    : tsan_si(xsan_thr ? xsan_thr->tsan_thread_ : __tsan::cur_thread_init(),
-              func, caller_pc) {}
+ScopedInterceptor::ScopedInterceptor(XsanContext &xsan_ctx,
+                                     const char *func, uptr caller_pc)
+    : tsan_si(xsan_ctx.tsan_ctx_.thr_, func, caller_pc) {}
 
-
-[[gnu::always_inline]]
-bool ShouldXsanIgnoreInterceptor(XsanThread *thread) {
+bool ShouldXsanIgnoreInterceptor(XsanContext &xsan_ctx) {
+  XsanThread *thread = __xsan::GetCurrentThread();
   return xsan_ignore_interceptors || !xsan_inited ||
          (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
-         __xsan::ShouldSanitzerIgnoreInterceptors(thread);
+         __xsan::ShouldSanitzerIgnoreInterceptors(xsan_ctx);
 }
 
 // Zero out addr if it points into shadow memory and was provided as a hint
@@ -259,13 +257,13 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 /// TODO: use a better approach to use SCOPED_TSAN_INTERCEPTOR
 #  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)     \
     SCOPED_XSAN_INTERCEPTOR(func, __VA_ARGS__);      \
-    XsanInterceptorContext _ctx = {#func, xsan_thr}; \
+    XsanInterceptorContext _ctx = {#func, xsan_ctx}; \
     ctx = (void *)&_ctx;                             \
     (void)ctx;
 
 #  define XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, ...) \
     SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);        \
-    XsanInterceptorContext _ctx = {#func, xsan_thr};       \
+    XsanInterceptorContext _ctx = {#func, xsan_ctx};       \
     ctx = (void *)&_ctx;                                   \
     (void)ctx;
 
@@ -368,7 +366,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  if XSAN_CONTAINS_TSAN
 
 #    define COMMON_INTERCEPTOR_BLOCK_REAL(name) \
-      (__tsan::BlockingCall(xsan_thr->tsan_thread_), REAL(name))
+      (__tsan::BlockingCall(xsan_ctx.tsan_ctx_.thr_), REAL(name))
 
 #    define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
       __xsan::OnFileOpen(ctx, file, path)
@@ -497,11 +495,10 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
             void *(*start_routine)(void *), void *arg) {
   GET_STACK_TRACE_THREAD;
-  __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();
 
-  ScopedInterceptor si(xsan_thr, "pthread_create", stack.trace_buffer[1]);
   const uptr pc = stack.trace_buffer[0];
-  xsan_thr->setTsanArgs(pc);
+  XsanContext xsan_ctx(pc);
+  ScopedInterceptor si(xsan_ctx, "pthread_create", stack.trace_buffer[1]);
 
 
   __xsan::OnPthreadCreate();

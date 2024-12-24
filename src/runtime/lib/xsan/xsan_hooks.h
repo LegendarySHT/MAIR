@@ -16,8 +16,28 @@ namespace __sanitizer {
 struct CommonFlags;
 }
 
+namespace __tsan {
+  struct ThreadState;
+  ThreadState *cur_thread();
+}
+
 namespace __xsan {
 class XsanThread;
+XsanThread *GetCurrentThread();
+// These structs is to hold the context of sub-sanitizers.
+// - TSan requires a thread state and a pc everywhere.
+// - ASan needs a BufferedStackTrace everywhere.
+struct TsanContext {
+  __tsan::ThreadState *thr_;
+  uptr pc_;
+};
+struct XsanContext {
+  TsanContext tsan_ctx_;
+
+  XsanContext() : tsan_ctx_({nullptr, 0}) {}
+  XsanContext(uptr pc)
+      : tsan_ctx_({__tsan::cur_thread(), pc}) {}
+};
 
 // ---------------------- Hook for other Sanitizers -------------------
 /// Notifies Xsan that the current thread is entering an completely internal
@@ -34,7 +54,7 @@ extern THREADLOCAL int is_in_symbolizer;
 inline bool in_symbolizer() { return UNLIKELY(is_in_symbolizer > 0); }
 void EnterSymbolizer();
 void ExitSymbolizer();
-bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);
+bool ShouldSanitzerIgnoreInterceptors(XsanContext &xsan_thr);
 bool ShouldSanitzerIgnoreAllocFreeHook();
 // Integrates different sanitizers' exit code logic.
 int get_exit_code(void *ctx = nullptr);
