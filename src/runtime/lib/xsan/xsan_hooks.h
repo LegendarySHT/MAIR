@@ -6,6 +6,7 @@
 // This file is used to manuplate the hooks for coordination between multiple
 // sanitizers.
 //===----------------------------------------------------------------------===//
+#pragma once
 
 #include "xsan_interface_internal.h"
 
