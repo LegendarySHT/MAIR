@@ -187,6 +187,7 @@ void init(XsanOption *opt) {
   opt->mask |= (u64)1 << XSan;
 }
 
+/// TODO: handle unsupported sanTy.
 void set(XsanOption *opt, enum SanitizerType sanTy) {
   opt->mask |= (u64)1 << sanTy;
 }
@@ -223,7 +224,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       xsanTy = XSan;
       init(&xsan_options);
       continue;
-    } else if (!strncmp(cur, "-fno-sanitize=", 14)){
+    } else if (!strncmp(cur, "-fno-sanitize=", 14)) {
       u8 *val = cur + 14;
       enum SanitizerType disableTy = SanNone;
       if (!strcmp(val, "all")) {
@@ -242,6 +243,18 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       if (xsanTy == disableTy || disableTy == XSan) {
         xsanTy = SanNone;
       }
+    } else if (!strncmp(cur, "-fsanitize=", 11)) {
+      u8 *val = cur + 11;
+      enum SanitizerType enableTy = SanNone;
+      if (!strcmp(val, "address")) {
+        enableTy = ASan;
+      } else if (!strcmp(val, "thread")) {
+        enableTy = TSan;
+      } else if (!strcmp(val, "undefined")) {
+        enableTy = UBSan;
+      }
+
+      set(&xsan_options, enableTy);
     }
   }
   return xsanTy;
@@ -264,8 +277,6 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
     2. -fsanitize=address,pointer-subtract
  */
 static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
-  if (!strcmp(opt, "-fsanitize=address"))
-    return 1;
 
   if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
     // TODO
@@ -324,8 +335,6 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
  Refer to SanitizerArgs.cpp:1142~1155
  */
 static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
-  if (!strcmp(opt, "-fsanitize=thread"))
-    return 1;
   if (!strcmp(opt, "-fsanitize-thread-atomics")) {
     return 1;
   } else if (!strcmp(opt, "-fno-sanitize-thread-atomics")) {
@@ -368,8 +377,6 @@ static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
 }
 
 static u8 handle_ubsan_options(u8* opt) {
-  if (!strcmp(opt, "-fsanitize=undefined"))
-    return 1;
   return 0;
 }
 
