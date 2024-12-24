@@ -10,6 +10,7 @@
 
 #include <sanitizer_common/sanitizer_common.h>
 
+#include "lsan/lsan_common.h"
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
@@ -78,6 +79,20 @@ bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
 
 bool ShouldSanitzerIgnoreAllocFreeHook() {
   return __tsan::ShouldIgnoreAllocFreeHook();
+}
+
+int get_exit_code(void *ctx) {
+  int exit_code = 0;
+  if (CAN_SANITIZE_LEAKS && common_flags()->detect_leaks &&
+      __lsan::HasReportedLeaks()) {
+    return common_flags()->exitcode;
+  }
+
+  auto *tsan_thr =
+      ctx == nullptr ? __tsan::cur_thread()
+                     : ((XsanInterceptorContext *)ctx)->xsan_thr->tsan_thread_;
+  exit_code = __tsan::Finalize(tsan_thr);
+  return exit_code;
 }
 
 }  // namespace __xsan

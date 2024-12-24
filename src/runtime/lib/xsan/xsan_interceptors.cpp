@@ -227,25 +227,19 @@ static void FlushStreams() {
 
 /// Changes exit code.
 static int OnExit(void *ctx) {
-  if (CAN_SANITIZE_LEAKS && common_flags()->detect_leaks &&
-      __lsan::HasReportedLeaks()) {
-    return common_flags()->exitcode;
-  }
-
-  auto *ctx_ = (XsanInterceptorContext *)ctx;
-  int status = __tsan::Finalize(ctx_->xsan_thr->tsan_thread_);
+  int exit_code = get_exit_code(ctx);
   FlushStreams();
 
   // FIXME: ask frontend whether we need to return failure.
-  return status;
+  return exit_code;
 }
 
 /// Changes exit code.
 static void finalize(void *arg) {
-  int status = __tsan::Finalize(__tsan::cur_thread());
+  int exit_code = get_exit_code();
   // Make sure the output is not lost.
   FlushStreams();
-  if (status)
+  if (exit_code)
     Die();
 }
 

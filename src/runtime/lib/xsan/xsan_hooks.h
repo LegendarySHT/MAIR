@@ -35,6 +35,8 @@ void EnterSymbolizer();
 void ExitSymbolizer();
 bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);
 bool ShouldSanitzerIgnoreAllocFreeHook();
+// Integrates different sanitizers' exit code logic.
+int get_exit_code(void *ctx = nullptr);
 
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
