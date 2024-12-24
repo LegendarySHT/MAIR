@@ -984,7 +984,7 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f,
 /// TODO: support on_exit interceptor
 INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
             void *dso_handle) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return 0;
 #    if SANITIZER_APPLE
   if (UNLIKELY(!xsan_inited))
@@ -1005,7 +1005,7 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
 
 #  if XSAN_INTERCEPT_ATEXIT
 INTERCEPTOR(int, atexit, void (*func)()) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return 0;
 
   ENSURE_XSAN_INITED();
@@ -1023,7 +1023,7 @@ INTERCEPTOR(int, atexit, void (*func)()) {
 
 #  if XSAN_INTERCEPT_ON_EXIT
 INTERCEPTOR(int, on_exit, void (*func)(int, void *), void *arg) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return 0;
 
   ENSURE_XSAN_INITED();

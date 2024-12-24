@@ -6,6 +6,7 @@
 /// To provide SIZE_T definition, these headers should be included first
 /// Otherwise sanitizer_common/sanitizer_allocator_dlsym.h raises an error
 #  include "xsan_allocator.h"
+#  include "xsan_hooks.h"
 #  include "xsan_interceptors.h"
 #  include "xsan_internal.h"
 #  include "xsan_stack.h"
@@ -39,7 +40,7 @@ struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
 INTERCEPTOR(void, free, void *ptr) {
   if (ptr == 0) 
     return; 
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalFree(ptr);
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
@@ -51,7 +52,7 @@ INTERCEPTOR(void, free, void *ptr) {
 INTERCEPTOR(void, cfree, void *ptr) {
   if (ptr == 0) 
     return; 
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalFree(ptr);
   if (DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Free(ptr);
@@ -61,7 +62,7 @@ INTERCEPTOR(void, cfree, void *ptr) {
 #  endif  // SANITIZER_INTERCEPT_CFREE
 
 INTERCEPTOR(void *, malloc, uptr size) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalAlloc(size);
   if (DlsymAlloc::Use())
     return DlsymAlloc::Allocate(size);
@@ -71,7 +72,7 @@ INTERCEPTOR(void *, malloc, uptr size) {
 }
 
 INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalCalloc(size, size);
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(nmemb, size);
@@ -81,7 +82,7 @@ INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
 }
 
 INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalRealloc(ptr, size);
   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Realloc(ptr, size);
@@ -92,7 +93,7 @@ INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
 
 #  if SANITIZER_INTERCEPT_REALLOCARRAY
 INTERCEPTOR(void *, reallocarray, void *ptr, uptr nmemb, uptr size) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalReallocArray(ptr, size, size);
   ENSURE_XSAN_INITED();
   SCOPED_XSAN_INTERCEPTOR_MALLOC(reallocarray, ptr, nmemb, size);
@@ -116,7 +117,7 @@ INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
 
 #  if SANITIZER_INTERCEPT_ALIGNED_ALLOC
 INTERCEPTOR(void *, aligned_alloc, uptr boundary, uptr size) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalAlloc(size, nullptr, boundary);
   SCOPED_XSAN_INTERCEPTOR_MALLOC(aligned_alloc, boundary, size);
   return xsan_aligned_alloc(boundary, size, &stack);
@@ -148,7 +149,7 @@ INTERCEPTOR(int, mallopt, int cmd, int value) { return 0; }
 #  endif  // SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
 
 INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
-  if (__tsan::in_symbolizer()) {
+  if (__xsan::in_symbolizer()) {
     void *p = InternalAlloc(size, nullptr, alignment);
     if (!p)
       return errno_ENOMEM;
@@ -160,7 +161,7 @@ INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
 }
 
 INTERCEPTOR(void *, valloc, uptr size) {
-  if (__tsan::in_symbolizer())
+  if (__xsan::in_symbolizer())
     return InternalAlloc(size, nullptr, GetPageSizeCached());
   SCOPED_XSAN_INTERCEPTOR_MALLOC(valloc, size);
   return xsan_valloc(size, &stack);
@@ -168,7 +169,7 @@ INTERCEPTOR(void *, valloc, uptr size) {
 
 #  if SANITIZER_INTERCEPT_PVALLOC
 INTERCEPTOR(void *, pvalloc, uptr size) {
-  if (__tsan::in_symbolizer()) {
+  if (__xsan::in_symbolizer()) {
     uptr PageSize = GetPageSizeCached();
     size = size ? RoundUpTo(size, PageSize) : PageSize;
     return InternalAlloc(size, nullptr, PageSize);

@@ -1,11 +1,12 @@
 #include <lsan/lsan_common.h>
-#include <sanitizer_common/sanitizer_interface_internal.h>
 #include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_interface_internal.h>
 #include <ubsan/ubsan_init.h>
 
 #include "asan/asan_init.h"
 #include "tsan/tsan_init.h"
 #include "xsan_activation.h"
+#include "xsan_hooks.h"
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
@@ -176,6 +177,8 @@ static void XsanInitInternal() {
 #if TSAN_CONTAINS_UBSAN
   __ubsan::InitAsPlugin();
 #endif
+
+  Symbolizer::GetOrInit()->AddHooks(EnterSymbolizer, ExitSymbolizer);
 
   /// Initialize Symbolizer in the last
   if (CAN_SANITIZE_LEAKS) {

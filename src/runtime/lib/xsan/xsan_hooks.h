@@ -29,6 +29,10 @@ class ScopedXsanInternal {
   ScopedXsanInternal();
   ~ScopedXsanInternal();
 };
+extern THREADLOCAL int is_in_symbolizer;
+inline bool in_symbolizer() { return UNLIKELY(is_in_symbolizer > 0); }
+void EnterSymbolizer();
+void ExitSymbolizer();
 
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);

@@ -16,6 +16,14 @@
 #include "xsan_thread.h"
 
 // ---------------------- State Management Hooks --------------------
+// - in internal
+// - in symbolizer
+
+namespace __tsan {
+void EnterSymbolizer();
+void ExitSymbolizer();
+}  // namespace __tsan
+
 namespace __xsan {
 THREADLOCAL int xsan_in_intenal = 0;
 
@@ -24,6 +32,18 @@ bool IsInXsanInternal() { return xsan_in_intenal != 0; }
 ScopedXsanInternal::ScopedXsanInternal() { xsan_in_intenal++; }
 
 ScopedXsanInternal::~ScopedXsanInternal() { xsan_in_intenal--; }
+
+THREADLOCAL int is_in_symbolizer;
+void EnterSymbolizer() {
+  ++is_in_symbolizer;
+  __tsan::EnterSymbolizer();
+}
+
+void ExitSymbolizer() {
+  --is_in_symbolizer;
+  __tsan::ExitSymbolizer();
+}
+
 }  // namespace __xsan
 
 // ---------- End of State Management Hooks -----------------

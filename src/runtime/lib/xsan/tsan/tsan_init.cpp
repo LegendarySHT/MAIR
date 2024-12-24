@@ -170,7 +170,7 @@ void TsanInitFromXsan() {
   InitializeSuppressions();
 #if !SANITIZER_GO
   InitializeLibIgnore();
-  Symbolizer::GetOrInit()->AddHooks(EnterSymbolizer, ExitSymbolizer);
+  // Symbolizer::GetOrInit()->AddHooks(EnterSymbolizer, ExitSymbolizer);
 #endif
 
   VPrintf(1, "***** Running under ThreadSanitizer v3 (pid %d) *****\n",
