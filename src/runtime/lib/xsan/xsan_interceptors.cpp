@@ -327,13 +327,10 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
                               off);                                          \
     } while (false)
 
-/// TODO: move libignore to Xsan.
 #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
-  __tsan::libignore()->OnLibraryLoaded(filename)
+    __xsan::OnLibraryLoaded(filename, handle)
 
-#  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() \
-  __tsan::libignore()->OnLibraryUnloaded()
-
+#  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() __xsan::OnLibraryUnloaded()
 
 #  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!xsan_inited)
 
@@ -700,31 +697,27 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
 #  endif
 
 INTERCEPTOR(void, longjmp, void *env, int val) {
-  __tsan::handle_longjmp(env, "longjmp", GET_CALLER_PC());
-  __xsan_handle_no_return();
+  OnLongjmp(env, "longjmp", GET_CALLER_PC());
   REAL(longjmp)(env, val);
 }
 
 #  if XSAN_INTERCEPT__LONGJMP
 INTERCEPTOR(void, _longjmp, void *env, int val) {
-  __tsan::handle_longjmp(env, "_longjmp", GET_CALLER_PC());
-  __xsan_handle_no_return();
+  OnLongjmp(env, "_longjmp", GET_CALLER_PC());
   REAL(_longjmp)(env, val);
 }
 #  endif
 
 #  if XSAN_INTERCEPT___LONGJMP_CHK
 INTERCEPTOR(void, __longjmp_chk, void *env, int val) {
-  __tsan::handle_longjmp(env, "__longjmp_chk", GET_CALLER_PC());
-  __xsan_handle_no_return();
+  OnLongjmp(env, "__longjmp_chk", GET_CALLER_PC());
   REAL(__longjmp_chk)(env, val);
 }
 #  endif
 
 #  if XSAN_INTERCEPT_SIGLONGJMP
 INTERCEPTOR(void, siglongjmp, void *env, int val) {
-  __tsan::handle_longjmp(env, "siglongjmp", GET_CALLER_PC());
-  __xsan_handle_no_return();
+  OnLongjmp(env, "siglongjmp", GET_CALLER_PC());
   REAL(siglongjmp)(env, val);
 }
 #  endif
@@ -1036,23 +1029,6 @@ INTERCEPTOR(int, on_exit, void (*func)(int, void *), void *arg) {
 #  if XSAN_INTERCEPT___CXA_ATEXIT || XSAN_INTERCEPT_ATEXIT || \
       XSAN_INTERCEPT_ON_EXIT
 
-static void XsanBeforeAtExitHandler(AtExitCtx *ctx) {
-  /// Stop init order checking to avoid false positives in the
-  /// initialization code, adhering the logic of ASan.
-  __asan::StopInitOrderChecking();
-
-  /// TODO: use a more generic way
-  __tsan::ThreadState *thr = __tsan::cur_thread();
-  __tsan::Acquire(thr, ctx->pc, (uptr)ctx);
-  __tsan::FuncEntry(thr, ctx->pc);
-}
-
-static void XsanPostAtExitHandler(AtExitCtx *ctx) {
-  (void)ctx;
-  /// TODO: use a more generic way
-  __tsan::FuncExit(__tsan::cur_thread());
-}
-
 static void XSanAtExitWrapper() {
   AtExitCtx *ctx;
   {
@@ -1065,27 +1041,30 @@ static void XSanAtExitWrapper() {
     interceptor_ctx()->AtExitStack.PopBack();
   }
 
-  XsanBeforeAtExitHandler(ctx);
-  ((void (*)())ctx->f)();
-  XsanPostAtExitHandler(ctx);
+  {
+    ScopedAtExitHandler saeh(ctx->pc, ctx);
+    ((void (*)())ctx->f)();
+  }
   Free(ctx);
 }
 
 static void XSanCxaAtExitWrapper(void *arg) {
   AtExitCtx *ctx = (AtExitCtx *)arg;
 
-  XsanBeforeAtExitHandler(ctx);
-  ((void (*)(void *arg))ctx->f)(ctx->arg);
-  XsanPostAtExitHandler(ctx);
+  {
+    ScopedAtExitHandler saeh(ctx->pc, ctx);
+    ((void (*)(void *arg))ctx->f)(ctx->arg);
+  }
   Free(ctx);
 }
 
 static void XSanOnExitWrapper(int status, void *arg) {
   AtExitCtx *ctx = (AtExitCtx *)arg;
 
-  XsanBeforeAtExitHandler(ctx);
-  ((void (*)(int status, void *arg))ctx->f)(status, ctx->arg);
-  XsanPostAtExitHandler(ctx);
+  {
+    ScopedAtExitHandler saeh(ctx->pc, ctx);
+    ((void (*)(int status, void *arg))ctx->f)(status, ctx->arg);
+  }
   Free(ctx);
 }
 

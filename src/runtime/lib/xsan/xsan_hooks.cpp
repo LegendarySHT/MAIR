@@ -155,6 +155,8 @@ void __asan_handle_vfork(void *sp);
 namespace __asan {
 /// ASan 1) checks the correctness of main thread ID, 2) checks the init orders.
 void OnPthreadCreate();
+void __asan_handle_no_return();
+void StopInitOrderChecking();
 }  // namespace __asan
 
 namespace __tsan {
@@ -170,9 +172,21 @@ void ThreadIgnoreEnd(ThreadState *thr);
 
 void DisableTsanForVfork();
 void RecoverTsanAfterVforkParent();
+
+LibIgnore *libignore();
+void handle_longjmp(void *env, const char *fname, uptr caller_pc);
 }  // namespace __tsan
 
 namespace __xsan {
+/*
+Provides hooks for special functions, such as
+  - pthread_create
+  - atexit / on_exit / _cxa_atexit
+  - longjmp / siglongjmp / _longjmp / _siglongjmp
+  - dlopen / dlclose
+  - vfork
+*/
+
 void OnPthreadCreate() {
   __asan::OnPthreadCreate();
   __tsan::OnPthreadCreate();
@@ -193,6 +207,20 @@ ScopedAtExitWrapper::~ScopedAtExitWrapper() {
   __tsan::ThreadIgnoreEnd(thr);
 }
 
+ScopedAtExitHandler::ScopedAtExitHandler(uptr pc, void *ctx) {
+  /// Stop init order checking to avoid false positives in the
+  /// initialization code, adhering the logic of ASan.
+  __asan::StopInitOrderChecking();
+
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  __tsan::Acquire(thr, pc, (uptr)ctx);
+  __tsan::FuncEntry(thr, pc);
+}
+
+ScopedAtExitHandler::~ScopedAtExitHandler() {
+  __tsan::FuncExit(__tsan::cur_thread());
+}
+
 /// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
 /// Notably, this function is called TWICE at the attitude per process.
 extern "C" void *__xsan_vfork_before_and_after() {
@@ -209,6 +237,18 @@ extern "C" void __xsan_vfork_parent_after(void *sp) {
   __asan_handle_vfork(sp);
 }
 
+void OnLibraryLoaded(const char *filename, void *handle) {
+  __tsan::libignore()->OnLibraryLoaded(filename);
+}
+
+void OnLibraryUnloaded() {
+  __tsan::libignore()->OnLibraryUnloaded();
+}
+
+void OnLongjmp(void *env, const char *fn_name, uptr pc) {
+  __tsan::handle_longjmp(env, fn_name, pc);
+  __asan_handle_no_return();
+}
 }  // namespace __xsan
 
 // --------------- End of Special Function Hooks -----------------

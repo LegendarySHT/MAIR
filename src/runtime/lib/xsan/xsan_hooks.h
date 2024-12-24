@@ -71,11 +71,18 @@ class ScopedAtExitWrapper {
   ScopedAtExitWrapper(uptr pc, void *ctx);
   ~ScopedAtExitWrapper();
 };
+class ScopedAtExitHandler {
+ public:
+  ScopedAtExitHandler(uptr pc, void *ctx);
+  ~ScopedAtExitHandler();
+};
 void AfterMmap(void *ctx, void *res, uptr size, int fd);
 /// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
 /// Notably, this function is called TWICE at the attitude per process.
 extern "C" void * __xsan_vfork_before_and_after();
 /// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
 extern "C" void __xsan_vfork_parent_after(void *sp);
-
+void OnLibraryLoaded(const char *filename, void *handle);
+void OnLibraryUnloaded();
+void OnLongjmp(void *env, const char *fn_name, uptr pc);
 }  // namespace __xsan
