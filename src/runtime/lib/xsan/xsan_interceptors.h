@@ -184,7 +184,7 @@ class ScopedIgnoreChecks {
 /// Used in Interceptros to manage the resources uniformly.
 class ScopedInterceptor {
  public:
-  ScopedInterceptor(XsanContext &xsan_ctx, const char *func, uptr caller_pc);
+  ScopedInterceptor(const XsanContext &xsan_ctx, const char *func, uptr caller_pc);
   ~ScopedInterceptor() {}
   void DisableIgnores() {
     tsan_si.DisableIgnores();
@@ -196,7 +196,7 @@ class ScopedInterceptor {
   __tsan::ScopedInterceptor tsan_si;
 };
 
-inline bool ShouldXsanIgnoreInterceptor(XsanContext &xsan_ctx);
+inline bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
 
 }  // namespace __xsan
 

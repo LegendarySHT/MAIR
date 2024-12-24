@@ -54,10 +54,10 @@ extern THREADLOCAL int is_in_symbolizer;
 inline bool in_symbolizer() { return UNLIKELY(is_in_symbolizer > 0); }
 void EnterSymbolizer();
 void ExitSymbolizer();
-bool ShouldSanitzerIgnoreInterceptors(XsanContext &xsan_thr);
+bool ShouldSanitzerIgnoreInterceptors(const XsanContext &xsan_thr);
 bool ShouldSanitzerIgnoreAllocFreeHook();
 // Integrates different sanitizers' exit code logic.
-int get_exit_code(void *ctx = nullptr);
+int get_exit_code(const void *ctx = nullptr);
 
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
@@ -75,29 +75,29 @@ void SetSanitizerThreadNameByUserId(uptr uid, const char *name);
 
 bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id);
 
-void OnAcquire(void *ctx, uptr addr);
-void OnDirAcquire(void *ctx, const char *path);
-void OnDirRelease(void *ctx, const char *path);
-void OnRelease(void *ctx, uptr addr);
-void OnFdAcquire(void *ctx, int fd);
-void OnFdRelease(void *ctx, int fd);
-void OnFdAccess(void *ctx, int fd);
-void OnFdSocketAccept(void *ctx, int fd, int newfd);
-void OnFileOpen(void *ctx, void *file, const char *path);
-void OnFileClose(void *ctx, void *file);
-void OnHandleRecvmsg(void *ctx,  __sanitizer_msghdr *msg);
+void OnAcquire(const void *ctx, uptr addr);
+void OnDirAcquire(const void *ctx, const char *path);
+void OnDirRelease(const void *ctx, const char *path);
+void OnRelease(const void *ctx, uptr addr);
+void OnFdAcquire(const void *ctx, int fd);
+void OnFdRelease(const void *ctx, int fd);
+void OnFdAccess(const void *ctx, int fd);
+void OnFdSocketAccept(const void *ctx, int fd, int newfd);
+void OnFileOpen(const void *ctx, void *file, const char *path);
+void OnFileClose(const void *ctx, void *file);
+void OnHandleRecvmsg(const void *ctx,  __sanitizer_msghdr *msg);
 /// Used in the Atexit registration.
 class ScopedAtExitWrapper {
  public:
-  ScopedAtExitWrapper(uptr pc, void *ctx);
+  ScopedAtExitWrapper(uptr pc, const void *ctx);
   ~ScopedAtExitWrapper();
 };
 class ScopedAtExitHandler {
  public:
-  ScopedAtExitHandler(uptr pc, void *ctx);
+  ScopedAtExitHandler(uptr pc, const void *ctx);
   ~ScopedAtExitHandler();
 };
-void AfterMmap(void *ctx, void *res, uptr size, int fd);
+void AfterMmap(const void *ctx, void *res, uptr size, int fd);
 /// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
 /// Notably, this function is called TWICE at the attitude per process.
 extern "C" void * __xsan_vfork_before_and_after();

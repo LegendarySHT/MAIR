@@ -63,14 +63,14 @@ void ExitSymbolizer() {
   __tsan::ExitSymbolizer();
 }
 
-bool ShouldSanitzerIgnoreInterceptors(XsanContext &xsan_ctx) {
+bool ShouldSanitzerIgnoreInterceptors(const XsanContext &xsan_ctx) {
   /// Avoid sanity checks in XSan internal.
   if (IsInXsanInternal()) {
     return true;
   }
 
   bool should_ignore = false;
-  
+
   /// TODO: to support libignore, we plan to migrate it to Xsan.
   /// xsan_suppressions.cpp is required accordingly.
   should_ignore = __tsan::ShouldIgnoreInterceptors(xsan_ctx.tsan_ctx_.thr_);
@@ -82,7 +82,7 @@ bool ShouldSanitzerIgnoreAllocFreeHook() {
   return __tsan::ShouldIgnoreAllocFreeHook();
 }
 
-int get_exit_code(void *ctx) {
+int get_exit_code(const void *ctx) {
   int exit_code = 0;
   if (CAN_SANITIZE_LEAKS && common_flags()->detect_leaks &&
       __lsan::HasReportedLeaks()) {
@@ -90,8 +90,9 @@ int get_exit_code(void *ctx) {
   }
 
   auto *tsan_thr =
-      ctx == nullptr ? __tsan::cur_thread()
-                     : ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan_ctx_.thr_;
+      ctx == nullptr
+          ? __tsan::cur_thread()
+          : ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan_ctx_.thr_;
   exit_code = __tsan::Finalize(tsan_thr);
   return exit_code;
 }
@@ -119,11 +120,14 @@ void OnFakeStackDestory(uptr addr, uptr size) {}
 }  // namespace __tsan
 
 namespace __asan {
-  
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id){return false;}
 
-}// namespace __asan
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr,
+                             bool set_stack_trace_id) {
+  return false;
+}
+
+}  // namespace __asan
 
 namespace __xsan {
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
@@ -140,8 +144,10 @@ void OnFakeStackDestory(uptr addr, uptr size) {
   __tsan::OnFakeStackDestory(addr, size);
 }
 
-bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr, bool set_stack_trace_id){
-return __asan::GetASanMellocStackTrace(stack_trace_id, addr, set_stack_trace_id);
+bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr,
+                         bool set_stack_trace_id) {
+  return __asan::GetASanMellocStackTrace(stack_trace_id, addr,
+                                         set_stack_trace_id);
 }
 
 }  // namespace __xsan
@@ -193,7 +199,7 @@ void OnPthreadCreate() {
   __tsan::OnPthreadCreate();
 }
 
-ScopedAtExitWrapper::ScopedAtExitWrapper(uptr pc, void *ctx) {
+ScopedAtExitWrapper::ScopedAtExitWrapper(uptr pc, const void *ctx) {
   __tsan::ThreadState *thr = __tsan::cur_thread();
   if (!xsan_in_init) {
     __tsan::Release(thr, pc, (uptr)ctx);
@@ -208,7 +214,7 @@ ScopedAtExitWrapper::~ScopedAtExitWrapper() {
   __tsan::ThreadIgnoreEnd(thr);
 }
 
-ScopedAtExitHandler::ScopedAtExitHandler(uptr pc, void *ctx) {
+ScopedAtExitHandler::ScopedAtExitHandler(uptr pc, const void *ctx) {
   /// Stop init order checking to avoid false positives in the
   /// initialization code, adhering the logic of ASan.
   __asan::StopInitOrderChecking();
@@ -242,9 +248,7 @@ void OnLibraryLoaded(const char *filename, void *handle) {
   __tsan::libignore()->OnLibraryLoaded(filename);
 }
 
-void OnLibraryUnloaded() {
-  __tsan::libignore()->OnLibraryUnloaded();
-}
+void OnLibraryUnloaded() { __tsan::libignore()->OnLibraryUnloaded(); }
 
 void OnLongjmp(void *env, const char *fn_name, uptr pc) {
   __tsan::handle_longjmp(env, fn_name, pc);
@@ -348,48 +352,48 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg);
 }  // namespace __tsan
 
 namespace __xsan {
-void OnAcquire(void *ctx, uptr addr) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnAcquire(const void *ctx, uptr addr) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::Acquire(thr, pc, addr);
 }
 
-void OnDirAcquire(void *ctx, const char *path) {
+void OnDirAcquire(const void *ctx, const char *path) {
   OnAcquire(ctx, __tsan::Dir2addr(path));
 }
 
-void OnRelease(void *ctx, uptr addr) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnRelease(const void *ctx, uptr addr) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::Release(thr, pc, addr);
 }
 
-void OnFdAcquire(void *ctx, int fd) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnFdAcquire(const void *ctx, int fd) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdAcquire(thr, pc, fd);
 }
 
-void OnFdRelease(void *ctx, int fd) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnFdRelease(const void *ctx, int fd) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdRelease(thr, pc, fd);
 }
 
-void OnFdAccess(void *ctx, int fd) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnFdAccess(const void *ctx, int fd) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdAccess(thr, pc, fd);
 }
 
-void OnFdSocketAccept(void *ctx, int fd, int newfd) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnFdSocketAccept(const void *ctx, int fd, int newfd) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::FdSocketAccept(thr, pc, fd, newfd);
 }
 
-void OnFileOpen(void *ctx, void *file, const char *path) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnFileOpen(const void *ctx, void *file, const char *path) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   if (path) {
     __tsan::Acquire(thr, pc, __tsan::File2addr(path));
@@ -402,25 +406,25 @@ void OnFileOpen(void *ctx, void *file, const char *path) {
   }
 }
 
-void OnFileClose(void *ctx, void *file) {
+void OnFileClose(const void *ctx, void *file) {
   if (file) {
     int fd = fileno_unlocked(file);
-    XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+    const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
     auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
     __tsan::FdClose(thr, pc, fd);
   }
 }
 
 #if !SANITIZER_APPLE
-void OnHandleRecvmsg(void *ctx, __sanitizer_msghdr *msg) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void OnHandleRecvmsg(const void *ctx, __sanitizer_msghdr *msg) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   __tsan::HandleRecvmsg(thr, pc, msg);
 }
 #endif
 
-void AfterMmap(void *ctx, void *res, uptr size, int fd) {
-  XsanInterceptorContext *ctx_ = (XsanInterceptorContext *)ctx;
+void AfterMmap(const void *ctx, void *res, uptr size, int fd) {
+  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
   auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
   if (fd > 0)
     OnFdAccess(ctx, fd);

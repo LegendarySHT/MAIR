@@ -92,11 +92,11 @@ ScopedIgnoreChecks::~ScopedIgnoreChecks() {
   __tsan::ThreadIgnoreEnd(__tsan::cur_thread());
 }
 
-ScopedInterceptor::ScopedInterceptor(XsanContext &xsan_ctx,
+ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
                                      const char *func, uptr caller_pc)
     : tsan_si(xsan_ctx.tsan_ctx_.thr_, func, caller_pc) {}
 
-bool ShouldXsanIgnoreInterceptor(XsanContext &xsan_ctx) {
+bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
   XsanThread *thread = __xsan::GetCurrentThread();
   return xsan_ignore_interceptors || !xsan_inited ||
          (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
