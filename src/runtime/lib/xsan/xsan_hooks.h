@@ -33,6 +33,8 @@ extern THREADLOCAL int is_in_symbolizer;
 inline bool in_symbolizer() { return UNLIKELY(is_in_symbolizer > 0); }
 void EnterSymbolizer();
 void ExitSymbolizer();
+bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);
+bool ShouldSanitzerIgnoreAllocFreeHook();
 
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
@@ -74,7 +76,4 @@ extern "C" void * __xsan_vfork_before_and_after();
 /// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
 extern "C" void __xsan_vfork_parent_after(void *sp);
 
-
-bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr);
-bool ShouldSanitzerIgnoreAllocFreeHook();
 }  // namespace __xsan

@@ -15,13 +15,31 @@
 #include "xsan_internal.h"
 #include "xsan_thread.h"
 
-// ---------------------- State Management Hooks --------------------
-// - in internal
-// - in symbolizer
+// ---------------------- State/Ignoration Management Hooks --------------------
+/*
+ Manage and notify the following states:
+  - if XSan is in internal
+  - if XSan is in symbolizer
+  - if XSan should ignore interceptors
+  - the exit code of XSan
+*/
 
 namespace __tsan {
 void EnterSymbolizer();
 void ExitSymbolizer();
+
+/*
+ The sub-sanitizers implement the following ignore predicates to ignore
+  - Interceptors
+  - Allocation/Free Hooks
+ which are shared by all sub-sanitizers.
+ */
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ShouldIgnoreInterceptors(ThreadState *thr) { return false; }
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ShouldIgnoreInterceptors() { return false; }
+SANITIZER_WEAK_CXX_DEFAULT_IMPL
+bool ShouldIgnoreAllocFreeHook() { return false; }
 }  // namespace __tsan
 
 namespace __xsan {
@@ -42,6 +60,24 @@ void EnterSymbolizer() {
 void ExitSymbolizer() {
   --is_in_symbolizer;
   __tsan::ExitSymbolizer();
+}
+
+bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
+  /// Avoid sanity checks in XSan internal.
+  if (IsInXsanInternal()) {
+    return true;
+  }
+  /// TODO: to support libignore, we plan to migrate it to Xsan.
+  /// xsan_suppressions.cpp is required accordingly.
+  if (xsan_thr == nullptr) {
+    return __tsan::ShouldIgnoreInterceptors();
+  } else {
+    return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);
+  }
+}
+
+bool ShouldSanitzerIgnoreAllocFreeHook() {
+  return __tsan::ShouldIgnoreAllocFreeHook();
 }
 
 }  // namespace __xsan
@@ -338,41 +374,3 @@ void AfterMmap(void *ctx, void *res, uptr size, int fd) {
 }  // namespace __xsan
 
 // ---------- End of Synchronization and File-Related Hooks ----------------
-
-// ---------- Ignoration Hooks -----------------------------------------------
-/*
- The sub-sanitizers implement the following ignore predicates to ignore
-  - Interceptors
-  - Allocation/Free Hooks
- which are shared by all sub-sanitizers.
- */
-namespace __tsan {
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool ShouldIgnoreInterceptors(ThreadState *thr) { return false; }
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool ShouldIgnoreInterceptors() { return false; }
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool ShouldIgnoreAllocFreeHook() { return false; }
-}  // namespace __tsan
-
-namespace __xsan {
-bool ShouldSanitzerIgnoreInterceptors(XsanThread *xsan_thr) {
-  /// Avoid sanity checks in XSan internal.
-  if (IsInXsanInternal()) {
-    return true;
-  }
-  /// TODO: to support libignore, we plan to migrate it to Xsan.
-  /// xsan_suppressions.cpp is required accordingly.
-  if (xsan_thr == nullptr) {
-    return __tsan::ShouldIgnoreInterceptors();
-  } else {
-    return __tsan::ShouldIgnoreInterceptors(xsan_thr->tsan_thread_);
-  }
-}
-
-bool ShouldSanitzerIgnoreAllocFreeHook() {
-  return __tsan::ShouldIgnoreAllocFreeHook();
-}
-}  // namespace __xsan
-
-// ---------- End of Ignoration Hooks -------------------------------
