@@ -7,11 +7,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "xsan_internal.h"
 #include "xsan_report.h"
 
 #include "sanitizer_common/sanitizer_symbolizer.h"
-
+#include "xsan_internal.h"
 
 namespace __asan {
 /// ASan modifies the global memory structure, so we need to correct the

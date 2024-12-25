@@ -53,6 +53,10 @@
 # error "ThreadSanitizer is supported only on 64-bit platforms"
 #endif
 
+namespace __xsan {
+class XsanThread;
+}  // namespace __xsan
+
 namespace __tsan {
 
 #if !SANITIZER_GO

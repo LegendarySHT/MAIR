@@ -8,14 +8,12 @@
 #include <sanitizer_common/sanitizer_tls_get_addr.h>
 
 #include "asan/asan_thread.h"
-#include "asan/orig/asan_internal.h"
-#include "lsan/lsan_common.h"
-#include "tsan_rtl.h"
-#include "xsan_allocator.h"
+#include "tsan/tsan_rtl.h"
+#include "xsan_common_defs.h"
+#include "xsan_hooks.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
-#include "xsan_stack.h"
-#include "xsan_hooks.h"
+
 namespace __xsan {
 
 XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
@@ -51,7 +49,12 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   }
 
   thread->asan_thread_ = asan_thread;
-
+# if XSAN_CONTAINS_ASAN
+  thread->tid_ = asan_thread->tid();
+#else
+  static u32 tid = 0;
+  thread->tid_ = tid++;
+# endif
   return thread;
 }
 
@@ -231,11 +234,6 @@ void XsanThread::SetThreadStackAndTls(const InitOptions *options) {
 }
 
 #endif  // !SANITIZER_FUCHSIA
-
-bool XsanThread::GetStackFrameAccessByAddr(uptr addr,
-                                           StackFrameAccess *access) {
-  return asan_thread_->GetStackFrameAccessByAddr(addr, access);
-}
 
 uptr XsanThread::GetStackVariableShadowStart(uptr addr) {
   return asan_thread_->GetStackVariableShadowStart(addr);

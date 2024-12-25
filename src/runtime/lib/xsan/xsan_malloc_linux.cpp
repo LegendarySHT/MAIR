@@ -10,7 +10,6 @@
 #  include "xsan_interceptors.h"
 #  include "xsan_internal.h"
 #  include "xsan_stack.h"
-#  include "xsan_thread.h"
 
 #  include <lsan/lsan_common.h>
 #  include <sanitizer_common/sanitizer_allocator_checks.h>

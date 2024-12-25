@@ -10,7 +10,6 @@
 #include "asan/orig/asan_suppressions.h"
 #include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
-#include "tsan/orig/tsan_fd.h"
 #include "tsan/tsan_interceptors.h"
 #include "tsan/tsan_rtl.h"
 #include "xsan_hooks.h"

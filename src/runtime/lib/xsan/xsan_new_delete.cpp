@@ -16,9 +16,9 @@
 #include "asan_report.h"
 #include "interception/interception.h"
 #include "xsan_allocator.h"
+#include "xsan_interceptors.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
-#include "xsan_thread.h"
 
 // C++ operators can't have dllexport attributes on Windows. We export them
 // anyway by passing extra -export flags to the linker, which is exactly that

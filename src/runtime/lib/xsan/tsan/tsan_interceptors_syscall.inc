@@ -1,3 +1,15 @@
+namespace __tsan {
+  void Acquire(ThreadState *thr, uptr pc, uptr addr);
+  void Release(ThreadState *thr, uptr pc, uptr addr);
+  void FdClose(ThreadState *thr, uptr pc, int fd, bool write = true);
+  void FdAcquire(ThreadState *thr, uptr pc, int fd);
+  void FdRelease(ThreadState *thr, uptr pc, int fd);
+  void FdOnFork(ThreadState *thr, uptr pc);
+  void ForkBefore(ThreadState *thr, uptr pc);
+  void ForkChildAfter(ThreadState *thr, uptr pc, bool start_thread);
+  void ForkParentAfter(ThreadState *thr, uptr pc);
+} // namespace __tsan
+
 static USED void syscall_acquire(uptr pc, uptr addr) {
   XSAN_SYSCALL();
   __tsan::Acquire(__tsan::cur_thread(), pc, addr);

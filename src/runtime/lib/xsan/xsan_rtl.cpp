@@ -143,9 +143,14 @@ static void XsanInitInternal() {
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   CheckAndProtect();
-  __asan::AsanInitFromXsan();
-
-  __tsan::TsanInitFromXsan();
+  {
+    ScopedSanitizerToolName tool_name("AddressSanitizer");
+    __asan::AsanInitFromXsan();
+  }
+  {
+    ScopedSanitizerToolName tool_name("ThreadSanitizer");
+    __tsan::TsanInitFromXsan();
+  }
 
  
 
@@ -166,10 +171,14 @@ static void XsanInitInternal() {
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-
-  __asan::AsanInitFromXsanLate();
-
-  __tsan::TsanInitFromXsanLate();
+  {
+    ScopedSanitizerToolName tool_name("AddressSanitizer");
+    __asan::AsanInitFromXsanLate();
+  }
+  {
+    ScopedSanitizerToolName tool_name("ThreadSanitizer");
+    __tsan::TsanInitFromXsanLate();
+  }
 
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);

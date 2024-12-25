@@ -1,13 +1,6 @@
 #include "xsan_allocator.h"
 
-// #include "xsan_mapping.h"
-// #include "xsan_poisoning.h"
-// #include "xsan_report.h"
-#include "asan_allocator.h"
-#include "xsan_internal.h"
-#include "xsan_stack.h"
-#include "xsan_thread.h"
-// #include "xsan_thread.h"
+#include "asan/asan_allocator.h"
 #include <lsan/lsan_common.h>
 #include <sanitizer_common/sanitizer_allocator_checks.h>
 #include <sanitizer_common/sanitizer_allocator_interface.h>
@@ -17,6 +10,13 @@
 #include <sanitizer_common/sanitizer_list.h>
 #include <sanitizer_common/sanitizer_quarantine.h>
 #include <sanitizer_common/sanitizer_stackdepot.h>
+
+namespace __tsan {
+struct ScopedGlobalProcessor {
+  ScopedGlobalProcessor();
+  ~ScopedGlobalProcessor();
+};
+}
 
 namespace __xsan {
 

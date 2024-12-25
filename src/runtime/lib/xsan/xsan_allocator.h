@@ -5,8 +5,6 @@
 #include <sanitizer_common/sanitizer_platform.h>
 
 #include "asan/asan_allocator.h"
-#include "xsan_flags.h"
-#include "xsan_internal.h"
 
 namespace __xsan {
 

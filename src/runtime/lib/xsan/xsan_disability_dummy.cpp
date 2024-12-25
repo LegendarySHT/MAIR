@@ -5,8 +5,6 @@
     but they are not used by XSan.
 */
 
-#include "xsan_internal.h"
-
 /// TODO: Delegate these function implemantations to XSan or remove
 /// all the references to these symbols.
 namespace __asan {

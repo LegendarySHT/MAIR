@@ -4,36 +4,25 @@
 #include <sanitizer_common/sanitizer_libc.h>
 #include <sanitizer_common/sanitizer_thread_registry.h>
 
-#include "asan/asan_thread.h"
-#include "asan_internal.h"
-#include "tsan/tsan_rtl.h"
-#include "xsan_allocator.h"
-#include "xsan_interceptors.h"
 #include "xsan_internal.h"
 
 namespace __sanitizer {
 struct DTLS;
 }  // namespace __sanitizer
 
-namespace __xsan {
+namespace __tsan {
+struct ThreadState;
+}  // namespace __tsan
 
-/// Represents the extra arguments for alloc. series APIs
-/// - ASan needs:
-///     - BufferredStackTrace *stack
-/// - TSan needs:
-///     - ThreadState *thr
-///     - uptr pc
-struct TsanArgs {
-  __tsan::ThreadState *thr_;
-  uptr pc_;
-};
+namespace __asan {
+class AsanThread;
+}  // namespace __asan
+
+namespace __xsan {
 
 /// FIXME: Should we actually need such a complex class?
 // XsanThread are stored in TSD and destroyed when the thread dies.
 class XsanThread {
- public:
-  using StackFrameAccess = __asan::AsanThread::StackFrameAccess;
-
  public:
   static XsanThread *Create(thread_callback_t start_routine, void *arg,
                             u32 parent_tid, StackTrace *stack, bool detached);
@@ -56,9 +45,7 @@ class XsanThread {
   uptr tls_begin() { return tls_begin_; }
   uptr tls_end() { return tls_end_; }
   DTLS *dtls() { return dtls_; }
-  u32 tid() { return asan_thread_->tid(); }
-
-  bool GetStackFrameAccessByAddr(uptr addr, StackFrameAccess *access);
+  u32 tid() { return tid_; }
 
   // Returns a pointer to the start of the stack variable's shadow memory.
   uptr GetStackVariableShadowStart(uptr addr);
@@ -106,6 +93,8 @@ class XsanThread {
 
   thread_callback_t start_routine_;
   void *arg_;
+
+  u32 tid_;
 
   uptr stack_top_;
   uptr stack_bottom_;

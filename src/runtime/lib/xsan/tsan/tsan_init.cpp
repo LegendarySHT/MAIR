@@ -121,7 +121,6 @@ void TsanInitFromXsan() {
   // Thread safe because done before all threads exist.
   if (is_initialized)
     return;
-  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
 
   cur_thread_init();
   is_initialized = true;

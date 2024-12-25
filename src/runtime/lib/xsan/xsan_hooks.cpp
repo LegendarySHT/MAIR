@@ -14,7 +14,6 @@
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
-#include "xsan_thread.h"
 
 // ---------------------- State/Ignoration Management Hooks --------------------
 /*

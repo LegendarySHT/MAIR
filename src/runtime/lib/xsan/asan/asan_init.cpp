@@ -214,8 +214,6 @@ static NOINLINE void force_interface_symbols() {
 
 
 void AsanInitFromXsan() {
-  __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
-
   if (LIKELY(asan_inited)) return;
   SanitizerToolName = "AddressSanitizer";
   CHECK(!asan_init_is_running && "ASan init calls itself!");
@@ -351,7 +349,6 @@ void AsanInitFromXsan() {
 }
 
 void AsanInitFromXsanLate() {
-  __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
 
   if (flags()->atexit)
     Atexit(asan_atexit);
