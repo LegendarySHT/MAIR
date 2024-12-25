@@ -1,4 +1,4 @@
-//===-- hwasan_setjmp_aarch64.S -------------------------------------------===//
+//===-- hwasan_setjmp_riscv64.S -------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,14 +7,14 @@
 //===----------------------------------------------------------------------===//
 //
 // This file is a part of HWAddressSanitizer.
-//
+// setjmp interceptor for risc-v.
 // HWAddressSanitizer runtime.
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common/sanitizer_asm.h"
 #include "builtins/assembly.h"
 
-#if HWASAN_WITH_INTERCEPTORS && defined(__aarch64__)
+#if HWASAN_WITH_INTERCEPTORS && defined(__riscv) && (__riscv_xlen == 64)
 #include "sanitizer_common/sanitizer_platform.h"
 
 // We want to save the context of the calling function.
@@ -29,74 +29,64 @@
 // Hence we have to write this function in assembly.
 
 .section .text
-.file "hwasan_setjmp_aarch64.S"
+.file "hwasan_setjmp_riscv64.S"
 
 .global ASM_WRAPPER_NAME(setjmp)
 ASM_TYPE_FUNCTION(ASM_WRAPPER_NAME(setjmp))
 ASM_WRAPPER_NAME(setjmp):
   CFI_STARTPROC
-  BTI_C
-  mov	x1, #0
-  b	ASM_WRAPPER_NAME(sigsetjmp)
+  addi x11, x0, 0
+  tail ASM_WRAPPER_NAME(sigsetjmp)
   CFI_ENDPROC
 ASM_SIZE(ASM_WRAPPER_NAME(setjmp))
-
-ASM_INTERCEPTOR_TRAMPOLINE(setjmp)
-
-#if SANITIZER_ANDROID
-// Bionic also defines a function `setjmp` that calls `sigsetjmp` saving the
-// current signal.
-.global ASM_WRAPPER_NAME(setjmp_bionic)
-ASM_TYPE_FUNCTION(ASM_WRAPPER_NAME(setjmp_bionic))
-ASM_WRAPPER_NAME(setjmp_bionic):
-  CFI_STARTPROC
-  BTI_C
-  mov	x1, #1
-  b	ASM_WRAPPER_NAME(sigsetjmp)
-  CFI_ENDPROC
-ASM_SIZE(ASM_WRAPPER_NAME(setjmp_bionic))
-
-ASM_INTERCEPTOR_TRAMPOLINE(setjmp_bionic)
-#endif
 
 .global ASM_WRAPPER_NAME(sigsetjmp)
 ASM_TYPE_FUNCTION(ASM_WRAPPER_NAME(sigsetjmp))
 ASM_WRAPPER_NAME(sigsetjmp):
   CFI_STARTPROC
-  BTI_C
-  stp	x19, x20, [x0, #0<<3]
-  stp	x21, x22, [x0, #2<<3]
-  stp	x23, x24, [x0, #4<<3]
-  stp	x25, x26, [x0, #6<<3]
-  stp	x27, x28, [x0, #8<<3]
-  stp	x29, x30, [x0, #10<<3]
-  stp	 d8,  d9, [x0, #14<<3]
-  stp	d10, d11, [x0, #16<<3]
-  stp	d12, d13, [x0, #18<<3]
-  stp	d14, d15, [x0, #20<<3]
-  mov	x2,  sp
-  str	x2,  [x0, #13<<3]
+  sd    ra,   0<<3(x10)
+  sd    s0,   1<<3(x10)
+  sd    s1,   2<<3(x10)
+  sd    s2,   3<<3(x10)
+  sd    s3,   4<<3(x10)
+  sd    s4,   5<<3(x10)
+  sd    s5,   6<<3(x10)
+  sd    s6,   7<<3(x10)
+  sd    s7,   8<<3(x10)
+  sd    s8,   9<<3(x10)
+  sd    s9,   10<<3(x10)
+  sd    s10,  11<<3(x10)
+  sd    s11,  12<<3(x10)
+  sd    sp,   13<<3(x10)
+#if __riscv_float_abi_double
+  fsd   fs0,  14<<3(x10)
+  fsd   fs1,  15<<3(x10)
+  fsd   fs2,  16<<3(x10)
+  fsd   fs3,  17<<3(x10)
+  fsd   fs4,  18<<3(x10)
+  fsd   fs5,  19<<3(x10)
+  fsd   fs6,  20<<3(x10)
+  fsd   fs7,  21<<3(x10)
+  fsd   fs8,  22<<3(x10)
+  fsd   fs9,  23<<3(x10)
+  fsd   fs10, 24<<3(x10)
+  fsd   fs11, 25<<3(x10)
+#elif __riscv_float_abi_soft
+#else
+# error "Unsupported case"
+#endif
   // We always have the second argument to __sigjmp_save (savemask) set, since
   // the _setjmp function above has set it for us as `false`.
   // This function is defined in hwasan_interceptors.cc
-  b	__sigjmp_save
+  tail __sigjmp_save
   CFI_ENDPROC
 ASM_SIZE(ASM_WRAPPER_NAME(sigsetjmp))
 
 ASM_INTERCEPTOR_TRAMPOLINE(sigsetjmp)
-
-
-#if SANITIZER_ANDROID
-ASM_TRAMPOLINE_ALIAS(sigsetjmp, sigsetjmp)
-ASM_TRAMPOLINE_ALIAS(setjmp, setjmp_bionic)
-#else
 ASM_TRAMPOLINE_ALIAS(__sigsetjmp, sigsetjmp)
-#endif
-
+ASM_INTERCEPTOR_TRAMPOLINE(setjmp)
 ASM_TRAMPOLINE_ALIAS(_setjmp, setjmp)
 #endif
 
 // We do not need executable stack.
 NO_EXEC_STACK_DIRECTIVE
-
-GNU_PROPERTY_BTI_PAC
