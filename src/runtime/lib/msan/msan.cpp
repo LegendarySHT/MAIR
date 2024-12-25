@@ -56,12 +56,11 @@ THREADLOCAL u64 __msan_retval_tls[kMsanRetvalTlsSize / sizeof(u64)];
 SANITIZER_INTERFACE_ATTRIBUTE
 THREADLOCAL u32 __msan_retval_origin_tls;
 
-SANITIZER_INTERFACE_ATTRIBUTE
-ALIGNED(16) THREADLOCAL u64 __msan_va_arg_tls[kMsanParamTlsSize / sizeof(u64)];
+alignas(16) SANITIZER_INTERFACE_ATTRIBUTE THREADLOCAL u64
+    __msan_va_arg_tls[kMsanParamTlsSize / sizeof(u64)];
 
-SANITIZER_INTERFACE_ATTRIBUTE
-ALIGNED(16)
-THREADLOCAL u32 __msan_va_arg_origin_tls[kMsanParamTlsSize / sizeof(u32)];
+alignas(16) SANITIZER_INTERFACE_ATTRIBUTE THREADLOCAL u32
+    __msan_va_arg_origin_tls[kMsanParamTlsSize / sizeof(u32)];
 
 SANITIZER_INTERFACE_ATTRIBUTE
 THREADLOCAL u64 __msan_va_arg_overflow_size_tls;
@@ -100,7 +99,17 @@ int msan_report_count = 0;
 
 // Array of stack origins.
 // FIXME: make it resizable.
-static const uptr kNumStackOriginDescrs = 1024 * 1024;
+// Although BSS memory doesn't cost anything until used, it is limited to 2GB
+// in some configurations (e.g., "relocation R_X86_64_PC32 out of range:
+// ... is not in [-2147483648, 2147483647]; references section '.bss'").
+// We use kNumStackOriginDescrs * (sizeof(char*) + sizeof(uptr)) == 64MB.
+#if SANITIZER_PPC
+// soft_rss_limit test (release_origin.c) fails on PPC if kNumStackOriginDescrs
+// is too high
+static const uptr kNumStackOriginDescrs = 1 * 1024 * 1024;
+#else
+static const uptr kNumStackOriginDescrs = 4 * 1024 * 1024;
+#endif  // SANITIZER_PPC
 static const char *StackOriginDescr[kNumStackOriginDescrs];
 static uptr StackOriginPC[kNumStackOriginDescrs];
 static atomic_uint32_t NumStackOriginDescrs;
@@ -138,8 +147,8 @@ static void RegisterMsanFlags(FlagParser *parser, Flags *f) {
 #include "msan_flags.inc"
 #undef MSAN_FLAG
 
-  FlagHandlerKeepGoing *fh_keep_going =
-      new (FlagParser::Alloc) FlagHandlerKeepGoing(&f->halt_on_error);
+  FlagHandlerKeepGoing *fh_keep_going = new (GetGlobalLowLevelAllocator())
+      FlagHandlerKeepGoing(&f->halt_on_error);
   parser->RegisterHandler("keep_going", fh_keep_going,
                           "deprecated, use halt_on_error");
 }
@@ -225,10 +234,6 @@ static void InitializeFlags() {
   if (f->store_context_size < 1) f->store_context_size = 1;
 }
 
-void PrintWarning(uptr pc, uptr bp) {
-  PrintWarningWithOrigin(pc, bp, __msan_origin_tls);
-}
-
 void PrintWarningWithOrigin(uptr pc, uptr bp, u32 origin) {
   if (msan_expect_umr) {
     // Printf("Expected UMR\n");
@@ -303,6 +308,28 @@ u32 ChainOrigin(u32 id, StackTrace *stack) {
   return chained.raw_id();
 }
 
+// Current implementation separates the 'id_ptr' from the 'descr' and makes
+// 'descr' constant.
+// Previous implementation 'descr' is created at compile time and contains
+// '----' in the beginning.  When we see descr for the first time we replace
+// '----' with a uniq id and set the origin to (id | (31-th bit)).
+static inline void SetAllocaOrigin(void *a, uptr size, u32 *id_ptr, char *descr,
+                                   uptr pc) {
+  static const u32 dash = '-';
+  static const u32 first_timer =
+      dash + (dash << 8) + (dash << 16) + (dash << 24);
+  u32 id = *id_ptr;
+  if (id == 0 || id == first_timer) {
+    u32 idx = atomic_fetch_add(&NumStackOriginDescrs, 1, memory_order_relaxed);
+    CHECK_LT(idx, kNumStackOriginDescrs);
+    StackOriginDescr[idx] = descr;
+    StackOriginPC[idx] = pc;
+    id = Origin::CreateStackOrigin(idx).raw_id();
+    *id_ptr = id;
+  }
+  __msan_set_origin(a, size, id);
+}
+
 }  // namespace __msan
 
 void __sanitizer::BufferedStackTrace::UnwindImpl(
@@ -327,8 +354,7 @@ using namespace __msan;
 
 #define MSAN_MAYBE_WARNING(type, size)              \
   void __msan_maybe_warning_##size(type s, u32 o) { \
-    GET_CALLER_PC_BP_SP;                            \
-    (void) sp;                                      \
+    GET_CALLER_PC_BP;                               \
     if (UNLIKELY(s)) {                              \
       PrintWarningWithOrigin(pc, bp, o);            \
       if (__msan::flags()->halt_on_error) {         \
@@ -347,8 +373,7 @@ MSAN_MAYBE_WARNING(u64, 8)
   void __msan_maybe_store_origin_##size(type s, void *p, u32 o) { \
     if (UNLIKELY(s)) {                                            \
       if (__msan_get_track_origins() > 1) {                       \
-        GET_CALLER_PC_BP_SP;                                      \
-        (void) sp;                                                \
+        GET_CALLER_PC_BP;                                         \
         GET_STORE_STACK_TRACE_PC_BP(pc, bp);                      \
         o = ChainOrigin(o, &stack);                               \
       }                                                           \
@@ -362,9 +387,8 @@ MSAN_MAYBE_STORE_ORIGIN(u32, 4)
 MSAN_MAYBE_STORE_ORIGIN(u64, 8)
 
 void __msan_warning() {
-  GET_CALLER_PC_BP_SP;
-  (void)sp;
-  PrintWarning(pc, bp);
+  GET_CALLER_PC_BP;
+  PrintWarningWithOrigin(pc, bp, 0);
   if (__msan::flags()->halt_on_error) {
     if (__msan::flags()->print_stats)
       ReportStats();
@@ -374,9 +398,8 @@ void __msan_warning() {
 }
 
 void __msan_warning_noreturn() {
-  GET_CALLER_PC_BP_SP;
-  (void)sp;
-  PrintWarning(pc, bp);
+  GET_CALLER_PC_BP;
+  PrintWarningWithOrigin(pc, bp, 0);
   if (__msan::flags()->print_stats)
     ReportStats();
   Printf("Exiting\n");
@@ -384,8 +407,7 @@ void __msan_warning_noreturn() {
 }
 
 void __msan_warning_with_origin(u32 origin) {
-  GET_CALLER_PC_BP_SP;
-  (void)sp;
+  GET_CALLER_PC_BP;
   PrintWarningWithOrigin(pc, bp, origin);
   if (__msan::flags()->halt_on_error) {
     if (__msan::flags()->print_stats)
@@ -396,8 +418,7 @@ void __msan_warning_with_origin(u32 origin) {
 }
 
 void __msan_warning_with_origin_noreturn(u32 origin) {
-  GET_CALLER_PC_BP_SP;
-  (void)sp;
+  GET_CALLER_PC_BP;
   PrintWarningWithOrigin(pc, bp, origin);
   if (__msan::flags()->print_stats)
     ReportStats();
@@ -436,9 +457,11 @@ void __msan_init() {
 
   __sanitizer_set_report_path(common_flags()->log_path);
 
+  InitializePlatformEarly();
+
   InitializeInterceptors();
+  InstallAtForkHandler();
   CheckASLR();
-  InitTlsSize();
   InstallDeadlySignalHandlers(MsanOnDeadlySignal);
   InstallAtExitHandler(); // Needs __cxa_atexit interceptor.
 
@@ -454,7 +477,7 @@ void __msan_init() {
   __msan_clear_on_return();
   if (__msan_get_track_origins())
     VPrintf(1, "msan_track_origins\n");
-  if (!InitShadow(__msan_get_track_origins())) {
+  if (!InitShadowWithReExec(__msan_get_track_origins())) {
     Printf("FATAL: MemorySanitizer can not mmap the shadow memory.\n");
     Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
     Printf("FATAL: Disabling ASLR is known to cause this error.\n");
@@ -495,8 +518,7 @@ void __msan_set_expect_umr(int expect_umr) {
   if (expect_umr) {
     msan_expected_umr_found = 0;
   } else if (!msan_expected_umr_found) {
-    GET_CALLER_PC_BP_SP;
-    (void)sp;
+    GET_CALLER_PC_BP;
     GET_FATAL_STACK_TRACE_PC_BP(pc, bp);
     ReportExpectedUMRNotFound(&stack);
     Die();
@@ -544,8 +566,7 @@ void __msan_check_mem_is_initialized(const void *x, uptr size) {
   if (offset < 0)
     return;
 
-  GET_CALLER_PC_BP_SP;
-  (void)sp;
+  GET_CALLER_PC_BP;
   ReportUMRInsideAddressRange(__func__, x, size, offset);
   __msan::PrintWarningWithOrigin(pc, bp,
                                  __msan_get_origin(((const char *)x) + offset));
@@ -581,45 +602,30 @@ void __msan_set_origin(const void *a, uptr size, u32 origin) {
   if (__msan_get_track_origins()) SetOrigin(a, size, origin);
 }
 
-// 'descr' is created at compile time and contains '----' in the beginning.
-// When we see descr for the first time we replace '----' with a uniq id
-// and set the origin to (id | (31-th bit)).
 void __msan_set_alloca_origin(void *a, uptr size, char *descr) {
-  __msan_set_alloca_origin4(a, size, descr, 0);
+  SetAllocaOrigin(a, size, reinterpret_cast<u32 *>(descr), descr + 4,
+                  GET_CALLER_PC());
 }
 
 void __msan_set_alloca_origin4(void *a, uptr size, char *descr, uptr pc) {
-  static const u32 dash = '-';
-  static const u32 first_timer =
-      dash + (dash << 8) + (dash << 16) + (dash << 24);
-  u32 *id_ptr = (u32*)descr;
-  bool print = false;  // internal_strstr(descr + 4, "AllocaTOTest") != 0;
-  u32 id = *id_ptr;
-  if (id == first_timer) {
-    u32 idx = atomic_fetch_add(&NumStackOriginDescrs, 1, memory_order_relaxed);
-    CHECK_LT(idx, kNumStackOriginDescrs);
-    StackOriginDescr[idx] = descr + 4;
-#if SANITIZER_PPC64V1
-    // On PowerPC64 ELFv1, the address of a function actually points to a
-    // three-doubleword data structure with the first field containing
-    // the address of the function's code.
-    if (pc)
-      pc = *reinterpret_cast<uptr*>(pc);
-#endif
-    StackOriginPC[idx] = pc;
-    id = Origin::CreateStackOrigin(idx).raw_id();
-    *id_ptr = id;
-    if (print)
-      Printf("First time: idx=%d id=%d %s 0x%zx \n", idx, id, descr + 4, pc);
-  }
-  if (print)
-    Printf("__msan_set_alloca_origin: descr=%s id=%x\n", descr + 4, id);
-  __msan_set_origin(a, size, id);
+  // Intentionally ignore pc and use return address. This function is here for
+  // compatibility, in case program is linked with library instrumented by
+  // older clang.
+  SetAllocaOrigin(a, size, reinterpret_cast<u32 *>(descr), descr + 4,
+                  GET_CALLER_PC());
+}
+
+void __msan_set_alloca_origin_with_descr(void *a, uptr size, u32 *id_ptr,
+                                         char *descr) {
+  SetAllocaOrigin(a, size, id_ptr, descr, GET_CALLER_PC());
+}
+
+void __msan_set_alloca_origin_no_descr(void *a, uptr size, u32 *id_ptr) {
+  SetAllocaOrigin(a, size, id_ptr, nullptr, GET_CALLER_PC());
 }
 
 u32 __msan_chain_origin(u32 id) {
-  GET_CALLER_PC_BP_SP;
-  (void)sp;
+  GET_CALLER_PC_BP;
   GET_STORE_STACK_TRACE_PC_BP(pc, bp);
   return ChainOrigin(id, &stack);
 }
