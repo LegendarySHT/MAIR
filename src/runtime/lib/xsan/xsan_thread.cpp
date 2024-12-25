@@ -286,7 +286,14 @@ void XsanTSDDtor(void *tsd) {
   XsanThread::TSDDtor(tsd);
 }
 
-XsanThread *GetCurrentThread() { return xsan_current_thread; }
+XsanThread *GetCurrentThread() {
+  /// As the current tsan_thread_ might change as the fiber switch, we need to
+  /// get the current thread from the current fiber.
+  if (xsan_current_thread) {
+    xsan_current_thread->tsan_thread_ = __tsan::cur_thread();
+  }
+  return xsan_current_thread; 
+}
 
 void SetCurrentThread(XsanThread *t) {
   __asan::SetCurrentThread(t->asan_thread_);

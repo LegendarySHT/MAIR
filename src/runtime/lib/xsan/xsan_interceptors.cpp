@@ -97,9 +97,11 @@ ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
     : tsan_si(xsan_ctx.tsan_ctx_.thr_, func, caller_pc) {}
 
 bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
+  if (xsan_ignore_interceptors || !xsan_inited) {
+    return true;
+  }
   XsanThread *thread = __xsan::GetCurrentThread();
-  return xsan_ignore_interceptors || !xsan_inited ||
-         (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
+  return (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
          __xsan::ShouldSanitzerIgnoreInterceptors(xsan_ctx);
 }
 
