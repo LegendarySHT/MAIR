@@ -32,9 +32,8 @@ class XsanThread {
   struct InitOptions;
   void Init(const InitOptions *options = nullptr);
 
-  Tid PostCreateTsanThread(uptr pc, uptr uid);
-  void AsanBeforeThreadStart(tid_t os_id);
-  void TsanBeforeThreadStart(tid_t os_id);
+  Tid PostNonMainThreadCreate(uptr pc, uptr uid);
+
   /// Semaphore: comes from TSan, controlling the thread create event.
   thread_return_t ThreadStart(tid_t os_id, Semaphore *created = nullptr,
                               Semaphore *started = nullptr);
@@ -46,9 +45,6 @@ class XsanThread {
   uptr tls_end() { return tls_end_; }
   DTLS *dtls() { return dtls_; }
   u32 tid() { return tid_; }
-
-  // Returns a pointer to the start of the stack variable's shadow memory.
-  uptr GetStackVariableShadowStart(uptr addr);
 
   bool AddrIsInRealStack(uptr addr);
   /// ASan uses FakeStack to detect use-after-return bugs just like what it does
@@ -82,6 +78,16 @@ class XsanThread {
  private:
   // NOTE: There is no XsanThread constructor. It is allocated
   // via mmap() and *must* be valid in zero-initialized state.
+
+  /// Create sub-sanitizers' thread data.
+  void OnThreadCreate(thread_callback_t start_routine, void *arg,
+                      u32 parent_tid, StackTrace *stack, bool detached);
+  /// Distroy sub-sanitizers' thread data.
+  void OnThreadDestroy();
+  /// Initialize sub-sanitizers' thread data in new thread and before the real
+  /// callback execution.
+  void BeforeThreadStart(tid_t os_id);
+  void AfterThreadStart();
 
   void SetThreadStackAndTls(const InitOptions *options);
 

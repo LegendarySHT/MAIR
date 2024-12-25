@@ -1,4 +1,5 @@
 namespace __tsan {
+  struct ThreadState;
   void Acquire(ThreadState *thr, uptr pc, uptr addr);
   void Release(ThreadState *thr, uptr pc, uptr addr);
   void FdClose(ThreadState *thr, uptr pc, int fd, bool write);

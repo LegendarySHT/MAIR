@@ -561,7 +561,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   if (result == 0) {
     // sub_thread must live, as sub_thread waits for `created_.Post()`
-    sub_thread->PostCreateTsanThread(pc, *(uptr *)thread);
+    sub_thread->PostNonMainThreadCreate(pc, *(uptr *)thread);
     // Synchronization on p.tid serves two purposes:
     // 1. ThreadCreate must finish before the new thread starts.
     //    Otherwise the new thread can call pthread_detach, but the pthread_t

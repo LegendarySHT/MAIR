@@ -7,8 +7,6 @@
 #include <sanitizer_common/sanitizer_stackdepot.h>
 #include <sanitizer_common/sanitizer_tls_get_addr.h>
 
-#include "asan/asan_thread.h"
-#include "tsan/tsan_rtl.h"
 #include "xsan_common_defs.h"
 #include "xsan_hooks.h"
 #include "xsan_interceptors.h"
@@ -32,26 +30,14 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->is_main_thread_ =
       (start_routine == nullptr && parent_tid == kMainTid);
 
-  auto *asan_thread = __asan::AsanThread::Create(
-      /* start_routine */ start_routine, /* arg */ arg,
-      /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);
+  /// Create sub-sanitizers' thread data.
+  thread->OnThreadCreate(/* start_routine */ start_routine, /* arg */ arg,
+                         /* parent_tid */ parent_tid, /* stack */ stack,
+                         /* detached */ detached);
 
-  if (thread->is_main_thread_) {
-    // Main thread.
-    auto *tsan_thread = __tsan::cur_thread_init();
-    __tsan::Processor *proc = __tsan::ProcCreate();
-    __tsan::ProcWire(proc, tsan_thread);
-    thread->tsan_tid_ = __tsan::ThreadCreate(nullptr, 0, 0, true);
-    thread->tsan_thread_ = tsan_thread;
-    tsan_thread->xsan_thread = thread;
-  } else {
-    // Other thread create for TSan is called in CreateTsanThread.
-  }
-
-  thread->asan_thread_ = asan_thread;
-# if XSAN_CONTAINS_ASAN
-  thread->tid_ = asan_thread->tid();
-#else
+/// If XSan contains ASan, the tid is assigned by ASan. See OnThreadCreate for
+/// more details.
+# if !XSAN_CONTAINS_ASAN
   static u32 tid = 0;
   thread->tid_ = tid++;
 # endif
@@ -114,9 +100,10 @@ void XsanThread::Destroy() {
   //   UnsetAlternateSignalStack();
 
   uptr size = RoundUpTo(sizeof(XsanThread), GetPageSizeCached());
-  this->tsan_thread_->DestroyThreadState();
-  // Common resource, must be managed by the XSan
-  this->asan_thread_->Destroy();
+
+  // Destroy sub-sanitizers' thread data.
+  this->OnThreadDestroy();
+
   UnmapOrDie(this, size);
   DTLS_Destroy();
 }
@@ -125,30 +112,6 @@ void XsanThread::Destroy() {
 // xsan_fuchsia.c definies CreateMainThread and SetThreadStackAndTls.
 #if !SANITIZER_FUCHSIA
 
-Tid XsanThread::PostCreateTsanThread(uptr pc, uptr uid) {
-  /// TODO: merge ASan's ThreadContext and TSan's ThreadContext.
-  Tid tsan_tid = __tsan::ThreadCreate(__tsan::cur_thread_init(), pc, uid,
-                                      IsStateDetached(detached_));
-  CHECK_NE(tsan_tid, kMainTid);
-  tsan_tid_ = tsan_tid;
-
-  return tsan_tid;
-}
-
-void XsanThread::AsanBeforeThreadStart(tid_t os_id) {
-  asan_thread_->BeforeThreadStart(os_id);
-}
-
-void XsanThread::TsanBeforeThreadStart(tid_t os_id) {
-  __tsan::ThreadState *thr = tsan_thread_;
-  if (isMainThread()) {
-    __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
-  } else {
-    __tsan::Processor *proc = __tsan::ProcCreate();
-    __tsan::ProcWire(proc, thr);
-    __tsan::ThreadStart(thr, tsan_tid_, os_id, ThreadType::Regular);
-  }
-}
 
 thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semaphore *started) {
   // XSanThread doesn't have a registry.
@@ -162,8 +125,9 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
     __xsan::ScopedIgnoreInterceptors ignore;
     if (created) created->Wait();
 
-    TsanBeforeThreadStart(os_id);
-    AsanBeforeThreadStart(os_id);
+    /// Initialize sub-sanitizers' thread data in new thread and before the real
+    /// callback execution.
+    this->BeforeThreadStart(os_id);
 
     Init();
     if (started) started->Post();
@@ -185,7 +149,9 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
 
   {
     __xsan::ScopedIgnoreInterceptors ignore;
-    asan_thread_->AfterThreadStart();
+
+    this->AfterThreadStart();
+
     // On POSIX systems we defer this to the TSD destructor. LSan will consider
     // the thread's memory as non-live from the moment we call Destroy(), even
     // though that memory might contain pointers to heap objects which will be
@@ -235,21 +201,15 @@ void XsanThread::SetThreadStackAndTls(const InitOptions *options) {
 
 #endif  // !SANITIZER_FUCHSIA
 
-uptr XsanThread::GetStackVariableShadowStart(uptr addr) {
-  return asan_thread_->GetStackVariableShadowStart(addr);
-}
 
 bool XsanThread::AddrIsInRealStack(uptr addr) {
   const auto bounds = GetStackBounds();
   return addr >= bounds.bottom && addr < bounds.top;
 }
 
+bool IsInFakeStack(const XsanThread *thr, uptr addr);
 bool XsanThread::AddrIsInFakeStack(uptr addr) {
-  __asan::FakeStack *fake_stack = this->asan_thread_->get_fake_stack();
-  if (fake_stack) {
-    return fake_stack->AddrIsInFakeStack((uptr)addr);
-  }
-  return false;
+  return IsInFakeStack(this, addr);
 }
 
 bool XsanThread::AddrIsInStack(uptr addr) {
@@ -293,11 +253,10 @@ XsanThread *GetCurrentThread() {
   return xsan_current_thread; 
 }
 
+void OnSetCurrentThread(XsanThread *t);
 void SetCurrentThread(XsanThread *t) {
-  __asan::SetCurrentThread(t->asan_thread_);
-  auto *tsan_thread = __tsan::SetCurrentThread();
-  t->tsan_thread_ = tsan_thread;
-  tsan_thread->xsan_thread = t;
+  // Set current thread for each sub-sanitizer.
+  OnSetCurrentThread(t);
 
   // Make sure we do not reset the current XsanThread.
   CHECK_EQ(0, xsan_current_thread);
