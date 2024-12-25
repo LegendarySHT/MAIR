@@ -365,29 +365,45 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  endif
 
 #  if XSAN_CONTAINS_TSAN
+/* These MACROs are only defined by TSan,
+   hence we directly use their definitions in TSan.
+      COMMON_INTERCEPTOR_BLOCK_REAL
+      COMMON_INTERCEPTOR_FILE_OPEN
+      COMMON_INTERCEPTOR_FILE_CLOSE
+      COMMON_INTERCEPTOR_ACQUIRE
+      COMMON_INTERCEPTOR_RELEASE
+      COMMON_INTERCEPTOR_DIR_ACQUIRE
+      COMMON_INTERCEPTOR_FD_ACQUIRE
+      COMMON_INTERCEPTOR_FD_RELEASE
+      COMMON_INTERCEPTOR_FD_ACCESS
+      COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT
+      COMMON_INTERCEPTOR_USER_CALLBACK_START
+      COMMON_INTERCEPTOR_USER_CALLBACK_END
+      COMMON_INTERCEPTOR_HANDLE_RECVMSG
+ */
 
-#    define COMMON_INTERCEPTOR_BLOCK_REAL(name) \
-      (__tsan::BlockingCall(xsan_ctx.tsan_ctx_.thr_), REAL(name))
-
-#    define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
-      __xsan::OnFileOpen(ctx, file, path)
-#    define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) \
-      __xsan::OnFileClose(ctx, file)
-#    define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) __xsan::OnAcquire(ctx, u)
-#    define COMMON_INTERCEPTOR_RELEASE(ctx, u) __xsan::OnRelease(ctx, u)
-#    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
-      __xsan::OnDirAcquire(ctx, path)
-#    define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) __xsan::OnFdAcquire(ctx, fd)
-#    define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) __xsan::OnFdRelease(ctx, fd)
-#    define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) __xsan::OnFdAccess(ctx, fd)
-#    define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
-      __xsan::OnFdSocketAccept(ctx, fd, newfd)
-#    define COMMON_INTERCEPTOR_USER_CALLBACK_START() xsi.DisableIgnores();
-#    define COMMON_INTERCEPTOR_USER_CALLBACK_END() xsi.EnableIgnores();
-#    if !SANITIZER_APPLE
-#      define COMMON_INTERCEPTOR_HANDLE_RECVMSG(ctx, msg) \
-        __xsan::OnHandleRecvmsg((ctx), (msg));
-#    endif
+// #    define COMMON_INTERCEPTOR_BLOCK_REAL(name) \
+//       (__tsan::BlockingCall(xsan_ctx.tsan_ctx_.thr_), REAL(name))
+// #    define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
+//       __xsan::OnFileOpen(ctx, file, path)
+// #    define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) \
+//       __xsan::OnFileClose(ctx, file)
+// #    define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) __xsan::OnAcquire(ctx, u)
+// #    define COMMON_INTERCEPTOR_RELEASE(ctx, u) __xsan::OnRelease(ctx, u)
+// #    define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
+//       __xsan::OnDirAcquire(ctx, path)
+// #    define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) __xsan::OnFdAcquire(ctx, fd)
+// #    define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) __xsan::OnFdRelease(ctx, fd)
+// #    define COMMON_INTERCEPTOR_FD_ACCESS(ctx, fd) __xsan::OnFdAccess(ctx, fd)
+// #    define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
+//       __xsan::OnFdSocketAccept(ctx, fd, newfd)
+// #    define COMMON_INTERCEPTOR_USER_CALLBACK_START() xsi.DisableIgnores();
+// #    define COMMON_INTERCEPTOR_USER_CALLBACK_END() xsi.EnableIgnores();
+// #    if !SANITIZER_APPLE
+// #      define COMMON_INTERCEPTOR_HANDLE_RECVMSG(ctx, msg) \
+//         __xsan::OnHandleRecvmsg((ctx), (msg));
+// #    endif
+#    include "tsan/tsan_interceptors_common.inc"
 
 #  else
 #    define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)

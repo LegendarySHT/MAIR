@@ -1,7 +1,7 @@
 namespace __tsan {
   void Acquire(ThreadState *thr, uptr pc, uptr addr);
   void Release(ThreadState *thr, uptr pc, uptr addr);
-  void FdClose(ThreadState *thr, uptr pc, int fd, bool write = true);
+  void FdClose(ThreadState *thr, uptr pc, int fd, bool write);
   void FdAcquire(ThreadState *thr, uptr pc, int fd);
   void FdRelease(ThreadState *thr, uptr pc, int fd);
   void FdOnFork(ThreadState *thr, uptr pc);
@@ -23,7 +23,7 @@ static USED void syscall_release(uptr pc, uptr addr) {
 }
 
 static void syscall_fd_close(uptr pc, int fd) {
-  __tsan::FdClose(__tsan::cur_thread(), pc, fd);
+  __tsan::FdClose(__tsan::cur_thread(), pc, fd, true);
 }
 
 static USED void syscall_fd_acquire(uptr pc, int fd) {
