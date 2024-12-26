@@ -9,19 +9,26 @@ include(SanitizerUtils)
 #
 #TODO: Refactor sanitizer_common into smaller pieces (e.g. flag parsing, utils).
 if (COMPILER_RT_HAS_SANITIZER_COMMON AND
-    (COMPILER_RT_BUILD_SANITIZERS OR COMPILER_RT_BUILD_XRAY OR COMPILER_RT_BUILD_MEMPROF))
+    (COMPILER_RT_BUILD_SANITIZERS OR COMPILER_RT_BUILD_XRAY OR COMPILER_RT_BUILD_MEMPROF OR COMPILER_RT_BUILD_CTX_PROFILE))
   add_subdirectory(sanitizer_common)
 endif()
 
-
+# Diable the building of builtins for now.
+# if(COMPILER_RT_BUILD_BUILTINS)
+#   add_subdirectory(builtins)
+# endif()
 
 function(compiler_rt_build_runtime runtime)
   string(TOUPPER ${runtime} runtime_uppercase)
   if(COMPILER_RT_HAS_${runtime_uppercase})
-    add_subdirectory(${runtime})
     if(${runtime} STREQUAL tsan)
       # tsan/dd is a separate runtime library so that directly being added here.
       add_subdirectory(tsan/dd)
+    endif()
+    if(${runtime} STREQUAL scudo_standalone)
+      add_subdirectory(scudo/standalone)
+    else()
+      add_subdirectory(${runtime})
     endif()
   endif()
 endfunction()
@@ -32,23 +39,47 @@ endif()
 
 if(COMPILER_RT_BUILD_SANITIZERS)
   if(COMPILER_RT_HAS_SANITIZER_COMMON)
+    # Disable the building of stats for now.
     # add_subdirectory(stats)
+    # Contains RTLSanCommon used even without COMPILER_RT_HAS_LSAN.
     add_subdirectory(lsan)
+    # Contains RTUbsan used even without COMPILER_RT_HAS_UBSAN.
     add_subdirectory(ubsan)
   endif()
 
   foreach(sanitizer ${COMPILER_RT_SANITIZERS_TO_BUILD})
     compiler_rt_build_runtime(${sanitizer})
   endforeach()
-
+  
+  # Add our XSan runtime here, which is not controlled by COMPILER_RT_SANITIZERS_TO_BUILD.
   add_subdirectory(xsan)
 endif()
 
+### Disable the following runtimes for now.
+# if(COMPILER_RT_BUILD_PROFILE)
+#   compiler_rt_build_runtime(profile)
+# endif()
+
+# if(COMPILER_RT_BUILD_CTX_PROFILE)
+#   compiler_rt_build_runtime(ctx_profile)
+# endif()
+
+# if(COMPILER_RT_BUILD_XRAY)
+#   compiler_rt_build_runtime(xray)
+# endif()
 
 if(COMPILER_RT_BUILD_LIBFUZZER)
   compiler_rt_build_runtime(fuzzer)
 endif()
 
+### Disable the following runtimes for now.
+# if(COMPILER_RT_BUILD_MEMPROF AND COMPILER_RT_HAS_SANITIZER_COMMON)
+#   compiler_rt_build_runtime(memprof)
+# endif()
+
+# if(COMPILER_RT_BUILD_ORC)
+#   compiler_rt_build_runtime(orc)
+# endif()
 
 # It doesn't normally make sense to build runtimes when a sanitizer is enabled,
 # so we don't add_subdirectory the runtimes in that case. However, the opposite
