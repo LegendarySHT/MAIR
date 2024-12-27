@@ -259,6 +259,10 @@ else()
       STATIC
       ARCHS ${arch}
       SOURCES ${TSAN_CXX_SOURCES}
+              # In clang-15, UBSan's func check relys on RTTI.
+              # In clang-20, UBSan use embeded func ty hash instead.
+              # Hence, the following line could be eliminated in clang-20.
+              $<TARGET_OBJECTS:RTUbsan_cxx.${arch}>
       ADDITIONAL_HEADERS ${TSAN_HEADERS}
       CFLAGS ${TSAN_RTL_CFLAGS}
       PARENT_TARGET tsan)

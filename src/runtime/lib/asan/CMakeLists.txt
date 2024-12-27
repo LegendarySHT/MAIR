@@ -260,6 +260,10 @@ else()
       STATIC
       ARCHS ${ASAN_SUPPORTED_ARCH}
       OBJECT_LIBS RTAsan_cxx
+                  # In clang-15, UBSan's func check relys on RTTI.
+                  # In clang-20, UBSan use embeded func ty hash instead.
+                  # Hence, the following line could be eliminated in clang-20.
+                  RTUbsan_cxx
       CFLAGS ${ASAN_CFLAGS}
       DEFS ${ASAN_COMMON_DEFINITIONS}
       PARENT_TARGET asan)
