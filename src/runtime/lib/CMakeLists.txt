@@ -52,14 +52,14 @@ if(COMPILER_RT_BUILD_SANITIZERS)
   endforeach()
   
   # Add our XSan runtime here, which is not controlled by COMPILER_RT_SANITIZERS_TO_BUILD.
-  add_subdirectory(xsan)
+  # add_subdirectory(xsan)
+endif()
+
+if(COMPILER_RT_BUILD_PROFILE)
+  compiler_rt_build_runtime(profile)
 endif()
 
 ### Disable the following runtimes for now.
-# if(COMPILER_RT_BUILD_PROFILE)
-#   compiler_rt_build_runtime(profile)
-# endif()
-
 # if(COMPILER_RT_BUILD_CTX_PROFILE)
 #   compiler_rt_build_runtime(ctx_profile)
 # endif()
