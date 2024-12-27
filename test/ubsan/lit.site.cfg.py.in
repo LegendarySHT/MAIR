@@ -3,9 +3,9 @@
 # Tool-specific config options.
 config.name_suffix = "@CONFIG_NAME@"
 config.ubsan_lit_test_mode = "@UBSAN_LIT_TEST_MODE@"
-config.clang = "@XSAN_TEST_TARGET_CC@"
+config.clang = "@UBSAN_TEST_TARGET_CC@"
 config.target_cflags = "@UBSAN_TEST_TARGET_CFLAGS@"
-config.target_arch = "@XSAN_TEST_TARGET_ARCH@"
+config.target_arch = "@UBSAN_TEST_TARGET_ARCH@"
 config.use_lld = @UBSAN_TEST_USE_LLD@
 config.use_thinlto = @UBSAN_TEST_USE_THINLTO@
 config.apple_platform = "@UBSAN_TEST_APPLE_PLATFORM@"

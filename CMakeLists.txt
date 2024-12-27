@@ -50,23 +50,36 @@ find_package(LLVM REQUIRED CONFIG)
 list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake/Modules"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
 )
 
+include(Message) # introduce message_green()... function
 include(AllSupportedArchDefs)
+
+# Notify user to specify the LLVM_PATH, otherwise we cannot
+# enable the full support of XSAN.
+# LLVM_PATH could be set by environment variable or CMake variable.
+if(NOT LLVM_PATH)
+  message(WARNING "LLVM_PATH is not set. Please set it to your LLVM source directory.")
+else()
+  include(HandleOutOfTreeLLVM)
+  set(LLVM_THIRD_PARTY_DIR ${LLVM_PATH}/third-party)
+endif()
+
+
+
+
+# Now we only support x86_64
 set(XSAN_SUPPORTED_ARCH ${X86_64})
-
-
-
-message(STATUS "XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
+message_green("XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
 
 set(XSAN_BIN_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
 # TODO: de-hardcode this
 set(XSAN_COMMON_LIT_CONFIGURE_PATH
-${CMAKE_BINARY_DIR}/test/lit.common.configured)
+  ${CMAKE_BINARY_DIR}/test/lit.common.configured)
 
 add_subdirectory(src)
 add_subdirectory(test)

@@ -1,3 +1,5 @@
+# Use green color to notify that test building is in progress.
+message_green("Building tests for Xsan")
 # This file is modified from src/runtime/test/asan/CMakeLists.txt
 set(XSAN_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SANITIZER_COMMON_LIT_TEST_DEPS)
@@ -12,6 +14,8 @@ set(ASAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 set(TSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 # set(MSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 
+# To make `get_test_cc_for_arch` happy
+set(COMPILER_RT_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 
 list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake"

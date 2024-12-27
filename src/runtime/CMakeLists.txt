@@ -7,6 +7,10 @@ cmake_minimum_required(VERSION 3.20.0)
 set(LLVM_SUBPROJECT_TITLE "Compiler-RT")
 # We build runtime standalone but not adhere monorepo building, so we need to set this variable to true.
 set(COMPILER_RT_STANDALONE_BUILD TRUE)
+# Turn on the option to build tests if LLVM_MAIN_SRC_DIR is set
+if(DEFINED LLVM_MAIN_SRC_DIR)
+  set(COMPILER_RT_INCLUDE_TESTS ON)
+endif()
 
 if(NOT DEFINED LLVM_COMMON_CMAKE_UTILS)
   set(LLVM_COMMON_CMAKE_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
@@ -726,14 +730,17 @@ elseif (SANITIZER_TEST_CXX_LIBNAME STREQUAL "libstdc++")
   append_list_if(COMPILER_RT_HAS_LIBSTDCXX -lstdc++ SANITIZER_TEST_CXX_LIBRARIES)
 endif()
 
-# Unittests support.
-# FIXME: When compiler-rt is build using -DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON, then
-# The LLVM_THIRD_PARTY_DIR variable is not set.
-if (NOT LLVM_THIRD_PARTY_DIR)
-  set(LLVM_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third-party")
-endif()
 
-set(COMPILER_RT_GTEST_PATH ${LLVM_THIRD_PARTY_DIR}/unittest/googletest)
+### TODO: In LLVM 15, unittests module still stays in ${LLVM_MAIN_SRC_DIR}/unittest
+###       In LLVM 20, unittests module is moved to ${LLVM_THIRD_PARTY_DIR}/unittest
+# # Unittests support.
+# # FIXME: When compiler-rt is build using -DLLVM_BUILD_EXTERNAL_COMPILER_RT=ON, then
+# # The LLVM_THIRD_PARTY_DIR variable is not set.
+# if (NOT LLVM_THIRD_PARTY_DIR)
+#   set(LLVM_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third-party")
+# endif()
+
+set(COMPILER_RT_GTEST_PATH ${LLVM_MAIN_SRC_DIR}/unittest/googletest)
 set(COMPILER_RT_GTEST_SOURCE ${COMPILER_RT_GTEST_PATH}/src/gtest-all.cc)
 set(COMPILER_RT_GTEST_CFLAGS
   -DGTEST_NO_LLVM_SUPPORT=1
@@ -743,7 +750,7 @@ set(COMPILER_RT_GTEST_CFLAGS
 )
 
 # Mocking support.
-set(COMPILER_RT_GMOCK_PATH ${LLVM_THIRD_PARTY_DIR}/unittest/googlemock)
+set(COMPILER_RT_GMOCK_PATH ${LLVM_MAIN_SRC_DIR}/unittest/googlemock)
 set(COMPILER_RT_GMOCK_SOURCE ${COMPILER_RT_GMOCK_PATH}/src/gmock-all.cc)
 set(COMPILER_RT_GMOCK_CFLAGS
   -DGTEST_NO_LLVM_SUPPORT=1
@@ -854,8 +861,6 @@ mark_as_advanced(COMPILER_RT_ENABLE_INTERNAL_SYMBOLIZER)
 
 add_subdirectory(lib)
 
-# enable COMPILER_RT_INCLUDE_TESTS
-option(COMPILER_RT_INCLUDE_TESTS "Build compiler-rt tests" ON)
 
 if(COMPILER_RT_INCLUDE_TESTS)
   # Don't build llvm-lit for runtimes-build, it will clean up map_config.
@@ -872,12 +877,21 @@ if(COMPILER_RT_INCLUDE_TESTS)
       get_llvm_lit_path(_base_dir _file_name)
       set(LLVM_EXTERNAL_LIT "${_base_dir}/${_file_name}" CACHE STRING "Command used to spawn lit" FORCE)
     elseif(NOT EXISTS ${LLVM_EXTERNAL_LIT})
-      message(WARNING "Could not find LLVM source directory and LLVM_EXTERNAL_LIT does not"
-                       "point to a valid file.  You will not be able to run tests.")
+      # Set LLVM_EXTERNAL_LIT according to LLVM_DIR if ${LLVM_DIR} exists.
+      if(LLVM_DIR)
+        get_filename_component(LLVM_EXTERNAL_LIT "${LLVM_DIR}/bin/llvm-lit" ABSOLUTE)
+      else()
+        message(WARNING "Could not find LLVM source directory and LLVM_EXTERNAL_LIT does not"
+                        "point to a valid file.  You will not be able to run tests.")
+      endif()
     endif()
   endif()
   # Diable unittests temporarily.
   # add_subdirectory(unittests)
+  add_subdirectory(test)
+elseif(XSAN_COMMON_LIT_CONFIGURE_PATH)
+  #  If XSAN_COMMON_LIT_CONFIGURE_PATH is set, we need add_subdirectory(test) to
+  #  generate lit.common.configure.
   add_subdirectory(test)
 endif()
 
