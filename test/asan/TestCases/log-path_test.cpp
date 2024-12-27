@@ -16,10 +16,9 @@
 // RUN: %env_asan_opts=log_path=%t.log not %run %t 2> %t.out
 // RUN: FileCheck %s --check-prefix=CHECK-ERROR < %t.log.*
 
-// Invalid log_path in existing directory. 
-// (The orginal test is wrong in Docker, as the root privilege)
-// %env_asan_opts=log_path=/INVALID not %run %t 2> %t.out
-// FileCheck %s --check-prefix=CHECK-INVALID < %t.out
+// Invalid log_path in existing directory.
+// RUN: %env_asan_opts=log_path=/INVALID not %run %t 2> %t.out
+// RUN: FileCheck %s --check-prefix=CHECK-INVALID < %t.out
 
 // Directory of log_path can't be created.
 // RUN: %env_asan_opts=log_path=/dev/null/INVALID not %run %t 2> %t.out
@@ -36,7 +35,7 @@
 // RUN: not cat %t.log.*
 
 // FIXME: log_path is not supported on Windows yet.
-// XFAIL: windows-msvc
+// XFAIL: target={{.*windows-msvc.*}}
 
 #include <stdlib.h>
 #include <string.h>
