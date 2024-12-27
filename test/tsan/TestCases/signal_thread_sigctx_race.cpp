@@ -1,5 +1,6 @@
 // RUN: %clangxx_tsan %s -o %t && %run %t 2>&1 | FileCheck %s
 // UNSUPPORTED: darwin
+
 #include <errno.h>
 #include <limits.h>
 #include <pthread.h>
@@ -10,6 +11,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 // This attempts to exercise a race condition where both a thread and its signal
 // handler allocate the SigCtx. If the race is allowed, it leads to a leak and
 // the first signal being dropped.
@@ -18,6 +20,7 @@
 // thread detects and then exits. A dropped signal results in a timeout.
 int pipes[2];
 static void handler(int sig) { write(pipes[1], "x", 1); }
+
 static int do_select() {
   struct timeval tvs {
     0, 1000
@@ -27,6 +30,7 @@ static int do_select() {
   FD_SET(pipes[0], &fds);
   return select(pipes[0] + 1, &fds, 0, 0, &tvs);
 }
+
 static void *thr(void *p) {
   // This kill() is expected to fail; it exists only to trigger a call to SigCtx
   // outside of the signal handler.
@@ -47,17 +51,20 @@ static void *thr(void *p) {
   }
   return p;
 }
+
 int main() {
   if (pipe(pipes)) {
     perror("pipe");
     exit(1);
   }
+
   struct sigaction act = {};
   act.sa_handler = &handler;
   if (sigaction(SIGUSR1, &act, 0)) {
     perror("sigaction");
     exit(1);
   }
+
   for (int i = 0; i < (1 << 10); i++) {
     pthread_t th{};
     if (pthread_create(&th, 0, thr, 0)) {
@@ -67,9 +74,11 @@ int main() {
     pthread_kill(th, SIGUSR1);
     pthread_join(th, 0);
   }
+
   fprintf(stderr, "DONE\n");
   return 0;
 }
+
 // CHECK-NOT: WARNING: ThreadSanitizer:
 // CHECK: DONE
 // CHECK-NOT: WARNING: ThreadSanitizer:

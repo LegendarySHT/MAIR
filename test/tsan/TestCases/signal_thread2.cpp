@@ -1,21 +1,22 @@
-// RUN: %clangxx_tsan -O1 %s -o %t && %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx_tsan %s -o %t && %run %t 2>&1 | FileCheck %s
 // UNSUPPORTED: darwin
 
 // FIXME: Very flaky on PPC with COMPILER_RT_DEBUG.
 // https://github.com/google/sanitizers/issues/1792
 // UNSUPPORTED: !compiler-rt-optimized && ppc
 
+// Test case for https://github.com/google/sanitizers/issues/1540
+
+#include <errno.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
-#include <sys/types.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <errno.h>
 
 volatile int X;
-int stop;
 
 static void handler(int sig) {
   (void)sig;
@@ -23,32 +24,23 @@ static void handler(int sig) {
     printf("bad");
 }
 
-static void* busy(void *p) {
-  while (__atomic_load_n(&stop, __ATOMIC_RELAXED) == 0) {
-  }
+static void *thr1(void *p) {
+  sleep(1);
   return 0;
 }
 
-static void* reset(void *p) {
-  struct sigaction act = {};
-  for (int i = 0; i < 1000000; i++) {
-    act.sa_handler = &handler;
-    if (sigaction(SIGPROF, &act, 0)) {
-      perror("sigaction");
-      exit(1);
-    }
-    act.sa_handler = SIG_IGN;
-    if (sigaction(SIGPROF, &act, 0)) {
-      perror("sigaction");
-      exit(1);
-    }
-  }
+static void *thr(void *p) {
+  pthread_t th[10];
+  for (int i = 0; i < sizeof(th) / sizeof(th[0]); i++)
+    pthread_create(&th[i], 0, thr1, 0);
+  for (int i = 0; i < sizeof(th) / sizeof(th[0]); i++)
+    pthread_join(th[i], 0);
   return 0;
 }
 
 int main() {
   struct sigaction act = {};
-  act.sa_handler = SIG_IGN;
+  act.sa_handler = &handler;
   if (sigaction(SIGPROF, &act, 0)) {
     perror("sigaction");
     exit(1);
@@ -63,13 +55,11 @@ int main() {
     exit(1);
   }
 
-  pthread_t th[2];
-  pthread_create(&th[0], 0, busy, 0);
-  pthread_create(&th[1], 0, reset, 0);
-
-  pthread_join(th[1], 0);
-  __atomic_store_n(&stop, 1, __ATOMIC_RELAXED);
-  pthread_join(th[0], 0);
+  pthread_t th[100];
+  for (int i = 0; i < sizeof(th) / sizeof(th[0]); i++)
+    pthread_create(&th[i], 0, thr, 0);
+  for (int i = 0; i < sizeof(th) / sizeof(th[0]); i++)
+    pthread_join(th[i], 0);
 
   fprintf(stderr, "DONE\n");
   return 0;

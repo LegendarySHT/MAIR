@@ -38,5 +38,5 @@ int main() {
 // CHECK:     #0 {{.*mem(cpy|move)}}
 // CHECK:     #{{[12]}} Thread2
 // CHECK:   Previous read of size 1 at [[ADDR]] by thread T1:
-// CHECK:     #0 memcmp
+// CHECK:     #0 {{.*}}memcmp
 // CHECK:     #{{[12]}} Thread1

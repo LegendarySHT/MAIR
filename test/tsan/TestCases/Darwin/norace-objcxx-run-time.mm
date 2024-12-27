@@ -110,4 +110,4 @@ int main(int argc, const char *argv[]) {
 }
 
 // CHECK: Done.
-// CHECK-NOT: {{XSan|ThreadSanitizer}}: data race
+// CHECK-NOT: ThreadSanitizer: data race

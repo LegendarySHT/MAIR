@@ -19,7 +19,7 @@ int main() {
     // obj1 -> obj1
     @synchronized(obj2) {
       @synchronized(obj1) {
-// CHECK: {{XSan|ThreadSanitizer}}: lock-order-inversion (potential deadlock)
+// CHECK: ThreadSanitizer: lock-order-inversion (potential deadlock)
       }
     }
   }
