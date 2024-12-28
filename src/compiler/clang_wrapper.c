@@ -193,16 +193,19 @@ void set(XsanOption *opt, enum SanitizerType sanTy) {
 }
 
 void clear(XsanOption *opt, enum SanitizerType sanTy) {
-  opt->mask &= ~((u64)1 << sanTy);
+  opt->mask &= (sanTy == XSan)
+                   ? ((u64)1 << XSan) // if clear all, contains XSan flag only.
+                   : ~((u64)1 << sanTy);
 }
 
 u8 has(XsanOption *opt, enum SanitizerType sanTy) {
   return (opt->mask & (((u64)1 << sanTy))) != 0;
 }
 
-#define OPT_MATCH(arg, opt) (!strcmp((arg), opt))
-#define OPT_MATCH_AND_THEN(arg, opt, ...)                                      \
-  if (OPT_MATCH(arg, opt)) {                                                   \
+u8 has_any(XsanOption *opt) {
+  return (opt->mask & ~(((u64)1 << XSan) | ((u64)1 << SanNone))) != 0;
+}
+
 #define OPT_EQ(arg, opt) (!strcmp((arg), opt))
 #define OPT_EQ_AND_THEN(arg, opt, ...)                                         \
   if (OPT_EQ(arg, opt)) {                                                      \
@@ -279,19 +282,19 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
 
       if (is_neg) {
         clear(&xsan_options, sanTy);
-        if (xsanTy == sanTy || sanTy == XSan) {
-          xsanTy = SanNone;
-        }
       } else {
         set(&xsan_options, sanTy);
-        if (xsanTy == SanNone) {
-          xsanTy = sanTy;
-        }
       }
 
       continue;
     })
   }
+
+  /// Use our out-of-tree runtime
+  if (xsanTy != SanNone && !has_any(&xsan_options)) {
+    xsanTy = SanNone;
+  }
+
   return xsanTy;
 }
 
