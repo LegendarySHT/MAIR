@@ -203,12 +203,20 @@ u8 has(XsanOption *opt, enum SanitizerType sanTy) {
 #define OPT_MATCH(arg, opt) (!strcmp((arg), opt))
 #define OPT_MATCH_AND_THEN(arg, opt, ...)                                      \
   if (OPT_MATCH(arg, opt)) {                                                   \
+#define OPT_EQ(arg, opt) (!strcmp((arg), opt))
+#define OPT_EQ_AND_THEN(arg, opt, ...)                                         \
+  if (OPT_EQ(arg, opt)) {                                                      \
     __VA_ARGS__                                                                \
   }
 
-#define OPT_EQ_GET_VAL_AND_THEN(arg, opt, ...)                                 \
-  if (!strncmp((arg), opt "=", strlen(opt "="))) {                             \
-    u8 *val = arg + strlen(opt "=");                                           \
+#define OPT_MATCH(arg, opt) (!strncmp((arg), opt, sizeof(opt) - 1))
+#define OPT_EMATCH_AND_THEN(arg, opt, ...)                                     \
+  if (OPT_MATCH(arg, opt)) {                                                   \
+    __VA_ARGS__                                                                \
+  }
+#define OPT_GET_VAL_AND_THEN(arg, opt, ...)                                    \
+  if (OPT_MATCH(arg, (opt "="))) {                                             \
+    u8 *val = arg + sizeof(opt "=") - 1;                                       \
     __VA_ARGS__                                                                \
   }
 
@@ -216,7 +224,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     u8* cur = argv[i];
-    OPT_MATCH_AND_THEN(cur, "-tsan", {
+    OPT_EQ_AND_THEN(cur, "-tsan", {
       if (has(&xsan_options, ASan))
         FATAL("'-tsan' could not be used with '-asan'");
       xsanTy = TSan;
@@ -224,7 +232,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       continue;
     })
 
-    OPT_MATCH_AND_THEN(cur, "-asan", {
+    OPT_EQ_AND_THEN(cur, "-asan", {
       if (has(&xsan_options, TSan))
         FATAL("'-asan' could not be used with '-tsan'");
       xsanTy = ASan;
@@ -232,52 +240,55 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       continue;
     })
 
-    OPT_MATCH_AND_THEN(cur, "-ubsan", {
+    OPT_EQ_AND_THEN(cur, "-ubsan", {
       xsanTy = UBSan;
       set(&xsan_options, UBSan);
       continue;
     })
 
-    OPT_MATCH_AND_THEN(cur, "-xsan", {
+    OPT_EQ_AND_THEN(cur, "-xsan", {
       xsanTy = XSan;
       init(&xsan_options);
       continue;
     })
 
-    OPT_EQ_GET_VAL_AND_THEN(cur, "-fno-sanitize", {
-      if (OPT_MATCH(val, "all")) {
-        xsanTy = SanNone;
-      } else if (OPT_MATCH(val, "address")) {
-        clear(&xsan_options, ASan);
-        xsanTy = ASan;
-      } else if (OPT_MATCH(val, "thread")) {
-        clear(&xsan_options, TSan);
-        xsanTy = TSan;
-      } else if (OPT_MATCH(val, "undefined")) {
-        clear(&xsan_options, UBSan);
-        xsanTy = UBSan;
-      } else {
-        FATAL("Unsupported -fno-sanitize option: %s", val);
-      }
-
-      clear(&xsan_options, XSan);
-      if (xsanTy == XSan) {
-        xsanTy = SanNone;
-      }
+    u8 is_neg = 0;
+    // Check prefix "-f"
+    if (cur[0] != '-' || cur[1] != 'f') {
       continue;
-    })
+    }
+    cur += 2;
+    // Check prefix "no-"
+    if (cur[0] == 'n' && cur[1] == 'o' && cur[2] == '-') {
+      is_neg = 1;
+      cur += 3;
+    }
 
-    OPT_EQ_GET_VAL_AND_THEN(cur, "-fsanitize", {
-      enum SanitizerType enableTy = SanNone;
-      if (!strcmp(val, "address")) {
-        enableTy = ASan;
-      } else if (!strcmp(val, "thread")) {
-        enableTy = TSan;
-      } else if (!strcmp(val, "undefined")) {
-        enableTy = UBSan;
+    // -fsanitize=<value> / -fno-sanitize=<value>
+    OPT_GET_VAL_AND_THEN(cur, "sanitize", {
+      enum SanitizerType sanTy = SanNone;
+      if (OPT_EQ(val, "all")) {
+        sanTy = XSan;
+      } else if (OPT_EQ(val, "address")) {
+        sanTy = ASan;
+      } else if (OPT_EQ(val, "thread")) {
+        sanTy = TSan;
+      } else if (OPT_EQ(val, "undefined")) {
+        sanTy = UBSan;
       }
 
-      set(&xsan_options, enableTy);
+      if (is_neg) {
+        clear(&xsan_options, sanTy);
+        if (xsanTy == sanTy || sanTy == XSan) {
+          xsanTy = SanNone;
+        }
+      } else {
+        set(&xsan_options, sanTy);
+        if (xsanTy == SanNone) {
+          xsanTy = sanTy;
+        }
+      }
+
       continue;
     })
   }
@@ -300,68 +311,77 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
     1. -fsanitize=address,pointer-compare
     2. -fsanitize=address,pointer-subtract
  */
-static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
+static u8 handle_asan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
+  if (is_mllvm_arg) {
+    if (!OPT_MATCH(arg, "-asan-")) {
+      return 0;
+    }
+    arg += sizeof("-asan-") - 1;
+    cc_params[cc_par_cnt++] = alloc_printf("-as-%s", arg);
+    return 1;
+  }
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-globals-dead-stripping", {
+  // -fsanitize-recover
+  OPT_GET_VAL_AND_THEN(arg, "recover", {
+    u8 is_all = OPT_EQ(val, "all");
+    if (is_all || OPT_EQ(val, "address")) {
+      cc_params[cc_par_cnt++] = "-mllvm";
+      cc_params[cc_par_cnt++] = "-as-recover";
+    }
+    return 0;
+  })
+
+  if (!OPT_MATCH(arg, "address-")) {
+    return 0;
+  }
+  arg += sizeof("address-") - 1;
+
+  // -fsanitize-address-globals-dead-stripping
+  OPT_EQ_AND_THEN(arg, "globals-dead-stripping", {
     // TODO
     return 0;
   }) 
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-poison-custom-array-cookie", {
+  // -fsanitize-address-poison-custom-array-cookie
+  OPT_EQ_AND_THEN(arg, "poison-custom-array-cookie", {
     // TODO
     return 0;
   })
 
-  OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-address-use-after-return", {
+  // -fsanitize-address-use-after-return=<mode>
+  OPT_GET_VAL_AND_THEN(arg, "use-after-return", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = alloc_printf("-as-use-after-return=%s", val);
     return 0;
   })
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-use-after-scope", {
+  // -fsanitize-address-use-after-scope
+  OPT_EQ_AND_THEN(arg, "use-after-scope", {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-as-use-after-scope";
+    cc_params[cc_par_cnt++] =
+        is_neg ? "-as-use-after-scope=0" : "-as-use-after-scope";
     return 0;
   })
 
-  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-address-use-after-scope", {
+  // -fsanitize-address-use-odr-indicator
+  OPT_EQ_AND_THEN(arg, "use-odr-indicator", {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-as-use-after-scope=0";
+    cc_params[cc_par_cnt++] =
+        is_neg ? "-as-use-odr-indicator=0" : "-as-use-odr-indicator";
     return 0;
   })
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-use-odr-indicator", {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-as-use-odr-indicator";
-    return 0;
-  })
-
-  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-address-use-odr-indicator", {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-as-use-odr-indicator=0";
-    return 0;
-  })
-
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-outline-instrumentation", {
+  // -fsanitize-address-outline-instrumentation
+  OPT_EQ_AND_THEN(arg, "outline-instrumentation", {
     // clang driver translates this frontend option to middle-end options
     //          -mllvm -asan-instrumentation-with-call-threshold=0
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-as-instrumentation-with-call-threshold=0";
+    cc_params[cc_par_cnt++] = is_neg
+                                  ? "-as-instrumentation-with-call-threshold"
+                                  : "-as-instrumentation-with-call-threshold=0";
     return 1;
   })
 
-  OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-recover", {
-    if (OPT_MATCH(val, "address") || OPT_MATCH(val, "all")) {
-      cc_params[cc_par_cnt++] = "-mllvm";
-      cc_params[cc_par_cnt++] = "-as-recover";
-      return 0;
-    }
-  })
-
-  if (is_mllvm_arg && !strncmp(opt, "-asan-", 6)) {
-    cc_params[cc_par_cnt++] = alloc_printf("-as-%s", opt + 6);
-    return 1;
-  }
   return 0;
 }
 
@@ -375,59 +395,59 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
    -mllvm -xxx
  Refer to SanitizerArgs.cpp:1142~1155
  */
-static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
+static u8 handle_tsan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
+  if (is_mllvm_arg) {
+    if (!OPT_MATCH(arg, "-tsan-")) {
+      return 0;
+    }
+    arg += sizeof("-tsan-") - 1;
+    cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", arg);
+    return 1;
+  }
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-atomics", {
+  if (!OPT_MATCH(arg, "thread-")) {
     return 0;
-  })
+  }
+  arg += sizeof("thread-") - 1;
 
-  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-atomics", {
+  // -fsanitize-thread-atomics
+  OPT_EQ_AND_THEN(arg, "atomics", {
     // The clang driver translates this frontend option to middle-end options
     //          -mllvm -tsan-instrument-atomics=0
+    if (!is_neg) {
+      return 0;
+    }
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-atomics=0";
     return 1;
   })
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-func-entry-exit", {
-    return 0;
-  })
-
-  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-func-entry-exit", {
+  // -fsanitize-thread-func-entry-exit
+  OPT_EQ_AND_THEN(arg, "func-entry-exit", {
     // The clang driver translates this frontend option to middle-end options
     //          -mllvm -tsan-instrument-func-entry-exit=0
+    if (!is_neg) {
+      return 0;
+    }
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-func-entry-exit=0";
     return 1;
   })
 
-  OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-memory-access", {
-    return 0;
-  })
-
-  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-memory-access", {
+  // -fsanitize-thread-memory-access
+  OPT_EQ_AND_THEN(arg, "memory-access", {
     // The clang driver translates this frontend option to middle-end options
     //          -mllvm -tsan-instrument-memory-accesses=0
     //          -mllvm -tsan-instrument-memintrinsics=0
+    if (!is_neg) {
+      return 0;
+    }
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-memory-accesses=0";
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-memintrinsics=0";
     return 1;
   })
-
-  OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-recover", {
-    if (OPT_MATCH(val, "thread") || OPT_MATCH(val, "all")) {
-      cc_params[cc_par_cnt++] = "-mllvm";
-      cc_params[cc_par_cnt++] = "-as-recover";
-      return 0;
-    }
-  })
-
-  if (is_mllvm_arg && !strncmp(opt, "-tsan-", 6)) {
-    cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", opt + 6);
-    return 1;
-  }
 
   return 0;
 }
@@ -443,23 +463,45 @@ static u8 handle_ubsan_options(u8* opt) {
   Dicards the original argument if return 1.
 
 */
-static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
+static u8 handle_sanitizer_options(u8* arg, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
 
-  if (OPT_MATCH(opt, "-asan") || OPT_MATCH(opt, "-tsan") 
-      || OPT_MATCH(opt, "-ubsan") || OPT_MATCH(opt, "-xsan")) {
+  if (OPT_EQ(arg, "-asan") || OPT_EQ(arg, "-tsan") 
+      || OPT_EQ(arg, "-ubsan") || OPT_EQ(arg, "-xsan")) {
     return 1;
   }
 
+  u8 is_neg = 0;
+  /// If this arg is not a mllvm option, do not check for -fsanitize-xxx
+  if (!is_mllvm_arg) {
+    // Check prefix "-f"
+    if (arg[0] != '-' || arg[1] != 'f') {
+      return 0;
+    }
+    arg += 2;
+    // Check prefix "no-"
+    if (arg[0] == 'n' && arg[1] == 'o' && arg[2] == '-') {
+      is_neg = 1;
+      arg += 3;
+    }
+    // Check prefix "sanitize-"
+    if (!OPT_MATCH(arg, "sanitize-")) {
+      return 0;
+    }
+
+    arg += sizeof("sanitize-") - 1;
+  }
+
+
   switch (sanTy) {
   case ASan:
-    return handle_asan_options(opt, is_mllvm_arg);
+    return handle_asan_options(arg, is_mllvm_arg, is_neg);
   case TSan:
-    return handle_tsan_options(opt, is_mllvm_arg);
+    return handle_tsan_options(arg, is_mllvm_arg, is_neg);
   case UBSan:
-    return handle_ubsan_options(opt);
+    return handle_ubsan_options(arg);
   case XSan:
-    return handle_asan_options(opt, is_mllvm_arg) |
-           handle_tsan_options(opt, is_mllvm_arg) | handle_ubsan_options(opt);
+    return handle_asan_options(arg, is_mllvm_arg, is_neg) |
+           handle_tsan_options(arg, is_mllvm_arg, is_neg) | handle_ubsan_options(arg);
   case SanNone:
     break;
   }
