@@ -304,45 +304,47 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-address-globals-dead-stripping", {
     // TODO
-    return 1;
+    return 0;
   }) 
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-address-poison-custom-array-cookie", {
     // TODO
-    return 1;
+    return 0;
   })
 
   OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-address-use-after-return", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = alloc_printf("-as-use-after-return=%s", val);
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-address-use-after-scope", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-after-scope";
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fno-sanitize-address-use-after-scope", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-after-scope=0";
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-address-use-odr-indicator", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-odr-indicator";
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fno-sanitize-address-use-odr-indicator", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-odr-indicator=0";
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-address-outline-instrumentation", {
+    // clang driver translates this frontend option to middle-end options
+    //          -mllvm -asan-instrumentation-with-call-threshold=0
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-instrumentation-with-call-threshold=0";
     return 1;
@@ -352,7 +354,7 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
     if (OPT_MATCH(val, "address") || OPT_MATCH(val, "all")) {
       cc_params[cc_par_cnt++] = "-mllvm";
       cc_params[cc_par_cnt++] = "-as-recover";
-      return 1;
+      return 0;
     }
   })
 
@@ -364,7 +366,7 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
 }
 
 /*
- Handle the following options about ASan:
+ Handle the following options about TSan:
   -fsanitize-thread-atomics
   -fsanitize-thread-func-entry-exit
   -fsanitize-thread-memory-access
@@ -376,30 +378,37 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
 static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-atomics", {
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-atomics", {
+    // The clang driver translates this frontend option to middle-end options
+    //          -mllvm -tsan-instrument-atomics=0
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-atomics=0";
     return 1;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-func-entry-exit", {
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-func-entry-exit", {
+    // The clang driver translates this frontend option to middle-end options
+    //          -mllvm -tsan-instrument-func-entry-exit=0
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-func-entry-exit=0";
     return 1;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-memory-access", {
-    return 1;
+    return 0;
   })
 
   OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-memory-access", {
+    // The clang driver translates this frontend option to middle-end options
+    //          -mllvm -tsan-instrument-memory-accesses=0
+    //          -mllvm -tsan-instrument-memintrinsics=0
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-memory-accesses=0";
     cc_params[cc_par_cnt++] = "-mllvm";
@@ -411,7 +420,7 @@ static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
     if (OPT_MATCH(val, "thread") || OPT_MATCH(val, "all")) {
       cc_params[cc_par_cnt++] = "-mllvm";
       cc_params[cc_par_cnt++] = "-as-recover";
-      return 1;
+      return 0;
     }
   })
 
