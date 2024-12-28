@@ -200,51 +200,74 @@ u8 has(XsanOption *opt, enum SanitizerType sanTy) {
   return (opt->mask & (((u64)1 << sanTy))) != 0;
 }
 
+#define OPT_MATCH(arg, opt) (!strcmp((arg), opt))
+#define OPT_MATCH_AND_THEN(arg, opt, ...)                                      \
+  if (OPT_MATCH(arg, opt)) {                                                   \
+    __VA_ARGS__                                                                \
+  }
+
+#define OPT_EQ_GET_VAL_AND_THEN(arg, opt, ...)                                 \
+  if (!strncmp((arg), opt "=", strlen(opt "="))) {                             \
+    u8 *val = arg + strlen(opt "=");                                           \
+    __VA_ARGS__                                                                \
+  }
+
 static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     u8* cur = argv[i];
-    if (!strcmp(cur, "-tsan")) {
+    OPT_MATCH_AND_THEN(cur, "-tsan", {
       if (has(&xsan_options, ASan))
         FATAL("'-tsan' could not be used with '-asan'");
       xsanTy = TSan;
       set(&xsan_options, TSan);
       continue;
-    } else if (!strcmp(cur, "-asan")) {
+    })
+
+    OPT_MATCH_AND_THEN(cur, "-asan", {
       if (has(&xsan_options, TSan))
         FATAL("'-asan' could not be used with '-tsan'");
       xsanTy = ASan;
       set(&xsan_options, ASan);
       continue;
-    } else if (!strcmp(cur, "-ubsan")) {
+    })
+
+    OPT_MATCH_AND_THEN(cur, "-ubsan", {
       xsanTy = UBSan;
       set(&xsan_options, UBSan);
       continue;
-    } else if (!strcmp(cur, "-xsan")) {
+    })
+
+    OPT_MATCH_AND_THEN(cur, "-xsan", {
       xsanTy = XSan;
       init(&xsan_options);
       continue;
-    } else if (!strncmp(cur, "-fno-sanitize=", 14)) {
-      u8 *val = cur + 14;
-      enum SanitizerType disableTy = SanNone;
-      if (!strcmp(val, "all")) {
-        disableTy = XSan;
-      } else if (!strcmp(val, "address")) {
-        disableTy = ASan;
-      } else if (!strcmp(val, "thread")) {
-        disableTy = TSan;
-      } else if (!strcmp(val, "undefined")) {
-        disableTy = UBSan;
+    })
+
+    OPT_EQ_GET_VAL_AND_THEN(cur, "-fno-sanitize", {
+      if (OPT_MATCH(val, "all")) {
+        xsanTy = SanNone;
+      } else if (OPT_MATCH(val, "address")) {
+        clear(&xsan_options, ASan);
+        xsanTy = ASan;
+      } else if (OPT_MATCH(val, "thread")) {
+        clear(&xsan_options, TSan);
+        xsanTy = TSan;
+      } else if (OPT_MATCH(val, "undefined")) {
+        clear(&xsan_options, UBSan);
+        xsanTy = UBSan;
       } else {
         FATAL("Unsupported -fno-sanitize option: %s", val);
       }
 
-      clear(&xsan_options, disableTy);
-      if (xsanTy == disableTy || disableTy == XSan) {
+      clear(&xsan_options, XSan);
+      if (xsanTy == XSan) {
         xsanTy = SanNone;
       }
-    } else if (!strncmp(cur, "-fsanitize=", 11)) {
-      u8 *val = cur + 11;
+      continue;
+    })
+
+    OPT_EQ_GET_VAL_AND_THEN(cur, "-fsanitize", {
       enum SanitizerType enableTy = SanNone;
       if (!strcmp(val, "address")) {
         enableTy = ASan;
@@ -255,7 +278,8 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
       }
 
       set(&xsan_options, enableTy);
-    }
+      continue;
+    })
   }
   return xsanTy;
 }
@@ -278,44 +302,59 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
  */
 static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
 
-  if (!strcmp(opt, "-fsanitize-address-globals-dead-stripping")) {
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-globals-dead-stripping", {
     // TODO
     return 1;
-  } else if (!strcmp(opt, "-fsanitize-address-poison-custom-array-cookie")) {
+  }) 
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-poison-custom-array-cookie", {
     // TODO
     return 1;
-  } else if (!strncmp(opt, "-fsanitize-address-use-after-return=", 36)) {
+  })
+
+  OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-address-use-after-return", {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = alloc_printf("-as-use-after-return=%s", opt + 36);
+    cc_params[cc_par_cnt++] = alloc_printf("-as-use-after-return=%s", val);
     return 1;
-  } else if (!strcmp(opt, "-fsanitize-address-use-after-scope")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-use-after-scope", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-after-scope";
     return 1;
-  } else if (!strcmp(opt, "-fno-sanitize-address-use-after-scope")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-address-use-after-scope", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-after-scope=0";
     return 1;
-  } else if (!strcmp(opt, "-fsanitize-address-use-odr-indicator")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-use-odr-indicator", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-odr-indicator";
     return 1;
-  } else if (!strcmp(opt, "-fno-sanitize-address-use-odr-indicator")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-address-use-odr-indicator", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-use-odr-indicator=0";
     return 1;
-  } else if (!strcmp(opt, "-fsanitize-address-outline-instrumentation")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-address-outline-instrumentation", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-as-instrumentation-with-call-threshold=0";
     return 1;
-  } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
-    u8* val = opt + 19;
-    if (!strcmp(val, "address") || !strcmp(val, "all")) {
+  })
+
+  OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-recover", {
+    if (OPT_MATCH(val, "address") || OPT_MATCH(val, "all")) {
       cc_params[cc_par_cnt++] = "-mllvm";
       cc_params[cc_par_cnt++] = "-as-recover";
       return 1;
     }
-  }
+  })
 
   if (is_mllvm_arg && !strncmp(opt, "-asan-", 6)) {
     cc_params[cc_par_cnt++] = alloc_printf("-as-%s", opt + 6);
@@ -335,44 +374,52 @@ static u8 handle_asan_options(u8* opt, u8 is_mllvm_arg) {
  Refer to SanitizerArgs.cpp:1142~1155
  */
 static u8 handle_tsan_options(u8* opt, u8 is_mllvm_arg) {
-  if (!strcmp(opt, "-fsanitize-thread-atomics")) {
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-atomics", {
     return 1;
-  } else if (!strcmp(opt, "-fno-sanitize-thread-atomics")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-atomics", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-atomics=0";
     return 1;
-  } else if (!strcmp(opt, "-fsanitize-thread-func-entry-exit")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-func-entry-exit", {
     return 1;
-  } else if (!strcmp(opt, "-fno-sanitize-thread-func-entry-exit")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-func-entry-exit", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-func-entry-exit=0";
     return 1;
-  } else if (!strcmp(opt, "-fsanitize-thread-memory-access")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fsanitize-thread-memory-access", {
     return 1;
-  } else if (!strcmp(opt, "-fno-sanitize-thread-memory-access")) {
+  })
+
+  OPT_MATCH_AND_THEN(opt, "-fno-sanitize-thread-memory-access", {
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-memory-accesses=0";
     cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] = "-ts-instrument-memintrinsics=0";
     return 1;
-  } else if (!strncmp(opt, "-fsanitize-recover=", 19)) {
-    u8* val = opt + 19;
-    if (!strcmp(val, "thread") || !strcmp(val, "all")) {
+  })
+
+  OPT_EQ_GET_VAL_AND_THEN(opt, "-fsanitize-recover", {
+    if (OPT_MATCH(val, "thread") || OPT_MATCH(val, "all")) {
       cc_params[cc_par_cnt++] = "-mllvm";
       cc_params[cc_par_cnt++] = "-as-recover";
       return 1;
     }
+  })
+
+  if (is_mllvm_arg && !strncmp(opt, "-tsan-", 6)) {
+    cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", opt + 6);
+    return 1;
   }
 
-  if (is_mllvm_arg) {
-    if (!strncmp(opt, "-asan-", 6)) {
-      cc_params[cc_par_cnt++] = alloc_printf("-as-%s", opt + 6);
-      return 1;
-    } else if (!strncmp(opt, "-tsan-", 6)) {
-      cc_params[cc_par_cnt++] = alloc_printf("-ts-%s", opt + 6);
-      return 1;
-    }
-  }
   return 0;
 }
 
@@ -388,8 +435,9 @@ static u8 handle_ubsan_options(u8* opt) {
 
 */
 static u8 handle_sanitizer_options(u8* opt, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
-  if (!strcmp(opt, "-asan") || !strcmp(opt, "-tsan") 
-      || !strcmp(opt, "-ubsan") || !strcmp(opt, "-xsan")) {
+
+  if (OPT_MATCH(opt, "-asan") || OPT_MATCH(opt, "-tsan") 
+      || OPT_MATCH(opt, "-ubsan") || OPT_MATCH(opt, "-xsan")) {
     return 1;
   }
 
@@ -713,7 +761,7 @@ static void edit_params(u32 argc, char** argv) {
   cc_params[cc_par_cnt++] = "-fsanitize-coverage=trace-pc-guard";
 #ifndef __ANDROID__
   cc_params[cc_par_cnt++] = "-mllvm";
-  cc_params[cc_par_cnt++] = "-sanitizer-coverage-block-threshold=0";
+  cc_params[cc_par_cnt++] = -sanitize"r-coverage-block-threshold=0";
 #endif
 #else
   cc_params[cc_par_cnt++] = "-Xclang";
