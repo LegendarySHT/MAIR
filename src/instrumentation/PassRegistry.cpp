@@ -11,6 +11,79 @@
 
 using namespace llvm;
 
+/// Set the default value to true
+/// From
+/// https://github.com/llvm/llvm-project/commit/1ada819c237bf724e6eaa1c82b2742e3eb57a5d5#diff-3fdc9c7b499c6c90240f4409c3ad6bd18cc9b0c247751ab371769101a195238b
+static cl::opt<bool> ClAsanUseOdrIndicator(
+    "sanitize-address-use-odr-indicator",
+    cl::desc("Simulates -fsanitize-address-use-odr-indicator"), cl::Hidden,
+    cl::init(true));
+
+static cl::opt<AsanDtorKind> ClAsanDestructorKind(
+    "sanitize-address-dtor",
+    cl::desc("Simulates -fsanitize-address-destructor"),
+    cl::values(clEnumValN(AsanDtorKind::None, "none", "No destructors"),
+               clEnumValN(AsanDtorKind::Global, "global",
+                          "Use global destructors")),
+    cl::init(AsanDtorKind::Global), cl::Hidden);
+
+static cl::opt<bool> ClAsanUseAfterScope(
+    "sanitize-address-use-after-scope",
+    cl::desc("Simulates -fsanitize-address-use-after-scope"), cl::Hidden,
+    cl::init(true));
+
+static cl::opt<AsanDetectStackUseAfterReturnMode> ClAsanUseAfterReturn(
+    "sanitize-address-use-after-return",
+    cl::desc("Simulates -fsanitize-address-use-after-return"),
+    cl::values(
+        clEnumValN(AsanDetectStackUseAfterReturnMode::Never, "never",
+                   "Never detect stack use after return."),
+        clEnumValN(
+            AsanDetectStackUseAfterReturnMode::Runtime, "runtime",
+            "Detect stack use after return if "
+            "binary flag 'ASAN_OPTIONS=detect_stack_use_after_return' is set."),
+        clEnumValN(AsanDetectStackUseAfterReturnMode::Always, "always",
+                   "Always detect stack use after return.")),
+    cl::Hidden, cl::init(AsanDetectStackUseAfterReturnMode::Runtime));
+
+/*
+static bool asanUseGlobalsGC(const Triple &T, const CodeGenOptions &CGOpts) {
+  if (!CGOpts.SanitizeAddressGlobalsDeadStripping)
+    return false;
+  switch (T.getObjectFormat()) {
+  case Triple::MachO:
+  case Triple::COFF:
+    return true;
+  case Triple::ELF:
+    return !CGOpts.DisableIntegratedAS;
+  case Triple::GOFF:
+    llvm::report_fatal_error("ASan not implemented for GOFF");
+  case Triple::XCOFF:
+    llvm::report_fatal_error("ASan not implemented for XCOFF.");
+  case Triple::Wasm:
+  case Triple::DXContainer:
+  case Triple::SPIRV:
+  case Triple::UnknownObjectFormat:
+    break;
+  }
+  return false;
+}
+*/
+static cl::opt<bool> ClAsanGlobalsGC(
+    "asan-globals-gc",
+    cl::desc("Controls whether ASan uses gc-friendly globals instrumentation"),
+    cl::Hidden, cl::init(false));
+
+static cl::opt<bool>
+    ClAsanRecover("sanitize-recover-address",
+                  cl::desc("Simulates -fsanitize-recover=address"), cl::Hidden,
+                  cl::init(false));
+
+
+static cl::opt<bool> ClAllRecover("sanitize-recover-all",
+                                  cl::desc("Simulates -fsanitize-recover=all"),
+                                  cl::Hidden, cl::init(false));
+
 namespace __xsan {
 
 LLVM_ATTRIBUTE_WEAK
@@ -39,14 +112,15 @@ static void addAsanToMPM(ModulePassManager &MPM) {
   // Here set the default value for each setting, but you can set them by
   // their cl::opt version.
   Opts.CompileKernel = false;
-  Opts.Recover = false;
+  Opts.Recover = ClAsanRecover || ClAllRecover;
   // The default value of UseAfterScope is true
-  Opts.UseAfterScope = true;
-  Opts.UseAfterReturn = AsanDetectStackUseAfterReturnMode::Runtime;
+  Opts.UseAfterScope = ClAsanUseAfterScope;
+  Opts.UseAfterReturn = ClAsanUseAfterReturn;
 
-  llvm::AsanDtorKind DestructorKind = llvm::AsanDtorKind::Global;
-  bool UseOdrIndicator = false;
-  bool UseGlobalGC = false;
+  llvm::AsanDtorKind DestructorKind = ClAsanDestructorKind;
+
+  bool UseOdrIndicator = ClAsanUseOdrIndicator;
+  bool UseGlobalGC = ClAsanGlobalsGC;
 
   MPM.addPass(ModuleAddressSanitizerPass(Opts, UseGlobalGC, UseOdrIndicator,
                                          DestructorKind));
