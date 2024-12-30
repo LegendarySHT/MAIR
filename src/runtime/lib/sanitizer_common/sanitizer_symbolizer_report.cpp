@@ -29,11 +29,33 @@ namespace __sanitizer {
 
 #if !SANITIZER_GO
 
+static bool FrameIsXsanInternal(const char *file) {
+  const char *name = internal_strstr(file, "/src/runtime/lib/");
+  if (!name) {
+    name = internal_strstr(file, "\\src\\runtime\\lib\\");
+  }
+  if (!name)
+    return false;
+  name += sizeof("/src/runtime/lib/") - 1;
+  // asan, hwasan, tsan, msan, ubsan, nsan, tysan, rtsan, lsan, sanitizer_common
+  static const char *san_name[] = {
+      "asan", "hwasan", "tsan",  "msan", "ubsan",
+      "nsan", "tysan",  "rtsan", "lsan", "sanitizer_common"};
+  for (uptr i = 0; i < ARRAY_SIZE(san_name); i++) {
+    if (internal_strncmp(name, san_name[i], internal_strlen(san_name[i])) == 0)
+      return true;
+  }
+  return false;
+}
+
 static bool FrameIsInternal(const SymbolizedStack *frame) {
   if (!frame)
     return true;
   const char *file = frame->info.file;
   const char *module = frame->info.module;
+  if (file && FrameIsXsanInternal(file))
+    return true;
+  
   // On Gentoo, the path is g++-*, so there's *not* a missing /.
   if (file && (internal_strstr(file, "/compiler-rt/lib/") ||
                internal_strstr(file, "/include/c++/") ||
