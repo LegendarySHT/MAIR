@@ -168,11 +168,32 @@ static void find_obj(u8* argv0) {
 
 }
 
+struct FrontEndOpt {
+  /* -no-integrated-as , 0 dy default */
+  u8 DisableIntegratedAS;
+  u8 SanitizeAddressGlobalsDeadStripping;
+  enum ObjectFormatType obj_format;
+} frontend_opt = {.DisableIntegratedAS = 0,
+                   .SanitizeAddressGlobalsDeadStripping = 1,
+// { MachO, COFF, ELF, GOFF, XCOFF, UnknownObjectFormat };
+#if defined(__APPLE__)
+                   .obj_format = MachO
+#elif defined(__linux__)
+                   .obj_format = ELF
+#elif defined(_WIN32)
+                   .obj_format = COFF
+#else
+                   .obj_format = UnknownObjectFormat
+#endif
+
+};
+
 typedef struct kXsanOption {
   u64 mask;
 } XsanOption;
 
 XsanOption xsan_options;
+XsanOption xsan_recover_options;
 
 void init(XsanOption *opt) {
 #if XSAN_UBSAN
@@ -189,13 +210,15 @@ void init(XsanOption *opt) {
 
 /// TODO: handle unsupported sanTy.
 void set(XsanOption *opt, enum SanitizerType sanTy) {
-  opt->mask |= (u64)1 << sanTy;
+  if (sanTy == XSan) {
+    init(opt);
+  } else {
+    opt->mask |= (u64)1 << sanTy;
+  }
 }
 
 void clear(XsanOption *opt, enum SanitizerType sanTy) {
-  opt->mask &= (sanTy == XSan)
-                   ? ((u64)1 << XSan) // if clear all, contains XSan flag only.
-                   : ~((u64)1 << sanTy);
+  opt->mask &= (sanTy == XSan) ? 0 : ~((u64)1 << sanTy);
 }
 
 u8 has(XsanOption *opt, enum SanitizerType sanTy) {
@@ -324,16 +347,6 @@ static u8 handle_asan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
     return 1;
   }
 
-  // -fsanitize-recover
-  OPT_GET_VAL_AND_THEN(arg, "recover", {
-    u8 is_all = OPT_EQ(val, "all");
-    if (is_all || OPT_EQ(val, "address")) {
-      cc_params[cc_par_cnt++] = "-mllvm";
-      cc_params[cc_par_cnt++] = "-as-recover";
-    }
-    return 0;
-  })
-
   if (!OPT_MATCH(arg, "address-")) {
     return 0;
   }
@@ -341,9 +354,9 @@ static u8 handle_asan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
 
   // -fsanitize-address-globals-dead-stripping
   OPT_EQ_AND_THEN(arg, "globals-dead-stripping", {
-    // TODO
+    frontend_opt.SanitizeAddressGlobalsDeadStripping = is_neg ? 0 : 1;
     return 0;
-  }) 
+  })
 
   // -fsanitize-address-poison-custom-array-cookie
   OPT_EQ_AND_THEN(arg, "poison-custom-array-cookie", {
@@ -352,25 +365,38 @@ static u8 handle_asan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
   })
 
   // -fsanitize-address-use-after-return=<mode>
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_GET_VAL_AND_THEN(arg, "use-after-return", {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = alloc_printf("-as-use-after-return=%s", val);
+    cc_params[cc_par_cnt++] =
+        alloc_printf("-sanitize-address-use-after-return=%s", val);
     return 0;
   })
 
   // -fsanitize-address-use-after-scope
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_EQ_AND_THEN(arg, "use-after-scope", {
     cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] =
-        is_neg ? "-as-use-after-scope=0" : "-as-use-after-scope";
+    cc_params[cc_par_cnt++] = is_neg ? "-sanitize-address-use-after-scope=0"
+                                     : "-sanitize-address-use-after-scope";
     return 0;
   })
 
   // -fsanitize-address-use-odr-indicator
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_EQ_AND_THEN(arg, "use-odr-indicator", {
     cc_params[cc_par_cnt++] = "-mllvm";
+    cc_params[cc_par_cnt++] = is_neg ? "-sanitize-address-use-odr-indicator=0"
+                                     : "-sanitize-address-use-odr-indicator";
+    return 0;
+  })
+
+  // -fsanitize-address-destructor=<value>
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
+  OPT_GET_VAL_AND_THEN(arg, "destructor", {
+    cc_params[cc_par_cnt++] = "-mllvm";
     cc_params[cc_par_cnt++] =
-        is_neg ? "-as-use-odr-indicator=0" : "-as-use-odr-indicator";
+        alloc_printf("sanitize-address-destructor=%s", val);
     return 0;
   })
 
@@ -494,6 +520,25 @@ static u8 handle_sanitizer_options(u8* arg, u8 is_mllvm_arg, enum SanitizerType 
     arg += sizeof("sanitize-") - 1;
   }
 
+  // -fsanitize-recover
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
+  OPT_GET_VAL_AND_THEN(arg, "recover", {
+    OPT_EQ_AND_THEN(val, "all", {
+      if (is_neg) {
+        clear(&xsan_recover_options, XSan);
+      } else {
+        set(&xsan_recover_options, XSan);
+      }
+    })
+    OPT_EQ_AND_THEN(val, "address", {
+      if (is_neg) {
+        clear(&xsan_recover_options, ASan);
+      } else {
+        set(&xsan_recover_options, ASan);
+      }
+    })
+    return 0;
+  })
 
   switch (sanTy) {
   case ASan:
@@ -553,6 +598,67 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     break;
   case SanNone:
     return;
+  }
+}
+
+static u8 asan_use_globals_gc() {
+  /*
+    static bool asanUseGlobalsGC(const Triple &T, const CodeGenOptions &CGOpts) {
+      if (!CGOpts.SanitizeAddressGlobalsDeadStripping)
+        return false;
+      switch (T.getObjectFormat()) {
+      case Triple::MachO:
+      case Triple::COFF:
+        return true;
+      case Triple::ELF:
+        return !CGOpts.DisableIntegratedAS;
+      case Triple::GOFF:
+        llvm::report_fatal_error("ASan not implemented for GOFF");
+      case Triple::XCOFF:
+        llvm::report_fatal_error("ASan not implemented for XCOFF.");
+      case Triple::Wasm:
+      case Triple::DXContainer:
+      case Triple::SPIRV:
+      case Triple::UnknownObjectFormat:
+        break;
+      }
+      return false;
+    }
+  */
+  if (!frontend_opt.SanitizeAddressGlobalsDeadStripping) {
+    return 0;
+  }
+  switch (frontend_opt.obj_format) {
+    case MachO:
+    case COFF:
+      return 1;
+    case ELF:
+      return !frontend_opt.DisableIntegratedAS;
+    default:
+      return 0;
+  }
+}
+
+/* This function forwards the frontend options that could not handled by XSan to
+ * the middle-end options that XSan can handle.The relevant middle-end options
+ * are defined in instrumenation/PassRegistry.cpp */
+static void add_pass_options(enum SanitizerType sanTy) {
+  /// We only add pass options if there is any sanitizers in XSan-project
+  /// activated.
+  if (sanTy == SanNone) {
+    return;
+  }
+
+  if (has(&xsan_options, ASan)){
+    if (!asan_use_globals_gc()) {
+      cc_params[cc_par_cnt++] = "-mllvm";
+      cc_params[cc_par_cnt++] = "-asan-globals-gc=0";
+    }
+
+    if (has(&xsan_recover_options, ASan)) {
+      cc_params[cc_par_cnt++] = "-mllvm";
+      cc_params[cc_par_cnt++] = "-sanitize-recover-address";
+    }
   }
 }
 
@@ -779,8 +885,8 @@ static void sync_hook_id(char *dst, char *src) {
   fwrite(buf, 1, sizeof(unsigned int), dst_f);
   fclose(dst_f);
 }
-/* Copy argv to cc_params, making the necessary edits. */
 
+/* Copy argv to cc_params, making the necessary edits. */
 static void edit_params(u32 argc, char** argv) {
 
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
@@ -852,6 +958,26 @@ static void edit_params(u32 argc, char** argv) {
     else if (!strcmp(cur, "-c")) have_c = 1;
     else if (!strncmp(cur, "-O", 2)) have_o = 1;
     else if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
+    else {
+      // For ASan's global gc option.
+      // Search "-asan-globals-gc=0" in this file for details.
+      OPT_EQ_AND_THEN(cur, "-no-integrated-as", {
+        frontend_opt.DisableIntegratedAS = 1;
+        continue;
+      })
+      OPT_GET_VAL_AND_THEN(cur, "--target", {
+        if (strstr(val, "apple")) {
+          frontend_opt.obj_format = MachO;
+        } else if (strstr(val, "linux")) {
+          frontend_opt.obj_format = ELF;
+        } else if (strstr(val, "mingw32")) {
+          frontend_opt.obj_format = COFF;
+        } else {
+          frontend_opt.obj_format = UnknownObjectFormat;
+        }
+        continue;
+      })
+    }
 
   }
 
@@ -888,6 +1014,8 @@ static void edit_params(u32 argc, char** argv) {
     cc_params[cc_par_cnt++] = cur;
 
   }
+
+  add_pass_options(xsanTy);
 
   if (getenv("X_HARDEN")) {
 

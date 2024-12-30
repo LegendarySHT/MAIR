@@ -2,6 +2,8 @@
 
 enum SanitizerType { SanNone, ASan, TSan, UBSan, XSan };
 
+enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };
+
 #ifndef XSAN_UBSAN
 #define XSAN_UBSAN 1
 #endif

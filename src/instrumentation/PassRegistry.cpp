@@ -20,7 +20,7 @@ static cl::opt<bool> ClAsanUseOdrIndicator(
     cl::init(true));
 
 static cl::opt<AsanDtorKind> ClAsanDestructorKind(
-    "sanitize-address-dtor",
+    "sanitize-address-destructor",
     cl::desc("Simulates -fsanitize-address-destructor"),
     cl::values(clEnumValN(AsanDtorKind::None, "none", "No destructors"),
                clEnumValN(AsanDtorKind::Global, "global",
