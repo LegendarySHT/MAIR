@@ -46,33 +46,18 @@ static cl::opt<AsanDetectStackUseAfterReturnMode> ClAsanUseAfterReturn(
                    "Always detect stack use after return.")),
     cl::Hidden, cl::init(AsanDetectStackUseAfterReturnMode::Runtime));
 
-/*
-static bool asanUseGlobalsGC(const Triple &T, const CodeGenOptions &CGOpts) {
-  if (!CGOpts.SanitizeAddressGlobalsDeadStripping)
-    return false;
-  switch (T.getObjectFormat()) {
-  case Triple::MachO:
-  case Triple::COFF:
-    return true;
-  case Triple::ELF:
-    return !CGOpts.DisableIntegratedAS;
-  case Triple::GOFF:
-    llvm::report_fatal_error("ASan not implemented for GOFF");
-  case Triple::XCOFF:
-    llvm::report_fatal_error("ASan not implemented for XCOFF.");
-  case Triple::Wasm:
-  case Triple::DXContainer:
-  case Triple::SPIRV:
-  case Triple::UnknownObjectFormat:
-    break;
-  }
-  return false;
-}
-*/
+
+/// In LLVM 15, this option is false by default.
+//    As a workaround for a bug in gold 2.26 and earlier, dead stripping of
+//    globals in ASan is disabled by default on most ELF targets.
+//    See https://sourceware.org/bugzilla/show_bug.cgi?id=19002
+/// In LLVM 20, this option is true by default.
+//  Commit:
+//    https://github.com/llvm/llvm-project/commit/a8d3ae712290d6f85db2deb9164181058f5c1307#diff-6f3485aafcf75a6f836f79dc7ce698a27780a0942b69d68c105154d905e01cb0R244
 static cl::opt<bool> ClAsanGlobalsGC(
     "asan-globals-gc",
     cl::desc("Controls whether ASan uses gc-friendly globals instrumentation"),
-    cl::Hidden, cl::init(false));
+    cl::Hidden, cl::init(true));
 
 static cl::opt<bool>
     ClAsanRecover("sanitize-recover-address",
