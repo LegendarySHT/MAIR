@@ -890,6 +890,19 @@ if(COMPILER_RT_INCLUDE_TESTS)
   # add_subdirectory(unittests)
   add_subdirectory(test)
 elseif(XSAN_COMMON_LIT_CONFIGURE_PATH)
+  # If we have a valid source tree, generate llvm-lit into the bin directory.
+  # The user can still choose to have the check targets *use* a different lit
+  # by specifying -DLLVM_EXTERNAL_LIT, but we generate it regardless.
+  if (EXISTS ${CMAKE_SOURCE_DIR}/utils/llvm-lit)
+    # Needed for lit support in standalone builds.
+    include(AddLLVM)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/utils/llvm-lit ${CMAKE_CURRENT_BINARY_DIR}/llvm-lit)
+    # Ensure that the testsuite uses the local lit rather than
+    # LLVM_INSTALL_DIR/bin/llvm-lit (which probably does not exist).
+    get_llvm_lit_path(_base_dir _file_name)
+    set(LLVM_EXTERNAL_LIT "${_base_dir}/${_file_name}" CACHE STRING "Command used to spawn lit" FORCE)
+    message_green("Using customized ${LLVM_EXTERNAL_LIT} for lit tests")
+  endif()
   #  If XSAN_COMMON_LIT_CONFIGURE_PATH is set, we need add_subdirectory(test) to
   #  generate lit.common.configure.
   add_subdirectory(test)
