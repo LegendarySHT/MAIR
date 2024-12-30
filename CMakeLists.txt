@@ -20,6 +20,18 @@ Learn more about these options in our documentation at https://llvm.org/docs/CMa
 ")
 endif()
 
+# Check the type if one of the four supported build types
+if(NOT CMAKE_BUILD_TYPE MATCHES "^(Release|Debug|RelWithDebInfo|MinSizeRel)$")
+  message(FATAL_ERROR "
+Invalid build type: ${CMAKE_BUILD_TYPE}. You need to pass -DCMAKE_BUILD_TYPE=<type> in order to configure LLVM.
+Available options are:
+  * -DCMAKE_BUILD_TYPE=Release - For an optimized build with no assertions or debug info.
+  * -DCMAKE_BUILD_TYPE=Debug - For an unoptimized build with assertions and debug info.
+  * -DCMAKE_BUILD_TYPE=RelWithDebInfo - For an optimized build with no assertions but with debug info.
+  * -DCMAKE_BUILD_TYPE=MinSizeRel - For a build optimized for size instead of speed.
+Learn more about these options in our documentation at https://llvm.org/docs/CMake.html#cmake-build-type
+")
+endif()
 
 find_program(CLANG_C_COMPILER clang)
 if (CLANG_C_COMPILER)

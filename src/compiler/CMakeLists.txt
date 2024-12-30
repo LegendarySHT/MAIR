@@ -9,6 +9,7 @@ endif()
 
 include_directories(include)
 
+# set output directory
 set_target_properties(xclang
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${XSAN_BIN_DIR}"
