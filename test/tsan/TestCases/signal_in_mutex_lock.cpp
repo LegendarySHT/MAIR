@@ -1,4 +1,4 @@
-// RUN: %clang_tsan %s -lstdc++ -o %t && %run %t 2>&1 | FileCheck %s
+// RUN: %clang_tsan %s -std=c++17 -lstdc++ -o %t && %run %t 2>&1 | FileCheck %s
 
 #include "test.h"
 #include <pthread.h>

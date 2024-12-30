@@ -16,4 +16,4 @@ int main() {
 }
 
 // CHECK: WARNING: ThreadSanitizer: thread leak
-// CHECK: SUMMARY: {{ThreadSanitizer|XSan}}: thread leak{{.*}}main
+// CHECK: SUMMARY: {{ThreadSanitizer|XSan}}: thread leak

@@ -16,9 +16,9 @@
 // RUN: %env_asan_opts=log_path=%t.log not %run %t 2> %t.out
 // RUN: FileCheck %s --check-prefix=CHECK-ERROR < %t.log.*
 
-// Invalid log_path in existing directory.
-// RUN: %env_asan_opts=log_path=/INVALID not %run %t 2> %t.out
-// RUN: FileCheck %s --check-prefix=CHECK-INVALID < %t.out
+// Invalid log_path in existing directory. Could not test on root.
+// RUN: [ "$(id -u)" -eq 0 ] || %env_asan_opts=log_path=/INVALID not %run %t 2> %t.out
+// RUN: [ "$(id -u)" -eq 0 ] || FileCheck %s --check-prefix=CHECK-INVALID < %t.out
 
 // Directory of log_path can't be created.
 // RUN: %env_asan_opts=log_path=/dev/null/INVALID not %run %t 2> %t.out

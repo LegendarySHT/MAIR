@@ -16,17 +16,17 @@
 //  from different environments with different shells and seds]
 //
 // RUN: grep -e "^INTERFACE_FUNCTION"                                          \
-// RUN:  %p/../../../../lib/asan/asan_interface.inc                            \
-// RUN:  %p/../../../../lib/ubsan/ubsan_interface.inc                          \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_common_interface.inc    \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_coverage_interface.inc  \
+// RUN:  %p/../../../../src/runtime/lib/asan/asan_interface.inc                            \
+// RUN:  %p/../../../../src/runtime/lib/ubsan/ubsan_interface.inc                          \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_common_interface.inc    \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_coverage_interface.inc  \
 // RUN:  | sed -e "s/.*(//" -e "s/).*//" > %t.imports1
 //
 // RUN: grep -e "^INTERFACE_WEAK_FUNCTION"                                     \
-// RUN:  %p/../../../../lib/asan/asan_interface.inc                            \
-// RUN:  %p/../../../../lib/ubsan/ubsan_interface.inc                          \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_common_interface.inc    \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_coverage_interface.inc  \
+// RUN:  %p/../../../../src/runtime/lib/asan/asan_interface.inc                            \
+// RUN:  %p/../../../../src/runtime/lib/ubsan/ubsan_interface.inc                          \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_common_interface.inc    \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_coverage_interface.inc  \
 // RUN:  | sed -e "s/.*(//" -e "s/).*/__dll/" > %t.imports2
 //
 // Add functions not included in the interface lists:

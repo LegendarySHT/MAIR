@@ -3,7 +3,7 @@
 // ../Linux/interface_symbols.c
 
 // This is needed to run the preprocessor to exclude symbols guarded by platform
-// RUN: %clangxx -x c++-header -o - -E %p/../../../../lib/asan/asan_interface.inc  \
+// RUN: %clangxx -x c++-header -o - -E %p/../../../../src/runtime/lib/asan/asan_interface.inc  \
 // RUN:  | sed "s/INTERFACE_FUNCTION/\nINTERFACE_FUNCTION/g" >  %t.asan_interface.inc
 
 // RUN: %clangxx_asan -dead_strip -O2 %s -o %t.exe
@@ -29,10 +29,10 @@
 // RUN:      -e ':b' -e 's/\n\n/\n/g' -e 'tb'                                     \
 // RUN:      -e 's/(\n/(/g'                                                       \
 // RUN:  %t.asan_interface.inc                                                    \
-// RUN:  %p/../../../../lib/ubsan/ubsan_interface.inc                             \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_common_interface.inc       \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_common_interface_posix.inc \
-// RUN:  %p/../../../../lib/sanitizer_common/sanitizer_coverage_interface.inc     \
+// RUN:  %p/../../../../src/runtime/lib/ubsan/ubsan_interface.inc                             \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_common_interface.inc       \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_common_interface_posix.inc \
+// RUN:  %p/../../../../src/runtime/lib/sanitizer_common/sanitizer_coverage_interface.inc     \
 // RUN:  | grep -e "INTERFACE_\(WEAK_\)\?FUNCTION"                                \
 // RUN:  | grep -v "__sanitizer_weak_hook"                                        \
 // RUN:  | grep -v "__sanitizer_override_function"                                \
