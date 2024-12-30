@@ -15,7 +15,9 @@ set(TSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 # set(MSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 
 # To make `get_test_cc_for_arch` happy
-set(COMPILER_RT_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
+# Now we inherite all variables from src/runtime/test/CMakeLists.txt,
+#  and thus no need to set this variable again.
+# set(COMPILER_RT_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 
 list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake"

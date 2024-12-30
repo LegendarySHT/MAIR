@@ -18,33 +18,36 @@ configure_compiler_rt_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/lit.common.configured.in
   ${XSAN_COMMON_LIT_CONFIGURE_PATH})
 
-# # BlocksRuntime (and most of builtins) testsuites are not yet ported to lit.
-# # add_subdirectory(BlocksRuntime)
+# BlocksRuntime (and most of builtins) testsuites are not yet ported to lit.
+# add_subdirectory(BlocksRuntime)
 
-# set(SANITIZER_COMMON_LIT_TEST_DEPS)
+set(SANITIZER_COMMON_LIT_TEST_DEPS)
 
-# if(COMPILER_RT_BUILD_PROFILE AND COMPILER_RT_HAS_PROFILE)
-#   list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS profile)
-# endif()
+if(COMPILER_RT_BUILD_PROFILE AND COMPILER_RT_HAS_PROFILE)
+  list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS profile)
+endif()
 
-# # When ANDROID, we build tests with the host compiler (i.e. CMAKE_C_COMPILER),
-# # and run tests with tools from the host toolchain.
-# if(NOT ANDROID)
-#   if(NOT COMPILER_RT_STANDALONE_BUILD AND NOT LLVM_RUNTIMES_BUILD)
-#     # Use LLVM utils and Clang from the same build tree.
-#     list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS
-#       clang clang-resource-headers FileCheck count not llvm-config llvm-nm 
-#       llvm-objdump llvm-readelf llvm-readobj llvm-size llvm-symbolizer 
-#       compiler-rt-headers sancov split-file llvm-strip)
-#     if (WIN32)
-#       list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS KillTheDoctor)
-#     endif()
-#   endif()
-#   # Tests use C++ standard library headers.
-#   if (TARGET cxx-headers OR HAVE_LIBCXX)
-#     list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS cxx-headers)
-#   endif()
-# endif()
+# When ANDROID, we build tests with the host compiler (i.e. CMAKE_C_COMPILER),
+# and run tests with tools from the host toolchain.
+if(NOT ANDROID)
+  if(NOT COMPILER_RT_STANDALONE_BUILD AND NOT LLVM_RUNTIMES_BUILD)
+    # Use LLVM utils and Clang from the same build tree.
+    list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS
+      clang clang-resource-headers FileCheck count not llvm-config llvm-nm 
+      llvm-objdump llvm-readelf llvm-readobj llvm-size llvm-symbolizer 
+      compiler-rt-headers sancov split-file llvm-strip)
+    if (WIN32)
+      list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS KillTheDoctor)
+    endif()
+  endif()
+  # Tests use C++ standard library headers.
+  if (TARGET cxx-headers OR HAVE_LIBCXX)
+    list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS cxx-headers)
+  endif()
+endif()
+
+### Adds an out-of-tree test suite, and specifies its binary directory.
+add_subdirectory(${CMAKE_SOURCE_DIR}/test ${CMAKE_BINARY_DIR}/test)
 
 # umbrella_lit_testsuite_begin(check-compiler-rt)
 

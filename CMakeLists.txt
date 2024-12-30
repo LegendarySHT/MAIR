@@ -82,5 +82,7 @@ set(XSAN_COMMON_LIT_CONFIGURE_PATH
   ${CMAKE_BINARY_DIR}/test/lit.common.configured)
 
 add_subdirectory(src)
-add_subdirectory(test)
+# Now this directory is added from /src/runtime/test/CMakeLists.txt, 
+# in order to include the relevant variables.
+# add_subdirectory(test)
 
