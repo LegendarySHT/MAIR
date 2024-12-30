@@ -1,3 +1,5 @@
+########## Set the sources for the XSan runtime library ##########
+
 # Build for the XSan runtime support library.
 set(ASAN_SOURCES
   # asan/orig/asan_allocator.cpp
@@ -30,6 +32,20 @@ set(ASAN_SOURCES
   # asan/orig/asan_thread.cpp
   asan/orig/asan_win.cpp
 )
+
+if(WIN32)
+  set(ASAN_DYNAMIC_RUNTIME_THUNK_SOURCES
+    asan_globals_win.cpp
+    asan_win_common_runtime_thunk.cpp
+    asan_win_dynamic_runtime_thunk.cpp
+    )
+  set(ASAN_STATIC_RUNTIME_THUNK_SOURCES
+    asan_globals_win.cpp
+    asan_malloc_win_thunk.cpp
+    asan_win_common_runtime_thunk.cpp
+    asan_win_static_runtime_thunk.cpp
+    )
+endif()
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
@@ -106,23 +122,23 @@ set(TSAN_ASM_SOURCES)
 if (NOT APPLE)
   foreach(arch ${TSAN_SUPPORTED_ARCH})
     if(arch STREQUAL "x86_64")
-      add_asm_sources(TSAN_ASM_SOURCES
+      set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_amd64.S
         )
     elseif(arch STREQUAL "aarch64")
-      add_asm_sources(TSAN_ASM_SOURCES
+      set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_aarch64.S
         )
     elseif(arch MATCHES "powerpc64|powerpc64le")
-      add_asm_sources(TSAN_ASM_SOURCES
+      set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_ppc64.S
         )
     elseif(arch MATCHES "mips64|mips64le")
-      add_asm_sources(TSAN_ASM_SOURCES
+      set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_mips64.S
         )
     elseif(arch MATCHES "s390x")
-      add_asm_sources(TSAN_ASM_SOURCES
+      set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_s390x.S
         )
     else()
@@ -185,7 +201,7 @@ set(XSAN_STATIC_SOURCES
   xsan_rtl_static.cpp
   )
 
-if (NOT WIN32 AND NOT APPLE)
+if ("x86_64" IN_LIST ASAN_SUPPORTED_ARCH AND NOT WIN32 AND NOT APPLE)
   list(APPEND XSAN_STATIC_SOURCES
     asan/orig/asan_rtl_x86_64.S
   )
@@ -194,6 +210,8 @@ endif()
 set(XSAN_PREINIT_SOURCES
   xsan_preinit.cpp
   )
+
+################## Set the headers for the XSan runtime library ##########
 
 set(ASAN_HEADERS
   asan/orig/asan_activation.h
@@ -209,7 +227,6 @@ set(ASAN_HEADERS
   asan/orig/asan_interface.inc
   asan/orig/asan_interface_internal.h
   asan/orig/asan_internal.h
-  asan/orig/asan_lock.h
   # asan/orig/asan_mapping.h
   asan/orig/asan_poisoning.h
   asan/orig/asan_premap_shadow.h
@@ -293,15 +310,18 @@ include_directories(
 )
 
 
+# Set the 
 
-set(XSAN_COMMON_RUNTIME_OBJECT_LIBS
-  RTInterception
-  RTSanitizerCommon
-  RTSanitizerCommonLibc
-  RTSanitizerCommonCoverage
-  RTSanitizerCommonSymbolizer
-  RTLSanCommon
-  RTUbsan)
+
+
+
+############### Set the CFLAGS for the XSan runtime library ##########
+
+set(ASAN_CFLAGS)
+
+append_list_if(MSVC /Zl ASAN_CFLAGS)
+
+set(ASAN_COMMON_DEFINITIONS "")
 
 set(TSAN_CFLAGS)
 # SANITIZER_COMMON_CFLAGS contains -fPIC, but it's performance-critical for
@@ -333,18 +353,22 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
   list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_LIBDISPATCH_CFLAGS})
 endif()
 
-set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${TSAN_RTL_CFLAGS})
-set(XSAN_COMMON_DEFINITIONS)
+set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${ASAN_CFLAGS} ${TSAN_RTL_CFLAGS})
+
+set(XSAN_COMMON_DEFINITIONS "")
 
 append_rtti_flag(OFF XSAN_RTL_CFLAGS)
 
 # Silence warnings in system headers with MSVC.
 if(NOT CLANG_CL)
-  append_list_if(COMPILER_RT_HAS_EXTERNAL_FLAG "/experimental:external /external:W0 /external:anglebrackets" XSAN_RTL_CFLAGS)
+  append_list_if(COMPILER_RT_HAS_EXTERNAL_FLAG "/experimental:external;/external:W0;/external:anglebrackets" XSAN_RTL_CFLAGS)
 endif()
 
 # Too many existing bugs, needs cleanup.
 append_list_if(COMPILER_RT_HAS_WNO_FORMAT -Wno-format XSAN_RTL_CFLAGS)
+
+
+################## Compilation setting from source files to object files ###############
 
 if(NOT APPLE)
   add_compiler_rt_object_libraries(RTXsan
@@ -380,7 +404,7 @@ if(NOT APPLE)
   #   DEFS ${XSAN_DYNAMIC_DEFINITIONS})
 endif()
 
-add_compiler_rt_component(xsan)
+################### Set the LDFLAGS for the XSan runtime library ##########
 
 # TODO: only add this link flags when both TSan and LSan are activated.
 # If LSan and TSan are enabled togother, we need to intercept the LSan's symbols DoLeakCheck and DoRecoverableLeakCheck.
@@ -396,47 +420,74 @@ set(XSAN_LINK_FLAGS "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv"
                     )
 
 
+################## Set the runtime library for the XSan runtime library ##########
+if(MSVC)
+  # asan on windows only supports the release dll version of the runtimes, in the interest of
+  # only having one asan dll to support/test. Having asan statically linked
+  # with the runtime might be possible, but it multiplies the number of scenerios to test.
+  # the program USING sanitizers can use whatever version of the runtime it wants to.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
+endif()
+
+
+################## Linking setting from object files to the static XSan runtime library ###############
+
+# Build XSan runtimes shipped with Clang.
+add_compiler_rt_component(xsan)
+
 if(NOT APPLE)
+  set(XSAN_COMMON_RUNTIME_OBJECT_LIBS
+    RTInterception
+    RTSanitizerCommon
+    RTSanitizerCommonLibc
+    RTSanitizerCommonCoverage
+    RTSanitizerCommonSymbolizer
+    RTSanitizerCommonSymbolizerInternal
+    RTLSanCommon
+    RTUbsan)
 
-  add_compiler_rt_runtime(clang_rt.xsan
-      STATIC
-      ARCHS ${XSAN_SUPPORTED_ARCH}
-      OBJECT_LIBS RTXsan_preinit
-                  RTXsan          
-                  ${XSAN_COMMON_RUNTIME_OBJECT_LIBS}
-      CFLAGS ${XSAN_RTL_CFLAGS}
-      LINK_FLAGS ${XSAN_LINK_FLAGS}
-      DEFS ${XSAN_COMMON_DEFINITIONS}
-      PARENT_TARGET xsan)
+  if (NOT WIN32)
+    add_compiler_rt_runtime(clang_rt.xsan
+        STATIC
+        ARCHS ${XSAN_SUPPORTED_ARCH}
+        OBJECT_LIBS RTXsan_preinit
+                    RTXsan          
+                    ${XSAN_COMMON_RUNTIME_OBJECT_LIBS}
+        CFLAGS ${XSAN_RTL_CFLAGS}
+        LINK_FLAGS ${XSAN_LINK_FLAGS}
+        DEFS ${XSAN_COMMON_DEFINITIONS}
+        PARENT_TARGET xsan)
 
-  add_compiler_rt_runtime(clang_rt.xsan_cxx
-      STATIC
-      ARCHS ${ASAN_SUPPORTED_ARCH}
-      OBJECT_LIBS RTXsan_cxx
-                  RTUbsan_cxx
-      CFLAGS ${XSAN_RTL_CFLAGS}
-      LINK_FLAGS ${XSAN_LINK_FLAGS}
-      DEFS ${XSAN_COMMON_DEFINITIONS}
-      PARENT_TARGET xsan)
-  
-  add_compiler_rt_runtime(clang_rt.xsan_static
-      STATIC
-      ARCHS ${XSAN_SUPPORTED_ARCH}
-      OBJECT_LIBS RTXsan_static
-      CFLAGS ${XSAN_RTL_CFLAGS}
-      LINK_FLAGS ${XSAN_LINK_FLAGS}
-      DEFS ${XSAN_COMMON_DEFINITIONS}
-      PARENT_TARGET xsan)
-  
-  add_compiler_rt_runtime(clang_rt.xsan-preinit
-      STATIC
-      ARCHS ${XSAN_SUPPORTED_ARCH}
-      OBJECT_LIBS RTXsan_preinit
-      CFLAGS ${XSAN_RTL_CFLAGS}
-      LINK_FLAGS ${XSAN_LINK_FLAGS}
-      DEFS ${XSAN_COMMON_DEFINITIONS}
-      PARENT_TARGET xsan)
+    add_compiler_rt_runtime(clang_rt.xsan_cxx
+        STATIC
+        ARCHS ${ASAN_SUPPORTED_ARCH}
+        OBJECT_LIBS RTXsan_cxx
+                    RTUbsan_cxx
+        CFLAGS ${XSAN_RTL_CFLAGS}
+        LINK_FLAGS ${XSAN_LINK_FLAGS}
+        DEFS ${XSAN_COMMON_DEFINITIONS}
+        PARENT_TARGET xsan)
+    
+    add_compiler_rt_runtime(clang_rt.xsan_static
+        STATIC
+        ARCHS ${XSAN_SUPPORTED_ARCH}
+        OBJECT_LIBS RTXsan_static
+        CFLAGS ${XSAN_RTL_CFLAGS}
+        LINK_FLAGS ${XSAN_LINK_FLAGS}
+        DEFS ${XSAN_COMMON_DEFINITIONS}
+        PARENT_TARGET xsan)
+    
+    add_compiler_rt_runtime(clang_rt.xsan-preinit
+        STATIC
+        ARCHS ${XSAN_SUPPORTED_ARCH}
+        OBJECT_LIBS RTXsan_preinit
+        CFLAGS ${XSAN_RTL_CFLAGS}
+        LINK_FLAGS ${XSAN_LINK_FLAGS}
+        DEFS ${XSAN_COMMON_DEFINITIONS}
+        PARENT_TARGET xsan)
+  endif()
 
+  ################ Dump the extern symbols in dynamic libraries ###############
   foreach(arch ${XSAN_SUPPORTED_ARCH})
     if (SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
       add_sanitizer_rt_symbols(clang_rt.xsan_cxx

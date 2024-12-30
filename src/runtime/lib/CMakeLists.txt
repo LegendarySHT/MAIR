@@ -52,7 +52,7 @@ if(COMPILER_RT_BUILD_SANITIZERS)
   endforeach()
   
   # Add our XSan runtime here, which is not controlled by COMPILER_RT_SANITIZERS_TO_BUILD.
-  # add_subdirectory(xsan)
+  add_subdirectory(xsan)
 endif()
 
 if(COMPILER_RT_BUILD_PROFILE)

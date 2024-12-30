@@ -1,5 +1,5 @@
-# Aligned with LLVM 15.0.7
-cmake_minimum_required(VERSION 3.13.4)
+# Aligned with LLVM 20
+cmake_minimum_required(VERSION 3.20.0)
 
 project(xsan)
 # To compile *.S in runtime
@@ -88,6 +88,7 @@ message_green("XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
 
 set(XSAN_BIN_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
+set(XSAN_RESOURCE_DIR "${CMAKE_BINARY_DIR}/share")
 set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
 # TODO: de-hardcode this
 set(XSAN_COMMON_LIT_CONFIGURE_PATH
