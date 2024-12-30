@@ -15,6 +15,8 @@ Now, XSan supports the following sanitizers:
     - compiler: the compiler wrapper of the XSan project.
     - runtime: the runtime library of the XSan project (major of which come from compiler-rt).
         - lib: the majority of the runtime library.
+      > Almost all the sanitizer runtime libraries are migrated from [LLVM20-commit: 3469996] (https://github.com/llvm/llvm-project/commit/3469996d0d057d99a33ec34ee3c80e5d4fa3afcb)
+      > Note that UBSan relies on clang frontend, therefore, the function checks of it could not upgrade as we still use clang-15.
     - instrumentation: the instrumentation code of the XSan project.
 - test: the test cases for the XSan project.
 
