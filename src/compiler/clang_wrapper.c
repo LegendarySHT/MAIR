@@ -978,7 +978,12 @@ static void edit_params(u32 argc, char** argv) {
         continue;
       })
     }
+  }
 
+  /// Set -x none for sanitizer rutnime libraries.
+  if (x_set) {
+    cc_params[cc_par_cnt++] = "-x";
+    cc_params[cc_par_cnt++] = "none";
   }
 
   init_sanitizer_setting(xsanTy);
@@ -1165,14 +1170,6 @@ static void edit_params(u32 argc, char** argv) {
 #endif*/ /* ^__APPLE__ */
    // "_I(); } while (0)";
 
-  if (x_set) {
-    cc_params[cc_par_cnt++] = "-x";
-    cc_params[cc_par_cnt++] = "none";
-  }
-
-  // init_sanitizer_setting(xsanTy);
-  // regist_pass_plugin(xsanTy);
-  // add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
 
   cc_params[cc_par_cnt++] = "-fuse-ld=lld";
 
