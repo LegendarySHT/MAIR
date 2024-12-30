@@ -1,0 +1,2 @@
+__asan_init
+__tsan_init

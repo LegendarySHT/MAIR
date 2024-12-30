@@ -406,18 +406,19 @@ endif()
 
 ################### Set the LDFLAGS for the XSan runtime library ##########
 
-# TODO: only add this link flags when both TSan and LSan are activated.
-# If LSan and TSan are enabled togother, we need to intercept the LSan's symbols DoLeakCheck and DoRecoverableLeakCheck.
-set(XSAN_LINK_FLAGS "-Wl,-wrap,_ZN6__lsan11DoLeakCheckEv" 
-                    "-Wl,-wrap,_ZN6__lsan26DoRecoverableLeakCheckVoidEv"
-                    "-Wl,-wrap,__lsan_do_leak_check"
-                    "-Wl,-wrap,__lsan_do_recoverable_leak_check"
+set (WRAPPED_SYMBOLS ${CMAKE_CURRENT_SOURCE_DIR}/xsan_wrapped_symbols.txt.in)
+# TODO: only add this file when TSan is activated.
+append_list_if(True ${CMAKE_CURRENT_SOURCE_DIR}/tsan/tsan_wrapped_symbols.txt.in WRAPPED_SYMBOLS)
 
-                    "-Wl,-wrap,_ZN11__sanitizer23IsAccessibleMemoryRangeEmm"
-                    
-                    "-Wl,-wrap,__asan_init"
-                    "-Wl,-wrap,__tsan_init"
-                    )
+# Located in src/cmake/AddWrapSyms.cmake
+include(AddWrapSyms)
+# Generate wrapped symbols file, which contains all symbols that need to be wrapped by _wrap=<symbol> linker option.
+generate_wrap_symbols(
+  OUT ${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt
+  IN ${WRAPPED_SYMBOLS}
+)
+
+set(XSAN_LINK_FLAGS "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt")
 
 
 ################## Set the runtime library for the XSan runtime library ##########

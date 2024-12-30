@@ -731,41 +731,13 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   }
 }
 
-static void add_interception_params(enum SanitizerType sanTy, u8 is_cxx) {
+static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   if (sanTy != XSan)
     return;
 
-#define INTERCEPT(symbol) cc_params[cc_par_cnt++] = "-Wl,-wrap," #symbol;
   /// TODO: only add this link arguments while TSan is enabled togother with LSan.
-
-  //   As LSan's sanity check conflicts with TSan's interceptor
-  // (dl_iterate_phdr), we need to disable TSan's interceptor while LSan is
-  // performing its checks.
-  //   We non-intrusively intercept LSan's check entry in link-time while
-  // both TSan and LSan are enabled.
-  //   See the comments in tsan_rtl_extra.cpp:__wrap__ZN6__lsan11DoLeakCheckEv
-  // for details.
-
-  // __lsan::DoLeakCheck()
-  INTERCEPT(_ZN6__lsan11DoLeakCheckEv);
-  // __lsan::DoRecoverableLeakCheck()
-  INTERCEPT(_ZN6__lsan26DoRecoverableLeakCheckVoidEv);
-  INTERCEPT(__lsan_do_leak_check);
-  INTERCEPT(__lsan_do_recoverable_leak_check);
-
-  /// TODO: only add this link arguments while TSan is enabled togother with UBSan.
-  // TSan's interceptor of `pipe` conflicts with UBSan's handling.
-  // UBSan's handling uses `__sanitizer::IsAccessibleMemoryRange`, which
-  // leverages `pipe` to check the accessibility of memory.
-
-  // __sanitizer::IsAccessibleMemoryRange
-  INTERCEPT(_ZN11__sanitizer23IsAccessibleMemoryRangeEmm);
-
-  /// Intercepts the initialization functions of ASan and TSan, and redirects
-  /// them to XSan's initialization function __xsan_init.
-  INTERCEPT(__asan_init);
-  INTERCEPT(__tsan_init);
-#undef INTERCEPT
+  // Use Linker Response File to include lots of -wrap=<symbol> options in one file.
+  cc_params[cc_par_cnt++] = alloc_printf("-Wl,@%s/share/xsan_wrapped_symbols.txt", obj_path);
 }
 
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso) {
@@ -792,7 +764,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
     return;
   }
 
-  add_interception_params(sanTy, is_cxx);
+  add_wrap_link_option(sanTy, is_cxx);
 
   /**
     // Always link the static runtime regardless of DSO or executable.

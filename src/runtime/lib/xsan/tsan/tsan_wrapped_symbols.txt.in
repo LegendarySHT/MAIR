@@ -1,0 +1,5 @@
+_ZN6__lsan11DoLeakCheckEv
+_ZN6__lsan26DoRecoverableLeakCheckVoidEv
+__lsan_do_leak_check
+__lsan_do_recoverable_leak_check
+_ZN11__sanitizer23IsAccessibleMemoryRangeEmm
