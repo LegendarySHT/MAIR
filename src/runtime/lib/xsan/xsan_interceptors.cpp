@@ -15,6 +15,7 @@
 #include "xsan_stack.h"
 #include "xsan_thread.h"
 
+#include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_libc.h"
@@ -512,8 +513,17 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   ThreadParam *p = (ThreadParam *)arg;
   auto &[t, created, started] = *p;
   SetCurrentThread(t);
-  /// TODO: pending update, refer to asanThreadArgRetval()
-  return t->ThreadStart(GetTid(), &created, &started);
+  auto self = GetThreadSelf();
+  auto args = xsanThreadArgRetval().GetArgs(self);
+
+  /// Semaphore: comes from TSan, controlling the thread create event.
+  created.Wait();
+  t->ThreadStart(GetTid());
+  started.Post();
+  thread_return_t retval = (*args.routine)(args.arg_retval);
+  xsanThreadArgRetval().Finish(self, retval);
+
+  return retval;
 }
 
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
@@ -545,7 +555,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   /// Note that sub_thread's recycle is delegated to sub thread.
   /// Hence, we could not use it after pthread_create in the parent thread.
   XsanThread *sub_thread =
-      XsanThread::Create(start_routine, arg, current_tid, &stack, detached);
+      XsanThread::Create(current_tid, &stack, detached);
 
   ThreadParam p;
   p.t = sub_thread;
@@ -563,7 +573,11 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 #    if CAN_SANITIZE_LEAKS
     __lsan::ScopedInterceptorDisabler disabler;
 #    endif
-    result = REAL(pthread_create)(thread, attr, xsan_thread_start, &p);
+    xsanThreadArgRetval().Create(detached, {start_routine, arg}, [&]() -> uptr {
+      result =
+          REAL(pthread_create)(thread, attr, xsan_thread_start, sub_thread);
+      return result ? 0 : *(uptr *)(thread);
+    });
   }
 
   if (result == 0) {
@@ -590,12 +604,54 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 }
 
 /// If not compose TSan, intercept join here
-#if !XSAN_CONTAINS_TSAN
+#    if !XSAN_CONTAINS_TSAN
 /// TODO: migrate pthread related APIs to XSan.
 INTERCEPTOR(int, pthread_join, void *t, void **arg) {
-  return real_pthread_join(t, arg);
+  int result;
+  xsanThreadArgRetval().Join((uptr)thread, [&]() {
+    result = REAL(pthread_join)(thread, retval);
+    return !result;
+  });
+  return result;
 }
-#endif
+
+INTERCEPTOR(int, pthread_detach, void *thread) {
+  int result;
+  xsanThreadArgRetval().Detach((uptr)thread, [&]() {
+    result = REAL(pthread_detach)(thread);
+    return !result;
+  });
+  return result;
+}
+
+INTERCEPTOR(int, pthread_exit, void *retval) {
+  xsanThreadArgRetval().Finish(GetThreadSelf(), retval);
+  return REAL(pthread_exit)(retval);
+}
+
+#      if XSAN_INTERCEPT_TRYJOIN
+INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **ret) {
+  int result;
+  xsanThreadArgRetval().Join((uptr)thread, [&]() {
+    result = REAL(pthread_tryjoin_np)(thread, ret);
+    return !result;
+  });
+  return result;
+}
+#      endif
+
+#      if XSAN_INTERCEPT_TIMEDJOIN
+INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **ret,
+            const struct timespec *abstime) {
+  int result;
+  xsanThreadArgRetval().Join((uptr)thread, [&]() {
+    result = REAL(pthread_timedjoin_np)(thread, ret, abstime);
+    return !result;
+  });
+  return result;
+}
+#      endif
+#    endif
 
 /// TODO: migrate pthread related APIs to XSan.
 // DEFINE_INTERNAL_PTHREAD_FUNCTIONS
@@ -1258,21 +1314,20 @@ void InitializeXsanInterceptors() {
 #    endif
 #    if !XSAN_CONTAINS_TSAN
   /// If not compose TSan, intercept join here
+  /// FIXME: use hooks for TSan.
   XSAN_INTERCEPT_FUNC(pthread_join);
   XSAN_INTERCEPT_FUNC(pthread_detach);
   XSAN_INTERCEPT_FUNC(pthread_exit);
+#      if XSAN_INTERCEPT_TIMEDJOIN
+  XSAN_INTERCEPT_FUNC(pthread_timedjoin_np);
+#      endif
+
+#      if XSAN_INTERCEPT_TRYJOIN
+  XSAN_INTERCEPT_FUNC(pthread_tryjoin_np);
+#      endif
 #    endif
 
 #  endif
-
-/// TODO: fix this
-// #  if XSAN_INTERCEPT_TIMEDJOIN
-//   XSAN_INTERCEPT_FUNC(pthread_timedjoin_np);
-// #  endif
-
-// #  if XSAN_INTERCEPT_TRYJOIN
-//   XSAN_INTERCEPT_FUNC(pthread_tryjoin_np);
-// #  endif
 
   // Intercept atexit function.
 #  if XSAN_INTERCEPT___CXA_ATEXIT

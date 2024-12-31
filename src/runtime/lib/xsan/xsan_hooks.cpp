@@ -357,11 +357,11 @@ The following events happen in order while `pthread_create` is executed:
     - [child-thread] : (**HOOK**) XsanThread::OnThreadDestroy
 */
 
-void XsanThread::OnThreadCreate(thread_callback_t start_routine, void *arg,
+void XsanThread::OnThreadCreate(const void *start_data, uptr data_size,
                                 u32 parent_tid, StackTrace *stack,
                                 bool detached) {
   auto *asan_thread = __asan::AsanThread::Create(
-      /* start_routine */ start_routine, /* arg */ arg,
+      /* start_data */ start_data, /* data_size */ data_size,
       /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);
   this->asan_thread_ = asan_thread;
   this->tid_ = asan_thread->tid();

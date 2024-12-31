@@ -1,11 +1,13 @@
 #include "xsan_thread.h"
 
 #include <pthread.h>
-#include <sanitizer_common/sanitizer_common.h>
-#include <sanitizer_common/sanitizer_internal_defs.h>
-#include <sanitizer_common/sanitizer_placement_new.h>
-#include <sanitizer_common/sanitizer_stackdepot.h>
-#include <sanitizer_common/sanitizer_tls_get_addr.h>
+
+#include "sanitizer_common/sanitizer_common.h"
+#include "sanitizer_common/sanitizer_internal_defs.h"
+#include "sanitizer_common/sanitizer_placement_new.h"
+#include "sanitizer_common/sanitizer_stackdepot.h"
+#include "sanitizer_common/sanitizer_thread_arg_retval.h"
+#include "sanitizer_common/sanitizer_tls_get_addr.h"
 
 #include "xsan_common_defs.h"
 #include "xsan_hooks.h"
@@ -13,8 +15,32 @@
 #include "xsan_internal.h"
 
 namespace __xsan {
+static ThreadArgRetval *thread_data;
+static void InitThreads() {
+  static bool initialized;
+  // Don't worry about thread_safety - this should be called when there is
+  // a single thread.
+  if (LIKELY(initialized))
+    return;
+  // Never reuse ASan threads: we store pointer to AsanThreadContext
+  // in TSD and can't reliably tell when no more TSD destructors will
+  // be called. It would be wrong to reuse AsanThreadContext for another
+  // thread before all TSD destructors will be called for it.
 
-XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
+  // MIPS requires aligned address
+  alignas(alignof(ThreadArgRetval)) static char
+      thread_data_placeholder[sizeof(ThreadArgRetval)];
+
+  thread_data = new (thread_data_placeholder) ThreadArgRetval();
+  initialized = true;
+}
+
+ThreadArgRetval &xsanThreadArgRetval() {
+  InitThreads();
+  return *thread_data;
+}
+
+XsanThread *XsanThread::Create(const void *start_data, uptr data_size,
                                u32 parent_tid, StackTrace *stack,
                                bool detached) {
   uptr PageSize = GetPageSizeCached();
@@ -23,15 +49,18 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->is_inited_ = false;
   thread->in_ignored_lib_ = false;
 
-  thread->start_routine_ = start_routine;
-  thread->arg_ = arg;
+  if (data_size) {
+    uptr availible_size = (uptr)thread + size - (uptr)(thread->start_data_);
+    CHECK_LE(data_size, availible_size);
+    internal_memcpy(thread->start_data_, start_data, data_size);
+  }
+
   thread->destructor_iterations_ = GetPthreadDestructorIterations();
   thread->detached_ = detached;
-  thread->is_main_thread_ =
-      (start_routine == nullptr && parent_tid == kMainTid);
+  thread->is_main_thread_ = (data_size == 0 && parent_tid == kMainTid);
 
   /// Create sub-sanitizers' thread data.
-  thread->OnThreadCreate(/* start_routine */ start_routine, /* arg */ arg,
+  thread->OnThreadCreate(/* start_data */ start_data, /* data_size */ data_size,
                          /* parent_tid */ parent_tid, /* stack */ stack,
                          /* detached */ detached);
 
@@ -42,6 +71,10 @@ XsanThread *XsanThread::Create(thread_callback_t start_routine, void *arg,
   thread->tid_ = tid++;
 # endif
   return thread;
+}
+
+void XsanThread::GetStartData(void *out, uptr out_size) const {
+  internal_memcpy(out, start_data_, out_size);
 }
 
 inline XsanThread::StackBounds XsanThread::GetStackBounds() const {
@@ -105,6 +138,8 @@ void XsanThread::Destroy() {
   this->OnThreadDestroy();
 
   UnmapOrDie(this, size);
+  /// TODO: ASan destroy DTLS only if was_running == true
+  // if (was_running)
   DTLS_Destroy();
 }
 
@@ -113,7 +148,7 @@ void XsanThread::Destroy() {
 #if !SANITIZER_FUCHSIA
 
 
-thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semaphore *started) {
+void XsanThread::ThreadStart(tid_t os_id) {
   // XSanThread doesn't have a registry.
   // xsanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular,
   // nullptr);
@@ -123,50 +158,22 @@ thread_return_t XsanThread::ThreadStart(tid_t os_id, Semaphore *created, Semapho
   {
     // Thread-local state is not initialized yet.
     __xsan::ScopedIgnoreInterceptors ignore;
-    if (created) created->Wait();
 
     /// Initialize sub-sanitizers' thread data in new thread and before the real
     /// callback execution.
     this->BeforeThreadStart(os_id);
 
     Init();
-    if (started) started->Post();
 
     /// Now only ASan uses this, so let's consider it as ASan's exclusive
     /// resource.
     // if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
-
-    if (!start_routine_) {
-      // start_routine_ == 0 if we're on the main thread or on one of the
-      // OS X libdispatch worker threads. But nobody is supposed to call
-      // ThreadStart() for the worker threads.
-      CHECK_EQ(tid(), 0);
-      return 0;
-    }
   }
-
-  thread_return_t res = start_routine_(arg_);
-
-  {
-    __xsan::ScopedIgnoreInterceptors ignore;
-
-    this->AfterThreadStart();
-
-    // On POSIX systems we defer this to the TSD destructor. LSan will consider
-    // the thread's memory as non-live from the moment we call Destroy(), even
-    // though that memory might contain pointers to heap objects which will be
-    // cleaned up by a user-defined TSD destructor. Thus, calling Destroy() before
-    // the TSD destructors have run might cause false positives in LSan.
-    if (!SANITIZER_POSIX)
-      this->Destroy();
-  }
-
-  return res;
 }
 
 XsanThread *CreateMainThread() {
   XsanThread *main_thread = XsanThread::Create(
-      /* start_routine */ nullptr, /* arg */ nullptr, /* parent_tid */ kMainTid,
+      /* parent_tid */ kMainTid,
       /* stack */ nullptr, /* detached */ true);
 
   SetCurrentThread(main_thread);
@@ -185,12 +192,11 @@ void InitializeMainThread() {
 // OS-specific implementations that need more information passed through.
 void XsanThread::SetThreadStackAndTls(const InitOptions *options) {
   DCHECK_EQ(options, nullptr);
-  uptr tls_size = 0;
-  uptr stack_size = 0;
-  GetThreadStackAndTls(tid() == kMainTid, &stack_bottom_, &stack_size,
-                       &tls_begin_, &tls_size);
-  stack_top_ = RoundDownTo(stack_bottom_ + stack_size, ASAN_SHADOW_GRANULARITY);
-  tls_end_ = tls_begin_ + tls_size;
+  GetThreadStackAndTls(tid() == kMainTid, &stack_bottom_, &stack_top_,
+                       &tls_begin_, &tls_end_);
+  /// TODO: use a more generic way to get the range of stack
+  stack_top_ = RoundDownTo(stack_top_, ASAN_SHADOW_GRANULARITY);
+  stack_bottom_ = RoundDownTo(stack_bottom_, ASAN_SHADOW_GRANULARITY);
   dtls_ = DTLS_Get();
 
   if (stack_top_ != stack_bottom_) {

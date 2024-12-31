@@ -1,9 +1,6 @@
 #pragma once
 
-#include <sanitizer_common/sanitizer_common.h>
-#include <sanitizer_common/sanitizer_libc.h>
-#include <sanitizer_common/sanitizer_thread_registry.h>
-
+#include "sanitizer_common/sanitizer_thread_arg_retval.h"
 #include "xsan_internal.h"
 
 namespace __sanitizer {
@@ -24,8 +21,17 @@ namespace __xsan {
 // XsanThread are stored in TSD and destroyed when the thread dies.
 class XsanThread {
  public:
-  static XsanThread *Create(thread_callback_t start_routine, void *arg,
-                            u32 parent_tid, StackTrace *stack, bool detached);
+  // For sub-threads. data is used to store rountine & args.
+  template <typename T>
+  static XsanThread *Create(const T &data, u32 parent_tid, StackTrace *stack,
+                            bool detached) {
+    return Create(&data, sizeof(data), parent_tid, stack, detached);
+  }
+  // For MainThread.
+  static XsanThread *Create(u32 parent_tid, StackTrace *stack, bool detached) {
+    return Create(nullptr, 0, parent_tid, stack, detached);
+  }
+
   static void TSDDtor(void *tsd);
   void Destroy();
 
@@ -34,9 +40,9 @@ class XsanThread {
 
   Tid PostNonMainThreadCreate(uptr pc, uptr uid);
 
-  /// Semaphore: comes from TSan, controlling the thread create event.
-  thread_return_t ThreadStart(tid_t os_id, Semaphore *created = nullptr,
-                              Semaphore *started = nullptr);
+  void ThreadStart(tid_t os_id);
+  /// ASan declares this method, but not implements.
+  thread_return_t RunThread();
 
   uptr stack_top();
   uptr stack_bottom();
@@ -65,7 +71,10 @@ class XsanThread {
 
   void *extra_spill_area() { return &extra_spill_area_; }
 
-  void *get_arg() { return arg_; }
+  template <typename T>
+  void GetStartData(T &data) const {
+    GetStartData(&data, sizeof(data));
+  }
 
   bool isMainThread() { return is_main_thread_; }
 
@@ -79,9 +88,12 @@ class XsanThread {
   // NOTE: There is no XsanThread constructor. It is allocated
   // via mmap() and *must* be valid in zero-initialized state.
 
+  static XsanThread *Create(const void *start_data, uptr data_size,
+                            u32 parent_tid, StackTrace *stack, bool detached);
+
   /// Create sub-sanitizers' thread data.
-  void OnThreadCreate(thread_callback_t start_routine, void *arg,
-                      u32 parent_tid, StackTrace *stack, bool detached);
+  void OnThreadCreate(const void *start_data, uptr data_size,
+                            u32 parent_tid, StackTrace *stack, bool detached);
   /// Distroy sub-sanitizers' thread data.
   void OnThreadDestroy();
   /// Initialize sub-sanitizers' thread data in new thread and before the real
@@ -97,8 +109,7 @@ class XsanThread {
   };
   StackBounds GetStackBounds() const;
 
-  thread_callback_t start_routine_;
-  void *arg_;
+  void GetStartData(void *out, uptr out_size) const;
 
   u32 tid_;
 
@@ -122,7 +133,11 @@ class XsanThread {
   bool is_main_thread_;
   Tid tsan_tid_;
 
+  char start_data_[];
 };
+
+ThreadArgRetval &xsanThreadArgRetval();
+
 
 // Get the current thread. May return 0.
 XsanThread *GetCurrentThread();
