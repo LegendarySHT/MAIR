@@ -74,7 +74,10 @@ class XsanThread;
 using __sanitizer::StackTrace;
 class XsanAllocator;
 
+bool XsanInited();
+
 void XsanInitFromRtl();
+bool TryXsanInitFromRtl();
 
 // xsan_win.cpp
 void InitializePlatformExceptionHandlers();
@@ -115,8 +118,8 @@ void InitializeMainThread();
 
 // void XsanOnDeadlySignal(int, void *siginfo, void *context);
 
+void SignContextStack(void *context);
 void ReadContextStack(void *context, uptr *stack, uptr *ssize);
-void ResetContextStack(void *context);
 // void StopInitOrderChecking();
 
 // Wrapper for TLS/TSD.
@@ -146,6 +149,7 @@ extern int xsan_inited;
 extern bool xsan_init_is_running;
 extern bool xsan_in_init;
 
+extern bool replace_intrin_cached;
 extern void (*death_callback)(void);
 
 }  // namespace __xsan

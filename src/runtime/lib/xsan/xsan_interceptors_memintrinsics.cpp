@@ -18,41 +18,36 @@ using namespace __xsan;
 // We do not treat memcpy with to==from as a bug.
 // See http://llvm.org/bugs/show_bug.cgi?id=11763.
 #define XSAN_MEMCPY_IMPL(ctx, to, from, size)               \
-  do {                                                      \
-    if (UNLIKELY(!xsan_inited))                             \
-      return internal_memcpy(to, from, size);               \
-    if (xsan_init_is_running) {                             \
-      return REAL(memcpy)(to, from, size);                  \
-    }                                                       \
-    ENSURE_XSAN_INITED();                                   \
-    if (to != from) {                                       \
-      CHECK_RANGES_OVERLAP("memcpy", to, size, from, size); \
-    }                                                       \
-    XSAN_READ_RANGE(ctx, from, size);                       \
-    XSAN_WRITE_RANGE(ctx, to, size);                        \
-    return REAL(memcpy)(to, from, size);                    \
+  do {                                                        \
+    if (LIKELY(replace_intrin_cached)) {                      \
+      if (LIKELY(to != from)) {                               \
+        CHECK_RANGES_OVERLAP("memcpy", to, size, from, size); \
+      }                                                       \
+      XSAN_READ_RANGE(ctx, from, size);                       \
+      XSAN_WRITE_RANGE(ctx, to, size);                        \
+    } else if (UNLIKELY(!XsanInited())) {                     \
+      return internal_memcpy(to, from, size);                 \
+    }                                                         \
+    return REAL(memcpy)(to, from, size);                      \
   } while (0)
 
 // memset is called inside Printf.
 #define XSAN_MEMSET_IMPL(ctx, block, c, size) \
   do {                                        \
-    if (UNLIKELY(!xsan_inited))               \
+    if (LIKELY(replace_intrin_cached)) {      \
+      XSAN_WRITE_RANGE(ctx, block, size);     \
+    } else if (UNLIKELY(!XsanInited())) {     \
       return internal_memset(block, c, size); \
-    if (xsan_init_is_running) {               \
-      return REAL(memset)(block, c, size);    \
     }                                         \
-    ENSURE_XSAN_INITED();                     \
-    XSAN_WRITE_RANGE(ctx, block, size);       \
     return REAL(memset)(block, c, size);      \
   } while (0)
 
 #define XSAN_MEMMOVE_IMPL(ctx, to, from, size) \
   do {                                         \
-    if (UNLIKELY(!xsan_inited))                \
-      return internal_memmove(to, from, size); \
-    ENSURE_XSAN_INITED();                      \
-    XSAN_READ_RANGE(ctx, from, size);          \
-    XSAN_WRITE_RANGE(ctx, to, size);           \
+    if (LIKELY(xsan_inited)) {                 \
+      XSAN_READ_RANGE(ctx, from, size);        \
+      XSAN_WRITE_RANGE(ctx, to, size);         \
+    }                                          \
     return internal_memmove(to, from, size);   \
   } while (0)
 

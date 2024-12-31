@@ -1,22 +1,24 @@
 #include "xsan_interceptors.h"
 
-#include <lsan/lsan_common.h>
-#include <sanitizer_common/sanitizer_libc.h>
-
 #include "asan/orig/asan_flags.h"
 #include "asan/orig/asan_internal.h"
 #include "asan/orig/asan_poisoning.h"
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
-#include "sanitizer_common/sanitizer_errno.h"
-#include "sanitizer_common/sanitizer_internal_defs.h"
+#include "lsan/lsan_common.h"
 #include "tsan/tsan_interceptors.h"
 #include "tsan/tsan_rtl.h"
+
 #include "xsan_hooks.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"
 #include "xsan_thread.h"
+
+#include "sanitizer_common/sanitizer_errno.h"
+#include "sanitizer_common/sanitizer_internal_defs.h"
+#include "sanitizer_common/sanitizer_libc.h"
+
 
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
@@ -96,7 +98,7 @@ ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
     : tsan_si(xsan_ctx.tsan_ctx_.thr_, func, caller_pc) {}
 
 bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
-  if (xsan_ignore_interceptors || !xsan_inited) {
+  if (xsan_ignore_interceptors || !XsanInited()) {
     return true;
   }
   XsanThread *thread = __xsan::GetCurrentThread();
@@ -104,45 +106,6 @@ bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
          __xsan::ShouldSanitzerIgnoreInterceptors(xsan_ctx);
 }
 
-// Zero out addr if it points into shadow memory and was provided as a hint
-// only, i.e., MAP_FIXED is not set.
-[[maybe_unused]]
-static bool fix_mmap_addr(void **addr, uptr sz, int flags) {
-  const int MAP_FIXED = 0x10;
-  if (*addr) {
-    if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
-      if (flags & MAP_FIXED) {
-        errno = errno_EINVAL;
-        return false;
-      } else {
-        *addr = 0;
-      }
-    }
-  }
-  return true;
-}
-
-template <class Mmap>
-static void *mmap_interceptor(void *ctx, Mmap real_mmap,
-                              void *addr, SIZE_T sz, int prot, int flags,
-                              int fd, OFF64_T off) {
-  void *const MAP_FAILED = (void *)-1;
-  /// FIXME: conflicts with cuda_test.cpp. Should we really return -1 when addr
-  /// is not in app memory?
-  // if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
-  void *res = real_mmap(addr, sz, prot, flags, fd, off);
-  if (res != MAP_FAILED) {
-    // if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
-    //   Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
-    //          addr, (void*)sz, res);
-    //   Die();
-    // }
-    if (IsAppMem((uptr)res) && IsAppMem((uptr)res + sz - 1)) {
-      AfterMmap(ctx, res, sz, fd);
-    }
-  }
-  return res;
-}
 
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
 // between callback setup and callback execution.
@@ -252,7 +215,7 @@ static void finalize(void *arg) {
 #    define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 #  endif
 
-DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
+DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, usize)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
 
@@ -269,19 +232,21 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     XSAN_WRITE_RANGE(ctx, ptr, size)
 #  define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
     XSAN_READ_RANGE(ctx, ptr, size)
-#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)   \
-    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__);  \
-    do {                                             \
-      if (xsan_init_is_running)                      \
-        return REAL(func)(__VA_ARGS__);              \
-      if (SANITIZER_APPLE && UNLIKELY(!xsan_inited)) \
-        return REAL(func)(__VA_ARGS__);              \
-      ENSURE_XSAN_INITED();                          \
+#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)  \
+    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__); \
+    do {                                            \
+      if constexpr (SANITIZER_APPLE) {              \
+        if (UNLIKELY(!XsanInited()))                \
+          return REAL(func)(__VA_ARGS__);           \
+      } else {                                      \
+        if (!TryXsanInitFromRtl())                  \
+          return REAL(func)(__VA_ARGS__);           \
+      }                                             \
     } while (false)
 #  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)   \
     XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__); \
     do {                                                      \
-      ENSURE_XSAN_INITED();                                   \
+      XsanInitFromRtl();                                   \
     } while (false)
 
 #  define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
@@ -307,11 +272,82 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     })
 #  define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit(ctx)
 
+// Zero out addr if it points into shadow memory and was provided as a hint
+// only, i.e., MAP_FIXED is not set.
+[[maybe_unused]]
+static bool fix_mmap_addr(void **addr, uptr sz, int flags) {
+  const int MAP_FIXED = 0x10;
+  if (*addr) {
+    if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
+      if (flags & MAP_FIXED) {
+        errno = errno_EINVAL;
+        return false;
+      } else {
+        *addr = 0;
+      }
+    }
+  }
+  return true;
+}
+
+template <class Mmap>
+static void *mmap_interceptor(void *ctx, Mmap real_mmap,
+                              void *addr, SIZE_T sz, int prot, int flags,
+                              int fd, OFF64_T off) {
+  void *const MAP_FAILED = (void *)-1;
+  /// FIXME: conflicts with cuda_test.cpp. Should we really return -1 when addr
+  /// is not in app memory?
+  // if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+  void *res = real_mmap(addr, sz, prot, flags, fd, off);
+  if (res != MAP_FAILED) {
+    // if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
+    //   Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
+    //          addr, (void*)sz, res);
+    //   Die();
+    // }
+    if (IsAppMem((uptr)res) && IsAppMem((uptr)res + sz - 1)) {
+      AfterMmap(ctx, res, sz, fd);
+    }
+  }
+  /// TODO: move to xsan_hooks.cpp
+  if (sz && res != (void *)-1) {
+    const uptr beg = reinterpret_cast<uptr>(res);
+    DCHECK(IsAligned(beg, GetPageSize()));
+    SIZE_T rounded_length = RoundUpTo(sz, GetPageSize());
+    // Only unpoison shadow if it's an ASAN managed address.
+    if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
+      __asan::PoisonShadow(beg, RoundUpTo(sz, GetPageSize()), 0);
+  }
+  return res;
+}
+
+template <class Munmap>
+static int munmap_interceptor(Munmap real_munmap, void *addr, SIZE_T length) {
+  // We should not tag if munmap fail, but it's to late to tag after
+  // real_munmap, as the pages could be mmaped by another thread.
+  const uptr beg = reinterpret_cast<uptr>(addr);
+  /// TODO: move to xsan_hooks.cpp
+  if (length && IsAligned(beg, GetPageSize())) {
+    SIZE_T rounded_length = RoundUpTo(length, GetPageSize());
+    // Protect from unmapping the shadow.
+    if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
+      __asan::PoisonShadow(beg, rounded_length, 0);
+  }
+  return real_munmap(addr, length);
+}
+
 #  define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd, \
                                        off)                                  \
     do {                                                                     \
+      (void)(ctx);                                                           \
       return mmap_interceptor(ctx, REAL(mmap), addr, sz, prot, flags, fd,    \
                               off);                                          \
+    } while (false)
+
+#  define COMMON_INTERCEPTOR_MUNMAP_IMPL(ctx, addr, length) \
+    do {                                                    \
+      (void)(ctx);                                          \
+      return munmap_interceptor(REAL(munmap), addr, sz);    \
     } while (false)
 
 #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
@@ -319,7 +355,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
 #  define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() __xsan::OnLibraryUnloaded()
 
-#  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!xsan_inited)
+#  define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!XsanInited())
 
 #  define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end) \
     if (XsanThread *t = GetCurrentThread()) {          \
@@ -407,7 +443,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 struct ScopedSyscall {
   XsanThread *thr;
 
-  explicit ScopedSyscall(XsanThread *thr) : thr(thr) { ENSURE_XSAN_INITED(); }
+  explicit ScopedSyscall(XsanThread *thr) : thr(thr) { XsanInitFromRtl(); }
 
   ~ScopedSyscall() {
     /// FIXME: migrate handling of pending signals to XSan
@@ -476,6 +512,7 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   ThreadParam *p = (ThreadParam *)arg;
   auto &[t, created, started] = *p;
   SetCurrentThread(t);
+  /// TODO: pending update, refer to asanThreadArgRetval()
   return t->ThreadStart(GetTid(), &created, &started);
 }
 
@@ -554,12 +591,14 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
 /// If not compose TSan, intercept join here
 #if !XSAN_CONTAINS_TSAN
+/// TODO: migrate pthread related APIs to XSan.
 INTERCEPTOR(int, pthread_join, void *t, void **arg) {
   return real_pthread_join(t, arg);
 }
 #endif
 
-// DEFINE_REAL_PTHREAD_FUNCTIONS
+/// TODO: migrate pthread related APIs to XSan.
+// DEFINE_INTERNAL_PTHREAD_FUNCTIONS
 #  endif  // XSAN_INTERCEPT_PTHREAD_CREATE
 
 #  if XSAN_INTERCEPT_SWAPCONTEXT
@@ -578,12 +617,48 @@ static void ClearShadowMemoryForContextStack(uptr stack, uptr ssize) {
   __asan::PoisonShadow(bottom, ssize, 0);
 }
 
-INTERCEPTOR(int, getcontext, struct ucontext_t *ucp) {
-  // API does not requires to have ucp clean, and sets only part of fields. We
-  // use ucp->uc_stack to unpoison new stack. We prefer to have zeroes then
-  // uninitialized bytes.
-  ResetContextStack(ucp);
-  return REAL(getcontext)(ucp);
+// Since Solaris 10/SPARC, ucp->uc_stack.ss_sp refers to the stack base address
+// as on other targets.  For binary compatibility, the new version uses a
+// different external name, so we intercept that.
+#    if SANITIZER_SOLARIS && defined(__sparc__)
+INTERCEPTOR(void, __makecontext_v2, struct ucontext_t *ucp, void (*func)(),
+            int argc, ...) {
+#    else
+INTERCEPTOR(void, makecontext, struct ucontext_t *ucp, void (*func)(), int argc,
+            ...) {
+#    endif
+  va_list ap;
+  uptr args[64];
+  // We don't know a better way to forward ... into REAL function. We can
+  // increase args size if necessary.
+  CHECK_LE(argc, ARRAY_SIZE(args));
+  internal_memset(args, 0, sizeof(args));
+  va_start(ap, argc);
+  for (int i = 0; i < argc; ++i) args[i] = va_arg(ap, uptr);
+  va_end(ap);
+
+#    define ENUMERATE_ARRAY_4(start) \
+      args[start], args[start + 1], args[start + 2], args[start + 3]
+#    define ENUMERATE_ARRAY_16(start)                         \
+      ENUMERATE_ARRAY_4(start), ENUMERATE_ARRAY_4(start + 4), \
+          ENUMERATE_ARRAY_4(start + 8), ENUMERATE_ARRAY_4(start + 12)
+#    define ENUMERATE_ARRAY_64()                                             \
+      ENUMERATE_ARRAY_16(0), ENUMERATE_ARRAY_16(16), ENUMERATE_ARRAY_16(32), \
+          ENUMERATE_ARRAY_16(48)
+
+#    if SANITIZER_SOLARIS && defined(__sparc__)
+  REAL(__makecontext_v2)
+#    else
+  REAL(makecontext)
+#    endif
+  ((struct ucontext_t *)ucp, func, argc, ENUMERATE_ARRAY_64());
+
+#    undef ENUMERATE_ARRAY_4
+#    undef ENUMERATE_ARRAY_16
+#    undef ENUMERATE_ARRAY_64
+
+  // Sign the stack so we can identify it for unpoisoning.
+  SignContextStack(ucp);
 }
 
 INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
@@ -600,9 +675,6 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
   uptr stack, ssize;
   ReadContextStack(ucp, &stack, &ssize);
   ClearShadowMemoryForContextStack(stack, ssize);
-
-  // See getcontext interceptor.
-  ResetContextStack(oucp);
 
   // -----------------------------------------------------------
 
@@ -697,7 +769,7 @@ INTERCEPTOR(_Unwind_Reason_Code, _Unwind_SjLj_RaiseException,
 #  if XSAN_INTERCEPT_INDEX
 #    if XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
 INTERCEPTOR(char *, index, const char *string, int c)
-ALIAS(WRAPPER_NAME(strchr));
+  ALIAS(WRAP(strchr));
 #    else
 #      if SANITIZER_APPLE
 DECLARE_REAL(char *, index, const char *string, int c)
@@ -713,7 +785,7 @@ DEFINE_REAL(char *, index, const char *string, int c)
 INTERCEPTOR(char *, strcat, char *to, const char *from) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strcat, to, from);
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   if (__asan::flags()->replace_str) {
     uptr from_length = internal_strlen(from);
     XSAN_READ_RANGE(ctx, from, from_length + 1);
@@ -731,13 +803,13 @@ INTERCEPTOR(char *, strcat, char *to, const char *from) {
   return REAL(strcat)(to, from);
 }
 
-INTERCEPTOR(char *, strncat, char *to, const char *from, uptr size) {
+INTERCEPTOR(char *, strncat, char *to, const char *from, usize size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncat, to, from, size);
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   if (__asan::flags()->replace_str) {
     uptr from_length = MaybeRealStrnlen(from, size);
-    uptr copy_length = Min(size, from_length + 1);
+    uptr copy_length = Min<uptr>(size, from_length + 1);
     XSAN_READ_RANGE(ctx, from, copy_length);
     uptr to_length = internal_strlen(to);
     XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
@@ -753,16 +825,16 @@ INTERCEPTOR(char *, strncat, char *to, const char *from, uptr size) {
 INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strcpy, to, from);
-#  if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited))
-    return REAL(strcpy)(to, from);
-#  endif
-  // strcpy is called from malloc_default_purgeable_zone()
-  // in __xsan::ReplaceSystemAlloc() on Mac.
-  if (xsan_init_is_running) {
-    return REAL(strcpy)(to, from);
+  if constexpr (SANITIZER_APPLE) {
+    // strcpy is called from malloc_default_purgeable_zone()
+    // in __asan::ReplaceSystemAlloc() on Mac.
+    if (UNLIKELY(!XsanInited()))
+      return REAL(strcpy)(to, from);
+  } else {
+    if (!TryXsanInitFromRtl())
+      return REAL(strcpy)(to, from);
   }
-  ENSURE_XSAN_INITED();
+
   if (__asan::flags()->replace_str) {
     uptr from_size = internal_strlen(from) + 1;
     CHECK_RANGES_OVERLAP("strcpy", to, from_size, from, from_size);
@@ -772,19 +844,31 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   return REAL(strcpy)(to, from);
 }
 
+// Windows doesn't always define the strdup identifier,
+// and when it does it's a macro defined to either _strdup
+// or _strdup_dbg, _strdup_dbg ends up calling _strdup, so
+// we want to intercept that. push/pop_macro are used to avoid problems
+// if this file ends up including <string.h> in the future.
+#  if SANITIZER_WINDOWS
+#    pragma push_macro("strdup")
+#    undef strdup
+#    define strdup _strdup
+#  endif
+
 INTERCEPTOR(char *, strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
-  if (UNLIKELY(!xsan_inited))
+  if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
-  ENSURE_XSAN_INITED();
   uptr length = internal_strlen(s);
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
   GET_STACK_TRACE_MALLOC;
   void *new_mem = xsan_malloc(length + 1, &stack);
-  REAL(memcpy)(new_mem, s, length + 1);
+  if (new_mem) {
+    REAL(memcpy)(new_mem, s, length + 1);
+  }
   return reinterpret_cast<char *>(new_mem);
 }
 
@@ -792,26 +876,27 @@ INTERCEPTOR(char *, strdup, const char *s) {
 INTERCEPTOR(char *, __strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
-  if (UNLIKELY(!xsan_inited))
+  if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
-  ENSURE_XSAN_INITED();
   uptr length = internal_strlen(s);
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
   GET_STACK_TRACE_MALLOC;
   void *new_mem = xsan_malloc(length + 1, &stack);
-  REAL(memcpy)(new_mem, s, length + 1);
+  if (new_mem) {
+    REAL(memcpy)(new_mem, s, length + 1);
+  }
   return reinterpret_cast<char *>(new_mem);
 }
 #  endif  // XSAN_INTERCEPT___STRDUP
 
-INTERCEPTOR(char *, strncpy, char *to, const char *from, uptr size) {
+INTERCEPTOR(char *, strncpy, char *to, const char *from, usize size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncpy, to, from, size);
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   if (__asan::flags()->replace_str) {
-    uptr from_size = Min(size, MaybeRealStrnlen(from, size) + 1);
+    uptr from_size = Min<uptr>(size, MaybeRealStrnlen(from, size) + 1);
     CHECK_RANGES_OVERLAP("strncpy", to, from_size, from, from_size);
     XSAN_READ_RANGE(ctx, from, from_size);
     XSAN_WRITE_RANGE(ctx, to, size);
@@ -819,27 +904,65 @@ INTERCEPTOR(char *, strncpy, char *to, const char *from, uptr size) {
   return REAL(strncpy)(to, from, size);
 }
 
-INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
-  void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strtol, nptr, endptr, base);
-  ENSURE_XSAN_INITED();
-  if (!__asan::flags()->replace_str) {
-    return REAL(strtol)(nptr, endptr, base);
-  }
+template <typename Fn>
+static ALWAYS_INLINE auto StrtolImpl(void *ctx, Fn real, const char *nptr,
+                                     char **endptr, int base)
+    -> decltype(real(nullptr, nullptr, 0)) {
+  if (!__asan::flags()->replace_str)
+    return real(nptr, endptr, base);
   char *real_endptr;
-  long result = REAL(strtol)(nptr, &real_endptr, base);
+  auto res = real(nptr, &real_endptr, base);
   StrtolFixAndCheck(ctx, nptr, endptr, real_endptr, base);
-  return result;
+  return res;
 }
+
+#  define INTERCEPTOR_STRTO_BASE(ret_type, func)                             \
+    INTERCEPTOR(ret_type, func, const char *nptr, char **endptr, int base) { \
+      void *ctx;                                                             \
+      XSAN_INTERCEPTOR_ENTER(ctx, func, nptr, endptr, base);                 \
+      XsanInitFromRtl();                                                     \
+      return StrtolImpl(ctx, REAL(func), nptr, endptr, base);                \
+    }
+
+INTERCEPTOR_STRTO_BASE(long long, strtoll)
+
+#  if SANITIZER_WINDOWS
+INTERCEPTOR(long, strtol, const char *nptr, char **endptr, int base) {
+  // REAL(strtol) may be ntdll!strtol, which doesn't set errno. Instead,
+  // call REAL(strtoll) and do the range check ourselves.
+  COMPILER_CHECK(sizeof(long) == sizeof(u32));
+
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, strtol);
+  XsanInitFromRtl();
+
+  long long result = StrtolImpl(ctx, REAL(strtoll), nptr, endptr, base);
+
+  if (result > INT32_MAX) {
+    errno = errno_ERANGE;
+    return INT32_MAX;
+  }
+  if (result < INT32_MIN) {
+    errno = errno_ERANGE;
+    return INT32_MIN;
+  }
+  return (long)result;
+}
+#  else
+INTERCEPTOR_STRTO_BASE(long, strtol)
+#  endif
+
+#  if SANITIZER_GLIBC
+INTERCEPTOR_STRTO_BASE(long, __isoc23_strtol)
+INTERCEPTOR_STRTO_BASE(long long, __isoc23_strtoll)
+#  endif
 
 INTERCEPTOR(int, atoi, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atoi, nptr);
-#  if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited))
+  if (SANITIZER_APPLE && UNLIKELY(!XsanInited()))
     return REAL(atoi)(nptr);
-#  endif
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   if (!__asan::flags()->replace_str) {
     return REAL(atoi)(nptr);
   }
@@ -857,11 +980,9 @@ INTERCEPTOR(int, atoi, const char *nptr) {
 INTERCEPTOR(long, atol, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atol, nptr);
-#  if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited))
+  if (SANITIZER_APPLE && UNLIKELY(!XsanInited()))
     return REAL(atol)(nptr);
-#  endif
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   if (!__asan::flags()->replace_str) {
     return REAL(atol)(nptr);
   }
@@ -872,24 +993,10 @@ INTERCEPTOR(long, atol, const char *nptr) {
   return result;
 }
 
-#  if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
-INTERCEPTOR(long long, strtoll, const char *nptr, char **endptr, int base) {
-  void *ctx;
-  XSAN_INTERCEPTOR_ENTER(ctx, strtoll, nptr, endptr, base);
-  ENSURE_XSAN_INITED();
-  if (!__asan::flags()->replace_str) {
-    return REAL(strtoll)(nptr, endptr, base);
-  }
-  char *real_endptr;
-  long long result = REAL(strtoll)(nptr, &real_endptr, base);
-  StrtolFixAndCheck(ctx, nptr, endptr, real_endptr, base);
-  return result;
-}
-
 INTERCEPTOR(long long, atoll, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atoll, nptr);
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   if (!__asan::flags()->replace_str) {
     return REAL(atoll)(nptr);
   }
@@ -899,7 +1006,6 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
   XSAN_READ_STRING(ctx, nptr, (real_endptr - nptr) + 1);
   return result;
 }
-#  endif  // XSAN_INTERCEPT_ATOLL_AND_STRTOLL
 
 static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f,
                                  bool is_on_exit = false, void *arg = nullptr,
@@ -911,11 +1017,9 @@ INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
             void *dso_handle) {
   if (__xsan::in_symbolizer())
     return 0;
-#    if SANITIZER_APPLE
-  if (UNLIKELY(!xsan_inited))
+  if (SANITIZER_APPLE && UNLIKELY(!XsanInited()))
     return REAL(__cxa_atexit)(func, arg, dso_handle);
-#    endif
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
@@ -933,7 +1037,7 @@ INTERCEPTOR(int, atexit, void (*func)()) {
   if (__xsan::in_symbolizer())
     return 0;
 
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
@@ -951,7 +1055,7 @@ INTERCEPTOR(int, on_exit, void (*func)(int, void *), void *arg) {
   if (__xsan::in_symbolizer())
     return 0;
 
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
 #    if CAN_SANITIZE_LEAKS
   __lsan::ScopedInterceptorDisabler disabler;
 #    endif
@@ -1047,7 +1151,7 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f, bool is_on_exit,
 extern "C" {
 extern int _pthread_atfork(void (*prepare)(), void (*parent)(),
                            void (*child)());
-};
+}
 
 INTERCEPTOR(int, pthread_atfork, void (*prepare)(), void (*parent)(),
             void (*child)()) {
@@ -1061,8 +1165,8 @@ INTERCEPTOR(int, pthread_atfork, void (*prepare)(), void (*parent)(),
 #  endif
 
 #  if XSAN_INTERCEPT_VFORK
-DEFINE_REAL(int, vfork)
-DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork)
+DEFINE_REAL(int, vfork,)
+DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork,)
 #  endif
 
 // ---------------------- InitializeXsanInterceptors ---------------- {{{1
@@ -1079,6 +1183,7 @@ void InitializeXsanInterceptors() {
   static bool was_called_once;
   CHECK(!was_called_once);
   was_called_once = true;
+  InitializePlatformInterceptors();
   InitializeCommonInterceptors();
 #  if !XSAN_CONTAINS_TSAN
   InitializeSignalInterceptors();
@@ -1098,18 +1203,24 @@ void InitializeXsanInterceptors() {
 
   XSAN_INTERCEPT_FUNC(atoi);
   XSAN_INTERCEPT_FUNC(atol);
+  ASAN_INTERCEPT_FUNC(atoll);
   XSAN_INTERCEPT_FUNC(strtol);
-#  if XSAN_INTERCEPT_ATOLL_AND_STRTOLL
-  XSAN_INTERCEPT_FUNC(atoll);
   XSAN_INTERCEPT_FUNC(strtoll);
+#  if SANITIZER_GLIBC
+  XSAN_INTERCEPT_FUNC(__isoc23_strtol);
+  XSAN_INTERCEPT_FUNC(__isoc23_strtoll);
 #  endif
-
   // Intecept jump-related functions.
   XSAN_INTERCEPT_FUNC(longjmp);
 
 #  if XSAN_INTERCEPT_SWAPCONTEXT
-  XSAN_INTERCEPT_FUNC(getcontext);
   XSAN_INTERCEPT_FUNC(swapcontext);
+  // See the makecontext interceptor above for an explanation.
+#    if SANITIZER_SOLARIS && defined(__sparc__)
+  ASAN_INTERCEPT_FUNC(__makecontext_v2);
+#    else
+  ASAN_INTERCEPT_FUNC(makecontext);
+#    endif
 #  endif
 #  if XSAN_INTERCEPT__LONGJMP
   XSAN_INTERCEPT_FUNC(_longjmp);
@@ -1130,11 +1241,11 @@ void InitializeXsanInterceptors() {
 #  endif
   // Indirectly intercept std::rethrow_exception.
 #  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
-  INTERCEPT_FUNCTION(_Unwind_RaiseException);
+  XSAN_INTERCEPT_FUNC(_Unwind_RaiseException);
 #  endif
   // Indirectly intercept std::rethrow_exception.
 #  if XSAN_INTERCEPT__UNWIND_SJLJ_RAISEEXCEPTION
-  INTERCEPT_FUNCTION(_Unwind_SjLj_RaiseException);
+  XSAN_INTERCEPT_FUNC(_Unwind_SjLj_RaiseException);
 #  endif
 
   // Intercept threading-related functions
@@ -1148,8 +1259,20 @@ void InitializeXsanInterceptors() {
 #    if !XSAN_CONTAINS_TSAN
   /// If not compose TSan, intercept join here
   XSAN_INTERCEPT_FUNC(pthread_join);
+  XSAN_INTERCEPT_FUNC(pthread_detach);
+  XSAN_INTERCEPT_FUNC(pthread_exit);
 #    endif
+
 #  endif
+
+/// TODO: fix this
+// #  if XSAN_INTERCEPT_TIMEDJOIN
+//   XSAN_INTERCEPT_FUNC(pthread_timedjoin_np);
+// #  endif
+
+// #  if XSAN_INTERCEPT_TRYJOIN
+//   XSAN_INTERCEPT_FUNC(pthread_tryjoin_np);
+// #  endif
 
   // Intercept atexit function.
 #  if XSAN_INTERCEPT___CXA_ATEXIT
@@ -1192,10 +1315,12 @@ void InitializeXsanInterceptors() {
 
   __tsan::InitializeInterceptors();
 
-  InitializePlatformInterceptors();
-
   VReport(1, "AddressSanitizer: libc interceptors initialized\n");
 }
+
+#  if SANITIZER_WINDOWS
+#    pragma pop_macro("strdup")
+#  endif
 
 }  // namespace __xsan
 

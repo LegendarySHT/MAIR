@@ -2385,6 +2385,13 @@ static int sigaction_impl(int sig, const __sanitizer_sigaction *act,
                           __sanitizer_sigaction *old);
 static __sanitizer_sighandler_ptr signal_impl(int sig,
                                               __sanitizer_sighandler_ptr h);
+namespace __xsan {
+void XsanInitFromRtl();
+}
+#define SIGNAL_INTERCEPTOR_ENTER() \
+  do {                             \
+    __xsan::XsanInitFromRtl();     \
+  } while (false)
 
 #define SIGNAL_INTERCEPTOR_SIGACTION_IMPL(signo, act, oldact) \
   { return sigaction_impl(signo, act, oldact); }

@@ -13,14 +13,6 @@ namespace __xsan {
 void InitializeXsanInterceptors();
 void InitializePlatformInterceptors();
 
-#define ENSURE_XSAN_INITED()      \
-  do {                            \
-    CHECK(!xsan_init_is_running); \
-    if (UNLIKELY(!xsan_inited)) { \
-      XsanInitFromRtl();          \
-    }                             \
-  } while (0)
-
 }  // namespace __xsan
 
 // There is no general interception at all on Fuchsia.
@@ -31,12 +23,10 @@ void InitializePlatformInterceptors();
 // Use macro to describe if specific function should be
 // intercepted on a given platform.
 #  if !SANITIZER_WINDOWS
-#    define XSAN_INTERCEPT_ATOLL_AND_STRTOLL 1
 #    define XSAN_INTERCEPT__LONGJMP 1
 #    define XSAN_INTERCEPT_INDEX 1
 #    define XSAN_INTERCEPT_PTHREAD_CREATE 1
 #  else
-#    define XSAN_INTERCEPT_ATOLL_AND_STRTOLL 0
 #    define XSAN_INTERCEPT__LONGJMP 0
 #    define XSAN_INTERCEPT_INDEX 0
 #    define XSAN_INTERCEPT_PTHREAD_CREATE 0
@@ -67,8 +57,8 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT___LONGJMP_CHK 0
 #  endif
 
-#  if XSAN_HAS_EXCEPTIONS && !SANITIZER_WINDOWS && !SANITIZER_SOLARIS && \
-      !SANITIZER_NETBSD
+#  if XSAN_HAS_EXCEPTIONS && !SANITIZER_SOLARIS && !SANITIZER_NETBSD && \
+      (!SANITIZER_WINDOWS || (defined(__MINGW32__) && defined(__i386__)))
 #    define XSAN_INTERCEPT___CXA_THROW 1
 #    define XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION 1
 #    if defined(_GLIBCXX_SJLJ_EXCEPTIONS) || (SANITIZER_IOS && defined(__xrm__))
@@ -95,7 +85,6 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT_ON_EXIT 0
 #  endif
 
-
 #  if !SANITIZER_ANDROID
 #    define XSAN_INTERCEPT_ATEXIT 1
 #  else
@@ -108,9 +97,17 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT___STRDUP 0
 #  endif
 
+#  if SANITIZER_GLIBC && ASAN_INTERCEPT_PTHREAD_CREATE
+#    define XSAN_INTERCEPT_TIMEDJOIN 1
+#    define XSAN_INTERCEPT_TRYJOIN 1
+#  else
+#    define XSAN_INTERCEPT_TIMEDJOIN 0
+#    define XSAN_INTERCEPT_TRYJOIN 0
+#  endif
+
 #  if SANITIZER_LINUX &&                                                \
       (defined(__xrm__) || defined(__xarch64__) || defined(__i386__) || \
-       defined(__x86_64__) || SANITIZER_RISCV64)
+       defined(__x86_64__) || SANITIZER_RISCV64 || SANITIZER_LOONGARCH64)
 #    define XSAN_INTERCEPT_VFORK 1
 #  else
 #    define XSAN_INTERCEPT_VFORK 0
@@ -122,11 +119,11 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT_PTHREAD_ATFORK 0
 #  endif
 
-DECLARE_REAL(int, memcmp, const void *a1, const void *a2, uptr size)
+DECLARE_REAL(int, memcmp, const void *a1, const void *a2, SIZE_T size)
 DECLARE_REAL(char *, strchr, const char *str, int c)
 DECLARE_REAL(SIZE_T, strlen, const char *s)
-DECLARE_REAL(char *, strncpy, char *to, const char *from, uptr size)
-DECLARE_REAL(uptr, strnlen, const char *s, uptr maxlen)
+DECLARE_REAL(char *, strncpy, char *to, const char *from, SIZE_T size)
+DECLARE_REAL(SIZE_T, strnlen, const char *s, SIZE_T maxlen)
 DECLARE_REAL(char *, strstr, const char *s1, const char *s2)
 
 #  if !SANITIZER_APPLE
@@ -234,16 +231,15 @@ inline bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
   if (__xsan::ShouldXsanIgnoreInterceptor(xsan_ctx)) \
     return REAL(func)(__VA_ARGS__);
 
-
 /// TODO: use a better approach to use SCOPED_TSAN_INTERCEPTOR
-#  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)     \
-    SCOPED_XSAN_INTERCEPTOR(func, __VA_ARGS__);      \
-    XsanInterceptorContext _ctx = {#func, xsan_ctx}; \
-    ctx = (void *)&_ctx;                             \
-    (void)ctx;
+#define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)     \
+  SCOPED_XSAN_INTERCEPTOR(func, __VA_ARGS__);      \
+  XsanInterceptorContext _ctx = {#func, xsan_ctx}; \
+  ctx = (void *)&_ctx;                             \
+  (void)ctx;
 
-#  define XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, ...) \
-    SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);        \
-    XsanInterceptorContext _ctx = {#func, xsan_ctx};       \
-    ctx = (void *)&_ctx;                                   \
-    (void)ctx;
+#define XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, ...) \
+  SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);        \
+  XsanInterceptorContext _ctx = {#func, xsan_ctx};       \
+  ctx = (void *)&_ctx;                                   \
+  (void)ctx;
