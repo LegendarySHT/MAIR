@@ -10,8 +10,8 @@
 
 /// TODO: Implement suppression & flags
 
-DECLARE_REAL(void *, memcpy, void *to, const void *from, uptr size)
-DECLARE_REAL(void *, memset, void *block, int c, uptr size)
+DECLARE_REAL(void *, memcpy, void *to, const void *from, SIZE_T size)
+DECLARE_REAL(void *, memset, void *block, int c, SIZE_T size)
 
 namespace __tsan {
 struct ThreadState;
@@ -25,21 +25,22 @@ struct XsanInterceptorContext {
   XsanContext xsan_ctx;
 };
 
-#define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2) \
-  do {                                                                   \
-    const char *offset1 = (const char *)_offset1;                        \
-    const char *offset2 = (const char *)_offset2;                        \
-    if (__asan::AsanRangesOverlap(offset1, length1, offset2, length2)) { \
-      GET_STACK_TRACE_FATAL_HERE;                                        \
-      bool suppressed = __asan::IsInterceptorSuppressed(name);           \
-      if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {    \
-        suppressed = __asan::IsStackTraceSuppressed(&stack);             \
-      }                                                                  \
-      if (!suppressed) {                                                 \
-        __asan::ReportStringFunctionMemoryRangesOverlap(                 \
-            name, offset1, length1, offset2, length2, &stack);           \
-      }                                                                  \
-    }                                                                    \
+#define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2)      \
+  do {                                                                        \
+    const char *offset1 = (const char *)_offset1;                             \
+    const char *offset2 = (const char *)_offset2;                             \
+    if (UNLIKELY(                                                             \
+            __asan::AsanRangesOverlap(offset1, length1, offset2, length2))) { \
+      GET_STACK_TRACE_FATAL_HERE;                                             \
+      bool suppressed = __asan::IsInterceptorSuppressed(name);                \
+      if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {         \
+        suppressed = __asan::IsStackTraceSuppressed(&stack);                  \
+      }                                                                       \
+      if (!suppressed) {                                                      \
+        __asan::ReportStringFunctionMemoryRangesOverlap(                      \
+            name, offset1, length1, offset2, length2, &stack);                \
+      }                                                                       \
+    }                                                                         \
   } while (0)
 
 // We implement ACCESS_MEMORY_RANGE, ASAN_READ_RANGE,
@@ -52,11 +53,12 @@ struct XsanInterceptorContext {
     uptr __offset = (uptr)(offset);                                           \
     uptr __size = (uptr)(size);                                               \
     uptr __bad = 0;                                                           \
-    if (__offset > __offset + __size) {                                       \
+    if (UNLIKELY(__offset > __offset + __size)) {                             \
       GET_STACK_TRACE_FATAL_HERE;                                             \
       __asan::ReportStringFunctionSizeOverflow(__offset, __size, &stack);     \
     }                                                                         \
-    if (!__asan::AsanQuickCheckForUnpoisonedRegion(__offset, __size) &&       \
+    if (UNLIKELY(                                                             \
+            !__asan::AsanQuickCheckForUnpoisonedRegion(__offset, __size)) &&  \
         (__bad = __asan_region_is_poisoned(__offset, __size))) {              \
       XsanInterceptorContext *_ctx = (XsanInterceptorContext *)(ctx);         \
       bool suppressed = false;                                                \
@@ -94,47 +96,6 @@ struct XsanInterceptorContext {
     TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite);    \
   } while (0)
 
-// memcpy is called during __xsan_init() from the internals of printf(...).
-// We do not treat memcpy with to==from as a bug.
-// See http://llvm.org/bugs/show_bug.cgi?id=11763.
-#define XSAN_MEMCPY_IMPL(ctx, to, from, size)               \
-  do {                                                      \
-    if (UNLIKELY(!xsan_inited))                             \
-      return internal_memcpy(to, from, size);               \
-    if (xsan_init_is_running) {                             \
-      return REAL(memcpy)(to, from, size);                  \
-    }                                                       \
-    ENSURE_XSAN_INITED();                                   \
-    if (to != from) {                                       \
-      CHECK_RANGES_OVERLAP("memcpy", to, size, from, size); \
-    }                                                       \
-    XSAN_READ_RANGE(ctx, from, size);                       \
-    XSAN_WRITE_RANGE(ctx, to, size);                        \
-    return REAL(memcpy)(to, from, size);                    \
-  } while (0)
-
-// memset is called inside Printf.
-#define XSAN_MEMSET_IMPL(ctx, block, c, size) \
-  do {                                        \
-    if (UNLIKELY(!xsan_inited))               \
-      return internal_memset(block, c, size); \
-    if (xsan_init_is_running) {               \
-      return REAL(memset)(block, c, size);    \
-    }                                         \
-    ENSURE_XSAN_INITED();                     \
-    XSAN_WRITE_RANGE(ctx, block, size);       \
-    return REAL(memset)(block, c, size);      \
-  } while (0)
-
-#define XSAN_MEMMOVE_IMPL(ctx, to, from, size) \
-  do {                                         \
-    if (UNLIKELY(!xsan_inited))                \
-      return internal_memmove(to, from, size); \
-    ENSURE_XSAN_INITED();                      \
-    XSAN_READ_RANGE(ctx, from, size);          \
-    XSAN_WRITE_RANGE(ctx, to, size);           \
-    return internal_memmove(to, from, size);   \
-  } while (0)
 
 #define XSAN_READ_RANGE(ctx, offset, size) \
   XSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, false)

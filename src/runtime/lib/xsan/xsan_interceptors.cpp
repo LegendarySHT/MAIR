@@ -255,18 +255,6 @@ static void finalize(void *arg) {
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
-/// TODO: use a better approach to use SCOPED_TSAN_INTERCEPTOR
-#  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)     \
-    SCOPED_XSAN_INTERCEPTOR(func, __VA_ARGS__);      \
-    XsanInterceptorContext _ctx = {#func, xsan_ctx}; \
-    ctx = (void *)&_ctx;                             \
-    (void)ctx;
-
-#  define XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, ...) \
-    SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);        \
-    XsanInterceptorContext _ctx = {#func, xsan_ctx};       \
-    ctx = (void *)&_ctx;                                   \
-    (void)ctx;
 
 #  define XSAN_BEFORE_DLOPEN(filename, flag) \
     if (__asan::flags()->strict_init_order)  \
@@ -340,24 +328,6 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     } else {                                           \
       *begin = *end = 0;                               \
     }
-
-#  define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
-    do {                                                       \
-      XSAN_INTERCEPTOR_ENTER(ctx, memmove, to, from, size);    \
-      XSAN_MEMMOVE_IMPL(ctx, to, from, size);                  \
-    } while (false)
-
-#  define COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, to, from, size) \
-    do {                                                      \
-      XSAN_INTERCEPTOR_ENTER(ctx, memcpy, to, from, size);    \
-      XSAN_MEMCPY_IMPL(ctx, to, from, size);                  \
-    } while (false)
-
-#  define COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, block, c, size) \
-    do {                                                      \
-      XSAN_INTERCEPTOR_ENTER(ctx, memset, block, c, size);    \
-      XSAN_MEMSET_IMPL(ctx, block, c, size);                  \
-    } while (false)
 
 #  if CAN_SANITIZE_LEAKS
 #    define COMMON_INTERCEPTOR_STRERROR() \
@@ -1228,49 +1198,5 @@ void InitializeXsanInterceptors() {
 }
 
 }  // namespace __xsan
-
-extern "C" {
-
-/// FIXME: migrate to memintrinsics.cpp, adhering https://github.com/llvm/llvm-project/commit/c551c9c311b33a847390f6a57afda3b82d517675
-void *__xsan_memcpy(void *dst, const void *src, uptr size) {
-  void *ctx;
-#if PLATFORM_HAS_DIFFERENT_MEMCPY_AND_MEMMOVE
-  COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, dst, src, size);
-#else
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
-#endif
-}
-
-void *__xsan_memset(void *dst, int c, uptr size) {
-  void *ctx;
-  COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, dst, c, size);
-}
-
-void *__xsan_memmove(void *dst, const void *src, uptr size) {
-  void *ctx;
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
-}
-
-/// XSan does own an intrinsic, and thus use ASan's implementation.
-void *__asan_memcpy(void *dst, const void *src, uptr size) {
-  void *ctx;
-#if PLATFORM_HAS_DIFFERENT_MEMCPY_AND_MEMMOVE
-  COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, dst, src, size);
-#else
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
-#endif
-}
-
-void *__asan_memset(void *dst, int c, uptr size) {
-  void *ctx;
-  COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, dst, c, size);
-}
-
-void *__asan_memmove(void *dst, const void *src, uptr size) {
-  void *ctx;
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
-}
-
-}
 
 #endif  // !SANITIZER_FUCHSIA

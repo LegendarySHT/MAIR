@@ -233,3 +233,17 @@ inline bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
   XSAN_CHECK_REAL_FUNC(func);                        \
   if (__xsan::ShouldXsanIgnoreInterceptor(xsan_ctx)) \
     return REAL(func)(__VA_ARGS__);
+
+
+/// TODO: use a better approach to use SCOPED_TSAN_INTERCEPTOR
+#  define XSAN_INTERCEPTOR_ENTER(ctx, func, ...)     \
+    SCOPED_XSAN_INTERCEPTOR(func, __VA_ARGS__);      \
+    XsanInterceptorContext _ctx = {#func, xsan_ctx}; \
+    ctx = (void *)&_ctx;                             \
+    (void)ctx;
+
+#  define XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, ...) \
+    SCOPED_XSAN_INTERCEPTOR_RAW(func, __VA_ARGS__);        \
+    XsanInterceptorContext _ctx = {#func, xsan_ctx};       \
+    ctx = (void *)&_ctx;                                   \
+    (void)ctx;
