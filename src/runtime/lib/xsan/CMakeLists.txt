@@ -24,7 +24,7 @@ set(ASAN_SOURCES
   #asan/orig/asan_posix.cpp
   asan/orig/asan_premap_shadow.cpp
   #asan/orig/asan_report.cpp
-  asan/orig/asan_rtl.cpp
+  # asan/orig/asan_rtl.cpp
   asan/orig/asan_shadow_setup.cpp
   asan/orig/asan_stack.cpp
   asan/orig/asan_stats.cpp
@@ -55,6 +55,7 @@ set(XSAN_ASAN_SOURCES
   asan/asan_posix.cpp
   asan/asan_poisoning.cpp
   asan/asan_report.cpp
+  asan/asan_rtl.cpp
   asan/asan_rtl_extra.cpp
   asan/asan_thread.cpp
   ${ASAN_SOURCES}
