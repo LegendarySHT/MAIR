@@ -10,19 +10,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "sanitizer_common/sanitizer_flags.h"
-#include "sanitizer_common/sanitizer_flag_parser.h"
-#include "sanitizer_common/sanitizer_libc.h"
 #include "tsan_flags.h"
-#include "tsan_rtl.h"
+
+#include "sanitizer_common/sanitizer_flag_parser.h"
+#include "sanitizer_common/sanitizer_flags.h"
+#include "sanitizer_common/sanitizer_libc.h"
+#include "tsan_interface.h"
 #include "tsan_mman.h"
-#include "ubsan/ubsan_flags.h"
+#include "tsan_rtl.h"
 
 namespace __tsan {
 
 // Can be overriden in frontend.
 #ifdef TSAN_EXTERNAL_HOOKS
-extern "C" const char* __tsan_default_options();
+extern "C" const char *__tsan_default_options();
 #else
 SANITIZER_WEAK_DEFAULT_IMPL
 const char *__tsan_default_options() {
@@ -77,25 +78,25 @@ void ValidateFlags() {
 }
 
 void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
-//   SetCommonFlagsDefaults();
-//   {
-//     // Override some common flags defaults.
-//     CommonFlags cf;
-//     cf.CopyFrom(*common_flags());
-//     cf.external_symbolizer_path = GetEnv("TSAN_SYMBOLIZER_PATH");
-//     cf.allow_addr2line = true;
-//     if (SANITIZER_GO) {
-//       // Does not work as expected for Go: runtime handles SIGABRT and crashes.
-//       cf.abort_on_error = false;
-//       // Go does not have mutexes.
-//       cf.detect_deadlocks = false;
-//     }
-//     cf.print_suppressions = false;
-//     cf.stack_trace_format = "    #%n %f %S %M";
-//     cf.exitcode = 66;
-//     cf.intercept_tls_get_addr = true;
-//     OverrideCommonFlags(cf);
-//   }
+  // SetCommonFlagsDefaults();
+  // {
+  //   // Override some common flags defaults.
+  //   CommonFlags cf;
+  //   cf.CopyFrom(*common_flags());
+  //   cf.external_symbolizer_path = GetEnv("TSAN_SYMBOLIZER_PATH");
+  //   cf.allow_addr2line = true;
+  //   if (SANITIZER_GO) {
+  //     // Does not work as expected for Go: runtime handles SIGABRT and crashes.
+  //     cf.abort_on_error = false;
+  //     // Go does not have mutexes.
+  //     cf.detect_deadlocks = false;
+  //   }
+  //   cf.print_suppressions = false;
+  //   cf.stack_trace_format = "    #%n %f %S %M";
+  //   cf.exitcode = 66;
+  //   cf.intercept_tls_get_addr = true;
+  //   OverrideCommonFlags(cf);
+  // }
 
   f->SetDefaults();
 
@@ -131,7 +132,7 @@ void InitializeFlags(Flags *f, const char *env, const char *env_option_name) {
     f->report_signal_unsafe = false;
   }
 
-//   InitializeCommonFlags();
+  // InitializeCommonFlags();
 
   // if (Verbosity()) ReportUnrecognizedFlags();
 

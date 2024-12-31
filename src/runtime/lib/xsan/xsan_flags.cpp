@@ -13,9 +13,11 @@
 
 #include "xsan_flags.h"
 
-#include <sanitizer_common/sanitizer_common.h>
-#include <sanitizer_common/sanitizer_flag_parser.h>
-#include <sanitizer_common/sanitizer_flags.h>
+#include "sanitizer_common/sanitizer_common.h"
+#include "sanitizer_common/sanitizer_flag_parser.h"
+#include "sanitizer_common/sanitizer_flags.h"
+#include "sanitizer_common/sanitizer_win_interception.h"
+
 
 #include "ubsan/ubsan_flags.h"
 #include "ubsan/ubsan_platform.h"
@@ -48,7 +50,21 @@ static void RegisterXsanFlags(FlagParser *parser, Flags *f) {
 #undef XSAN_FLAG
 }
 
-void InitializeFlags() {
+static void DisplayHelpMessages(FlagParser *parser) {
+  // TODO(eugenis): dump all flags at verbosity>=2?
+  if (Verbosity()) {
+    ReportUnrecognizedFlags();
+  }
+
+  if (common_flags()->help) {
+    parser->PrintFlagDescriptions();
+  }
+}
+
+static void InitializeDefaultFlags() {
+  Flags *f = flags();
+  FlagParser xsan_parser;
+
   // Set the default values and prepare for parsing ASan and common flags.
   SetCommonFlagsDefaults();
   {
@@ -63,10 +79,8 @@ void InitializeFlags() {
     SetSanitizerCommonFlags(cf);
     OverrideCommonFlags(cf);
   }
-  Flags *f = flags();
   f->SetDefaults();
 
-  FlagParser xsan_parser;
   RegisterXsanFlags(&xsan_parser, f);
   RegisterCommonFlags(&xsan_parser);
 
@@ -103,13 +117,66 @@ void InitializeFlags() {
 
   // Flag validation:
 
-  if (Verbosity())
-    ReportUnrecognizedFlags();
-
-  ValidateSanitizerFlags();
+  // TODO(samsonov): print all of the flags (ASan, LSan, common).
+  DisplayHelpMessages(&xsan_parser);
 
   CHECK_LE((uptr)common_flags()->malloc_context_size, kStackTraceMax);
 }
+
+
+void InitializeFlags() {
+  InitializeDefaultFlags();
+  ValidateSanitizerFlags();
+
+#if SANITIZER_WINDOWS
+  // On Windows, weak symbols are emulated by having the user program
+  // register which weak functions are defined.
+  // The ASAN DLL will initialize flags prior to user module initialization,
+  // so __asan_default_options will not point to the user definition yet.
+  // We still want to ensure we capture when options are passed via
+  // __asan_default_options, so we add a callback to be run
+  // when it is registered with the runtime.
+
+  // There is theoretically time between the initial ProcessFlags and
+  // registering the weak callback where a weak function could be added and we
+  // would miss it, but in practice, InitializeFlags will always happen under
+  // the loader lock (if built as a DLL) and so will any calls to
+  // __sanitizer_register_weak_function.
+  AddRegisterWeakFunctionCallback(
+      reinterpret_cast<uptr>(__xsan_default_options), []() {
+        FlagParser asan_parser;
+
+        RegisterAsanFlags(&asan_parser, flags());
+        RegisterCommonFlags(&asan_parser);
+        asan_parser.ParseString(__asan_default_options());
+
+        DisplayHelpMessages(&asan_parser);
+        ProcessFlags();
+
+        // TODO: Update other globals and data structures that may need to change
+        // after initialization due to new flags potentially being set changing after
+        // `__asan_default_options` is registered.
+        // See GH issue 'https://github.com/llvm/llvm-project/issues/117925' for
+        // details.
+        SetAllocatorMayReturnNull(common_flags()->allocator_may_return_null);
+      });
+
+#  if CAN_SANITIZE_UB
+  AddRegisterWeakFunctionCallback(
+      reinterpret_cast<uptr>(__ubsan_default_options), []() {
+        FlagParser ubsan_parser;
+
+        __ubsan::RegisterUbsanFlags(&ubsan_parser, __ubsan::flags());
+        RegisterCommonFlags(&ubsan_parser);
+        ubsan_parser.ParseString(__ubsan_default_options());
+
+        // To match normal behavior, do not print UBSan help.
+        ProcessFlags();
+      });
+#  endif
+#endif
+}
+
 
 }  // namespace __xsan
 
