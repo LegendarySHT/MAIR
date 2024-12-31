@@ -44,7 +44,7 @@ using namespace __xsan;
 
 #define XSAN_MEMMOVE_IMPL(ctx, to, from, size) \
   do {                                         \
-    if (LIKELY(xsan_inited)) {                 \
+    if (LIKELY(XsanInited())) {                 \
       XSAN_READ_RANGE(ctx, from, size);        \
       XSAN_WRITE_RANGE(ctx, to, size);         \
     }                                          \

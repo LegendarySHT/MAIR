@@ -4,6 +4,9 @@
 #include <ubsan/ubsan_init.h>
 
 #include "asan/asan_init.h"
+#include "sanitizer_common/sanitizer_atomic.h"
+#include "sanitizer_common/sanitizer_internal_defs.h"
+#include "sanitizer_common/sanitizer_mutex.h"
 #include "tsan/tsan_init.h"
 #include "xsan_activation.h"
 #include "xsan_hooks.h"
@@ -21,17 +24,27 @@ constexpr uptr ZeroBaseShadowStart = 0;
 constexpr uptr ZeroBaseMaxShadowStart = 1 << 18;
 
 // -------------------------- Globals --------------------- {{{1
-int xsan_inited;
-/// Indicate whether XSan's initialization is in progress.
-/// Set to false before sub-santizers's initialization.
-bool xsan_init_is_running;
+static StaticSpinMutex xsan_inited_mutex;
+static atomic_uint8_t xsan_inited = {0};
+
 /// Whether we are currently in XSan initialization.
 /// Only set to false after all sub-santizers's initialization.
 bool xsan_in_init;
+bool replace_intrin_cached;
 
 #if !ASAN_FIXED_MAPPING
 uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
 #endif
+
+static void SetXsanInited() {
+  atomic_store(&xsan_inited, 1, memory_order_release);
+}
+
+bool AsanInited() {
+  return atomic_load(&xsan_inited, memory_order_acquire) == 1;
+}
+
+// -------------------------- Functions --------------------------
 
 static void CheckUnwind() {
   __xsan::ScopedIgnoreInterceptors sii(true);
@@ -102,13 +115,11 @@ void CheckAndProtect() {
 
 // -------------------------- Run-time entry ------------------- {{{1
 
-static void XsanInitInternal() {
-  if (LIKELY(xsan_inited))
-    return;
+static bool XsanInitInternal() {
+  if (LIKELY(XsanInited()))
+    return true;
   SanitizerToolName = "XSan";
   ScopedSanitizerToolName tool_name("XSan");
-  CHECK(!xsan_init_is_running && "XSan init calls itself!");
-  xsan_init_is_running = true;
   xsan_in_init = true;
 
   __tsan::TsanInitFromXsanEarly();
@@ -170,15 +181,16 @@ static void XsanInitInternal() {
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
 
-  // On Linux AsanThread::ThreadStart() calls malloc() that's why xsan_inited
+  // On Linux AsanThread::ThreadStart() calls malloc() that's why XsanInited()
   // should be set to 1 prior to initializing the threads.
-  xsan_inited = 1;
-  xsan_init_is_running = false;
+  SetXsanInited();
+  replace_intrin_cached = flags()->replace_intrin;
 
   // This function call interceptors, so it should be called after,
   // waiting for __asan::AsanTSDInit() finished.
   // Fix: InitTlsSize should be initialized before MainThread initialization.
-  InitTlsSize();
+  /// FIXME: this has been moved to InitializePlatformEarly, is it Okay?
+  // InitTlsSize();
 
   // Initialize main thread after __asan::AsanInitFromXsan() because it
   // Because we need to wait __asan::AsanTSDInit() to be called.
@@ -196,6 +208,9 @@ static void XsanInitInternal() {
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
+  /// FIXME: unify the AfFork handler and the relevant lock!
+  // InstallAtForkHandler();
+
 #if TSAN_CONTAINS_UBSAN
   __ubsan::InitAsPlugin();
 #endif
@@ -212,11 +227,32 @@ static void XsanInitInternal() {
     Symbolizer::LateInitialize();
   }
   xsan_in_init = false;
+
+  return true;
 }
 
 // Initialize as requested from some part of ASan runtime library (interceptors,
 // allocator, etc).
-void XsanInitFromRtl() { XsanInitInternal(); }
+void XsanInitFromRtl() { 
+  if (LIKELY(XsanInited()))
+    return;
+  SpinMutexLock lock(&xsan_inited_mutex);
+  XsanInitInternal(); 
+}
+
+
+bool TryXsanInitFromRtl() {
+  if (UNLIKELY(XsanInited())) {
+    return true;
+  }
+  if (!xsan_inited_mutex.TryLock()) {
+    return false;
+  }
+
+  bool result = XsanInitInternal();
+  xsan_inited_mutex.Unlock();
+  return result;
+}
 
 }  // namespace __xsan
 
@@ -224,7 +260,7 @@ void XsanInitFromRtl() { XsanInitInternal(); }
 using namespace __xsan;
 
 void NOINLINE __xsan_handle_no_return() {
-  if (xsan_init_is_running)
+  if (UNLIKELY(!XsanInited()))
     return;
 
   __asan_handle_no_return();
@@ -234,5 +270,5 @@ void NOINLINE __xsan_handle_no_return() {
 // We use this call as a trigger to wake up ASan from deactivated state.
 void __xsan_init() {
   XsanActivate();
-  XsanInitInternal();
+  XsanInitFromRtl();
 }

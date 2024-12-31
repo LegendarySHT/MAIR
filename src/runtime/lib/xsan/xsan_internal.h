@@ -74,7 +74,6 @@ class XsanThread;
 using __sanitizer::StackTrace;
 class XsanAllocator;
 
-bool XsanInited();
 
 void XsanInitFromRtl();
 bool TryXsanInitFromRtl();
@@ -144,9 +143,8 @@ void InstallAtExitCheckLeaks();
   if (&__xsan_on_error) \
   __xsan_on_error()
 
-extern int xsan_inited;
+bool XsanInited();
 // Used to avoid infinite recursion in __xsan_init().
-extern bool xsan_init_is_running;
 extern bool xsan_in_init;
 
 extern bool replace_intrin_cached;
