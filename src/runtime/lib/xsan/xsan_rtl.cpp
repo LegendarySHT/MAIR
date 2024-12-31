@@ -124,6 +124,17 @@ static void XsanInitInternal() {
 
   InitializeFlags();
 
+
+  // Stop performing init at this point if we are being loaded via
+  // dlopen() and the platform supports it.
+  if (SANITIZER_SUPPORTS_INIT_FOR_DLOPEN && UNLIKELY(HandleDlopenInit())) {
+    VReport(1, "AddressSanitizer init is being performed for dlopen().\n");
+    return false;
+  }
+
+  // Make sure we are not statically linked.
+  __interception::DoesNotSupportStaticLinking();
+
   AvoidCVE_2016_2143();
   __sanitizer::InitializePlatformEarly();
 
@@ -135,6 +146,8 @@ static void XsanInitInternal() {
   /// TODO: For Android, move it to Xsan initialization
   ReplaceSystemMalloc();
 #endif
+
+  DisableCoreDumperIfNecessary();
 
   InitializeXsanInterceptors();
 

@@ -636,3 +636,152 @@ void __asan_init() {
 void __asan_version_mismatch_check() {
   // Do nothing.
 }
+
+
+/// ---------------------- asan_init interfaces provided to XSan --- {{{1
+
+namespace __asan {
+void AsanInitFromXsan() {
+  if (LIKELY(AsanInited()))
+    return;
+  SanitizerToolName = "AddressSanitizer";
+
+  // CacheBinaryName();
+
+  // // Initialize flags. This must be done early, because most of the
+  // // initialization steps look at flags().
+  // InitializeFlags();
+
+  WaitForDebugger(flags()->sleep_before_init, "before init");
+
+  // // Stop performing init at this point if we are being loaded via
+  // // dlopen() and the platform supports it.
+  //   if (SANITIZER_SUPPORTS_INIT_FOR_DLOPEN && UNLIKELY(HandleDlopenInit())) {
+  //     VReport(1, "AddressSanitizer init is being performed for dlopen().\n");
+  //     return false;
+  //   }
+
+  //  // Make sure we are not statically linked.
+  // __interception::DoesNotSupportStaticLinking();
+  
+  AsanCheckIncompatibleRT();
+  AsanCheckDynamicRTPrereqs();
+  // AvoidCVE_2016_2143();
+
+  SetCanPoisonMemory(flags()->poison_heap);
+  SetMallocContextSize(common_flags()->malloc_context_size);
+
+  InitializePlatformExceptionHandlers();
+
+  InitializeHighMemEnd();
+
+  // Install tool-specific callbacks in sanitizer_common.
+  AddDieCallback(AsanDie);
+  // Duplicated with TSan's init, moved to XSan
+  // SetCheckUnwindCallback(CheckUnwind);
+  SetPrintfAndReportCallback(AppendToErrorMessageBuffer);
+
+  // __sanitizer_set_report_path(common_flags()->log_path);
+
+  __asan_option_detect_stack_use_after_return =
+      flags()->detect_stack_use_after_return;
+
+  // __sanitizer::InitializePlatformEarly();
+
+  // Setup internal allocator callback.
+  SetLowLevelAllocateMinAlignment(ASAN_SHADOW_GRANULARITY);
+  SetLowLevelAllocateCallback(OnLowLevelAllocate);
+
+  // InitializeAsanInterceptors();
+  // CheckASLR();
+
+  // Enable system log ("adb logcat") on Android.
+  // Doing this before interceptors are initialized crashes in:
+  // AsanInitInternal -> android_log_write -> __interceptor_strcmp
+  AndroidLogInit();
+
+
+  // ReplaceSystemMalloc();
+  
+  // DisableCoreDumperIfNecessary();
+
+  InitializeShadowMemory();
+
+  /// ASan Thread Destroy is delegated to XSanThread
+  AsanTSDInit(PlatformTSDDtor);
+  // InstallDeadlySignalHandlers(AsanOnDeadlySignal);
+
+  /// Use Asan wrapper allocator and XSan inner allocator
+  AllocatorOptions allocator_options;
+  allocator_options.SetFrom(flags(), common_flags());
+  InitializeAllocator(allocator_options);
+
+  if (SANITIZER_START_BACKGROUND_THREAD_IN_ASAN_INTERNAL)
+    MaybeStartBackgroudThread();
+
+  // On Linux AsanThread::ThreadStart() calls malloc() that's why asan_inited
+  // should be set to 1 prior to initializing the threads.
+  replace_intrin_cached = flags()->replace_intrin;
+  SetAsanInited();
+  
+  /// Moved to AsanInitFromXsanLate, as Atexit is intercepted, requiring
+  /// `XsanInited() = true`
+  // if (flags()->atexit)
+  //   Atexit(asan_atexit);
+
+//   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
+
+  // Now that ASan runtime is (mostly) initialized, deactivate it if
+  // necessary, so that it can be re-activated when requested.
+  if (flags()->start_deactivated)
+    AsanDeactivate();
+
+  // Create main thread.
+  // AsanThread *main_thread = CreateMainThread();
+  // CHECK_EQ(0, main_thread->tid());
+
+  force_interface_symbols();  // no-op.
+  SanitizerInitializeUnwinder();
+
+  /// Move to AsanInitFromXsanLate, as InstallAtExitCheckLeaks use interceptor atexit
+  /// requiring xsan_init_running = false
+  // if (CAN_SANITIZE_LEAKS) {
+  //   __lsan::InitCommonLsan();
+  //   InstallAtExitCheckLeaks();
+  // }
+
+  /// As deadlock with TSan/MSan's InstallAtforkHandler, we move it to XSan
+  // InstallAtForkHandler();
+
+// #if CAN_SANITIZE_UB
+//   __ubsan::InitAsPlugin();
+// #endif
+
+  InitializeSuppressions();
+
+  // if (CAN_SANITIZE_LEAKS) {
+  //   // LateInitialize() calls dlsym, which can allocate an error string buffer
+  //   // in the TLS.  Let's ignore the allocation to avoid reporting a leak.
+  //   __lsan::ScopedInterceptorDisabler disabler;
+  //   Symbolizer::LateInitialize();
+  // } else {
+  //   Symbolizer::LateInitialize();
+  // }
+
+  VReport(1, "AddressSanitizer Init done\n");
+
+  WaitForDebugger(flags()->sleep_after_init, "after init");
+}
+
+void AsanInitFromXsanLate() {
+
+  if (flags()->atexit)
+    Atexit(asan_atexit);
+
+  if (CAN_SANITIZE_LEAKS) {
+    __lsan::InitCommonLsan();
+    /// Use interceptor atexit, requiring xsan_init_running = false
+    InstallAtExitCheckLeaks();
+  }
+}
+}
