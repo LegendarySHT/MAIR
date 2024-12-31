@@ -6,10 +6,6 @@
 #  include <fcntl.h>
 #  include <limits.h>
 #  include <pthread.h>
-#  include <sanitizer_common/sanitizer_flags.h>
-#  include <sanitizer_common/sanitizer_freebsd.h>
-#  include <sanitizer_common/sanitizer_libc.h>
-#  include <sanitizer_common/sanitizer_procmaps.h>
 #  include <stdio.h>
 #  include <sys/mman.h>
 #  include <sys/resource.h>
@@ -22,6 +18,11 @@
 #  include "xsan_interceptors.h"
 #  include "xsan_internal.h"
 
+#  include "sanitizer_common/sanitizer_flags.h"
+#  include "sanitizer_common/sanitizer_hash.h"
+#  include "sanitizer_common/sanitizer_libc.h"
+#  include "sanitizer_common/sanitizer_procmaps.h"
+
 #  if SANITIZER_FREEBSD
 #    include <sys/link_elf.h>
 #  endif
@@ -32,22 +33,12 @@
 
 #  if SANITIZER_ANDROID || SANITIZER_FREEBSD || SANITIZER_SOLARIS
 #    include <ucontext.h>
-extern "C" void *_DYNAMIC;
 #  elif SANITIZER_NETBSD
 #    include <link_elf.h>
 #    include <ucontext.h>
-extern Elf_Dyn _DYNAMIC;
 #  else
 #    include <link.h>
 #    include <sys/ucontext.h>
-extern ElfW(Dyn) _DYNAMIC[];
-#  endif
-
-// x86-64 FreeBSD 9.2 and older define 'ucontext_t' incorrectly in
-// 32-bit mode.
-#  if SANITIZER_FREEBSD && (SANITIZER_WORDSIZE == 32) && \
-      __FreeBSD_version <= 902001  // v9.2
-#    define ucontext_t xucontext_t
 #  endif
 
 typedef enum {
@@ -68,11 +59,6 @@ void InitializePlatformInterceptors() {}
 void InitializePlatformExceptionHandlers() {}
 bool IsSystemHeapAddress(uptr addr) { return false; }
 
-void *XsanDoesNotSupportStaticLinkage() {
-  // This will fail to link with -static.
-  return &_DYNAMIC;
-}
-
 #  if XSAN_PREMAP_SHADOW
 uptr FindPremappedShadowStart(uptr shadow_size_bytes) {
   uptr granularity = GetMmapGranularity();
@@ -87,13 +73,14 @@ uptr FindPremappedShadowStart(uptr shadow_size_bytes) {
 
 // uptr FindDynamicShadowStart() {
 //   uptr shadow_size_bytes = MemToShadowSize(kHighMemEnd);
-// #if XSAN_PREMAP_SHADOW
+// #  if XSAN_PREMAP_SHADOW
 //   if (!PremapShadowFailed())
 //     return FindPremappedShadowStart(shadow_size_bytes);
-// #endif
+// #  endif
 
 //   return MapDynamicShadow(shadow_size_bytes, XSAN_SHADOW_SCALE,
-//                           /*min_shadow_base_alignment*/ 0, kHighMemEnd);
+//                           /*min_shadow_base_alignment*/ 0, kHighMemEnd,
+//                           GetMmapGranularity());
 // }
 
 // void XsanApplyToGlobals(globals_op_fptr op, const void *needle) {
@@ -130,6 +117,11 @@ static int FindFirstDSOCallback(struct dl_phdr_info *info, size_t size,
   // detect this as well.
   if (!info->dlpi_name[0] ||
       internal_strncmp(info->dlpi_name, "linux-", sizeof("linux-") - 1) == 0)
+    return 0;
+#    endif
+#    if SANITIZER_FREEBSD
+  // Ignore vDSO.
+  if (internal_strcmp(info->dlpi_name, "[vdso]") == 0)
     return 0;
 #    endif
 
@@ -181,10 +173,7 @@ void XsanCheckIncompatibleRT() {
       MemoryMappedSegment segment(filename, sizeof(filename));
       while (proc_maps.Next(&segment)) {
         if (IsDynamicRTName(segment.filename)) {
-          Report(
-              "Your application is linked against "
-              "incompatible XSan runtimes.\n");
-          Die();
+          ReportIncompatibleRT();
         }
       }
       __xsan_rt_version = XSAN_RT_VERSION_STATIC;
@@ -195,25 +184,32 @@ void XsanCheckIncompatibleRT() {
 }
 #  endif  // SANITIZER_ANDROID
 
-#  if !SANITIZER_ANDROID
-void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
-  ucontext_t *ucp = (ucontext_t *)context;
-  *stack = (uptr)ucp->uc_stack.ss_sp;
-  *ssize = ucp->uc_stack.ss_size;
+#  if XSAN_INTERCEPT_SWAPCONTEXT
+constexpr u32 kXsanContextStackFlagsMagic = 0x51260eea;
+
+static int HashContextStack(const ucontext_t &ucp) {
+  MurMur2Hash64Builder hash(kXsanContextStackFlagsMagic);
+  hash.add(reinterpret_cast<uptr>(ucp.uc_stack.ss_sp));
+  hash.add(ucp.uc_stack.ss_size);
+  return static_cast<int>(hash.get());
 }
 
-void ResetContextStack(void *context) {
-  ucontext_t *ucp = (ucontext_t *)context;
-  ucp->uc_stack.ss_sp = nullptr;
-  ucp->uc_stack.ss_size = 0;
-}
-#  else
-void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
-  UNIMPLEMENTED();
+void SignContextStack(void *context) {
+  ucontext_t *ucp = reinterpret_cast<ucontext_t *>(context);
+  ucp->uc_stack.ss_flags = HashContextStack(*ucp);
 }
 
-void ResetContextStack(void *context) { UNIMPLEMENTED(); }
-#  endif
+void ReadContextStack(void *context, uptr *stack, uptr *ssize) {
+  const ucontext_t *ucp = reinterpret_cast<const ucontext_t *>(context);
+  if (HashContextStack(*ucp) == ucp->uc_stack.ss_flags) {
+    *stack = reinterpret_cast<uptr>(ucp->uc_stack.ss_sp);
+    *ssize = ucp->uc_stack.ss_size;
+    return;
+  }
+  *stack = 0;
+  *ssize = 0;
+}
+#  endif  // XSAN_INTERCEPT_SWAPCONTEXT
 
 void *XsanDlSymNext(const char *sym) { return dlsym(RTLD_NEXT, sym); }
 
