@@ -21,7 +21,7 @@ set(ASAN_SOURCES
   asan/orig/asan_malloc_win.cpp
   asan/orig/asan_memory_profile.cpp
   # asan/orig/asan_poisoning.cpp
-  #asan/orig/asan_posix.cpp
+  asan/orig/asan_posix.cpp
   asan/orig/asan_premap_shadow.cpp
   #asan/orig/asan_report.cpp
   # asan/orig/asan_rtl.cpp
@@ -50,7 +50,6 @@ endif()
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
   asan/asan_flags.cpp
-  asan/asan_posix.cpp
   asan/asan_poisoning.cpp
   asan/asan_report.cpp
   asan/asan_rtl.cpp

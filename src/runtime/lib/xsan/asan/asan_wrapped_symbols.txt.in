@@ -1,1 +1,2 @@
 _ZN6__asan9FakeStack7DestroyEi
+_ZN6__asan22PlatformUnpoisonStacksEv
