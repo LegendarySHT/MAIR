@@ -1,5 +1,5 @@
 namespace __tsan {
-  struct ThreadState;
+  struct __tsan::ThreadState *thr = __tsan::cur_thread();;
   void Acquire(ThreadState *thr, uptr pc, uptr addr);
   void Release(ThreadState *thr, uptr pc, uptr addr);
   void FdClose(ThreadState *thr, uptr pc, int fd, bool write);
@@ -9,6 +9,7 @@ namespace __tsan {
   void ForkBefore(ThreadState *thr, uptr pc);
   void ForkChildAfter(ThreadState *thr, uptr pc, bool start_thread);
   void ForkParentAfter(ThreadState *thr, uptr pc);
+  void EnterBlockingFunc(ThreadState *thr);
 } // namespace __tsan
 
 static USED void syscall_acquire(uptr pc, uptr addr) {
@@ -58,21 +59,44 @@ static void syscall_post_fork(uptr pc, int pid) {
   }
 }
 
-#    define COMMON_SYSCALL_ACQUIRE(addr) \
+static USED void sycall_blocking_start() {
+  DPrintf("sycall_blocking_start()\n");
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  __tsan::EnterBlockingFunc(thr);
+  // When we are in a "blocking call", we process signals asynchronously
+  // (right when they arrive). In this context we do not expect to be
+  // executing any user/runtime code. The known interceptor sequence when
+  // this is not true is: pthread_join -> munmap(stack). It's fine
+  // to ignore munmap in this case -- we handle stack shadow separately.
+  thr->ignore_interceptors++;
+}
+
+static USED void sycall_blocking_end() {
+  DPrintf("sycall_blocking_end()\n");
+  __tsan::ThreadState *thr = __tsan::cur_thread();
+  thr->ignore_interceptors--;
+  atomic_store(&thr->in_blocking_func, 0, memory_order_relaxed);
+}
+
+
+#define COMMON_SYSCALL_ACQUIRE(addr) \
       syscall_acquire(GET_CALLER_PC(), (uptr)(addr))
 
-#    define COMMON_SYSCALL_RELEASE(addr) \
+#define COMMON_SYSCALL_RELEASE(addr) \
       syscall_release(GET_CALLER_PC(), (uptr)(addr))
 
-#    define COMMON_SYSCALL_FD_CLOSE(fd) syscall_fd_close(GET_CALLER_PC(), fd)
+#define COMMON_SYSCALL_FD_CLOSE(fd) syscall_fd_close(GET_CALLER_PC(), fd)
 
-#    define COMMON_SYSCALL_FD_ACQUIRE(fd) \
+#define COMMON_SYSCALL_FD_ACQUIRE(fd) \
       syscall_fd_acquire(GET_CALLER_PC(), fd)
 
-#    define COMMON_SYSCALL_FD_RELEASE(fd) \
+#define COMMON_SYSCALL_FD_RELEASE(fd) \
       syscall_fd_release(GET_CALLER_PC(), fd)
 
-#    define COMMON_SYSCALL_PRE_FORK() syscall_pre_fork(GET_CALLER_PC())
+#define COMMON_SYSCALL_PRE_FORK() syscall_pre_fork(GET_CALLER_PC())
 
-#    define COMMON_SYSCALL_POST_FORK(res) \
+#define COMMON_SYSCALL_POST_FORK(res) \
       syscall_post_fork(GET_CALLER_PC(), res)
+
+#define COMMON_SYSCALL_BLOCKING_START() sycall_blocking_start()
+#define COMMON_SYSCALL_BLOCKING_END() sycall_blocking_end()
