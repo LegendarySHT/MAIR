@@ -27,6 +27,29 @@
 #  define XSAN_CONTAINS_ASAN 1
 #endif
 
+#define XSAN_REAL(f) __real_##f
+#define XSAN_WRAP(f) __wrap_##f
+
+#define XSAN_DECLARE_REAL(ret_ty, f, ...) \
+  extern "C" ret_ty XSAN_REAL(f)(__VA_ARGS__);
+
+#define XSAN_WRAPPER(ret_ty, f, ...)        \
+  XSAN_DECLARE_REAL(ret_ty, f, __VA_ARGS__) \
+  extern "C" ret_ty XSAN_WRAP(f)(__VA_ARGS__)
+
+#define INTERCEPT_AND_IGNORE_VOID(ret, f)                 \
+  XSAN_WRAPPER(ret, f, void) {                            \
+    __xsan::ScopedIgnoreInterceptors ignore_interceptors; \
+    return XSAN_REAL(f)();                                \
+  }
+
+#define INTERCEPT_AND_IGNORE(ret, f, params, args)        \
+  extern "C" ret XSAN_REAL(f) params;                     \
+  extern "C" ret XSAN_WRAP(f) params {                    \
+    __xsan::ScopedIgnoreInterceptors ignore_interceptors; \
+    return XSAN_REAL(f) args;                             \
+  }
+
 namespace __xsan {
 
 /// The default alignment for heap allocations.
