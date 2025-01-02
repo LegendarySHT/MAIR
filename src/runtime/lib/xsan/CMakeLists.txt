@@ -75,7 +75,7 @@ set(TSAN_SOURCES
   tsan/orig/tsan_md5.cpp
   # tsan/orig/tsan_mman.cpp
   tsan/orig/tsan_mutexset.cpp
-  # tsan/orig/tsan_report.cpp
+  tsan/orig/tsan_report.cpp
   tsan/orig/tsan_rtl.cpp
   tsan/orig/tsan_rtl_access.cpp
   tsan/orig/tsan_rtl_mutex.cpp
@@ -150,7 +150,6 @@ set(XSAN_TSAN_SOURCES
   tsan/tsan_init.cpp
   tsan/tsan_interceptors.cpp
   tsan/tsan_mman.cpp
-  tsan/tsan_report.cpp
   tsan/tsan_rtl_extra.cpp
   tsan/tsan_rtl_report.cpp
   tsan/tsan_rtl_thread.cpp
