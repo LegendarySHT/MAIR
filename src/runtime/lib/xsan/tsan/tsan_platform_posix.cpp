@@ -45,7 +45,9 @@ void DontDumpShadow(uptr addr, uptr size) {
 
 void InitializeShadowMemory() {
   // Map memory shadow.
-  DecreaseTotalMmap(ShadowEnd() - ShadowBeg());// Don't count the shadow against mmap_limit_mb.
+
+  // Don't count the shadow against mmap_limit_mb.
+  DecreaseTotalMmap(ShadowEnd() - ShadowBeg());
   if (!MmapFixedSuperNoReserve(ShadowBeg(), ShadowEnd() - ShadowBeg(),
                                "shadow")) {
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
@@ -63,7 +65,9 @@ void InitializeShadowMemory() {
   // Map meta shadow.
   const uptr meta = MetaShadowBeg();
   const uptr meta_size = MetaShadowEnd() - meta;
-  DecreaseTotalMmap(meta_size);// Don't count the shadow against mmap_limit_mb.
+
+  // Don't count the shadow against mmap_limit_mb.
+  DecreaseTotalMmap(meta_size);
   if (!MmapFixedSuperNoReserve(meta, meta_size, "meta shadow")) {
     Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
     Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
@@ -96,25 +100,53 @@ static void ProtectRange(uptr beg, uptr end) {
   }
 }
 
-void CheckAndProtect() {
+// CheckAndProtect will check if the memory layout is compatible with TSan.
+// Optionally (if 'protect' is true), it will set the memory regions between
+// app memory to be inaccessible.
+// 'ignore_heap' means it will not consider heap memory allocations to be a
+// conflict. Set this based on whether we are calling CheckAndProtect before
+// or after the allocator has initialized the heap.
+bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
   // Ensure that the binary is indeed compiled with -pie.
   MemoryMappingLayout proc_maps(true);
   MemoryMappedSegment segment;
   while (proc_maps.Next(&segment)) {
-    if (IsAppMem(segment.start))
+    if (segment.start >= HeapMemBeg() && segment.end <= HeapEnd()) {
+      if (ignore_heap) {
+        continue;
+      } else {
+        return false;
+      }
+    }
+
+    // Note: IsAppMem includes if it is heap memory, hence we must
+    // put this check after the heap bounds check.
+    if (IsAppMem(segment.start) && IsAppMem(segment.end - 1))
       continue;
-    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd())
-      continue;
+
+    // Guard page after the heap end
+    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd()) continue;
+
     if (__xsan::IsSanitizerPrivateMem(segment.start))
       continue;
+
     if (segment.protection == 0)  // Zero page or mprotected.
       continue;
+
     if (segment.start >= VdsoBeg())  // vdso
       break;
-    Printf("FATAL: ThreadSanitizer: unexpected memory mapping 0x%zx-0x%zx\n",
-           segment.start, segment.end);
-    Die();
+
+    // Debug output can break tests. Suppress this message in most cases.
+    if (print_warnings)
+      Printf(
+          "WARNING: ThreadSanitizer: unexpected memory mapping 0x%zx-0x%zx\n",
+          segment.start, segment.end);
+
+    return false;
   }
+
+  if (!protect)
+    return true;
 
 #    if SANITIZER_IOS && !SANITIZER_IOSSIM
   ProtectRange(HeapMemEnd(), ShadowBeg());
@@ -141,6 +173,8 @@ void CheckAndProtect() {
   // Older s390x kernels may not support 5-level page tables.
   TryProtectRange(user_addr_max_l4, user_addr_max_l5);
 #    endif
+
+  return true;
 }
 #  endif
 
