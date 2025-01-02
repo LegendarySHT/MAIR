@@ -1,2 +1,3 @@
 _ZN6__asan9FakeStack7DestroyEi
 _ZN6__asan22PlatformUnpoisonStacksEv
+_ZN11__sanitizer10Symbolizer13SymbolizeDataEmPNS_8DataInfoE

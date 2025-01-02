@@ -61,7 +61,7 @@ set(XSAN_ASAN_SOURCES
 
 
 set(TSAN_SOURCES
-  # tsan/orig/tsan_debugging.cpp
+  tsan/orig/tsan_debugging.cpp
   tsan/orig/tsan_external.cpp
   # tsan/orig/tsan_fd.cpp
   # tsan/orig/tsan_flags.cpp
@@ -145,7 +145,6 @@ if (NOT APPLE)
 endif()
 
 set(XSAN_TSAN_SOURCES
-  tsan/tsan_debugging.cpp
   tsan/tsan_fd.cpp
   tsan/tsan_flags.cpp
   tsan/tsan_init.cpp

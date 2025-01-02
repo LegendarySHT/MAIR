@@ -1,8 +1,9 @@
 #include "../xsan_common_defs.h"
 #include "../xsan_hooks.h"
+#include "../xsan_report.h"
 #include "asan_thread.h"
-#include "orig/asan_report.h"
 #include "orig/asan_fake_stack.h"
+#include "orig/asan_report.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
 namespace __asan {
 
@@ -55,4 +56,19 @@ XSAN_WRAPPER(void, _ZN6__asan22PlatformUnpoisonStacksEv, ) {
   /// To avoid sanity checks and alloca.
   __xsan::ScopedXsanInternal sxi;
   XSAN_REAL(_ZN6__asan22PlatformUnpoisonStacksEv)();
+}
+
+// __sanitizer::Symbolizer::SymbolizeData
+// ASan modifies the global memory structure, so we need to correct the
+// global variable description obtained from the symbolizer.
+XSAN_WRAPPER(bool, _ZN11__sanitizer10Symbolizer13SymbolizeDataEmPNS_8DataInfoE,
+             __sanitizer::Symbolizer *self, uptr address,
+             __sanitizer::DataInfo *info) {
+  bool symbolized_success =
+      XSAN_REAL(_ZN11__sanitizer10Symbolizer13SymbolizeDataEmPNS_8DataInfoE)(
+          self, address, info);
+  if (info && symbolized_success) {
+    __xsan::CorrectGlobalVariableDesc(address, *info);
+  }
+  return symbolized_success;
 }
