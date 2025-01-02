@@ -1,5 +1,5 @@
-#include <sanitizer_common/sanitizer_allocator_internal.h>
-#include <sanitizer_common/sanitizer_platform.h>
+#include "sanitizer_common/sanitizer_allocator_internal.h"
+#include "sanitizer_common/sanitizer_platform.h"
 #if SANITIZER_FREEBSD || SANITIZER_FUCHSIA || SANITIZER_LINUX || \
     SANITIZER_NETBSD || SANITIZER_SOLARIS
 
@@ -11,11 +11,10 @@
 #  include "xsan_internal.h"
 #  include "xsan_stack.h"
 
-#  include <lsan/lsan_common.h>
-#  include <sanitizer_common/sanitizer_allocator_checks.h>
-#  include <sanitizer_common/sanitizer_allocator_dlsym.h>
-#  include <sanitizer_common/sanitizer_errno.h>
-#  include <sanitizer_common/sanitizer_tls_get_addr.h>
+#  include "lsan/lsan_common.h"
+#  include "sanitizer_common/sanitizer_allocator_checks.h"
+#  include "sanitizer_common/sanitizer_allocator_dlsym.h"
+#  include "sanitizer_common/sanitizer_errno.h"
 
 // ---------------------- Replacement functions ---------------- {{{1
 using namespace __xsan;
@@ -65,7 +64,6 @@ INTERCEPTOR(void *, malloc, uptr size) {
     return InternalAlloc(size);
   if (DlsymAlloc::Use())
     return DlsymAlloc::Allocate(size);
-  ENSURE_XSAN_INITED();
   SCOPED_XSAN_INTERCEPTOR_MALLOC(malloc, size);
   return xsan_malloc(size, &stack);
 }
@@ -75,7 +73,6 @@ INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
     return InternalCalloc(size, size);
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(nmemb, size);
-  ENSURE_XSAN_INITED();
   SCOPED_XSAN_INTERCEPTOR_MALLOC(calloc, nmemb, size);
   return xsan_calloc(nmemb, size, &stack);
 }
@@ -85,7 +82,6 @@ INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
     return InternalRealloc(ptr, size);
   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
     return DlsymAlloc::Realloc(ptr, size);
-  ENSURE_XSAN_INITED();
   SCOPED_XSAN_INTERCEPTOR_MALLOC(realloc, ptr, size);
   return xsan_realloc(ptr, size, &stack);
 }
@@ -94,7 +90,7 @@ INTERCEPTOR(void *, realloc, void *ptr, uptr size) {
 INTERCEPTOR(void *, reallocarray, void *ptr, uptr nmemb, uptr size) {
   if (__xsan::in_symbolizer())
     return InternalReallocArray(ptr, size, size);
-  ENSURE_XSAN_INITED();
+  XsanInitFromRtl();
   SCOPED_XSAN_INTERCEPTOR_MALLOC(reallocarray, ptr, nmemb, size);
   return xsan_reallocarray(ptr, nmemb, size, &stack);
 }
@@ -108,9 +104,7 @@ INTERCEPTOR(void *, memalign, uptr boundary, uptr size) {
 
 INTERCEPTOR(void *, __libc_memalign, uptr boundary, uptr size) {
   SCOPED_XSAN_INTERCEPTOR_MALLOC(__libc_memalign, boundary, size);
-  void *res = xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
-  DTLS_on_libc_memalign(res, size);
-  return res;
+  return xsan_memalign(boundary, size, &stack, __asan::FROM_MALLOC);
 }
 #  endif  // SANITIZER_INTERCEPT_MEMALIGN
 
@@ -206,12 +200,12 @@ struct MallocDebugL {
   void *(*valloc)(uptr size);
 };
 
-ALIGNED(32)
+alignas(32)
 const MallocDebugK xsan_malloc_dispatch_k = {
     WRAP(malloc),  WRAP(free),     WRAP(calloc),
     WRAP(realloc), WRAP(memalign), WRAP(malloc_usable_size)};
 
-ALIGNED(32)
+alignas(32)
 const MallocDebugL xsan_malloc_dispatch_l = {WRAP(calloc),
                                              WRAP(free),
                                              WRAP(mallinfo),
