@@ -15,7 +15,10 @@
 #include "tsan_mman.h"
 #include "tsan_platform.h"
 #include "tsan_report.h"
+#include "tsan_rtl_extra.h"
 #include "tsan_sync.h"
+
+extern "C" int pthread_setspecific(unsigned key, const void *v);
 
 namespace __tsan {
 
