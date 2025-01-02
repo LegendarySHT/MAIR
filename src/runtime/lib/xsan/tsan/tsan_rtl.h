@@ -61,7 +61,8 @@ namespace __tsan {
 
 #if !SANITIZER_GO
 struct MapUnmapCallback;
-#if defined(__mips64) || defined(__aarch64__) || defined(__powerpc__)
+#  if defined(__mips64) || defined(__aarch64__) || defined(__loongarch__) || \
+      defined(__powerpc__) || SANITIZER_RISCV64
 
 struct AP32 {
   static const uptr kSpaceBeg = 0;
@@ -142,7 +143,7 @@ struct TidEpoch {
   Epoch epoch;
 };
 
-struct TidSlot {
+struct alignas(SANITIZER_CACHE_LINE_SIZE) TidSlot {
   Mutex mtx;
   Sid sid;
   atomic_uint32_t raw_epoch;
@@ -159,10 +160,10 @@ struct TidSlot {
   }
 
   TidSlot();
-} ALIGNED(SANITIZER_CACHE_LINE_SIZE);
+};
 
 // This struct is stored in TLS.
-struct ThreadState {
+struct alignas(SANITIZER_CACHE_LINE_SIZE) ThreadState {
   FastState fast_state;
   int ignore_sync;
 #if !SANITIZER_GO
@@ -244,7 +245,7 @@ struct ThreadState {
 
   explicit ThreadState(Tid tid);
   void DestroyThreadState();
-} ALIGNED(SANITIZER_CACHE_LINE_SIZE);
+};
 
 #if !SANITIZER_GO
 #if SANITIZER_APPLE || SANITIZER_ANDROID
@@ -526,7 +527,7 @@ bool IsExpectedReport(uptr addr, uptr size);
 StackID CurrentStackId(ThreadState *thr, uptr pc);
 ReportStack *SymbolizeStackId(StackID stack_id);
 void PrintCurrentStack(ThreadState *thr, uptr pc);
-void PrintCurrentStack(uptr pc, bool fast);  // uses may libunwind
+void PrintCurrentStack(uptr pc, bool fast);  // may uses libunwind
 MBlock *JavaHeapBlock(uptr addr, uptr *start);
 
 void Initialize(ThreadState *thr);
@@ -693,8 +694,9 @@ ALWAYS_INLINE
 void LazyInitialize(ThreadState *thr) {
   // If we can use .preinit_array, assume that __tsan_init
   // called from .preinit_array initializes runtime before
-  // any instrumented code except ANDROID.
-#if (!SANITIZER_CAN_USE_PREINIT_ARRAY || defined(__ANDROID__))
+  // any instrumented code except when tsan is used as a 
+  // shared library.
+#if (!SANITIZER_CAN_USE_PREINIT_ARRAY || defined(SANITIZER_SHARED))
   if (UNLIKELY(!is_initialized))
     Initialize(thr);
 #endif
