@@ -12,20 +12,21 @@
 #include "../xsan_report.h"
 #include "../xsan_thread.h"
 #include "../xsan_hooks.h"
+
+#include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
-#include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
+#include "tsan_fd.h"
+#include "tsan_flags.h"
+#include "tsan_mman.h"
 #include "tsan_platform.h"
+#include "tsan_report.h"
 #include "tsan_rtl.h"
 #include "tsan_suppressions.h"
 #include "tsan_symbolize.h"
-#include "tsan_report.h"
 #include "tsan_sync.h"
-#include "tsan_mman.h"
-#include "tsan_flags.h"
-#include "tsan_fd.h"
 
 namespace __tsan {
 
@@ -110,8 +111,8 @@ ReportStack *SymbolizeReverseStackId(u32 stack_id) {
     return nullptr;
   auto ReverseTrace = [](const uptr *trace, u32 size) {
     if (size > 1) {
-      uptr *start = const_cast<uptr*>(trace);
-      uptr *end = const_cast<uptr*>(trace + size - 1);
+      uptr *start = const_cast<uptr *>(trace);
+      uptr *end = const_cast<uptr *>(trace + size - 1);
       while (start < end) {
         uptr temp = *start;
         *start = *end;
@@ -270,7 +271,8 @@ static bool IsInStackOrTls(ThreadContextBase *tctx_base, void *arg) {
   /// we don't have XsanThread, so we can't check it.
   /// What's more, these fiber-created 'thr' doesn't have
   /// any meaningful stack/TLS space, so we can just return false.
-  if (!xsan_thr) return false;
+  if (!xsan_thr)
+    return false;
   /// Due to ASan's fake stack, delegates this check to
   /// XsanThread::AddrIsInStack and XsanThread::AddrIsInTls
   return (xsan_thr->AddrIsInStack(addr) || xsan_thr->AddrIsInTls(addr));
@@ -350,14 +352,13 @@ void ScopedReportBase::AddLocation(uptr addr, uptr size) {
     loc->heap_chunk_size = b->siz;
     loc->external_tag = b->tag;
     loc->tid = b->tid;
-    if(__xsan::GetMellocStackTrace(b->stk,addr,true)){
-    loc->stack = SymbolizeReverseStackId(b->stk);
-    }else{
-    loc->stack = SymbolizeStackId(b->stk);
+    if (__xsan::GetMellocStackTrace(b->stk, addr, true)) {
+      loc->stack = SymbolizeReverseStackId(b->stk);
+    } else {
+      loc->stack = SymbolizeStackId(b->stk);
     }
     rep_->locs.PushBack(loc);
-    if (ThreadContext *tctx = FindThreadByTidLocked(b->tid))
-      AddThread(tctx);
+    AddThread(b->tid);
     return;
   }
   bool is_stack = false;
@@ -370,11 +371,6 @@ void ScopedReportBase::AddLocation(uptr addr, uptr size) {
   }
 #endif
   if (ReportLocation *loc = SymbolizeData(addr)) {
-    /// TODO: Move the patch to inner of `SymbolizeData`, although
-    /// `SymbolizeData` is only used here.
-    /// The global structure may be modified by otehr sanitizers (e.g., ASan),
-    /// so we need to correct the global variable descriptor before adding it.
-    __xsan::CorrectGlobalVariableDesc(addr, loc->global);
     loc->suppressable = true;
     rep_->locs.PushBack(loc);
     return;
@@ -782,7 +778,6 @@ void ReportRace(ThreadState *thr, RawShadow *shadow_mem, Shadow cur, Shadow old,
   Shadow s[kMop] = {cur, old};
   uptr addr0 = addr + addr_off0;
   uptr addr1 = addr + addr_off1;
-  // Printf("addr : %p , off1: %zd\n", (void *)addr, addr_off1);
   uptr end0 = addr0 + size0;
   uptr end1 = addr1 + size1;
   uptr addr_min = min(addr0, addr1);
@@ -824,9 +819,7 @@ void ReportRace(ThreadState *thr, RawShadow *shadow_mem, Shadow cur, Shadow old,
     StoreShadow(&ctx->last_spurious_race, old.raw());
     return;
   }
-  // Printf("\tfinal stack size: %zd ; stack[0] = 0x%zx , stack[1] = 0x%zx\n", traces[1].size,
-  //        (traces[1].size > 0) ? traces[1].trace[0] : 0,
-  //        (traces[1].size > 1) ? traces[1].trace[1] : 0);
+
   if (IsFiredSuppression(ctx, rep_typ, traces[1]))
     return;
 
