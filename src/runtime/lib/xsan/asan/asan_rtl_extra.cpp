@@ -1,7 +1,9 @@
+#include "../xsan_common_defs.h"
+#include "../xsan_hooks.h"
 #include "asan_report.h"
 #include "asan_thread.h"
+#include "orig/asan_fake_stack.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
-
 namespace __asan {
 
 void OnPthreadCreate() {
@@ -31,3 +33,15 @@ void CorrectGlobalVariableDesc(const uptr addr, DataInfo &desc) {
 }
 
 }  // namespace __asan
+
+// FakeStack::Destroy()
+// XSan needs to intercept FakeStack::Destroy() to register the hook
+// `OnFakeStackDestory()` for notifying other sanitizers that the fake stack is
+// destroyed.
+XSAN_WRAPPER(void, _ZN6__asan9FakeStack7DestroyEi,
+             __asan::FakeStack *fake_stack, int tid) {
+  __xsan::OnFakeStackDestory(
+      reinterpret_cast<uptr>(fake_stack),
+      fake_stack->RequiredSize(fake_stack->stack_size_log()));
+  XSAN_REAL(_ZN6__asan9FakeStack7DestroyEi)(fake_stack, tid);
+}

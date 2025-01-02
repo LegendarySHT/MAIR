@@ -7,7 +7,7 @@ set(ASAN_SOURCES
   asan/orig/asan_debugging.cpp
   asan/orig/asan_descriptions.cpp
   asan/orig/asan_errors.cpp
-  # asan/orig/asan_fake_stack.cpp
+  asan/orig/asan_fake_stack.cpp
   # asan/orig/asan_flags.cpp
   asan/orig/asan_fuchsia.cpp
   asan/orig/asan_globals.cpp
@@ -49,7 +49,6 @@ endif()
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
-  asan/asan_fake_stack.cpp
   asan/asan_flags.cpp
   asan/asan_posix.cpp
   asan/asan_poisoning.cpp
@@ -407,6 +406,8 @@ endif()
 ################### Set the LDFLAGS for the XSan runtime library ##########
 
 set (WRAPPED_SYMBOLS ${CMAKE_CURRENT_SOURCE_DIR}/xsan_wrapped_symbols.txt.in)
+# TODO: only add this file when ASan is activated.
+append_list_if(True ${CMAKE_CURRENT_SOURCE_DIR}/asan/asan_wrapped_symbols.txt.in WRAPPED_SYMBOLS)
 # TODO: only add this file when TSan is activated.
 append_list_if(True ${CMAKE_CURRENT_SOURCE_DIR}/tsan/tsan_wrapped_symbols.txt.in WRAPPED_SYMBOLS)
 
