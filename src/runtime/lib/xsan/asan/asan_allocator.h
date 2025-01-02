@@ -328,11 +328,5 @@ void asan_mz_force_unlock();
 void PrintInternalAllocatorStats();
 void AsanSoftRssLimitExceededCallback(bool exceeded);
 
-bool UserPointerIsMine(const void *p);
-void *GetUserBlockBegin(const void *p);
-void *asan_malloc_internal(uptr size, BufferedStackTrace *stack);
-void asan_free_internal(void *ptr, BufferedStackTrace *stack);
-
-
 }  // namespace __asan
 #endif  // ASAN_ALLOCATOR_H

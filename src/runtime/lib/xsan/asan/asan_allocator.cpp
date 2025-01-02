@@ -13,6 +13,7 @@
 #include "sanitizer_common/sanitizer_quarantine.h"
 #include "sanitizer_common/sanitizer_stackdepot.h"
 
+#include "../xsan_allocator.h"
 #include "../xsan_common_defs.h"
 #include "../xsan_hooks.h"
 #include "asan_thread.h"
@@ -268,6 +269,7 @@ typedef Quarantine<QuarantineCallback, AsanChunk> AsanQuarantine;
 typedef AsanQuarantine::Cache QuarantineCache;
 
 void AsanMapUnmapCallback::OnMap(uptr p, uptr size) const {
+  /// TODO: add TSan's logic here
   PoisonShadow(p, size, kAsanHeapLeftRedzoneMagic);
   // Statistics.
   AsanStats &thread_stats = GetCurrentThreadStats();
@@ -277,6 +279,7 @@ void AsanMapUnmapCallback::OnMap(uptr p, uptr size) const {
 
 void AsanMapUnmapCallback::OnMapSecondary(uptr p, uptr size, uptr user_begin,
                                           uptr user_size) const {
+  /// TODO: add TSan's logic here
   uptr user_end = RoundDownTo(user_begin + user_size, ASAN_SHADOW_GRANULARITY);
   user_begin = RoundUpTo(user_begin, ASAN_SHADOW_GRANULARITY);
   // The secondary mapping will be immediately returned to user, no value
@@ -291,6 +294,7 @@ void AsanMapUnmapCallback::OnMapSecondary(uptr p, uptr size, uptr user_begin,
 }
 
 void AsanMapUnmapCallback::OnUnmap(uptr p, uptr size) const {
+  /// TODO: add TSan's logic here.
   PoisonShadow(p, size, 0);
   // We are about to unmap a chunk of user memory.
   // Mark the corresponding shadow memory as not needed.
@@ -1166,23 +1170,23 @@ void AsanThreadLocalMallocStorage::CommitBack() {
 
 void PrintInternalAllocatorStats() { instance.PrintStats(); }
 
-bool UserPointerIsMine(const void *p) {
+static bool UserPointerIsMine(const void *p) {
   if (!get_allocator().PointerIsMine(p))
     return false;
   /// Fast check by shadow. If p is a user pointer, its shadow is unposioned
   return !AddressIsPoisoned((uptr)p);
 }
 
-void *GetUserBlockBegin(const void *p) {
+static void *GetUserBlockBegin(const void *p) {
   uptr chunk_beg = (uptr)instance.GetAsanChunkByAddr((uptr)p);
   return (void *)(chunk_beg + kChunkHeaderSize);
 }
 
-void *asan_malloc_internal(uptr size, BufferedStackTrace *stack) {
+static void *asan_malloc_internal(uptr size, BufferedStackTrace *stack) {
   return instance.AllocateInternel(size, __xsan::kDefaultAlignment, stack);
 }
 
-void asan_free_internal(void *ptr, BufferedStackTrace *stack) {
+static void asan_free_internal(void *ptr, BufferedStackTrace *stack) {
   instance.DeallocateInternal(ptr, stack);
 }
 
@@ -1479,3 +1483,33 @@ int __asan_update_allocation_context(void* addr) {
   GET_STACK_TRACE_MALLOC;
   return instance.UpdateAllocationStack((uptr)addr, &stack);
 }
+
+// -------------------- Implement XsanAllocator's methods here! -------------
+namespace __xsan {
+void XsanAllocator::ForceLock() { instance.ForceLock(); }
+
+void XsanAllocator::ForceUnlock() { instance.ForceUnlock(); }
+
+
+/// ASan's embedded metadata should not be exposed
+bool XsanAllocator::PointerIsMine(const void *p) {
+  return __asan::UserPointerIsMine(p);
+}
+
+/// ASan's embedded metadata should not be exposed
+void *XsanAllocator::GetBlockBegin(const void *p) {
+  return __asan::GetUserBlockBegin(p);
+}
+
+void *XsanAllocator::AllocateInternel(uptr size, BufferedStackTrace *stack) {
+  return __asan::asan_malloc_internal(size, stack);
+}
+
+void XsanAllocator::DeallocateInternal(void *ptr, BufferedStackTrace *stack) {
+  __asan::asan_free_internal(ptr, stack);
+}
+
+void XsanAllocator::PrintStats() {
+  __asan::PrintInternalAllocatorStats();
+}
+}  // namespace __xsan

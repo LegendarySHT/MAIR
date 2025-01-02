@@ -21,6 +21,10 @@ public:
   void *GetBlockBegin(const void*p);
   void *AllocateInternel(uptr size, BufferedStackTrace *stack);
   void DeallocateInternal(void *ptr, BufferedStackTrace *stack);
+  // ForceLock() and ForceUnlock() are needed to implement Darwin malloc zone
+  // introspection API.
+  void ForceLock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS;
+  void ForceUnlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS;
   void PrintStats();
 };
 

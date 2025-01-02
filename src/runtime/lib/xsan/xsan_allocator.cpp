@@ -137,29 +137,7 @@ XsanAllocator xsan_alloctor;
 
 XsanAllocator *alloctor() { return &xsan_alloctor; }
 
-
-/// ASan's embedded metadata should not be exposed
-bool XsanAllocator::PointerIsMine(const void *p) {
-  return __asan::UserPointerIsMine(p);
-}
-
-/// ASan's embedded metadata should not be exposed
-void *XsanAllocator::GetBlockBegin(const void *p) {
-  return __asan::GetUserBlockBegin(p);
-}
-
-void *XsanAllocator::AllocateInternel(uptr size, BufferedStackTrace *stack) {
-  return __asan::asan_malloc_internal(size, stack);
-}
-
-void XsanAllocator::DeallocateInternal(void *ptr, BufferedStackTrace *stack) {
-  __asan::asan_free_internal(ptr, stack);
-}
-
-void XsanAllocator::PrintStats() {
-  __asan::PrintInternalAllocatorStats();
-}
-
+/// XsanAllocator's methods are implemented in asan/asan_allocator.cpp
 
 void *Alloc(uptr sz) {
   /// FIXME: figure out why TSan does this.
