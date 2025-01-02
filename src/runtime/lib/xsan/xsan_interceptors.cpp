@@ -604,6 +604,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 }
 
 /// If not compose TSan, intercept join here
+DECLARE_REAL(int, pthread_join, void *thread, void **arg);
 #    if !XSAN_CONTAINS_TSAN
 /// TODO: migrate pthread related APIs to XSan.
 INTERCEPTOR(int, pthread_join, void *t, void **arg) {
@@ -655,6 +656,17 @@ INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **ret,
 
 /// TODO: migrate pthread related APIs to XSan.
 // DEFINE_INTERNAL_PTHREAD_FUNCTIONS
+namespace __sanitizer {
+int internal_pthread_create(void *th, void *attr, void *(*callback)(void *),
+                            void *param) {
+  ScopedIgnoreInterceptors ignore;
+  return REAL(pthread_create)(th, attr, callback, param);
+}
+int internal_pthread_join(void *th, void **ret) {
+  ScopedIgnoreInterceptors ignore;
+  return REAL(pthread_join)(th, ret);
+}
+}  // namespace __sanitizer
 #  endif  // XSAN_INTERCEPT_PTHREAD_CREATE
 
 #  if XSAN_INTERCEPT_SWAPCONTEXT

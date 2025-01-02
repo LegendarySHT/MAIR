@@ -255,11 +255,19 @@ extern "C" void __xsan_vfork_parent_after(void *sp) {
   __asan_handle_vfork(sp);
 }
 
+// Ignore interceptors in OnLibraryLoaded()/Unloaded().  These hooks use code
+// (ListOfModules::init, MemoryMappingLayout::DumpListOfModules) that make
+// intercepted calls, which can cause deadlockes with ReportRace() which also
+// uses this code.
 void OnLibraryLoaded(const char *filename, void *handle) {
+  __xsan::ScopedIgnoreInterceptors ignore;
   __tsan::libignore()->OnLibraryLoaded(filename);
 }
 
-void OnLibraryUnloaded() { __tsan::libignore()->OnLibraryUnloaded(); }
+void OnLibraryUnloaded() { 
+  __xsan::ScopedIgnoreInterceptors ignore;
+  __tsan::libignore()->OnLibraryUnloaded(); 
+}
 
 void OnLongjmp(void *env, const char *fn_name, uptr pc) {
   __tsan::handle_longjmp(env, fn_name, pc);
