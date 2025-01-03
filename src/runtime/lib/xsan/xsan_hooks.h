@@ -39,6 +39,49 @@ struct XsanContext {
   XsanContext(uptr pc)
       : tsan_ctx_({__tsan::cur_thread(), pc}) {}
 };
+}
+
+namespace __tsan {
+/// -------------- Hooks for pthread functions -----------------
+using __xsan::TsanContext;
+class ScopedPthreadJoin {
+ public:
+  ScopedPthreadJoin(const int &res, const __xsan::XsanContext &xsan_ctx,
+                    const void *th);
+  ~ScopedPthreadJoin();
+
+ private:
+  const int &res_;
+  const TsanContext &tsan_ctx_;
+  Tid tid_;
+};
+class ScopedPthreadDetach {
+ public:
+  ScopedPthreadDetach(const int &res, const __xsan::XsanContext &xsan_ctx,
+                      const void *th);
+  ~ScopedPthreadDetach();
+
+ private:
+  const int &res_;
+  const TsanContext &tsan_ctx_;
+  Tid tid_;
+};
+class ScopedPthreadTryJoin {
+ public:
+  ScopedPthreadTryJoin(const int &res, const __xsan::XsanContext &xsan_ctx,
+                       const void *th);
+  ~ScopedPthreadTryJoin();
+
+ private:
+  uptr th_;
+  const int &res_;
+  const TsanContext &tsan_ctx_;
+  Tid tid_;
+};
+
+}  // namespace __tsan
+
+namespace __xsan {
 
 // ---------------------- Hook for other Sanitizers -------------------
 /// Notifies Xsan that the current thread is entering an completely internal
@@ -66,6 +109,41 @@ void XsanAllocFreeTailHook(uptr pc);
 void OnFakeStackDestory(uptr addr, uptr size);
 
 void OnPthreadCreate();
+class ScopedPthreadJoin {
+ public:
+  /// args:
+  ///   - res : the return value of pthread_join, 0 for success, non-zero for
+  ///   failure.
+  ///   - xsan_ctx : the context of Xsan.
+  ///   - th : the pthread_t of the thread to be joined.
+  ScopedPthreadJoin(const int &res, const __xsan::XsanContext &xsan_ctx,
+                    const void *th)
+      : tsan_join_(res, xsan_ctx, th) {}
+  ~ScopedPthreadJoin();
+
+ private:
+  __tsan::ScopedPthreadJoin tsan_join_;
+};
+class ScopedPthreadDetach {
+ public:
+  ScopedPthreadDetach(const int &res, const __xsan::XsanContext &xsan_ctx,
+                      const void *th)
+      : tsan_detach_(res, xsan_ctx, th) {}
+  ~ScopedPthreadDetach() {}
+
+ private:
+  __tsan::ScopedPthreadDetach tsan_detach_;
+};
+class ScopedPthreadTryJoin {
+ public:
+  ScopedPthreadTryJoin(const int &res, const __xsan::XsanContext &xsan_ctx,
+                       const void *th)
+      : tsan_try_join_(res, xsan_ctx, th) {}
+  ~ScopedPthreadTryJoin() {}
+
+ private:
+  __tsan::ScopedPthreadTryJoin tsan_try_join_;
+};
 
 void InitializeSanitizerFlags();
 void SetSanitizerCommonFlags(CommonFlags &cf);

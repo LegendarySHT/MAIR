@@ -167,23 +167,92 @@ bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr,
 
 // ---------- End of Memory Management Hooks -------------------
 
-// ---------------------- Special Function Hooks -----------------
-extern "C" {
-void *__asan_extra_spill_area();
-void __asan_handle_vfork(void *sp);
-}
-namespace __asan {
-/// ASan 1) checks the correctness of main thread ID, 2) checks the init orders.
-void OnPthreadCreate();
-void __asan_handle_no_return();
-void StopInitOrderChecking();
-}  // namespace __asan
+// ---------------------- pthread-related hooks -----------------
+/* pthread_create, pthread_join, pthread_detach, pthread_tryjoin_np, ... */
 
 namespace __tsan {
 /// TSan may spawn a background thread to recycle resource in pthread_create.
 /// What's more, TSan does not support starting new threads after multi-threaded
 /// fork.
 void OnPthreadCreate();
+Tid ThreadConsumeTid(ThreadState *thr, uptr pc, uptr uid);
+ScopedPthreadJoin::ScopedPthreadJoin(const int &res,
+                                     const XsanContext &xsan_ctx,
+                                     const void *th)
+    : res_(res), tsan_ctx_(xsan_ctx.tsan_ctx_) {
+  auto [thr, pc] = tsan_ctx_;
+  tid_ = ThreadConsumeTid(thr, pc, (uptr)th);
+  ThreadIgnoreBegin(thr, pc);
+}
+
+ScopedPthreadJoin::~ScopedPthreadJoin() {
+  auto [thr, pc] = tsan_ctx_;
+  ThreadIgnoreEnd(thr);
+  if (res_ == 0) {
+    ThreadJoin(thr, pc, tid_);
+  }
+}
+
+ScopedPthreadDetach::ScopedPthreadDetach(const int &res,
+                                         const XsanContext &xsan_ctx,
+                                         const void *th)
+    : res_(res), tsan_ctx_(xsan_ctx.tsan_ctx_) {
+  auto [thr, pc] = tsan_ctx_;
+  tid_ = ThreadConsumeTid(thr, pc, (uptr)th);
+}
+
+ScopedPthreadDetach::~ScopedPthreadDetach() {
+  if (res_ != 0) return;
+  auto [thr, pc] = tsan_ctx_;
+  ThreadDetach(thr, pc, tid_);
+}
+
+ScopedPthreadTryJoin::ScopedPthreadTryJoin(const int &res,
+                                           const XsanContext &xsan_ctx,
+                                           const void *th)
+    : th_((uptr)th), res_(res), tsan_ctx_(xsan_ctx.tsan_ctx_) {
+  auto [thr, pc] = tsan_ctx_;
+  tid_ = ThreadConsumeTid(thr, pc, th_);
+  ThreadIgnoreBegin(thr, pc);
+}
+
+ScopedPthreadTryJoin::~ScopedPthreadTryJoin() {
+  auto [thr, pc] = tsan_ctx_;
+  ThreadIgnoreEnd(thr);
+  if (res_ == 0) {
+    ThreadJoin(thr, pc, tid_);
+  } else {
+    ThreadNotJoined(thr, pc, tid_, th_);
+  }
+}
+}
+
+namespace __asan {
+/// ASan 1) checks the correctness of main thread ID, 2) checks the init orders.
+void OnPthreadCreate();
+}
+
+namespace __xsan {
+void OnPthreadCreate() {
+  __asan::OnPthreadCreate();
+  __tsan::OnPthreadCreate();
+}
+}
+
+// ---------------- End of pthread-related hooks -----------------
+
+
+// ---------------------- Special Function Hooks -----------------
+extern "C" {
+void *__asan_extra_spill_area();
+void __asan_handle_vfork(void *sp);
+}
+namespace __asan {
+void __asan_handle_no_return();
+void StopInitOrderChecking();
+}  // namespace __asan
+
+namespace __tsan {
 
 void Release(ThreadState *thr, uptr pc, uptr addr);
 
@@ -200,17 +269,11 @@ void handle_longjmp(void *env, const char *fname, uptr caller_pc);
 namespace __xsan {
 /*
 Provides hooks for special functions, such as
-  - pthread_create
   - atexit / on_exit / _cxa_atexit
   - longjmp / siglongjmp / _longjmp / _siglongjmp
   - dlopen / dlclose
   - vfork
 */
-
-void OnPthreadCreate() {
-  __asan::OnPthreadCreate();
-  __tsan::OnPthreadCreate();
-}
 
 ScopedAtExitWrapper::ScopedAtExitWrapper(uptr pc, const void *ctx) {
   __tsan::ThreadState *thr = __tsan::cur_thread();
