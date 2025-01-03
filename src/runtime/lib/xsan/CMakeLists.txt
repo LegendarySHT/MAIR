@@ -410,8 +410,10 @@ append_list_if(True ${CMAKE_CURRENT_SOURCE_DIR}/tsan/tsan_wrapped_symbols.txt.in
 
 # Located in src/cmake/AddWrapSyms.cmake
 include(AddWrapSyms)
-# Generate wrapped symbols file, which contains all symbols that need to be wrapped by _wrap=<symbol> linker option.
-generate_wrap_symbols(
+# Add the following task as a custom target:
+#   Generate wrapped symbols file, which contains all symbols that need to be 
+#   wrapped by _wrap=<symbol> linker option.
+create_wrap_symbols_target(
   OUT ${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt
   IN ${WRAPPED_SYMBOLS}
 )
