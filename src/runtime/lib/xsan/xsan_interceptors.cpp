@@ -591,21 +591,22 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   return result;
 }
 
-/// If not compose TSan, intercept join here
-DECLARE_REAL(int, pthread_join, void *thread, void **arg);
-#    if !XSAN_CONTAINS_TSAN
 /// TODO: migrate pthread related APIs to XSan.
-INTERCEPTOR(int, pthread_join, void *t, void **arg) {
+INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
+  SCOPED_XSAN_INTERCEPTOR_RAW(pthread_join, t, arg);
   int result;
+  ScopedPthreadJoin scoped_pthread_join(result, xsan_ctx, thread);
   xsanThreadArgRetval().Join((uptr)thread, [&]() {
-    result = REAL(pthread_join)(thread, retval);
+    result = COMMON_INTERCEPTOR_BLOCK_REAL(pthread_join)(thread, retval);
     return !result;
   });
   return result;
 }
 
 INTERCEPTOR(int, pthread_detach, void *thread) {
+  SCOPED_XSAN_INTERCEPTOR_RAW(pthread_detach, thread);
   int result;
+  ScopedPthreadDetach scoped_pthread_detach(result, xsan_ctx, thread);
   xsanThreadArgRetval().Detach((uptr)thread, [&]() {
     result = REAL(pthread_detach)(thread);
     return !result;
@@ -614,35 +615,39 @@ INTERCEPTOR(int, pthread_detach, void *thread) {
 }
 
 INTERCEPTOR(int, pthread_exit, void *retval) {
+  SCOPED_XSAN_INTERCEPTOR_RAW(pthread_exit, retval);
   xsanThreadArgRetval().Finish(GetThreadSelf(), retval);
   return REAL(pthread_exit)(retval);
 }
 
-#      if XSAN_INTERCEPT_TRYJOIN
+#    if XSAN_INTERCEPT_TRYJOIN
 INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **ret) {
+  SCOPED_XSAN_INTERCEPTOR_RAW(pthread_tryjoin_np, thread, ret);
   int result;
+  ScopedPthreadTryJoin scoped_pthread_tryjoin(result, xsan_ctx, thread);
   xsanThreadArgRetval().Join((uptr)thread, [&]() {
     result = REAL(pthread_tryjoin_np)(thread, ret);
     return !result;
   });
   return result;
 }
-#      endif
+#    endif
 
-#      if XSAN_INTERCEPT_TIMEDJOIN
+#    if XSAN_INTERCEPT_TIMEDJOIN
 INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **ret,
             const struct timespec *abstime) {
+  SCOPED_XSAN_INTERCEPTOR_RAW(pthread_timedjoin_np, thread, ret, abstime);
   int result;
+  ScopedPthreadTryJoin scoped_pthread_tryjoin(result, xsan_ctx, thread);
   xsanThreadArgRetval().Join((uptr)thread, [&]() {
-    result = REAL(pthread_timedjoin_np)(thread, ret, abstime);
+    result = COMMON_INTERCEPTOR_BLOCK_REAL(pthread_timedjoin_np)(thread, ret,
+                                                                 abstime);
     return !result;
   });
   return result;
 }
-#      endif
 #    endif
 
-/// TODO: migrate pthread related APIs to XSan.
 // DEFINE_INTERNAL_PTHREAD_FUNCTIONS
 namespace __sanitizer {
 int internal_pthread_create(void *th, void *attr, void *(*callback)(void *),
@@ -1312,19 +1317,17 @@ void InitializeXsanInterceptors() {
 #    else
   XSAN_INTERCEPT_FUNC(pthread_create);
 #    endif
-#    if !XSAN_CONTAINS_TSAN
   /// If not compose TSan, intercept join here
   /// FIXME: use hooks for TSan.
   XSAN_INTERCEPT_FUNC(pthread_join);
   XSAN_INTERCEPT_FUNC(pthread_detach);
   XSAN_INTERCEPT_FUNC(pthread_exit);
-#      if XSAN_INTERCEPT_TIMEDJOIN
+#    if XSAN_INTERCEPT_TIMEDJOIN
   XSAN_INTERCEPT_FUNC(pthread_timedjoin_np);
-#      endif
+#    endif
 
-#      if XSAN_INTERCEPT_TRYJOIN
+#    if XSAN_INTERCEPT_TRYJOIN
   XSAN_INTERCEPT_FUNC(pthread_tryjoin_np);
-#      endif
 #    endif
 
 #  endif

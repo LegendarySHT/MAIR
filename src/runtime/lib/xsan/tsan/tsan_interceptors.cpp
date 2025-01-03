@@ -889,79 +889,79 @@ extern "C" void *__tsan_thread_start_func(void *arg) {
 DECLARE_REAL(int, pthread_create,
     void *th, void *attr, void *(*callback)(void*), void * param)
 
-TSAN_INTERCEPTOR(int, pthread_join, void *th, void **ret) {
-  SCOPED_INTERCEPTOR_RAW(pthread_join, th, ret);
-  Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
-  ThreadIgnoreBegin(thr, pc);
-  int res = BLOCK_REAL(pthread_join)(th, ret);
-  ThreadIgnoreEnd(thr);
-  if (res == 0) {
-    ThreadJoin(thr, pc, tid);
-  }
-  return res;
-}
+// TSAN_INTERCEPTOR(int, pthread_join, void *th, void **ret) {
+//   SCOPED_INTERCEPTOR_RAW(pthread_join, th, ret);
+//   Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
+//   ThreadIgnoreBegin(thr, pc);
+//   int res = BLOCK_REAL(pthread_join)(th, ret);
+//   ThreadIgnoreEnd(thr);
+//   if (res == 0) {
+//     ThreadJoin(thr, pc, tid);
+//   }
+//   return res;
+// }
 
 // DEFINE_INTERNAL_PTHREAD_FUNCTIONS
-namespace __sanitizer {
-int internal_pthread_create(void *th, void *attr, void *(*callback)(void *),
-                            void *param) {
-  ScopedIgnoreInterceptors ignore;
-  return REAL(pthread_create)(th, attr, callback, param);
-}
-int internal_pthread_join(void *th, void **ret) {
-  ScopedIgnoreInterceptors ignore;
-  return REAL(pthread_join)(th, ret);
-}
-}  // namespace __sanitizer
+// namespace __sanitizer {
+// int internal_pthread_create(void *th, void *attr, void *(*callback)(void *),
+//                             void *param) {
+//   ScopedIgnoreInterceptors ignore;
+//   return REAL(pthread_create)(th, attr, callback, param);
+// }
+// int internal_pthread_join(void *th, void **ret) {
+//   ScopedIgnoreInterceptors ignore;
+//   return REAL(pthread_join)(th, ret);
+// }
+// }  // namespace __sanitizer
 
-TSAN_INTERCEPTOR(int, pthread_detach, void *th) {
-  SCOPED_INTERCEPTOR_RAW(pthread_detach, th);
-  Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
-  int res = REAL(pthread_detach)(th);
-  if (res == 0) {
-    ThreadDetach(thr, pc, tid);
-  }
-  return res;
-}
+// TSAN_INTERCEPTOR(int, pthread_detach, void *th) {
+//   SCOPED_INTERCEPTOR_RAW(pthread_detach, th);
+//   Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
+//   int res = REAL(pthread_detach)(th);
+//   if (res == 0) {
+//     ThreadDetach(thr, pc, tid);
+//   }
+//   return res;
+// }
 
-TSAN_INTERCEPTOR(void, pthread_exit, void *retval) {
-  {
-    SCOPED_INTERCEPTOR_RAW(pthread_exit, retval);
-#if !SANITIZER_APPLE && !SANITIZER_ANDROID
-    CHECK_EQ(thr, &cur_thread_placeholder);
-#endif
-  }
-  REAL(pthread_exit)(retval);
-}
+// TSAN_INTERCEPTOR(void, pthread_exit, void *retval) {
+//   {
+//     SCOPED_INTERCEPTOR_RAW(pthread_exit, retval);
+// #if !SANITIZER_APPLE && !SANITIZER_ANDROID
+//     CHECK_EQ(thr, &cur_thread_placeholder);
+// #endif
+//   }
+//   REAL(pthread_exit)(retval);
+// }
 
-#if SANITIZER_LINUX
-TSAN_INTERCEPTOR(int, pthread_tryjoin_np, void *th, void **ret) {
-  SCOPED_INTERCEPTOR_RAW(pthread_tryjoin_np, th, ret);
-  Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
-  ThreadIgnoreBegin(thr, pc);
-  int res = REAL(pthread_tryjoin_np)(th, ret);
-  ThreadIgnoreEnd(thr);
-  if (res == 0)
-    ThreadJoin(thr, pc, tid);
-  else
-    ThreadNotJoined(thr, pc, tid, (uptr)th);
-  return res;
-}
+// #if SANITIZER_LINUX
+// TSAN_INTERCEPTOR(int, pthread_tryjoin_np, void *th, void **ret) {
+//   SCOPED_INTERCEPTOR_RAW(pthread_tryjoin_np, th, ret);
+//   Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
+//   ThreadIgnoreBegin(thr, pc);
+//   int res = REAL(pthread_tryjoin_np)(th, ret);
+//   ThreadIgnoreEnd(thr);
+//   if (res == 0)
+//     ThreadJoin(thr, pc, tid);
+//   else
+//     ThreadNotJoined(thr, pc, tid, (uptr)th);
+//   return res;
+// }
 
-TSAN_INTERCEPTOR(int, pthread_timedjoin_np, void *th, void **ret,
-                 const struct timespec *abstime) {
-  SCOPED_INTERCEPTOR_RAW(pthread_timedjoin_np, th, ret, abstime);
-  Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
-  ThreadIgnoreBegin(thr, pc);
-  int res = BLOCK_REAL(pthread_timedjoin_np)(th, ret, abstime);
-  ThreadIgnoreEnd(thr);
-  if (res == 0)
-    ThreadJoin(thr, pc, tid);
-  else
-    ThreadNotJoined(thr, pc, tid, (uptr)th);
-  return res;
-}
-#endif
+// TSAN_INTERCEPTOR(int, pthread_timedjoin_np, void *th, void **ret,
+//                  const struct timespec *abstime) {
+//   SCOPED_INTERCEPTOR_RAW(pthread_timedjoin_np, th, ret, abstime);
+//   Tid tid = ThreadConsumeTid(thr, pc, (uptr)th);
+//   ThreadIgnoreBegin(thr, pc);
+//   int res = BLOCK_REAL(pthread_timedjoin_np)(th, ret, abstime);
+//   ThreadIgnoreEnd(thr);
+//   if (res == 0)
+//     ThreadJoin(thr, pc, tid);
+//   else
+//     ThreadNotJoined(thr, pc, tid, (uptr)th);
+//   return res;
+// }
+// #endif
 
 // Problem:
 // NPTL implementation of pthread_cond has 2 versions (2.2.5 and 2.3.2).
@@ -2802,13 +2802,13 @@ void InitializeInterceptors() {
   // TSAN_INTERCEPT(strdup);
 
   // TSAN_INTERCEPT(pthread_create);
-  TSAN_INTERCEPT(pthread_join);
-  TSAN_INTERCEPT(pthread_detach);
-  TSAN_INTERCEPT(pthread_exit);
-  #if SANITIZER_LINUX
-  TSAN_INTERCEPT(pthread_tryjoin_np);
-  TSAN_INTERCEPT(pthread_timedjoin_np);
-  #endif
+  // TSAN_INTERCEPT(pthread_join);
+  // TSAN_INTERCEPT(pthread_detach);
+  // TSAN_INTERCEPT(pthread_exit);
+  // #if SANITIZER_LINUX
+  // TSAN_INTERCEPT(pthread_tryjoin_np);
+  // TSAN_INTERCEPT(pthread_timedjoin_np);
+  // #endif
 
   TSAN_INTERCEPT_VER(pthread_cond_init, PTHREAD_ABI_BASE);
   TSAN_INTERCEPT_VER(pthread_cond_signal, PTHREAD_ABI_BASE);
