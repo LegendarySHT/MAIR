@@ -302,38 +302,26 @@ static void *mmap_interceptor(void *ctx, Mmap real_mmap,
   void *res = real_mmap(addr, sz, prot, flags, fd, off);
   if (res != MAP_FAILED) {
     // if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
-    //   Report("ThreadSanitizer: mmap at bad address: addr=%p size=%p res=%p\n",
+    //   Report("XSan: mmap at bad address: addr=%p size=%p res=%p\n",
     //          addr, (void*)sz, res);
     //   Die();
     // }
     if (IsAppMem((uptr)res) && IsAppMem((uptr)res + sz - 1)) {
-      AfterMmap(ctx, res, sz, fd);
+      const XsanInterceptorContext *ctx_ =
+          reinterpret_cast<const XsanInterceptorContext *>(ctx);
+      AfterMmap(*ctx_, res, sz, fd);
     }
   }
-  /// TODO: move to xsan_hooks.cpp
-  if (sz && res != (void *)-1) {
-    const uptr beg = reinterpret_cast<uptr>(res);
-    DCHECK(IsAligned(beg, GetPageSize()));
-    SIZE_T rounded_length = RoundUpTo(sz, GetPageSize());
-    // Only unpoison shadow if it's an ASAN managed address.
-    if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
-      __asan::PoisonShadow(beg, RoundUpTo(sz, GetPageSize()), 0);
-  }
+
   return res;
 }
 
 template <class Munmap>
-static int munmap_interceptor(Munmap real_munmap, void *addr, SIZE_T length) {
-  // We should not tag if munmap fail, but it's to late to tag after
-  // real_munmap, as the pages could be mmaped by another thread.
-  const uptr beg = reinterpret_cast<uptr>(addr);
-  /// TODO: move to xsan_hooks.cpp
-  if (length && IsAligned(beg, GetPageSize())) {
-    SIZE_T rounded_length = RoundUpTo(length, GetPageSize());
-    // Protect from unmapping the shadow.
-    if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
-      __asan::PoisonShadow(beg, rounded_length, 0);
-  }
+static int munmap_interceptor(void *ctx, Munmap real_munmap, void *addr,
+                              SIZE_T length) {
+  const XsanInterceptorContext *ctx_ =
+      reinterpret_cast<const XsanInterceptorContext *>(ctx);
+  BeforeMunmap(*ctx_, addr, length);
   return real_munmap(addr, length);
 }
 
@@ -345,10 +333,10 @@ static int munmap_interceptor(Munmap real_munmap, void *addr, SIZE_T length) {
                               off);                                          \
     } while (false)
 
-#  define COMMON_INTERCEPTOR_MUNMAP_IMPL(ctx, addr, length) \
-    do {                                                    \
-      (void)(ctx);                                          \
-      return munmap_interceptor(REAL(munmap), addr, sz);    \
+#  define COMMON_INTERCEPTOR_MUNMAP_IMPL(ctx, addr, length)   \
+    do {                                                      \
+      (void)(ctx);                                            \
+      return munmap_interceptor(ctx, REAL(munmap), addr, sz); \
     } while (false)
 
 #  define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \

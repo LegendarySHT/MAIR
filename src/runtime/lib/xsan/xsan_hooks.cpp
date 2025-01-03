@@ -8,7 +8,8 @@
 
 #include "xsan_hooks.h"
 
-#include <sanitizer_common/sanitizer_common.h>
+#include "sanitizer_common/sanitizer_common.h"
+#include "sanitizer_common/sanitizer_internal_defs.h"
 
 #include "asan/asan_thread.h"
 #include "asan/orig/asan_internal.h"
@@ -19,6 +20,7 @@
 #include "xsan_internal.h"
 #include "xsan_thread.h"
 
+using namespace __xsan;
 // ---------------------- State/Ignoration Management Hooks --------------------
 /*
  Manage and notify the following states:
@@ -452,7 +454,46 @@ void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
                                          uptr size);
 
 void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg);
+void AfterMmap(const XsanInterceptorContext &ctx, void *res, uptr size, int fd)  {
+  auto [thr, pc] = ctx.xsan_ctx.tsan_ctx_;
+  if (fd > 0)
+    __tsan::FdAccess(thr, pc, fd);
+  __tsan::MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, size);
+}
+void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr, uptr size) {
+  auto [thr, pc] = ctx.xsan_ctx.tsan_ctx_;
+  UnmapShadow(thr, (uptr)addr, size);
+}
 }  // namespace __tsan
+
+namespace __asan {
+
+void PoisonShadow(uptr addr, uptr size, u8 value);
+
+void AfterMmap(void *res, uptr size, int fd)  {
+  if (!size || res == (void *)-1) {
+    return;
+  }
+  const uptr beg = reinterpret_cast<uptr>(res);
+  DCHECK(IsAligned(beg, GetPageSize()));
+  SIZE_T rounded_length = RoundUpTo(size, GetPageSize());
+  // Only unpoison shadow if it's an ASAN managed address.
+  if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
+    __asan::PoisonShadow(beg, RoundUpTo(size, GetPageSize()), 0);
+}
+
+void BeforeMunmap(void *addr, uptr size) {
+  // We should not tag if munmap fail, but it's to late to tag after
+  // real_munmap, as the pages could be mmaped by another thread.
+  const uptr beg = reinterpret_cast<uptr>(addr);
+  if (size && IsAligned(beg, GetPageSize())) {
+    SIZE_T rounded_length = RoundUpTo(size, GetPageSize());
+    // Protect from unmapping the shadow.
+    if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
+      __asan::PoisonShadow(beg, rounded_length, 0);
+  }
+}
+}
 
 namespace __xsan {
 void OnAcquire(const void *ctx, uptr addr) {
@@ -526,14 +567,15 @@ void OnHandleRecvmsg(const void *ctx, __sanitizer_msghdr *msg) {
 }
 #endif
 
-void AfterMmap(const void *ctx, void *res, uptr size, int fd) {
-  const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
-  if (fd > 0)
-    OnFdAccess(ctx, fd);
-  __tsan::MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, size);
+void AfterMmap(const XsanInterceptorContext& ctx, void *res, uptr size, int fd) {
+  __tsan::AfterMmap(ctx, res, size, fd);
+  __asan::AfterMmap(res, size, fd);
 }
 
+void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr, uptr size) {
+  __tsan::BeforeMunmap(ctx, addr, size);
+  __asan::BeforeMunmap(addr, size);
+}
 }  // namespace __xsan
 
 // ---------- End of Synchronization and File-Related Hooks ----------------

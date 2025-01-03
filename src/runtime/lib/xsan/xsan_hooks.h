@@ -23,6 +23,7 @@ namespace __tsan {
 
 namespace __xsan {
 class XsanThread;
+class XsanInterceptorContext;
 XsanThread *GetCurrentThread();
 // These structs is to hold the context of sub-sanitizers.
 // - TSan requires a thread state and a pc everywhere.
@@ -97,7 +98,8 @@ class ScopedAtExitHandler {
   ScopedAtExitHandler(uptr pc, const void *ctx);
   ~ScopedAtExitHandler();
 };
-void AfterMmap(const void *ctx, void *res, uptr size, int fd);
+void AfterMmap(const XsanInterceptorContext &ctx, void *res, uptr size, int fd);
+void BeforeMunmap(const XsanInterceptorContext &ctx,void *addr, uptr size);
 /// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
 /// Notably, this function is called TWICE at the attitude per process.
 extern "C" void * __xsan_vfork_before_and_after();
