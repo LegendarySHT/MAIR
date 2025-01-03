@@ -591,7 +591,6 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
   return result;
 }
 
-/// TODO: migrate pthread related APIs to XSan.
 INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
   SCOPED_XSAN_INTERCEPTOR_RAW(pthread_join, t, arg);
   int result;
@@ -1073,7 +1072,6 @@ static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f,
                                  void *dso = nullptr);
 
 #  if XSAN_INTERCEPT___CXA_ATEXIT
-/// TODO: support on_exit interceptor
 INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
             void *dso_handle) {
   if (__xsan::in_symbolizer())
@@ -1318,7 +1316,6 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(pthread_create);
 #    endif
   /// If not compose TSan, intercept join here
-  /// FIXME: use hooks for TSan.
   XSAN_INTERCEPT_FUNC(pthread_join);
   XSAN_INTERCEPT_FUNC(pthread_detach);
   XSAN_INTERCEPT_FUNC(pthread_exit);
