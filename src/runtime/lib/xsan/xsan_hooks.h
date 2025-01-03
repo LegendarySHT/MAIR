@@ -103,6 +103,10 @@ bool ShouldSanitzerIgnoreAllocFreeHook();
 // Integrates different sanitizers' exit code logic.
 int get_exit_code(const void *ctx = nullptr);
 
+void OnAllocatorMap(uptr p, uptr size);
+void OnAllocatorMapSecondary(uptr p, uptr size, uptr user_begin,
+                             uptr user_size);
+void OnAllocatorUnmap(uptr p, uptr size);
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc);
 void XsanFreeHook(uptr ptr, bool write, uptr pc);
 void XsanAllocFreeTailHook(uptr pc);

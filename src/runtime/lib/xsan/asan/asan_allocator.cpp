@@ -269,7 +269,8 @@ typedef Quarantine<QuarantineCallback, AsanChunk> AsanQuarantine;
 typedef AsanQuarantine::Cache QuarantineCache;
 
 void AsanMapUnmapCallback::OnMap(uptr p, uptr size) const {
-  /// TODO: add TSan's logic here
+  /// hook for other sanitizers
+  __xsan::OnAllocatorMap(p, size);
   PoisonShadow(p, size, kAsanHeapLeftRedzoneMagic);
   // Statistics.
   AsanStats &thread_stats = GetCurrentThreadStats();
@@ -279,7 +280,8 @@ void AsanMapUnmapCallback::OnMap(uptr p, uptr size) const {
 
 void AsanMapUnmapCallback::OnMapSecondary(uptr p, uptr size, uptr user_begin,
                                           uptr user_size) const {
-  /// TODO: add TSan's logic here
+  /// hook for other sanitizers
+  __xsan::OnAllocatorMapSecondary(p, size, user_begin, user_size);
   uptr user_end = RoundDownTo(user_begin + user_size, ASAN_SHADOW_GRANULARITY);
   user_begin = RoundUpTo(user_begin, ASAN_SHADOW_GRANULARITY);
   // The secondary mapping will be immediately returned to user, no value
@@ -294,7 +296,8 @@ void AsanMapUnmapCallback::OnMapSecondary(uptr p, uptr size, uptr user_begin,
 }
 
 void AsanMapUnmapCallback::OnUnmap(uptr p, uptr size) const {
-  /// TODO: add TSan's logic here.
+  /// hook for other sanitizers
+  __xsan::OnAllocatorUnmap(p, size);
   PoisonShadow(p, size, 0);
   // We are about to unmap a chunk of user memory.
   // Mark the corresponding shadow memory as not needed.

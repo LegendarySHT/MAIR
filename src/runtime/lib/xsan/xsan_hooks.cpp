@@ -111,6 +111,8 @@ int get_exit_code(const void *ctx) {
 /// need to invoke ASan's hooks here.
 namespace __tsan {
 
+void OnAllocatorUnmap(uptr p, uptr size);
+
 SANITIZER_WEAK_CXX_DEFAULT_IMPL
 void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {}
 
@@ -135,6 +137,14 @@ bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr,
 }  // namespace __asan
 
 namespace __xsan {
+
+void OnAllocatorMap(uptr p, uptr size) {}
+
+void OnAllocatorMapSecondary(uptr p, uptr size, uptr user_begin,
+                             uptr user_size) {}
+
+void OnAllocatorUnmap(uptr p, uptr size) { __tsan::OnAllocatorUnmap(p, size); }
+
 void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
   __tsan::OnXsanAllocHook(ptr, size, write, pc);
 }

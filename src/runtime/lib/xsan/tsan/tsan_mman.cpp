@@ -418,6 +418,11 @@ void FreeImpl(void *p) {
 }
 
 // ---------------------- Hook for other Sanitizers -------------------
+void OnAllocatorUnmap(uptr p, uptr size) {
+  MapUnmapCallback cb;
+  cb.OnUnmap(p, size);
+}
+
 void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
   if (__tsan::is_tsan_initialized()) {
     /// TODO: remove code related to tsan's uaf checking
