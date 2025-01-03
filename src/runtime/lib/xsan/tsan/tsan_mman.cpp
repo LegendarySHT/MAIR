@@ -344,19 +344,20 @@ void *user_pvalloc(ThreadState *thr, uptr pc, uptr sz) {
   return SetErrnoOnNull(user_alloc_internal(thr, pc, sz, PageSize));
 }
 
-static const void *user_alloc_begin(const void *p) {
-  if (p == nullptr || !IsAppMem((uptr)p))
-    return nullptr;
-  void *beg = allocator()->GetBlockBegin(p);
-  if (!beg)
-    return nullptr;
+/// Delegated to XSan, and further delegated to ASan.
+// static const void *user_alloc_begin(const void *p) {
+//   if (p == nullptr || !IsAppMem((uptr)p))
+//     return nullptr;
+//   void *beg = allocator()->GetBlockBegin(p);
+//   if (!beg)
+//     return nullptr;
 
-  MBlock *b = ctx->metamap.GetBlock((uptr)beg);
-  if (!b)
-    return nullptr;  // Not a valid pointer.
+//   MBlock *b = ctx->metamap.GetBlock((uptr)beg);
+//   if (!b)
+//     return nullptr;  // Not a valid pointer.
 
-  return (const void *)beg;
-}
+//   return (const void *)beg;
+// }
 
 uptr user_alloc_usable_size(const void *p) {
   if (p == 0 || !IsAppMem((uptr)p))

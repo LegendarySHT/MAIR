@@ -224,7 +224,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     if (__asan::flags()->strict_init_order)  \
       __asan::StopInitOrderChecking();
 
-#  define COMMON_INTERCEPT_FUNCTION(name) XSAN_INTERCEPT_FUNC(name)
+
 #  define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
     XSAN_INTERCEPT_FUNC_VER(name, ver)
 #  define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \

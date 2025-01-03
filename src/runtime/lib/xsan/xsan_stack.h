@@ -2,6 +2,14 @@
 
 #include <sanitizer_common/sanitizer_flags.h>
 #include <sanitizer_common/sanitizer_stacktrace.h>
+
+#ifdef GET_STACK_TRACE_FATAL
+/// TODO: Find a better way to avoidheader file MACRO redefinitions.
+// Before: tsan_rtl.h   -> GET_STACK_TRACE_FATAL
+// After : xsan_stack.h -> GET_STACK_TRACE_FATAL
+#undef GET_STACK_TRACE_FATAL
+#endif
+
 // To reuse the macro GET_STACK_TRACE and etc.
 #include "asan/orig/asan_stack.h"
 

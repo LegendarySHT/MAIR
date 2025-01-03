@@ -118,7 +118,7 @@ void handle_longjmp(void *env, const char *fname, uptr caller_pc);
 # define TSAN_INTERCEPTOR_NETBSD_ALIAS_THR2(ret, func, func2, ...)
 #endif
 
-#define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
+// #define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
 
 // #define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED \
 //   (!cur_thread_init()->is_inited)

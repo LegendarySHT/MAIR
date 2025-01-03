@@ -17,13 +17,13 @@ struct CommonFlags;
 }
 
 namespace __tsan {
-  struct ThreadState;
-  ThreadState *cur_thread();
-}
+struct ThreadState;
+ThreadState *cur_thread();
+}  // namespace __tsan
 
 namespace __xsan {
 class XsanThread;
-class XsanInterceptorContext;
+struct XsanInterceptorContext;
 XsanThread *GetCurrentThread();
 // These structs is to hold the context of sub-sanitizers.
 // - TSan requires a thread state and a pc everywhere.

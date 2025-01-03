@@ -20,7 +20,7 @@
 
 
 static u8*  obj_path;               /* Path to runtime libraries         */
-static u8** cc_params;              /* Parameters passed to the real CC  */
+static const u8 **cc_params;        /* Parameters passed to the real CC  */
 static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
 
 #ifndef XSAN_PATH
@@ -153,7 +153,6 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
   ck_free(tmp);
 
   return NULL;
-
 }
 
 /* Try to find the runtime libraries. If that fails, abort. */
@@ -242,14 +241,14 @@ u8 has_any(XsanOption *opt) {
   }
 #define OPT_GET_VAL_AND_THEN(arg, opt, ...)                                    \
   if (OPT_MATCH(arg, (opt "="))) {                                             \
-    u8 *val = arg + sizeof(opt "=") - 1;                                       \
+    const char *val = arg + sizeof(opt "=") - 1;                               \
     __VA_ARGS__                                                                \
   }
 
-static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
+static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
-    u8* cur = argv[i];
+    const char* cur = argv[i];
     OPT_EQ_AND_THEN(cur, "-tsan", {
       if (has(&xsan_options, ASan))
         FATAL("'-tsan' could not be used with '-asan'");
@@ -337,7 +336,7 @@ static enum SanitizerType detect_san_type(u32 argc, u8* argv[]) {
     1. -fsanitize=address,pointer-compare
     2. -fsanitize=address,pointer-subtract
  */
-static u8 handle_asan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
+static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   if (is_mllvm_arg) {
     if (!OPT_MATCH(arg, "-asan-")) {
       return 0;
@@ -424,7 +423,7 @@ static u8 handle_asan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
    -mllvm -xxx
  Refer to SanitizerArgs.cpp:1142~1155
  */
-static u8 handle_tsan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
+static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
   if (is_mllvm_arg) {
     if (!OPT_MATCH(arg, "-tsan-")) {
       return 0;
@@ -481,7 +480,7 @@ static u8 handle_tsan_options(u8* arg, u8 is_mllvm_arg, u8 is_neg) {
   return 0;
 }
 
-static u8 handle_ubsan_options(u8* opt) {
+static u8 handle_ubsan_options(const char* opt) {
   return 0;
 }
 
@@ -492,7 +491,8 @@ static u8 handle_ubsan_options(u8* opt) {
   Dicards the original argument if return 1.
 
 */
-static u8 handle_sanitizer_options(u8* arg, u8 is_mllvm_arg, enum SanitizerType sanTy)  {
+static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
+                                   enum SanitizerType sanTy) {
 
   if (OPT_EQ(arg, "-asan") || OPT_EQ(arg, "-tsan") 
       || OPT_EQ(arg, "-ubsan") || OPT_EQ(arg, "-xsan")) {
@@ -556,7 +556,6 @@ static u8 handle_sanitizer_options(u8* arg, u8 is_mllvm_arg, enum SanitizerType 
 
   return 0;
 }
-
 
 static void init_sanitizer_setting(enum SanitizerType sanTy) {
   switch (sanTy) {
@@ -859,12 +858,12 @@ static void sync_hook_id(char *dst, char *src) {
 }
 
 /* Copy argv to cc_params, making the necessary edits. */
-static void edit_params(u32 argc, char** argv) {
+static void edit_params(u32 argc, const char** argv) {
 
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
      preprocessor_only = 0, have_unroll = 0, have_o = 0, have_pic = 0,
      have_c = 0, partial_linking = 0;
-  u8 *name;
+  const u8 *name;
   enum SanitizerType xsanTy = SanNone;
   u8 is_cxx = 0;
 
@@ -907,7 +906,7 @@ static void edit_params(u32 argc, char** argv) {
   /* Detect the compilation mode in advance. */
   xsanTy = detect_san_type(argc, argv);
   for (u32 i = 1; i < argc; i++) {
-    u8* cur = argv[i];
+    const u8* cur = argv[i];
 
     if (!strcmp(cur, "--driver-mode=g++")) is_cxx = 1;
     else if (!strcmp(cur, "-m32")) bit_mode = 32;
@@ -961,16 +960,17 @@ static void edit_params(u32 argc, char** argv) {
   init_sanitizer_setting(xsanTy);
 
   /*
-    We should put the sanitizer static runtime library just ahead of the input
-    *.o/*.c  files, so that the CTor of sanitizers can be called before the CTors of
-    user code (.preinit, module_ctor).
+    We should put the sanitizer static runtime library just ahead of the
+    input xxx.o/xxx.c  files, so that the CTor of sanitizers can be called
+    before the CTors of user code (.preinit, module_ctor).
 
     What's more, the compiler also places the sanitizer runtime library before
     the input files after the Driver generates the command line, which should be
     adhered by this compiler wrapper.
 
-    However, it is hard to judge whether an argument is an input file or not precisely,
-    so we simply add the sanitizer runtime library as front as possible.
+    However, it is hard to judge whether an argument is an input file or not
+    precisely, so we simply add the sanitizer runtime library as front as
+    possible.
 
     See ASan's testcase "init_fini_sections.cpp" for details.
   */
@@ -978,7 +978,7 @@ static void edit_params(u32 argc, char** argv) {
   add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
 
   while (--argc) {
-    u8* cur = *(++argv);
+    const u8* cur = *(++argv);
 
     if (!strcmp(cur, "-Wl,-z,defs") ||
         !strcmp(cur, "-Wl,--no-undefined")) continue;
@@ -1186,7 +1186,7 @@ static void print_cmdline(int argc) {
 }
 /* Main entry point */
 
-int main(int argc, char** argv) {
+int main(int argc, const char** argv) {
 
   if (isatty(2) && !getenv("AFL_QUIET")) {
 
@@ -1220,7 +1220,7 @@ int main(int argc, char** argv) {
 
 
 #ifndef __ANDROID__
-  find_obj(argv[0]);
+  find_obj((u8 *)argv[0]);
 #endif
 
   edit_params(argc, argv);

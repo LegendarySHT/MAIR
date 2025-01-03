@@ -2296,6 +2296,9 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
 /// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
 #undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
 
+/// We don't use tsan_interceptors_memintrinsics.cpp, therefore, this MACRO is
+/// not required to lift to header file.
+#define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
   INTERCEPT_FUNCTION_VER(name, ver)
 #define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
