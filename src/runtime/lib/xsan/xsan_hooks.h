@@ -123,7 +123,7 @@ class ScopedPthreadJoin {
   ScopedPthreadJoin(const int &res, const __xsan::XsanContext &xsan_ctx,
                     const void *th)
       : tsan_join_(res, xsan_ctx, th) {}
-  ~ScopedPthreadJoin();
+  ~ScopedPthreadJoin() {}
 
  private:
   __tsan::ScopedPthreadJoin tsan_join_;

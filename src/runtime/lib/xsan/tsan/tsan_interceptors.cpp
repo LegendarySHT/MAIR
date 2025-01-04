@@ -176,7 +176,7 @@ struct ThreadSignalContext {
   __sanitizer_sigset_t oldset;
 };
 
-static void EnterBlockingFunc(ThreadState *thr) {
+void EnterBlockingFunc(ThreadState *thr) {
   for (;;) {
     // The order is important to not delay a signal infinitely if it's
     // delivered right before we set in_blocking_func. Note: we can't call

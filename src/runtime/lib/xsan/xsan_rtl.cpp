@@ -40,7 +40,7 @@ static void SetXsanInited() {
   atomic_store(&xsan_inited, 1, memory_order_release);
 }
 
-bool AsanInited() {
+bool XsanInited() {
   return atomic_load(&xsan_inited, memory_order_acquire) == 1;
 }
 
