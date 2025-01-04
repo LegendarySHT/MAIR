@@ -2735,9 +2735,7 @@ bool AddressSanitizer::instrumentFunction(Function &F,
                    OperandsToInstrument.size() + IntrinToInstrument.size() >
                        (unsigned)ClInstrumentationWithCallsThreshold);
   const DataLayout &DL = F.getParent()->getDataLayout();
-  ObjectSizeOpts ObjSizeOpts;
-  ObjSizeOpts.RoundToAlign = true;
-  ObjectSizeOffsetVisitor ObjSizeVis(DL, TLI, F.getContext(), ObjSizeOpts);
+  ObjectSizeOffsetVisitor ObjSizeVis(DL, TLI, F.getContext());
 
   // Instrument.
   int NumInstrumented = 0;
