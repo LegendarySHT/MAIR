@@ -2117,6 +2117,7 @@ TSAN_INTERCEPTOR(int, fork, int fake) {
   return REAL(fork)(fake);
 }
 
+namespace __tsan {
 void atfork_prepare() {
   if (in_symbolizer())
     return;
@@ -2141,6 +2142,7 @@ void atfork_child() {
   ForkChildAfter(thr, pc, true);
   FdOnFork(thr, pc);
 }
+}  // namespace __tsan
 
 #if !SANITIZER_IOS
 DECLARE_REAL(int, vfork, int fake)
@@ -2933,10 +2935,10 @@ void InitializeInterceptors() {
   //   Printf("ThreadSanitizer: failed to setup atexit callback\n");
   //   Die();
   // }
-  if (pthread_atfork(atfork_prepare, atfork_parent, atfork_child)) {
-    Printf("ThreadSanitizer: failed to setup atfork callbacks\n");
-    Die();
-  }
+  // if (pthread_atfork(atfork_prepare, atfork_parent, atfork_child)) {
+  //   Printf("ThreadSanitizer: failed to setup atfork callbacks\n");
+  //   Die();
+  // }
 
 #if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
   if (pthread_key_create(&interceptor_ctx()->finalize_key, &thread_finalize)) {

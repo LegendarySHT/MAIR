@@ -181,6 +181,7 @@ set(XSAN_SOURCES
   xsan_interface.cpp
   xsan_linux.cpp
   xsan_malloc_linux.cpp
+  xsan_posix.cpp
   xsan_rtl.cpp
   xsan_report.cpp
   xsan_thread.cpp

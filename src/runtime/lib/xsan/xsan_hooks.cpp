@@ -260,6 +260,47 @@ void __asan_handle_vfork(void *sp);
 namespace __asan {
 void __asan_handle_no_return();
 void StopInitOrderChecking();
+
+/// Comes from BeforeFork and AfterFork in asan_posix.cpp
+/// We don't want to modify the asan_posix.cpp only for such a small change.
+void OnForkBefore() {
+  VReport(2, "BeforeFork tid: %llu\n", GetTid());
+  if (CAN_SANITIZE_LEAKS) {
+    __lsan::LockGlobal();
+  }
+  // `_lsan` functions defined regardless of `CAN_SANITIZE_LEAKS` and lock the
+  // stuff we need.
+#if !XSAN_CONTAINS_TSAN
+  /// 1. TSan restrictifys the internal lock checks.
+  /// 2. This LockThreads() locks ThreadRegistry, which conflicts with TSan's
+  ///    lock restrictions, as defined in `mutex_meta` in tsan_rtl.cpp.
+  /// 3. In details, TSan does not support multi-lock of type ThreadRegistry.
+  /// Therefore, we forbid this lock while TSan is enabled.
+  __lsan::LockThreads();
+#endif
+  /// Shared resources managed by XSan
+  // __lsan::LockAllocator();
+  // StackDepotLockBeforeFork();
+}
+void OnForkAfter() {
+  /// Shared resources managed by XSan
+  // StackDepotUnlockAfterFork(fork_child);
+  // // `_lsan` functions defined regardless of `CAN_SANITIZE_LEAKS` and unlock
+  // // the stuff we need.
+  // __lsan::UnlockAllocator();
+#if !XSAN_CONTAINS_TSAN
+  /// 1. TSan restrictifys the internal lock checks.
+  /// 2. This LockThreads() locks ThreadRegistry, which conflicts with TSan's
+  ///    lock restrictions, as defined in `mutex_meta` in tsan_rtl.cpp.
+  /// 3. In details, TSan does not support multi-lock of type ThreadRegistry.
+  /// Therefore, we forbid this lock while TSan is enabled.
+  __lsan::UnlockThreads();
+#endif
+  if (CAN_SANITIZE_LEAKS) {
+    __lsan::UnlockGlobal();
+  }
+  VReport(2, "AfterFork tid: %llu\n", GetTid());
+}
 }  // namespace __asan
 
 namespace __tsan {
@@ -274,6 +315,10 @@ void RecoverTsanAfterVforkParent();
 
 LibIgnore *libignore();
 void handle_longjmp(void *env, const char *fname, uptr caller_pc);
+
+void atfork_prepare();
+void atfork_parent();
+void atfork_child();
 }  // namespace __tsan
 
 namespace __xsan {
@@ -282,7 +327,7 @@ Provides hooks for special functions, such as
   - atexit / on_exit / _cxa_atexit
   - longjmp / siglongjmp / _longjmp / _siglongjmp
   - dlopen / dlclose
-  - vfork
+  - vfork / fork
 */
 
 ScopedAtExitWrapper::ScopedAtExitWrapper(uptr pc, const void *ctx) {
@@ -328,6 +373,22 @@ extern "C" void __xsan_vfork_parent_after(void *sp) {
   __tsan::RecoverTsanAfterVforkParent();
   /// Unpoison vfork child's new stack space : [stack_bottom, sp]
   __asan_handle_vfork(sp);
+}
+
+/// Used to lock before fork
+void OnForkBefore() {
+  __asan::OnForkBefore();
+  __tsan::atfork_prepare();
+}
+
+/// Used to unlock after fork
+void OnForkAfter(bool is_child) {
+  if (is_child) {
+    __tsan::atfork_child();
+  } else {
+    __tsan::atfork_parent();
+  }
+  __asan::OnForkAfter();
 }
 
 // Ignore interceptors in OnLibraryLoaded()/Unloaded().  These hooks use code

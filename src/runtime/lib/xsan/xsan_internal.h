@@ -137,7 +137,7 @@ void *XsanDlSymNext(const char *sym);
 // `dlopen()` specific initialization inside this function.
 bool HandleDlopenInit();
 
-void InstallAtExitCheckLeaks();
+void InstallAtForkHandler();
 
 #define XSAN_ON_ERROR() \
   if (&__xsan_on_error) \

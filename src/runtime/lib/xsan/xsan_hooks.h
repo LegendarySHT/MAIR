@@ -187,6 +187,8 @@ void BeforeMunmap(const XsanInterceptorContext &ctx,void *addr, uptr size);
 extern "C" void * __xsan_vfork_before_and_after();
 /// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
 extern "C" void __xsan_vfork_parent_after(void *sp);
+void OnForkBefore();
+void OnForkAfter(bool is_child);
 void OnLibraryLoaded(const char *filename, void *handle);
 void OnLibraryUnloaded();
 void OnLongjmp(void *env, const char *fn_name, uptr pc);

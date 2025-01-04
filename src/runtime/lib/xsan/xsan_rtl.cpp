@@ -245,8 +245,7 @@ static bool XsanInitInternal() {
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
-  /// FIXME: unify the AfFork handler and the relevant lock!
-  // InstallAtForkHandler();
+  InstallAtForkHandler();
 
 #if TSAN_CONTAINS_UBSAN
   __ubsan::InitAsPlugin();

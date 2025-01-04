@@ -121,18 +121,26 @@ ScopedGlobalProcessor::~ScopedGlobalProcessor() {
 void AllocatorLockBeforeFork() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
   global_proc()->internal_alloc_mtx.Lock();
   InternalAllocatorLock();
-#if !SANITIZER_APPLE
-  // OS X allocates from hooks, see 6a3958247a.
-  allocator()->ForceLock();
-  StackDepotLockBeforeFork();
-#endif
+  /// The TWO locks below are shared resources, so we manage them in XSan.
+  /// See xsan_posix.cpp for details.
+  /// FIXME: only tsan define COMMON_SYSCALL_PRE_FORK, which calls this function,
+  /// is it Okay to directly disable the following two locks here?
+  // #if !SANITIZER_APPLE
+  //   // OS X allocates from hooks, see 6a3958247a.
+  //   allocator()->ForceLock();
+  //   StackDepotLockBeforeFork();
+  // #endif
 }
 
 void AllocatorUnlockAfterFork(bool child) SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
-#if !SANITIZER_APPLE
-  StackDepotUnlockAfterFork(child);
-  allocator()->ForceUnlock();
-#endif
+/// The TWO locks below are shared resources, so we manage them in XSan.
+/// See xsan_posix.cpp for details.
+/// FIXME: only tsan define COMMON_SYSCALL_POST_FORK, which calls this function,
+/// is it Okay to directly disable the following two locks here?
+// #if !SANITIZER_APPLE
+//   StackDepotUnlockAfterFork(child);
+//   allocator()->ForceUnlock();
+// #endif
   InternalAllocatorUnlock();
   global_proc()->internal_alloc_mtx.Unlock();
 }
