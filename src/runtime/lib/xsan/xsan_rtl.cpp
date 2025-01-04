@@ -114,6 +114,50 @@ void CheckAndProtect() {
 }
 
 // -------------------------- Run-time entry ------------------- {{{1
+/* The sanitizer initialization sequence is as follows (those marked with * are
+   sub-santizers can interact with XSan):
+   1. *Very early initialization : initialize some necessary globals.
+      - e.g., TSan's `ctx` and `thr`
+   2. Early common initialization
+   3. *Flags initialization: parse sanitizers' flags, set up common flags.
+   4. *Early initialization: initialize sub-santizers' before major
+   initialization.
+      - this happens before memory/allocator/threads initialization.
+      - e.g., TSan's InitializePlatformEarly() can perform in this step, as it
+   checks memory mapping.
+   5. Some common initializations
+   6. *Major initializations: sub-sanitizers initialize their shaodw/state here.
+      - e.g., AsanInitFromXsan / TsanInitFromXsan
+   7. Some common initializations
+   8. Thread initialization: XsanThread delegates the main thread initialization
+      to sub-santizers.
+   9. *Late initialization: sub-santizers initialize their state after major
+      initialization, i.e., after almost everything is set up.
+  10. The final common initializations/
+*/
+
+/// Before any other initialization.
+/// Used to initialize state of sub-santizers, e.g., Context of TSan.
+static void XsanInitVeryEarly() {
+  __tsan::TsanInitFromXsanVeryEarly();
+}
+
+/// After flags initialization, before any other initialization.
+static void XsanInitEarly() {
+  __tsan::InitializePlatformEarly();
+}
+
+/// Almost after all is done, e.g., flags, memory, allocator, threads, etc.
+static void XsanInitLate() {
+  {
+    ScopedSanitizerToolName tool_name("AddressSanitizer");
+    __asan::AsanInitFromXsanLate();
+  }
+  {
+    ScopedSanitizerToolName tool_name("ThreadSanitizer");
+    __tsan::TsanInitFromXsanLate();
+  }
+}
 
 static bool XsanInitInternal() {
   if (LIKELY(XsanInited()))
@@ -122,7 +166,7 @@ static bool XsanInitInternal() {
   ScopedSanitizerToolName tool_name("XSan");
   xsan_in_init = true;
 
-  __tsan::TsanInitFromXsanEarly();
+  XsanInitVeryEarly();
   /// note that place this after cur_thread_init()
   __xsan::ScopedIgnoreInterceptors ignore;
 
@@ -135,6 +179,8 @@ static bool XsanInitInternal() {
 
   InitializeFlags();
 
+  __sanitizer::InitializePlatformEarly();
+  XsanInitEarly();
 
   // Stop performing init at this point if we are being loaded via
   // dlopen() and the platform supports it.
@@ -147,7 +193,6 @@ static bool XsanInitInternal() {
   __interception::DoesNotSupportStaticLinking();
 
   AvoidCVE_2016_2143();
-  __sanitizer::InitializePlatformEarly();
 
   // Setup correct file descriptor for error reports.
   __sanitizer_set_report_path(common_flags()->log_path);
@@ -196,15 +241,7 @@ static bool XsanInitInternal() {
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-  {
-    ScopedSanitizerToolName tool_name("AddressSanitizer");
-    __asan::AsanInitFromXsanLate();
-  }
-  {
-    ScopedSanitizerToolName tool_name("ThreadSanitizer");
-    __tsan::TsanInitFromXsanLate();
-  }
-
+  XsanInitLate();
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 

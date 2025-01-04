@@ -127,7 +127,9 @@ bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
     // Guard page after the heap end
     if (segment.start >= HeapMemEnd() && segment.start < HeapEnd()) continue;
 
-    if (__xsan::IsSanitizerPrivateMem(segment.start))
+    if (__xsan::IsSanitizerPrivateMem(segment.start) ||
+        // One page toleranc, e.g., ASan mmaps one more page left for shadow.
+        __xsan::IsSanitizerPrivateMem(segment.start + GetMmapGranularity()))
       continue;
 
     if (segment.protection == 0)  // Zero page or mprotected.

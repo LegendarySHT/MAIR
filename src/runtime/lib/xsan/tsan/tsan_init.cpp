@@ -43,7 +43,7 @@ static bool InitializeMemoryProfiler() {
 
 #endif
 
-void TsanInitFromXsanEarly() {
+void TsanInitFromXsanVeryEarly() {
   ctx = new (ctx_placeholder) Context;
   cur_thread_init();
 }
@@ -61,7 +61,7 @@ void TsanInitFromXsan() {
   // Install tool-specific callbacks in sanitizer_common.
   // SetCheckUnwindCallback(CheckUnwind);
 
-  /// Moved to TsanInitFromXsanEarly
+  /// Moved to XSan's very early initialization stage.
   // ctx = new (ctx_placeholder) Context;
   // const char *env_name = SANITIZER_GO ? "GORACE" : "TSAN_OPTIONS";
   // const char *options = GetEnv(env_name);
@@ -72,7 +72,8 @@ void TsanInitFromXsan() {
   //   InitializeFlags(&ctx->flags, options, env_name);
   // AvoidCVE_2016_2143();
   // __sanitizer::InitializePlatformEarly();
-  __tsan::InitializePlatformEarly();
+  /// Moved this to XSan's early initialization stage.
+  // __tsan::InitializePlatformEarly();
 
 #if !SANITIZER_GO
   /// Moved this to XSan

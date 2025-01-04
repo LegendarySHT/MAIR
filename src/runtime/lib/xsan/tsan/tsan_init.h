@@ -3,7 +3,7 @@
 namespace __tsan {
 
 // Initialization before flag initialization
-void TsanInitFromXsanEarly();
+void TsanInitFromXsanVeryEarly();
 // Initialization before xsan_is_running = false;
 void TsanInitFromXsan();
 // Initialization after TSan has been fully initialized.
