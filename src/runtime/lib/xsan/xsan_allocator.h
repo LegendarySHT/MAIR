@@ -28,7 +28,7 @@ public:
   void PrintStats();
 };
 
-XsanAllocator *alloctor();
+XsanAllocator *allocator();
 
 void *xsan_memalign(uptr alignment, uptr size, BufferedStackTrace *stack,
                     AllocType alloc_type);

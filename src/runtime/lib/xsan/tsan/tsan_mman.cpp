@@ -196,7 +196,7 @@ void *user_alloc_internal(ThreadState *thr, uptr pc, uptr sz, uptr align,
   /// Call from tsan_fd.cpp
   BufferedStackTrace stack;
   stack.Init(thr->shadow_stack, thr->shadow_stack_pos - thr->shadow_stack, pc);
-  return __xsan::alloctor()->AllocateInternel(sz, &stack);
+  return __xsan::allocator()->AllocateInternel(sz, &stack);
 
 }
 
@@ -205,7 +205,7 @@ void user_free(ThreadState *thr, uptr pc, void *p, bool signal) {
   ScopedGlobalProcessor sgp;
   BufferedStackTrace stack;
   stack.Init(thr->shadow_stack, thr->shadow_stack_pos - thr->shadow_stack, pc);
-  __xsan::alloctor()->DeallocateInternal(p, &stack);
+  __xsan::allocator()->DeallocateInternal(p, &stack);
   return;
 }
 

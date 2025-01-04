@@ -132,10 +132,10 @@ void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 
 
 namespace __xsan {
-// ---------------------- API exposed by xsan::Alloctor ---------------
-XsanAllocator xsan_alloctor;
+// ---------------------- API exposed by xsan::allocator ---------------
+XsanAllocator xsan_allocator;
 
-XsanAllocator *alloctor() { return &xsan_alloctor; }
+XsanAllocator *allocator() { return &xsan_allocator; }
 
 /// XsanAllocator's methods are implemented in asan/asan_allocator.cpp
 
