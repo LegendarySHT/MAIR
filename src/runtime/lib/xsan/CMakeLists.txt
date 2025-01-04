@@ -123,9 +123,15 @@ if (NOT APPLE)
       set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_amd64.S
         )
+      # Go is not supported.
     elseif(arch STREQUAL "aarch64")
       set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_aarch64.S
+        )
+      # Go is not supported.
+    elseif(arch MATCHES "loongarch64")
+      set(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_loongarch64.S
         )
     elseif(arch MATCHES "powerpc64|powerpc64le")
       set(TSAN_ASM_SOURCES
@@ -134,6 +140,10 @@ if (NOT APPLE)
     elseif(arch MATCHES "mips64|mips64le")
       set(TSAN_ASM_SOURCES
         tsan/orig/tsan_rtl_mips64.S
+        )
+    elseif(arch MATCHES "riscv64")
+      set(TSAN_ASM_SOURCES
+        tsan/orig/tsan_rtl_riscv64.S
         )
     elseif(arch MATCHES "s390x")
       set(TSAN_ASM_SOURCES
