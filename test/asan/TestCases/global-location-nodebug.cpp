@@ -17,4 +17,4 @@
 // GLOB-NO-G: 0x{{.*}} is located 4 bytes after global variable '{{.*}}global{{.*}}' defined in '{{.*}}global-location.cpp' {{.*}} of size 40
 // FUNC_STATIC-NO-G: 0x{{.*}} is located 4 bytes after global variable '{{.*}}main{{.*}}::array{{.*}}' defined in '{{.*}}global-location.cpp' {{.*}} of size 40
 // LITERAL-NO-G: 0x{{.*}} is located 0 bytes after global variable {{.*}} defined in '{{.*}}global-location.cpp' {{.*}} of size 11
-// CHECK: SUMMARY: AddressSanitizer: global-buffer-overflow
+// CHECK: SUMMARY: {{AddressSanitizer|XSan}}: global-buffer-overflow
