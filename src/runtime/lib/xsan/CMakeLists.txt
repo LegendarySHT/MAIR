@@ -10,7 +10,7 @@ set(ASAN_SOURCES
   asan/orig/asan_fake_stack.cpp
   # asan/orig/asan_flags.cpp
   asan/orig/asan_fuchsia.cpp
-  asan/orig/asan_globals.cpp
+  # asan/orig/asan_globals.cpp
   asan/orig/asan_globals_win.cpp
   # asan/orig/asan_interceptors.cpp
   # asan/orig/asan_interceptors_memintrinsics.cpp
@@ -50,6 +50,7 @@ endif()
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
   asan/asan_flags.cpp
+  asan/asan_globals.cpp
   asan/asan_poisoning.cpp
   asan/asan_report.cpp
   asan/asan_rtl.cpp
@@ -246,9 +247,9 @@ set(ASAN_HEADERS
   )
 set(XSAN_ASAN_HEADERS
   asan/asan_allocator.h
+  asan/asan_init.h
   asan/asan_mapping.h
   asan/asan_thread.h
-  asan/asan_init.h
   ${ASAN_HEADERS}
 )
 
