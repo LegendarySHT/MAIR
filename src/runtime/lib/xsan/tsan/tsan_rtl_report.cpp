@@ -9,7 +9,6 @@
 // This file is a part of ThreadSanitizer (TSan), a race detector.
 //
 //===----------------------------------------------------------------------===//
-#include "../xsan_report.h"
 #include "../xsan_thread.h"
 #include "../xsan_hooks.h"
 

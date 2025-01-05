@@ -580,3 +580,39 @@ void __asan_after_dynamic_init() {
 
   current_dynamic_init_module_name = nullptr;
 }
+
+namespace __asan {
+
+static bool IsAddrInGlobal(uptr addr, const Global &g) {
+  return g.beg <= addr && addr < g.beg + g.size;
+}
+
+static const Global *GetGlobalByAddr(uptr addr) {
+  for (const auto &l : list_of_all_globals) {
+    const Global &g = *l.g;
+    if (IsAddrInGlobal(addr, g)) {
+      return &g;
+    }
+  }
+  return nullptr;
+}
+
+/// Util function to get the real size of a global variable by address
+/// Returns 0 if the global is not found or if mu_for_globals is locked.
+uptr GetRealGlobalSizeByAddr(uptr addr) {
+  if (!mu_for_globals.TryLock()) {
+    return 0;
+  }
+
+  uptr size = 0;
+
+  const Global *g = GetGlobalByAddr(addr);
+  if (g) {
+    size = g->size;
+  }
+
+  mu_for_globals.Unlock();
+  return size;
+}
+
+}  // namespace __asan
