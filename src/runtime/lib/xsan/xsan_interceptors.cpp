@@ -508,6 +508,14 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   created.Wait();
   t->ThreadStart(GetTid());
   started.Post();
+
+#    if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
+        SANITIZER_SOLARIS
+  __sanitizer_sigset_t sigset;
+  t->GetStartData(sigset);
+  SetSigProcMask(&sigset, nullptr);
+#    endif
+
   thread_return_t retval = (*args.routine)(args.arg_retval);
   xsanThreadArgRetval().Finish(self, retval);
 
@@ -540,10 +548,16 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   u32 current_tid = GetCurrentTidOrInvalid();
 
+  __sanitizer_sigset_t sigset = {};
+#    if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
+        SANITIZER_SOLARIS
+  ScopedBlockSignals block(&sigset);
+#    endif
+
   /// Note that sub_thread's recycle is delegated to sub thread.
   /// Hence, we could not use it after pthread_create in the parent thread.
   XsanThread *sub_thread =
-      XsanThread::Create(current_tid, &stack, detached);
+      XsanThread::Create(sigset, current_tid, &stack, detached);
 
   ThreadParam p;
   p.t = sub_thread;
@@ -562,8 +576,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     __lsan::ScopedInterceptorDisabler disabler;
 #    endif
     xsanThreadArgRetval().Create(detached, {start_routine, arg}, [&]() -> uptr {
-      result =
-          REAL(pthread_create)(thread, attr, xsan_thread_start, sub_thread);
+      result = REAL(pthread_create)(thread, attr, xsan_thread_start, &p);
       return result ? 0 : *(uptr *)(thread);
     });
   }
