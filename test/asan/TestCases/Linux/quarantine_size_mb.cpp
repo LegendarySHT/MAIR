@@ -1,9 +1,10 @@
 // Test quarantine_size_mb (and the deprecated quarantine_size)
 // RUN: %clangxx_asan  %s -o %t
-// RUN: %env_asan_opts=quarantine_size=10485760:verbosity=1:hard_rss_limit_mb=50 %run %t  2>&1 | FileCheck %s  --check-prefix=Q10
-// RUN: %env_asan_opts=quarantine_size_mb=10:verbosity=1:hard_rss_limit_mb=50    %run %t  2>&1 | FileCheck %s  --check-prefix=Q10
+/// For each x mb of quarantine, TSan costs additional 2x + 10 Mb of RSS, and thus for x = 10, hard_rss_limit_mb += 30.
+// RUN: %env_asan_opts=quarantine_size=10485760:verbosity=1:hard_rss_limit_mb=80 %run %t  2>&1 | FileCheck %s  --check-prefix=Q10
+// RUN: %env_asan_opts=quarantine_size_mb=10:verbosity=1:hard_rss_limit_mb=80    %run %t  2>&1 | FileCheck %s  --check-prefix=Q10
 // RUN: %env_asan_opts=quarantine_size_mb=10:quarantine_size=20:verbosity=1  not %run %t  2>&1 | FileCheck %s  --check-prefix=BOTH
-// RUN: %env_asan_opts=quarantine_size_mb=1000:hard_rss_limit_mb=50 not  %run %t          2>&1 | FileCheck %s  --check-prefix=RSS_LIMIT
+// RUN: %env_asan_opts=quarantine_size_mb=1000:hard_rss_limit_mb=80 not  %run %t          2>&1 | FileCheck %s  --check-prefix=RSS_LIMIT
 // RUN: %env_asan_opts=hard_rss_limit_mb=20                         not  %run %t          2>&1 | FileCheck %s  --check-prefix=RSS_LIMIT
 
 // https://github.com/google/sanitizers/issues/981
