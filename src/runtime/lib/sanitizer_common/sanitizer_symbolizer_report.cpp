@@ -37,10 +37,18 @@ static bool FrameIsXsanInternal(const char *file) {
   if (!name)
     return false;
   name += sizeof("/src/runtime/lib/") - 1;
-  // asan, hwasan, tsan, msan, ubsan, nsan, tysan, rtsan, lsan, sanitizer_common
-  static const char *san_name[] = {
-      "asan", "hwasan", "tsan",  "msan", "ubsan",
-      "nsan", "tysan",  "rtsan", "lsan", "sanitizer_common"};
+  // xsan, asan, hwasan, tsan, msan, ubsan, nsan, tysan, rtsan, lsan, sanitizer_common
+  static const char *san_name[] = {"xsan",
+                                   "asan",
+                                   "hwasan",
+                                   "tsan",
+                                   "msan",
+                                   "ubsan",
+                                   "nsan",
+                                   "tysan",
+                                   "rtsan",
+                                   "lsan",
+                                   "sanitizer_common"};
   for (uptr i = 0; i < ARRAY_SIZE(san_name); i++) {
     if (internal_strncmp(name, san_name[i], internal_strlen(san_name[i])) == 0)
       return true;
