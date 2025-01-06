@@ -29,6 +29,6 @@ int main() {
 // CHECK:   Mutex {{.*}} created at:
 // CHECK:     {{.*}}pthread_mutex_init{{.*}}
 // CHECK:     {{.*}}main{{.*}}
-// CHECK: SUMMARY: ThreadSanitizer: mutex held in the wrong context {{.*}}mutex_held_wrong_context.cpp{{.*}}Func1
+// CHECK: SUMMARY: {{ThreadSanitizer|XSan}}: mutex held in the wrong context {{.*}}mutex_held_wrong_context.cpp{{.*}}Func1
 
-// CHECK-NOT: SUMMARY: ThreadSanitizer: mutex held in the wrong context {{.*}}mutex_held_wrong_context.cpp{{.*}}Func2
+// CHECK-NOT: SUMMARY: {{ThreadSanitizer|XSan}}: mutex held in the wrong context {{.*}}mutex_held_wrong_context.cpp{{.*}}Func2
