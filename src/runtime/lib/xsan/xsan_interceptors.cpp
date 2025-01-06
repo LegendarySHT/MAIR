@@ -481,6 +481,8 @@ struct ScopedSyscall {
   COMMON_SYSCALL_FD_RELEASE
   COMMON_SYSCALL_PRE_FORK
   COMMON_SYSCALL_POST_FORK
+  COMMON_SYSCALL_BLOCKING_START
+  COMMON_SYSCALL_BLOCKING_END
 */
 #    include "tsan/tsan_interceptors_syscall.inc"
 
