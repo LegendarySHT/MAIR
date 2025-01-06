@@ -25,6 +25,7 @@ default_ubsan_opts = list(config.default_sanitizer_opts)
 ubsan_lit_test_mode = get_required_attr(config, "ubsan_lit_test_mode")
 if ubsan_lit_test_mode == "Standalone":
     config.available_features.add("ubsan-standalone")
+    config.available_features.add("ubsan-xsan")
     clang_ubsan_cflags = []
 elif ubsan_lit_test_mode == "StandaloneStatic":
     config.available_features.add("ubsan-standalone-static")

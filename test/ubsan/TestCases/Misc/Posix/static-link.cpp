@@ -5,6 +5,9 @@
 // REQUIRES: target={{x86_64.*}}
 // UNSUPPORTED: i386-target-arch, internal_symbolizer
 
+/// XSan does not support static linking for intercepted functions.
+// XFAIL: ubsan-xsan
+
 // Does not link.
 // UNSUPPORTED: darwin
 
