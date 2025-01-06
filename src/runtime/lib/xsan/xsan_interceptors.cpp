@@ -507,7 +507,6 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   /// Semaphore: comes from TSan, controlling the thread create event.
   created.Wait();
   t->ThreadStart(GetTid());
-  started.Post();
 
 #    if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
         SANITIZER_SOLARIS
@@ -515,6 +514,9 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   t->GetStartData(sigset);
   SetSigProcMask(&sigset, nullptr);
 #    endif
+
+  // ThreadParam p is now not needed anymore, notify the parent thread.
+  started.Post();
 
   thread_return_t retval = (*args.routine)(args.arg_retval);
   xsanThreadArgRetval().Finish(self, retval);
@@ -592,6 +594,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     //    Otherwise, this thread can call pthread_detach and reset thr->sync
     //    before the new thread got a chance to acquire from it in ThreadStart.
     p.created.Post();
+    // Wait for ThreadParam *p to be free.
     p.started.Wait();
   } else {
     // If the thread didn't start delete the AsanThread to avoid leaking it.
