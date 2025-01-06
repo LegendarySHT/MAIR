@@ -44,22 +44,22 @@ class XsanThread {
   /// ASan declares this method, but not implements.
   thread_return_t RunThread();
 
-  uptr stack_top();
-  uptr stack_bottom();
-  uptr stack_size();
-  uptr tls_begin() { return tls_begin_; }
-  uptr tls_end() { return tls_end_; }
-  DTLS *dtls() { return dtls_; }
-  u32 tid() { return tid_; }
+  uptr stack_top() const;
+  uptr stack_bottom() const;
+  uptr stack_size() const;
+  uptr tls_begin() const { return tls_begin_; }
+  uptr tls_end() const { return tls_end_; }
+  DTLS *dtls() const { return dtls_; }
+  u32 tid() const { return tid_; }
 
-  bool AddrIsInRealStack(uptr addr);
+  bool AddrIsInRealStack(uptr addr) const;
   /// ASan uses FakeStack to detect use-after-return bugs just like what it does
   /// to detect use-after-free bugs.
   /// Based on ASan, XSan also provides API to query if an address is in the
   /// fake stack.
-  bool AddrIsInFakeStack(uptr addr);
-  bool AddrIsInStack(uptr addr);
-  bool AddrIsInTls(uptr addr);
+  bool AddrIsInFakeStack(uptr addr) const;
+  bool AddrIsInStack(uptr addr) const;
+  bool AddrIsInTls(uptr addr) const;
 
   // True is this thread is currently unwinding stack (i.e. collecting a stack
   // trace). Used to prevent deadlocks on platforms where libc unwinder calls

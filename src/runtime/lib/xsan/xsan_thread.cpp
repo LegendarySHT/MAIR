@@ -94,11 +94,11 @@ inline XsanThread::StackBounds XsanThread::GetStackBounds() const {
   return {stack_bottom_, stack_top_};
 }
 
-uptr XsanThread::stack_top() { return GetStackBounds().top; }
+uptr XsanThread::stack_top() const { return GetStackBounds().top; }
 
-uptr XsanThread::stack_bottom() { return GetStackBounds().bottom; }
+uptr XsanThread::stack_bottom() const { return GetStackBounds().bottom; }
 
-uptr XsanThread::stack_size() {
+uptr XsanThread::stack_size() const {
   const auto bounds = GetStackBounds();
   return bounds.top - bounds.bottom;
 }
@@ -208,21 +208,21 @@ void XsanThread::SetThreadStackAndTls(const InitOptions *options) {
 #endif  // !SANITIZER_FUCHSIA
 
 
-bool XsanThread::AddrIsInRealStack(uptr addr) {
+bool XsanThread::AddrIsInRealStack(uptr addr) const {
   const auto bounds = GetStackBounds();
   return addr >= bounds.bottom && addr < bounds.top;
 }
 
 bool IsInFakeStack(const XsanThread *thr, uptr addr);
-bool XsanThread::AddrIsInFakeStack(uptr addr) {
+bool XsanThread::AddrIsInFakeStack(uptr addr) const {
   return IsInFakeStack(this, addr);
 }
 
-bool XsanThread::AddrIsInStack(uptr addr) {
+bool XsanThread::AddrIsInStack(uptr addr) const {
   return AddrIsInRealStack(addr) || AddrIsInFakeStack(addr);
 }
 
-bool XsanThread::AddrIsInTls(uptr addr) {
+bool XsanThread::AddrIsInTls(uptr addr) const {
   return tls_begin() <= addr && addr < tls_end();
 }
 
