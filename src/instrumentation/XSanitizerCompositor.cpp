@@ -1,9 +1,13 @@
+#include "AttributeTaggingPass.hpp"
 #include "PassRegistry.h"
+#include "xsan_common.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
+using namespace __xsan;
 
 static cl::opt<bool> ClDisableAsan(
     "xsan-disable-asan", cl::init(false),
@@ -30,16 +34,40 @@ public:
   //                      MapClassName2PassName);
   static bool isRequired() { return true; }
 };
+
+void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
+
+  PB.registerOptimizerLastEPCallback(
+      [=](ModulePassManager &MPM, OptimizationLevel level) {
+        MPM.addPass(SanitizerCompositorPass());
+      });
+
+  // 这里注册opt回调的名称
+  PB.registerPipelineParsingCallback(
+      [=](StringRef Name, ModulePassManager &MPM,
+          ArrayRef<PassBuilder::PipelineElement>) {
+        if (Name == "tsan") {
+          MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
+          MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+          MPM.addPass(SanitizerCompositorPass());
+          return true;
+        }
+        return false;
+      });
+}
+
 } // namespace __xsan
 
-using namespace __xsan;
 
 SanitizerCompositorPass::SanitizerCompositorPass() {}
 
 PreservedAnalyses SanitizerCompositorPass::run(Module &M,
-                                               ModuleAnalysisManager &AM) {
-  /// Now this pass do nothing, just pending for the future.
-  return PreservedAnalyses::all();
+                                               ModuleAnalysisManager &MAM) {
+  SubSanitizers Sanitizers = __xsan::loadSubSanitizers();
+  /// Unlike ModulePassManager, SubSanitizers does not invalidate Analysises
+  /// between the runnings of sanitizers' passes.
+  PreservedAnalyses PA = Sanitizers.run(M, MAM);
+  return PA;
 }
 
 extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {

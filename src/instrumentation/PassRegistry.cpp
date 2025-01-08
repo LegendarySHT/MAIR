@@ -1,6 +1,8 @@
 #include "PassRegistry.h"
 #include "AttributeTaggingPass.hpp"
 
+#include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
 
 #include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
@@ -46,7 +48,6 @@ static cl::opt<AsanDetectStackUseAfterReturnMode> ClAsanUseAfterReturn(
                    "Always detect stack use after return.")),
     cl::Hidden, cl::init(AsanDetectStackUseAfterReturnMode::Runtime));
 
-
 /// In LLVM 15, this option is false by default.
 //    As a workaround for a bug in gold 2.26 and earlier, dead stripping of
 //    globals in ASan is disabled by default on most ELF targets.
@@ -64,7 +65,6 @@ static cl::opt<bool>
                   cl::desc("Simulates -fsanitize-recover=address"), cl::Hidden,
                   cl::init(false));
 
-
 static cl::opt<bool> ClAllRecover("sanitize-recover-all",
                                   cl::desc("Simulates -fsanitize-recover=all"),
                                   cl::Hidden, cl::init(false));
@@ -76,9 +76,7 @@ bool isAsanTurnedOff() { return false; }
 LLVM_ATTRIBUTE_WEAK
 bool isTsanTurnedOff() { return false; }
 
-static void addAsanToMPM(ModulePassManager &MPM) {
-  if (isAsanTurnedOff())
-    return;
+static ModuleAddressSanitizerPass getASanPass() {
   /*
    The relevant code in clang BackendUtil.cpp::addSanitizer
     ```cpp
@@ -107,8 +105,60 @@ static void addAsanToMPM(ModulePassManager &MPM) {
   bool UseOdrIndicator = ClAsanUseOdrIndicator;
   bool UseGlobalGC = ClAsanGlobalsGC;
 
-  MPM.addPass(ModuleAddressSanitizerPass(Opts, UseGlobalGC, UseOdrIndicator,
-                                         DestructorKind));
+  return ModuleAddressSanitizerPass(Opts, UseGlobalGC, UseOdrIndicator,
+                                    DestructorKind);
+}
+
+PreservedAnalyses SubSanitizers::run(Module &IR, ModuleAnalysisManager &AM) {
+  PreservedAnalyses PA = PreservedAnalyses::all();
+
+  for (unsigned Idx = 0, Size = Passes.size(); Idx != Size; ++Idx) {
+    auto *P = Passes[Idx].get();
+
+    PreservedAnalyses PassPA;
+    {
+      TimeTraceScope TimeScope(P->name(), IR.getName());
+      PassPA = P->run(IR, AM);
+    }
+
+    // // Update the analysis manager as each pass runs and potentially
+    // // invalidates analyses.
+    // AM.invalidate(IR, PassPA);
+
+    // Finally, intersect the preserved analyses to compute the aggregate
+    // preserved set for this pass manager.
+    PA.intersect(std::move(PassPA));
+  }
+
+  // Invalidation was handled after each pass in the above loop for the
+  // current unit of IR. Therefore, the remaining analysis results in the
+  // AnalysisManager are preserved. We mark this with a set so that we don't
+  // need to inspect each one individually.
+  PA.preserveSet<AllAnalysesOn<Module>>();
+
+  return PA;
+}
+
+SubSanitizers loadSubSanitizers() {
+  SubSanitizers Sanitizers;
+  if (!isAsanTurnedOff()) {
+    Sanitizers.addPass(getASanPass());
+  }
+
+  if (!isTsanTurnedOff()) {
+    Sanitizers.addPass(ModuleThreadSanitizerPass());
+    Sanitizers.addPass(
+        createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+  }
+
+  return Sanitizers;
+}
+
+static void addAsanToMPM(ModulePassManager &MPM) {
+  if (isAsanTurnedOff())
+    return;
+
+  MPM.addPass(getASanPass());
 }
 
 static void addTsanToMPM(ModulePassManager &MPM) {
@@ -160,28 +210,6 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "tsan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-          addTsanToMPM(MPM);
-          return true;
-        }
-        return false;
-      });
-}
-
-void registerXsanForClangAndOpt(PassBuilder &PB) {
-  PB.registerOptimizerLastEPCallback(
-      [=](ModulePassManager &MPM, OptimizationLevel level) {
-        addAsanToMPM(MPM);
-        addTsanToMPM(MPM);
-      });
-
-  // 这里注册opt回调的名称
-  PB.registerPipelineParsingCallback(
-      [=](StringRef Name, ModulePassManager &MPM,
-          ArrayRef<PassBuilder::PipelineElement>) {
-        if (Name == "xsan") {
-          MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-          MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-          addAsanToMPM(MPM);
           addTsanToMPM(MPM);
           return true;
         }
