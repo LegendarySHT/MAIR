@@ -4,7 +4,8 @@ set(TSAN_TEST_ARCH ${XSAN_TEST_ARCH})
 set(TSAN_TEST_TARGET_CC ${XSAN_TEST_TARGET_CC})
 
 if(${COMPILER_RT_DEFAULT_TARGET_ARCH} MATCHES "(x86_64|s390x)")
-  list(APPEND TSAN_TEST_DEPS GotsanRuntimeCheck)
+  # GoTSan runtime is now not supported.
+  # list(APPEND TSAN_TEST_DEPS GotsanRuntimeCheck)
 endif()
 list(APPEND TSAN_TEST_DEPS tsan)
 if(COMPILER_RT_LIBCXX_PATH AND
