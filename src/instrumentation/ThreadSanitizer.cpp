@@ -51,6 +51,7 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
 #include "Instrumentation.h"
+#include "PassRegistry.h"
 
 using namespace llvm;
 
@@ -123,6 +124,8 @@ struct ThreadSanitizer {
   bool sanitizeFunction(Function &F, const TargetLibraryInfo &TLI);
 
 private:
+  friend struct XsanThreadSanitizer;
+  friend struct __xsan::TsanToInstrument;
   // Internal Instruction wrapper that contains more information about the
   // Instruction from prior analysis.
   struct InstructionInfo {
@@ -176,6 +179,14 @@ private:
   FunctionCallee MemmoveFn, MemcpyFn, MemsetFn;
 };
 
+struct XsanThreadSanitizer : public ThreadSanitizer {
+  XsanThreadSanitizer() : ThreadSanitizer() {}
+  bool shouldSkipFunction(Function &F);
+  bool sanitizeFunction(Function &F, FunctionAnalysisManager &FAM);
+  bool collectTargetsToIntrument(Function &F, const TargetLibraryInfo &TLI,
+                                 __xsan::TsanToInstrument &Targets);
+};
+
 void insertModuleCtor(Module &M) {
   getOrCreateSanitizerCtorAndInitFunctions(
       M, kTsanModuleCtorName, kTsanInitName, /*InitArgTypes=*/{},
@@ -192,8 +203,8 @@ void insertModuleCtor(Module &M) {
 
 PreservedAnalyses ThreadSanitizerPass::run(Function &F,
                                            FunctionAnalysisManager &FAM) {
-  ThreadSanitizer TSan;
-  if (TSan.sanitizeFunction(F, FAM.getResult<TargetLibraryAnalysis>(F)))
+  XsanThreadSanitizer TSan;
+  if (TSan.sanitizeFunction(F, FAM))
     return PreservedAnalyses::none();
   return PreservedAnalyses::all();
 }
@@ -848,17 +859,200 @@ int ThreadSanitizer::getMemoryAccessFuncIndex(Type *OrigTy, Value *Addr,
   return Idx;
 }
 
+namespace __xsan {
+
+struct TsanToInstrument {
+  using InstructionInfo = ::ThreadSanitizer::InstructionInfo;
+  SmallVector<InstructionInfo, 8> AllLoadsAndStores;
+  SmallVector<Instruction *, 8> AtomicAccesses;
+  SmallVector<Instruction *, 8> MemIntrinCalls;
+  bool HasCalls = false;
+};
+
+class TsanTargetsToInstrumentAnalysis
+    : public llvm::AnalysisInfoMixin<TsanTargetsToInstrumentAnalysis> {
+  friend AnalysisInfoMixin<TsanTargetsToInstrumentAnalysis>;
+  static llvm::AnalysisKey Key;
+
+public:
+  /// Provide the result typedef for this analysis pass.
+  using Result = TsanToInstrument;
+
+  /// Run the analysis pass over a function and produce a dominator tree.
+  TsanToInstrument run(llvm::Function &F, llvm::FunctionAnalysisManager &FAM) {
+    const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+
+    XsanThreadSanitizer FunctionSanitizer;
+    TsanToInstrument Targets;
+
+    if (!FunctionSanitizer.collectTargetsToIntrument(F, TLI, Targets)) {
+      return Targets;
+    }
+
+    /// TODO: Removing Recurring Checks here
+
+    return Targets;
+  }
+};
+
+AnalysisKey TsanTargetsToInstrumentAnalysis::Key;
+
+/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+void registerAnalysisForTsan(PassBuilder &PB) {
+  PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
+    FAM.registerPass([&] { return TsanTargetsToInstrumentAnalysis(); });
+  });
+}
+
+void addTsanRequireAnalysisPass(SubSanitizers &MPM, FunctionPassManager &FPM) {
+  FPM.addPass(RequireAnalysisPass<TsanTargetsToInstrumentAnalysis, Function>());
+}
+
+} // namespace __xsan
+
+bool XsanThreadSanitizer::shouldSkipFunction(Function &F) {
+  // This is required to prevent instrumenting call to __tsan_init from within
+  // the module constructor.
+  if (F.getName() == kTsanModuleCtorName)
+    return true;
+  // Naked functions can not have prologue/epilogue
+  // (__tsan_func_entry/__tsan_func_exit) generated, so don't instrument them at
+  // all.
+  if (F.hasFnAttribute(Attribute::Naked))
+    return true;
+
+  // __attribute__(disable_sanitizer_instrumentation) prevents all kinds of
+  // instrumentation.
+  if (F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation))
+    return true;
+
+  return false;
+}
+
+bool XsanThreadSanitizer::collectTargetsToIntrument(
+    Function &F, const TargetLibraryInfo &TLI,
+    __xsan::TsanToInstrument &Targets) {
+
+  if (shouldSkipFunction(F)) {
+    return false;
+  }
+
+  SmallVector<Instruction *, 8> LocalLoadsAndStores;
+
+  // SmallVector<InstructionInfo, 8> AllLoadsAndStores;
+  // SmallVector<Instruction *, 8> AtomicAccesses;
+  // SmallVector<Instruction *, 8> MemIntrinCalls;
+  auto &[AllLoadsAndStores, AtomicAccesses, MemIntrinCalls, HasCalls] = Targets;
+
+  bool SanitizeFunction = F.hasFnAttribute(Attribute::SanitizeThread);
+  const DataLayout &DL = F.getParent()->getDataLayout();
+
+  // Traverse all instructions, collect loads/stores/returns, check for calls.
+  for (auto &BB : F) {
+    for (auto &Inst : BB) {
+      // Skip instructions inserted by another instrumentation.
+      if (Inst.hasMetadata(LLVMContext::MD_nosanitize))
+        continue;
+      if (isTsanAtomic(&Inst))
+        AtomicAccesses.push_back(&Inst);
+      else if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))
+        LocalLoadsAndStores.push_back(&Inst);
+      else if ((isa<CallInst>(Inst) && !isa<DbgInfoIntrinsic>(Inst)) ||
+               isa<InvokeInst>(Inst)) {
+        if (CallInst *CI = dyn_cast<CallInst>(&Inst))
+          maybeMarkSanitizerLibraryCallNoBuiltin(CI, &TLI);
+        if (isa<MemIntrinsic>(Inst))
+          MemIntrinCalls.push_back(&Inst);
+        HasCalls = true;
+        chooseInstructionsToInstrument(LocalLoadsAndStores, AllLoadsAndStores,
+                                       DL);
+      }
+    }
+    chooseInstructionsToInstrument(LocalLoadsAndStores, AllLoadsAndStores, DL);
+  }
+
+  return true;
+}
+
+bool XsanThreadSanitizer::sanitizeFunction(Function &F,
+                                           FunctionAnalysisManager &FAM) {
+  __xsan::TsanToInstrument *Targets =
+      FAM.getCachedResult<__xsan::TsanTargetsToInstrumentAnalysis>(F);
+  const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+  // For non-XSan ASan scenarios, the `Targets` is nullptr
+  if (!Targets) {
+    return ThreadSanitizer::sanitizeFunction(F, TLI);
+  }
+
+  if (shouldSkipFunction(F))
+    return false;
+
+  initialize(*F.getParent());
+  // SmallVector<InstructionInfo, 8> AllLoadsAndStores;
+  // SmallVector<Instruction*, 8> AtomicAccesses;
+  // SmallVector<Instruction*, 8> MemIntrinCalls;
+
+  auto &[AllLoadsAndStores, AtomicAccesses, MemIntrinCalls, HasCalls] =
+      *Targets;
+
+  bool Res = false;
+  bool SanitizeFunction = F.hasFnAttribute(Attribute::SanitizeThread);
+  const DataLayout &DL = F.getParent()->getDataLayout();
+
+  // We have collected all loads and stores.
+  // FIXME: many of these accesses do not need to be checked for races
+  // (e.g. variables that do not escape, etc).
+
+  // Instrument memory accesses only if we want to report bugs in the function.
+  if (ClInstrumentMemoryAccesses && SanitizeFunction)
+    for (const auto &II : AllLoadsAndStores) {
+      Res |= instrumentLoadOrStore(II, DL);
+    }
+
+  // Instrument atomic memory accesses in any case (they can be used to
+  // implement synchronization).
+  if (ClInstrumentAtomics)
+    for (auto *Inst : AtomicAccesses) {
+      Res |= instrumentAtomic(Inst, DL);
+    }
+
+  /// ASan's instrumentation might replace some GlobalVariables, MemIntrinsics
+  /// and AllocInsts.
+  /// TSan does not instrument on GlobalVariables and AllocInsts, but it does
+  /// instrument on MemIntrinsics. We need to handle MemIntrinsics separately.
+  /// TODO: Use XSan's unified mem intrinsic.
+  // if (ClInstrumentMemIntrinsics && SanitizeFunction)
+  //   for (auto *Inst : MemIntrinCalls) {
+  //     Res |= instrumentMemIntrinsic(Inst);
+  //   }
+
+  if (F.hasFnAttribute("sanitize_thread_no_checking_at_run_time")) {
+    assert(!F.hasFnAttribute(Attribute::SanitizeThread));
+    if (HasCalls)
+      InsertRuntimeIgnores(F);
+  }
+
+  // Instrument function entry/exit points if there were instrumented accesses.
+  if ((Res || HasCalls) && ClInstrumentFuncEntryExit) {
+    __xsan::InstrumentationIRBuilder IRB(F.getEntryBlock().getFirstNonPHI());
+    Value *ReturnAddress = IRB.CreateCall(
+        Intrinsic::getDeclaration(F.getParent(), Intrinsic::returnaddress),
+        IRB.getInt32(0));
+    IRB.CreateCall(TsanFuncEntry, ReturnAddress);
+
+    EscapeEnumerator EE(F, "tsan_cleanup", ClHandleCxxExceptions);
+    while (IRBuilder<> *AtExit = EE.Next()) {
+      __xsan::InstrumentationIRBuilder::ensureDebugInfo(*AtExit, F);
+      AtExit->CreateCall(TsanFuncExit, {});
+    }
+    Res = true;
+  }
+  return Res;
+}
+
 #ifndef XSAN_PASS
-#include "PassRegistry.h"
-
-
-extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo 
-llvmGetPassPluginInfo() {
-  return {
-    LLVM_PLUGIN_API_VERSION, 
-    "TSan Pass", 
-    LLVM_VERSION_STRING,
-    __xsan::registerTsanForClangAndOpt
-  };
+extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "TSan Pass", LLVM_VERSION_STRING,
+          __xsan::registerTsanForClangAndOpt};
 }
 #endif

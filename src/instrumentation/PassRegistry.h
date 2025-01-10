@@ -1,12 +1,15 @@
 #pragma once
 
 #include "llvm/IR/PassManager.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 
-namespace __xsan {
+namespace llvm {
+struct AddressSanitizerOptions;
+enum class AsanDtorKind;
+} // namespace llvm
 
-void registerAsanForClangAndOpt(llvm::PassBuilder &PB);
-void registerTsanForClangAndOpt(llvm::PassBuilder &PB);
+namespace __xsan {
 
 class SubSanitizers : public llvm::ModulePassManager {
 public:
@@ -18,4 +21,25 @@ public:
 
 SubSanitizers loadSubSanitizers();
 
+void obtainAsanPassArgs(llvm::AddressSanitizerOptions &Opts, bool &UseGlobalGC,
+                        bool &UseOdrIndicator,
+                        llvm::AsanDtorKind &DestructorKind);
+
+void registerAnalysisForXsan(llvm::PassBuilder &PB);
+
+// -- The following funtcions are implemented in XXXSanitizer.cpp --------
+/// Because the structure, indicating targets to instrument, depends on the
+/// interior type in each XXXSanitizer.cpp
+struct AsanToInstrument;
+struct TsanToInstrument;
+void registerAnalysisForAsan(llvm::PassBuilder &PB);
+void registerAnalysisForTsan(llvm::PassBuilder &PB);
+void addAsanRequireAnalysisPass(SubSanitizers &MPM,
+                                llvm::FunctionPassManager &FPM);
+void addTsanRequireAnalysisPass(SubSanitizers &MPM,
+                                llvm::FunctionPassManager &FPM);
+
+// --------- Implemented in PassRegistry.cpp -----------
+void registerAsanForClangAndOpt(llvm::PassBuilder &PB);
+void registerTsanForClangAndOpt(llvm::PassBuilder &PB);
 } // namespace __xsan

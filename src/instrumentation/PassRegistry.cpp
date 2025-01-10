@@ -3,7 +3,6 @@
 
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Passes/PassBuilder.h"
 
 #include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerCommon.h"
@@ -76,7 +75,9 @@ bool isAsanTurnedOff() { return false; }
 LLVM_ATTRIBUTE_WEAK
 bool isTsanTurnedOff() { return false; }
 
-static ModuleAddressSanitizerPass getASanPass() {
+void obtainAsanPassArgs(AddressSanitizerOptions &Opts, bool &UseGlobalGC,
+                        bool &UseOdrIndicator,
+                        llvm::AsanDtorKind &DestructorKind) {
   /*
    The relevant code in clang BackendUtil.cpp::addSanitizer
     ```cpp
@@ -91,7 +92,6 @@ static ModuleAddressSanitizerPass getASanPass() {
     Opts.UseAfterReturn = CodeGenOpts.getSanitizeAddressUseAfterReturn();
     ```
   */
-  AddressSanitizerOptions Opts;
   // Here set the default value for each setting, but you can set them by
   // their cl::opt version.
   Opts.CompileKernel = false;
@@ -100,13 +100,23 @@ static ModuleAddressSanitizerPass getASanPass() {
   Opts.UseAfterScope = ClAsanUseAfterScope;
   Opts.UseAfterReturn = ClAsanUseAfterReturn;
 
-  llvm::AsanDtorKind DestructorKind = ClAsanDestructorKind;
+  DestructorKind = ClAsanDestructorKind;
 
-  bool UseOdrIndicator = ClAsanUseOdrIndicator;
-  bool UseGlobalGC = ClAsanGlobalsGC;
+  UseOdrIndicator = ClAsanUseOdrIndicator;
+  UseGlobalGC = ClAsanGlobalsGC;
+}
 
-  return ModuleAddressSanitizerPass(Opts, UseGlobalGC, UseOdrIndicator,
-                                    DestructorKind);
+template <typename PassTy> static PassTy getASanPass() {
+  llvm::AddressSanitizerOptions Opts;
+
+  llvm::AsanDtorKind DestructorKind;
+
+  bool UseOdrIndicator;
+  bool UseGlobalGC;
+
+  obtainAsanPassArgs(Opts, UseGlobalGC, UseOdrIndicator, DestructorKind);
+
+  return PassTy(Opts, UseGlobalGC, UseOdrIndicator, DestructorKind);
 }
 
 PreservedAnalyses SubSanitizers::run(Module &IR, ModuleAnalysisManager &AM) {
@@ -141,8 +151,19 @@ PreservedAnalyses SubSanitizers::run(Module &IR, ModuleAnalysisManager &AM) {
 
 SubSanitizers loadSubSanitizers() {
   SubSanitizers Sanitizers;
+  // ---------- Collect targets to instrument first ----------------
+  FunctionPassManager FPM;
   if (!isAsanTurnedOff()) {
-    Sanitizers.addPass(getASanPass());
+    addAsanRequireAnalysisPass(Sanitizers, FPM);
+  }
+  if (!isTsanTurnedOff()) {
+    addTsanRequireAnalysisPass(Sanitizers, FPM);
+  }
+  Sanitizers.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+
+  // ------------ Then instrument ----------------------------------
+  if (!isAsanTurnedOff()) {
+    Sanitizers.addPass(getASanPass<ModuleAddressSanitizerPass>());
   }
 
   if (!isTsanTurnedOff()) {
@@ -158,7 +179,7 @@ static void addAsanToMPM(ModulePassManager &MPM) {
   if (isAsanTurnedOff())
     return;
 
-  MPM.addPass(getASanPass());
+  MPM.addPass(getASanPass<ModuleAddressSanitizerPass>());
 }
 
 static void addTsanToMPM(ModulePassManager &MPM) {
@@ -172,6 +193,8 @@ static void addTsanToMPM(ModulePassManager &MPM) {
 }
 
 void registerAsanForClangAndOpt(PassBuilder &PB) {
+  registerAnalysisForAsan(PB);
+
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
         addAsanToMPM(MPM);
@@ -191,6 +214,7 @@ void registerAsanForClangAndOpt(PassBuilder &PB) {
 }
 
 void registerTsanForClangAndOpt(PassBuilder &PB) {
+  registerAnalysisForTsan(PB);
   // // 这里注册 clang plugin extension point
   // // FIXME: what if LTO? this EP is not suitable for LTO.
   // PB.registerPipelineStartEPCallback(
@@ -215,6 +239,15 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
         }
         return false;
       });
+}
+
+void registerAnalysisForXsan(PassBuilder &PB) {
+  if (!isAsanTurnedOff()) {
+    registerAnalysisForAsan(PB);
+  }
+  if (!isTsanTurnedOff()) {
+    registerAnalysisForTsan(PB);
+  }
 }
 
 } // namespace __xsan

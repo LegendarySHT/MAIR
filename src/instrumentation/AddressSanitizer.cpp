@@ -89,6 +89,8 @@
 #include <tuple>
 
 #include "Instrumentation.h"
+#include "PassRegistry.h"
+
 
 using namespace llvm;
 
@@ -712,6 +714,7 @@ struct AddressSanitizer {
 
 private:
   friend struct FunctionStackPoisoner;
+  friend struct XsanAddressSanitizer;
 
   void initializeCallbacks(Module &M);
 
@@ -767,6 +770,22 @@ private:
   FunctionCallee AMDGPUAddressShared;
   FunctionCallee AMDGPUAddressPrivate;
 };
+
+struct XsanAddressSanitizer : public AddressSanitizer {
+public:
+  XsanAddressSanitizer(Module &M, const StackSafetyGlobalInfo *SSGI,
+                       bool CompileKernel = false, bool Recover = false,
+                       bool UseAfterScope = false,
+                       AsanDetectStackUseAfterReturnMode UseAfterReturn =
+                           AsanDetectStackUseAfterReturnMode::Runtime)
+      : AddressSanitizer(M, SSGI, CompileKernel, Recover, UseAfterScope,
+                         UseAfterReturn) {}
+  bool shouldSkipFunction(Function &F);
+  bool instrumentFunction(Function &F, FunctionAnalysisManager &FAM);
+  bool collectTargetsToIntrument(Function &F, const TargetLibraryInfo *TLI,
+                                 __xsan::AsanToInstrument &Targets);
+};
+
 
 class ModuleAddressSanitizer {
 public:
@@ -1151,11 +1170,10 @@ PreservedAnalyses ModuleAddressSanitizerPass::run(Module &M,
   const StackSafetyGlobalInfo *const SSGI =
       ClUseStackSafety ? &MAM.getResult<StackSafetyGlobalAnalysis>(M) : nullptr;
   for (Function &F : M) {
-    AddressSanitizer FunctionSanitizer(M, SSGI, Options.CompileKernel,
-                                       Options.Recover, Options.UseAfterScope,
-                                       Options.UseAfterReturn);
-    const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
-    Modified |= FunctionSanitizer.instrumentFunction(F, &TLI);
+    XsanAddressSanitizer FunctionSanitizer(M, SSGI, Options.CompileKernel,
+                                     Options.Recover, Options.UseAfterScope,
+                              Options.UseAfterReturn);
+    Modified |= FunctionSanitizer.instrumentFunction(F, FAM);
   }
   Modified |= ModuleSanitizer.instrumentModule(M);
   return Modified ? PreservedAnalyses::none() : PreservedAnalyses::all();
@@ -3460,16 +3478,344 @@ bool AddressSanitizer::isSafeAccess(ObjectSizeOffsetVisitor &ObjSizeVis,
          Size - uint64_t(Offset) >= TypeSize / 8;
 }
 
-#ifndef XSAN_PASS
-#include "PassRegistry.h"
+namespace __xsan {
 
-extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo 
-llvmGetPassPluginInfo() {
-  return {
-    LLVM_PLUGIN_API_VERSION, 
-    "ASan Pass", 
-    LLVM_VERSION_STRING,
-    __xsan::registerAsanForClangAndOpt
-  };
+struct AsanToInstrument {
+  SmallVector<InterestingMemoryOperand, 16> OperandsToInstrument;
+  SmallVector<MemIntrinsic *, 16> IntrinToInstrument;
+  SmallVector<Instruction *, 8> NoReturnCalls;
+  SmallVector<Instruction *, 16> PointerComparisonsOrSubtracts;
+  bool IsBug11395 = false;
+};
+
+class AsanTargetsToInstrumentAnalysis
+    : public llvm::AnalysisInfoMixin<AsanTargetsToInstrumentAnalysis> {
+  friend AnalysisInfoMixin<AsanTargetsToInstrumentAnalysis>;
+  static llvm::AnalysisKey Key;
+
+public:
+  /// Provide the result typedef for this analysis pass.
+  using Result = AsanToInstrument;
+
+  /// Run the analysis pass over a function and produce a dominator tree.
+  AsanToInstrument run(llvm::Function &F, llvm::FunctionAnalysisManager &) {
+    /// Use this anlaysis pass only as the key to obtain the cached result,
+    /// where
+    /// the concrete anlaysis is delegated to `AsanRequireAnalysisPass`.
+    /// See the comments above `AsanRequireAnalysisPass` for details.
+    AsanToInstrument Targets;
+
+    // auto &MAM = FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F);
+    // const auto *const SSGI =
+    // // const StackSafetyGlobalInfo *const SSGI =
+    //     ClUseStackSafety
+    //         ? MAM.getCachedResult<StackSafetyGlobalAnalysis>(*F.getParent())
+    //         : nullptr;
+    // XsanAddressSanitizer FunctionSanitizer(
+    //     *F.getParent(), SSGI, Options.CompileKernel, Options.Recover,
+    //     Options.UseAfterScope, Options.UseAfterReturn);
+
+    // const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+
+    // if (!FunctionSanitizer.collectTargetsToIntrument(F, &TLI, Targets)) {
+    //   return Targets;
+    // }
+
+    return Targets;
+  }
+};
+AnalysisKey AsanTargetsToInstrumentAnalysis::Key;
+
+/*
+Cannot use RequireAnalysisPass<AsanTargetsToInstrumentAnalysis> because
+  1. The orignal `AsanTargetsToInstrumentAnalysis` uses `XsanAddressSanitizer`
+     to collect targets
+  2. `XsanAddressSanitizer` requires StackSafetyGlobalInfo to construct.
+  3. `StackSafetyGlobalInfo` is result of Module Analysis
+    `StackSafetyGlobalAnalysis`
+  4. We need a ModuleAnalysisManager to get the cached result of
+    `StackSafetyGlobalInfo`
+  5. FAM can only access MAM by MAM =
+    FAM.getResult<ModuleAnalysisManagerFunctionProxy>(F)
+  6. This **proxy** MAM only accept those Analysis::Result with `invalidate`
+    method, which is not provided by `StackSafetyGlobalInfo`.
+In short, we cannot obtain `StackSafetyGlobalInfo` via FAM.
+
+Therefore, we need to obtain `StackSafetyGlobalInfo` via MAM, adhering what
+`ModuleAddressSanitizer` does.
+
+Accordingly, we migrate the collecting of targets from
+`AsanTargetsToInstrumentAnalysis` to this proxy class `AsanRequireAnalysisPass`,
+only retaining analysis pass `AsanTargetsToInstrumentAnalysis` as the key to
+obtain the cached result.
+
+Notaly, `AsanTargetsToInstrumentAnalysis` should only run once in this proxy
+pass, i.e., this patch is tricky but there is nothing wrong with it.
+*/
+class AsanRequireAnalysisPass : public PassInfoMixin<AsanRequireAnalysisPass> {
+public:
+  AsanRequireAnalysisPass(const AddressSanitizerOptions &Options,
+                          bool UseGlobalGC, bool UseOdrIndicator,
+                          AsanDtorKind DestructorKind)
+      : Options(Options), UseGlobalGC(UseGlobalGC),
+        UseOdrIndicator(UseOdrIndicator), DestructorKind(DestructorKind) {}
+
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
+    const StackSafetyGlobalInfo *const SSGI =
+        ClUseStackSafety ? &MAM.getResult<StackSafetyGlobalAnalysis>(M)
+                         : nullptr;
+    auto &FAM =
+        MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+    for (Function &F : M) {
+      XsanAddressSanitizer FunctionSanitizer(
+          M, SSGI, Options.CompileKernel, Options.Recover,
+          Options.UseAfterScope, Options.UseAfterReturn);
+      AsanToInstrument &Targets =
+          FAM.getResult<__xsan::AsanTargetsToInstrumentAnalysis>(F);
+      const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+
+      if (!FunctionSanitizer.collectTargetsToIntrument(F, &TLI, Targets)) {
+        continue;
+      }
+    }
+    return PreservedAnalyses::all();
+  }
+
+  static bool isRequired() { return true; }
+
+private:
+  AddressSanitizerOptions Options;
+  bool UseGlobalGC;
+  bool UseOdrIndicator;
+  AsanDtorKind DestructorKind;
+};
+
+void addAsanRequireAnalysisPass(SubSanitizers &MPM, FunctionPassManager &FPM) {
+  llvm::AddressSanitizerOptions Opts;
+  llvm::AsanDtorKind DestructorKind;
+  bool UseOdrIndicator;
+  bool UseGlobalGC;
+  obtainAsanPassArgs(Opts, UseGlobalGC, UseOdrIndicator, DestructorKind);
+  MPM.addPass(AsanRequireAnalysisPass(Opts, UseGlobalGC, UseOdrIndicator,
+                                      DestructorKind));
+}
+
+/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+void registerAnalysisForAsan(PassBuilder &PB) {
+  PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
+    FAM.registerPass([&] { return AsanTargetsToInstrumentAnalysis(); });
+  });
+}
+
+} // namespace __xsan
+
+bool XsanAddressSanitizer::shouldSkipFunction(Function &F) {
+  if (F.empty())
+    return true;
+  if (F.getLinkage() == GlobalValue::AvailableExternallyLinkage)
+    return true;
+  if (!ClDebugFunc.empty() && ClDebugFunc == F.getName())
+    return true;
+  if (F.getName().startswith("__asan_"))
+    return true;
+
+  return false;
+}
+
+bool XsanAddressSanitizer::collectTargetsToIntrument(
+    Function &F, const TargetLibraryInfo *TLI,
+    __xsan::AsanToInstrument &Targets) {
+  if (shouldSkipFunction(F)) {
+    return false;
+  }
+
+  // Leave if the function doesn't need instrumentation.
+  if (!F.hasFnAttribute(Attribute::SanitizeAddress))
+    return false;
+
+  if (F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation))
+    return false;
+
+  // initializeCallbacks(*F.getParent());
+
+  FunctionStateRAII CleanupObj(this);
+
+  // We can't instrument allocas used with llvm.localescape. Only static allocas
+  // can be passed to that intrinsic.
+  markEscapedLocalAllocas(F);
+
+  // We want to instrument every address only once per basic block (unless there
+  // are calls between uses).
+  SmallPtrSet<Value *, 16> TempsToInstrument;
+  SmallVector<BasicBlock *, 16> AllBlocks;
+  // SmallVector<InterestingMemoryOperand, 16> OperandsToInstrument;
+  // SmallVector<MemIntrinsic *, 16> IntrinToInstrument;
+  // SmallVector<Instruction *, 8> NoReturnCalls;
+  // SmallVector<Instruction *, 16> PointerComparisonsOrSubtracts;
+  auto &[OperandsToInstrument, IntrinToInstrument, NoReturnCalls,
+         PointerComparisonsOrSubtracts, IsBug11395] = Targets;
+
+  // Fill the set of memory operations to instrument.
+  for (auto &BB : F) {
+    AllBlocks.push_back(&BB);
+    TempsToInstrument.clear();
+    int NumInsnsPerBB = 0;
+    for (auto &Inst : BB) {
+      if (LooksLikeCodeInBug11395(&Inst)) {
+        IsBug11395 = true;
+        return false;
+      }
+      // Skip instructions inserted by another instrumentation.
+      if (Inst.hasMetadata(LLVMContext::MD_nosanitize))
+        continue;
+      SmallVector<InterestingMemoryOperand, 1> InterestingOperands;
+      getInterestingMemoryOperands(&Inst, InterestingOperands);
+
+      if (!InterestingOperands.empty()) {
+        for (auto &Operand : InterestingOperands) {
+          if (ClOpt && ClOptSameTemp) {
+            Value *Ptr = Operand.getPtr();
+            // If we have a mask, skip instrumentation if we've already
+            // instrumented the full object. But don't add to TempsToInstrument
+            // because we might get another load/store with a different mask.
+            if (Operand.MaybeMask) {
+              if (TempsToInstrument.count(Ptr))
+                continue; // We've seen this (whole) temp in the current BB.
+            } else {
+              if (!TempsToInstrument.insert(Ptr).second)
+                continue; // We've seen this temp in the current BB.
+            }
+          }
+          OperandsToInstrument.push_back(Operand);
+          NumInsnsPerBB++;
+        }
+      } else if (((ClInvalidPointerPairs || ClInvalidPointerCmp) &&
+                  isInterestingPointerComparison(&Inst)) ||
+                 ((ClInvalidPointerPairs || ClInvalidPointerSub) &&
+                  isInterestingPointerSubtraction(&Inst))) {
+        PointerComparisonsOrSubtracts.push_back(&Inst);
+      } else if (MemIntrinsic *MI = dyn_cast<MemIntrinsic>(&Inst)) {
+        // ok, take it.
+        IntrinToInstrument.push_back(MI);
+        NumInsnsPerBB++;
+      } else {
+        if (auto *CB = dyn_cast<CallBase>(&Inst)) {
+          // A call inside BB.
+          TempsToInstrument.clear();
+          if (CB->doesNotReturn())
+            NoReturnCalls.push_back(CB);
+        }
+        if (CallInst *CI = dyn_cast<CallInst>(&Inst))
+          maybeMarkSanitizerLibraryCallNoBuiltin(CI, TLI);
+      }
+      if (NumInsnsPerBB >= ClMaxInsnsToInstrumentPerBB)
+        break;
+    }
+  }
+  return true;
+}
+
+bool XsanAddressSanitizer::instrumentFunction(Function &F,
+                                              FunctionAnalysisManager &FAM) {
+  __xsan::AsanToInstrument *Targets =
+      FAM.getCachedResult<__xsan::AsanTargetsToInstrumentAnalysis>(F);
+  const TargetLibraryInfo *TLI = &FAM.getResult<TargetLibraryAnalysis>(F);
+  // For non-XSan ASan scenarios, the `Targets` is nullptr
+  if (!Targets) {
+    return AddressSanitizer::instrumentFunction(F, TLI);
+  }
+
+  if (shouldSkipFunction(F)) {
+    return false;
+  }
+
+  bool FunctionModified = false;
+
+  // If needed, insert __asan_init before checking for SanitizeAddress attr.
+  // This function needs to be called even if the function body is not
+  // instrumented.
+  if (maybeInsertAsanInitAtFunctionEntry(F))
+    FunctionModified = true;
+
+  // Leave if the function doesn't need instrumentation.
+  if (!F.hasFnAttribute(Attribute::SanitizeAddress))
+    return FunctionModified;
+
+  if (F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation))
+    return FunctionModified;
+
+  LLVM_DEBUG(dbgs() << "ASAN instrumenting:\n" << F << "\n");
+
+  initializeCallbacks(*F.getParent());
+
+  FunctionStateRAII CleanupObj(this);
+
+  FunctionModified |= maybeInsertDynamicShadowAtFunctionEntry(F);
+
+  // We can't instrument allocas used with llvm.localescape. Only static allocas
+  // can be passed to that intrinsic.
+  markEscapedLocalAllocas(F);
+
+  // We want to instrument every address only once per basic block (unless there
+  // are calls between uses).
+  // __xsan::AsanToInstrument Targets;
+  // if (!collectTargetsToIntrument(F, TLI, Targets))
+  //   return false;
+
+  auto &[OperandsToInstrument, IntrinToInstrument, NoReturnCalls,
+         PointerComparisonsOrSubtracts, IsBug11395] = *Targets;
+
+  if (IsBug11395) {
+    return false;
+  }
+
+  bool UseCalls = (ClInstrumentationWithCallsThreshold >= 0 &&
+                   OperandsToInstrument.size() + IntrinToInstrument.size() >
+                       (unsigned)ClInstrumentationWithCallsThreshold);
+  const DataLayout &DL = F.getParent()->getDataLayout();
+  ObjectSizeOffsetVisitor ObjSizeVis(DL, TLI, F.getContext());
+
+  // Instrument.
+  int NumInstrumented = 0;
+  for (auto &Operand : OperandsToInstrument) {
+    if (!suppressInstrumentationSiteForDebug(NumInstrumented))
+      instrumentMop(ObjSizeVis, Operand, UseCalls,
+                    F.getParent()->getDataLayout());
+    FunctionModified = true;
+  }
+  for (auto *Inst : IntrinToInstrument) {
+    if (!suppressInstrumentationSiteForDebug(NumInstrumented))
+      instrumentMemIntrinsic(Inst);
+    FunctionModified = true;
+  }
+
+  FunctionStackPoisoner FSP(F, *this);
+  bool ChangedStack = FSP.runOnFunction();
+
+  // We must unpoison the stack before NoReturn calls (throw, _exit, etc).
+  // See e.g. https://github.com/google/sanitizers/issues/37
+  for (auto CI : NoReturnCalls) {
+    __xsan::InstrumentationIRBuilder IRB(CI);
+    IRB.CreateCall(AsanHandleNoReturnFunc, {});
+  }
+
+  for (auto Inst : PointerComparisonsOrSubtracts) {
+    instrumentPointerComparisonOrSubtraction(Inst);
+    FunctionModified = true;
+  }
+
+  if (ChangedStack || !NoReturnCalls.empty())
+    FunctionModified = true;
+
+  LLVM_DEBUG(dbgs() << "ASAN done instrumenting: " << FunctionModified << " "
+                    << F << "\n");
+
+  return FunctionModified;
+}
+
+#ifndef XSAN_PASS
+extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "ASan Pass", LLVM_VERSION_STRING,
+          __xsan::registerAsanForClangAndOpt};
 }
 #endif

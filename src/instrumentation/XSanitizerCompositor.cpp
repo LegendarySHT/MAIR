@@ -36,6 +36,7 @@ public:
 };
 
 void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
+  registerAnalysisForXsan(PB);
 
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
@@ -46,7 +47,7 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
   PB.registerPipelineParsingCallback(
       [=](StringRef Name, ModulePassManager &MPM,
           ArrayRef<PassBuilder::PipelineElement>) {
-        if (Name == "tsan") {
+        if (Name == "xsan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
           MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
           MPM.addPass(SanitizerCompositorPass());
