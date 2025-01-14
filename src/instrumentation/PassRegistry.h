@@ -42,4 +42,8 @@ void addTsanRequireAnalysisPass(SubSanitizers &MPM,
 // --------- Implemented in PassRegistry.cpp -----------
 void registerAsanForClangAndOpt(llvm::PassBuilder &PB);
 void registerTsanForClangAndOpt(llvm::PassBuilder &PB);
+
+// --------- Use for XSan's optimization ---------------
+bool shouldTsanOptimizeLoadStores();
+bool shouldAsanOptimizeLoadStores();
 } // namespace __xsan

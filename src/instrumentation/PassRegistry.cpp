@@ -12,6 +12,8 @@
 
 using namespace llvm;
 
+// ------------ These middle-end options are used to simulate the frontend options ------------
+
 /// Set the default value to true
 /// From
 /// https://github.com/llvm/llvm-project/commit/1ada819c237bf724e6eaa1c82b2742e3eb57a5d5#diff-3fdc9c7b499c6c90240f4409c3ad6bd18cc9b0c247751ab371769101a195238b
@@ -68,7 +70,26 @@ static cl::opt<bool> ClAllRecover("sanitize-recover-all",
                                   cl::desc("Simulates -fsanitize-recover=all"),
                                   cl::Hidden, cl::init(false));
 
+// ------------ These middle-end options are used to perform optimization ------------
+static cl::opt<bool> ClOptXsan("xsan-opt", cl::desc("Optimize instrumentation"),
+                               cl::Hidden, cl::init(true));
+
+static cl::opt<bool> ClOptTsanLoadStore("xsan-tsan-opt-load-store",
+                               cl::desc("Reduce recurring load/stores"),
+                               cl::Hidden, cl::init(true));
+
+static cl::opt<bool> ClOptAsanLoadStore("xsan-asan-opt-load-store",
+                               cl::desc("Reduce recurring load/stores"),
+                               cl::Hidden, cl::init(true));
 namespace __xsan {
+
+bool shouldTsanOptimizeLoadStores() {
+  return ClOptXsan && ClOptTsanLoadStore;
+}
+
+bool shouldAsanOptimizeLoadStores() {
+  return ClOptXsan && ClOptAsanLoadStore;
+}
 
 LLVM_ATTRIBUTE_WEAK
 bool isAsanTurnedOff() { return false; }
