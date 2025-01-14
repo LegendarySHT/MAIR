@@ -19,6 +19,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -88,6 +89,7 @@
 #include <string>
 #include <tuple>
 
+#include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
 
@@ -3500,8 +3502,7 @@ public:
   /// Run the analysis pass over a function and produce a dominator tree.
   AsanToInstrument run(llvm::Function &F, llvm::FunctionAnalysisManager &) {
     /// Use this anlaysis pass only as the key to obtain the cached result,
-    /// where
-    /// the concrete anlaysis is delegated to `AsanRequireAnalysisPass`.
+    /// where the concrete anlaysis is delegated to `AsanRequireAnalysisPass`.
     /// See the comments above `AsanRequireAnalysisPass` for details.
     AsanToInstrument Targets;
 
@@ -3576,6 +3577,47 @@ public:
 
       if (!FunctionSanitizer.collectTargetsToIntrument(F, &TLI, Targets)) {
         continue;
+      }
+
+      /// Reduce recurrence between load/store instructions.
+      if (shouldAsanOptimizeLoadStores()) {
+        MopRecurrenceReducer MRC(F, FAM);
+        SmallVector<InterestingMemoryOperand, 16> NewOperandsToInstrument;
+
+        auto RngFilter = make_filter_range(
+            Targets.OperandsToInstrument, [&](InterestingMemoryOperand &Op) {
+              Instruction *Insn = Op.getInsn();
+              bool IsInterestingMop = isInterestingMop(*Insn);
+              if (!IsInterestingMop) {
+                NewOperandsToInstrument.push_back(Op);
+              }
+              return IsInterestingMop;
+            });
+        auto RngMap = map_range(RngFilter, [](InterestingMemoryOperand &Op) {
+          return Op.getInsn();
+        });
+        const SmallVector<const Instruction *, 16> TmpInsts(RngMap);
+        SmallVector<const Instruction *, 16> DistilledLoadStores =
+            MRC.distillRecurringChecks(TmpInsts, false);
+        auto RngMapBack =
+            map_range(DistilledLoadStores, [](const Instruction *Inst) {
+              Instruction *I = const_cast<Instruction *>(Inst);
+              if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+                return InterestingMemoryOperand(I, LI->getPointerOperandIndex(),
+                                                false, LI->getType(),
+                                                LI->getAlign());
+              }
+              if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
+                return InterestingMemoryOperand(
+                    I, SI->getPointerOperandIndex(), true,
+                    SI->getValueOperand()->getType(), SI->getAlign());
+              }
+
+              llvm_unreachable("Unexpected instruction type of MOPs.");
+            });
+        NewOperandsToInstrument.append(RngMapBack.begin(), RngMapBack.end());
+
+        Targets.OperandsToInstrument = std::move(NewOperandsToInstrument);
       }
     }
     return PreservedAnalyses::all();

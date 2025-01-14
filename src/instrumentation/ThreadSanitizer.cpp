@@ -21,6 +21,7 @@
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -50,6 +51,7 @@
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
+#include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
 
@@ -889,7 +891,24 @@ public:
       return Targets;
     }
 
-    /// TODO: Removing Recurring Checks here
+    // Reduce recurrence of load/store instructions.
+    if (shouldTsanOptimizeLoadStores()) {
+      MopRecurrenceReducer MRC(F, FAM);
+
+      auto RngMap = map_range(Targets.AllLoadsAndStores,
+                              [](const auto &II) { return II.Inst; });
+      const SmallVector<const Instruction *, 16> TmpInsts(RngMap);
+      /// FIXME: we don't handle CompoundRW yet, as it is also not supported by
+      /// TSan as well.
+      SmallVector<const Instruction *, 16> DistilledLoadStores =
+          MRC.distillRecurringChecks(TmpInsts, true);
+      auto RngMapBack = map_range(DistilledLoadStores, [](const auto *Inst) {
+        return TsanToInstrument::InstructionInfo(
+            const_cast<Instruction *>(Inst));
+      });
+      decltype(Targets.AllLoadsAndStores) NewLoadsAndStores(RngMapBack);
+      Targets.AllLoadsAndStores = std::move(NewLoadsAndStores);
+    }
 
     return Targets;
   }
