@@ -592,7 +592,8 @@ static bool IsAddrInGlobal(uptr addr, const Global &g) {
   return g.beg <= addr && addr < g.beg + g.size;
 }
 
-static const Global *GetGlobalByAddr(uptr addr) {
+static const Global *GetGlobalByAddr(uptr addr)
+    SANITIZER_REQUIRES(mu_for_globals) {
   for (const auto &l : list_of_all_globals) {
     const Global &g = *l.g;
     if (IsAddrInGlobal(addr, g)) {
