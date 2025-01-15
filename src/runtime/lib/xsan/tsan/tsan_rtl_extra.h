@@ -22,4 +22,15 @@ class ScopedIgnoreTsan {
   bool nomalloc_;
   bool enable_;
 };
+
+#if SANITIZER_DEBUG
+#define ADDR_GUARD (!IsAppMem(addr))
+#else
+#define ADDR_GUARD (0)
+#endif
+
+#define TSAN_CHECK_GUARD \
+  if (ADDR_GUARD) { \
+    return;         \
+  }
 }  // namespace __tsan

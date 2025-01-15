@@ -174,7 +174,57 @@ TSAN_INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_recoverable_leak_check)
 TSAN_INTERCEPT_AND_IGNORE(bool, _ZN11__sanitizer23IsAccessibleMemoryRangeEmm,
                      (uptr beg, uptr size), (beg, size))
 
-
-#undef INTERCEPT_AND_IGNORE
+#undef TSAN_INTERCEPT_AND_IGNORE
 #undef TSAN_INTERCEPT_AND_IGNORE_VOID
+
+
+// ----------- Intercept Data Race Checking Functions -----------
+
+
+#define TSAN_INTERCEPT_AND_GUARD(ret, f, params, args) \
+  ret XSAN_REAL(f) params;                             \
+  ret XSAN_WRAP(f) params {                            \
+    TSAN_CHECK_GUARD;                                       \
+    return XSAN_REAL(f) args;                          \
+  }
+
+using namespace __tsan;
+// void MemoryAccess(ThreadState* thr, uptr pc, uptr addr, 
+//                   uptr size, AccessType typ)
+TSAN_INTERCEPT_AND_GUARD(void, _ZN6__tsan12MemoryAccessEPNS_11ThreadStateEmmmm,
+                         (ThreadState * thr, uptr pc, uptr addr, uptr size,
+                          AccessType typ),
+                         (thr, pc, addr, size, typ))
+
+// void MemoryAccess16(ThreadState* thr, uptr pc, uptr addr,
+//                     AccessType typ)
+TSAN_INTERCEPT_AND_GUARD(void, _ZN6__tsan14MemoryAccess16EPNS_11ThreadStateEmmm,
+                         (ThreadState * thr, uptr pc, uptr addr,
+                          AccessType typ),
+                         (thr, pc, addr, typ))
+// void UnalignedMemoryAccess(ThreadState* thr, uptr pc,
+//                            uptr addr, uptr size,
+//                            AccessType typ)
+TSAN_INTERCEPT_AND_GUARD(
+    void, _ZN6__tsan21UnalignedMemoryAccessEPNS_11ThreadStateEmmmm,
+    (ThreadState * thr, uptr pc, uptr addr, uptr size, AccessType typ),
+    (thr, pc, addr, size, typ))
+
+// template <bool is_read>
+// void MemoryAccessRangeT(ThreadState* thr, uptr pc, uptr addr, uptr size)
+TSAN_INTERCEPT_AND_GUARD(
+    void, _ZN6__tsan18MemoryAccessRangeTILb0EEEvPNS_11ThreadStateEmmm,
+    (ThreadState * thr, uptr pc, uptr addr, uptr size), (thr, pc, addr, size))
+TSAN_INTERCEPT_AND_GUARD(
+    void, _ZN6__tsan18MemoryAccessRangeTILb1EEEvPNS_11ThreadStateEmmm,
+    (ThreadState * thr, uptr pc, uptr addr, uptr size), (thr, pc, addr, size))
+
+// void MemoryRangeFreed(ThreadState* thr, uptr pc, uptr addr, uptr size)
+TSAN_INTERCEPT_AND_GUARD(void,
+                         _ZN6__tsan16MemoryRangeFreedEPNS_11ThreadStateEmmm,
+                         (ThreadState * thr, uptr pc, uptr addr, uptr size),
+                         (thr, pc, addr, size))
+
+#undef ADDR_GUARD
+#undef TSAN_INTERCEPT_AND_GUARD
 }
