@@ -24,13 +24,23 @@ class ScopedIgnoreTsan {
 };
 
 #if SANITIZER_DEBUG
-#define ADDR_GUARD (!IsAppMem(addr))
+#  define TSAN_ADDR_GUARD_CONDITION (!IsAppMem(addr))
 #else
-#define ADDR_GUARD (0)
+#  define TSAN_ADDR_GUARD_CONDITION (0)
 #endif
 
-#define TSAN_CHECK_GUARD \
-  if (ADDR_GUARD) { \
-    return;         \
+// CheckRaces consists of TWO parts:
+//   - Check : should be disabled when all sub-threads are joined
+//   - Store : should be disabled when in single thread
+
+#define TSAN_CHECK_GUARD_CONDIITON (is_now_all_joined())
+/// FIXME: Shall we really need to guard the metatdat store?
+/// StoreShadow is just one atomic operation, while TraceAccess is
+/// relatively expensive.
+#define TSAN_STORE_GUARD_CONDIITON (is_now_single_threaded())
+
+#define TSAN_CHECK_GUARD                                         \
+  if (TSAN_ADDR_GUARD_CONDITION || TSAN_CHECK_GUARD_CONDIITON) { \
+    return;                                                      \
   }
 }  // namespace __tsan

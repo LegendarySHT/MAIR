@@ -130,6 +130,8 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
       IncrementEpoch(thr);
     }
   }
+  atomic_fetch_add(&ctx->num_alive_threads, 1, memory_order_relaxed);
+  atomic_fetch_add(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
   Tid tid = ctx->thread_registry.CreateThread(uid, detached, parent, &arg);
   DPrintf("#%d: ThreadCreate tid=%d uid=%zu\n", parent, tid, uid);
   return tid;
@@ -243,6 +245,7 @@ void ThreadState::DestroyThreadState() {
 
 void ThreadFinish(ThreadState *thr) {
   DPrintf("#%d: ThreadFinish\n", thr->tid);
+  atomic_fetch_sub(&ctx->num_alive_threads, 1, memory_order_relaxed);
   ThreadCheckIgnore(thr);
   if (thr->stk_addr && thr->stk_size)
     DontNeedShadowFor(thr->stk_addr, thr->stk_size);
@@ -331,6 +334,7 @@ void ThreadJoin(ThreadState *thr, uptr pc, Tid tid) {
       thr->clock.Acquire(arg.sync);
   }
   Free(arg.sync);
+  atomic_fetch_sub(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
 }
 
 void ThreadContext::OnJoined(void *ptr) {

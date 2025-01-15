@@ -48,6 +48,7 @@
 #include "tsan_sync.h"
 #include "tsan_trace.h"
 #include "tsan_vector_clock.h"
+#include "xsan_flags.h"
 
 #if SANITIZER_WORDSIZE != 64
 # error "ThreadSanitizer is supported only on 64-bit platforms"
@@ -389,11 +390,28 @@ struct Context {
   uptr mapped_shadow_begin;
   uptr mapped_shadow_end;
 #endif
+
+  // Count of alive threads.
+  atomic_uint32_t num_alive_threads;
+  // Count of unjoined threads.
+  atomic_uint32_t num_unjoined_threads;
 };
 
 extern Context *ctx;  // The one and the only global runtime context.
 
 ALWAYS_INLINE bool is_tsan_initialized() { return ctx && ctx->initialized; }
+ALWAYS_INLINE bool support_single_thread_optimization() {
+  return __xsan::flags()->tsan_ignore_single_thread && ctx &&
+         cur_thread()->tid == kMainTid;
+}
+ALWAYS_INLINE bool is_now_single_threaded() {
+  return support_single_thread_optimization() &&
+         (atomic_load(&ctx->num_alive_threads, memory_order_relaxed) <= 1);
+}
+ALWAYS_INLINE bool is_now_all_joined() {
+  return support_single_thread_optimization() &&
+         (atomic_load(&ctx->num_unjoined_threads, memory_order_relaxed) <= 1);
+}
 
 ALWAYS_INLINE Flags *flags() {
   return &ctx->flags;
