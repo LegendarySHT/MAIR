@@ -94,13 +94,18 @@ ALWAYS_INLINE void PoisonShadowForGlobal(const Global *g, u8 value) {
 }
 
 ALWAYS_INLINE void PoisonRedZones(const Global &g) {
-  uptr aligned_size = RoundUpTo(g.size, ASAN_SHADOW_GRANULARITY);
+  uptr size = g.size;
+  if (!internal_strcmp(g.name, "__xsan_internal")) {
+    // If g is xsan_internal, set size to 0 to poison the whole global.
+    size = 0;
+  }
+  uptr aligned_size = RoundUpTo(size, ASAN_SHADOW_GRANULARITY);
   FastPoisonShadow(g.beg + aligned_size, g.size_with_redzone - aligned_size,
                    kAsanGlobalRedzoneMagic);
-  if (g.size != aligned_size) {
+  if (size != aligned_size) {
     FastPoisonShadowPartialRightRedzone(
-        g.beg + RoundDownTo(g.size, ASAN_SHADOW_GRANULARITY),
-        g.size % ASAN_SHADOW_GRANULARITY, ASAN_SHADOW_GRANULARITY,
+        g.beg + RoundDownTo(size, ASAN_SHADOW_GRANULARITY),
+        size % ASAN_SHADOW_GRANULARITY, ASAN_SHADOW_GRANULARITY,
         kAsanGlobalRedzoneMagic);
   }
 }

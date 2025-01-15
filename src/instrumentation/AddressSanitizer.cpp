@@ -773,22 +773,6 @@ private:
   FunctionCallee AMDGPUAddressPrivate;
 };
 
-struct XsanAddressSanitizer : public AddressSanitizer {
-public:
-  XsanAddressSanitizer(Module &M, const StackSafetyGlobalInfo *SSGI,
-                       bool CompileKernel = false, bool Recover = false,
-                       bool UseAfterScope = false,
-                       AsanDetectStackUseAfterReturnMode UseAfterReturn =
-                           AsanDetectStackUseAfterReturnMode::Runtime)
-      : AddressSanitizer(M, SSGI, CompileKernel, Recover, UseAfterScope,
-                         UseAfterReturn) {}
-  bool shouldSkipFunction(Function &F);
-  bool instrumentFunction(Function &F, FunctionAnalysisManager &FAM);
-  bool collectTargetsToIntrument(Function &F, const TargetLibraryInfo *TLI,
-                                 __xsan::AsanToInstrument &Targets);
-};
-
-
 class ModuleAddressSanitizer {
 public:
   ModuleAddressSanitizer(Module &M, bool CompileKernel = false,
@@ -829,6 +813,8 @@ public:
   bool instrumentModule(Module &);
 
 private:
+  friend class XsanModuleAddressSanitizer;
+
   void initializeCallbacks(Module &M);
 
   bool InstrumentGlobals(IRBuilder<> &IRB, Module &M, bool *CtorComdat);
@@ -887,6 +873,39 @@ private:
 
   Function *AsanCtorFunction = nullptr;
   Function *AsanDtorFunction = nullptr;
+};
+
+struct XsanAddressSanitizer : public AddressSanitizer {
+public:
+  XsanAddressSanitizer(Module &M, const StackSafetyGlobalInfo *SSGI,
+                       bool CompileKernel = false, bool Recover = false,
+                       bool UseAfterScope = false,
+                       AsanDetectStackUseAfterReturnMode UseAfterReturn =
+                           AsanDetectStackUseAfterReturnMode::Runtime)
+      : AddressSanitizer(M, SSGI, CompileKernel, Recover, UseAfterScope,
+                         UseAfterReturn) {}
+  bool shouldSkipFunction(Function &F);
+  bool instrumentFunction(Function &F, FunctionAnalysisManager &FAM);
+  bool collectTargetsToIntrument(Function &F, const TargetLibraryInfo *TLI,
+                                 __xsan::AsanToInstrument &Targets);
+};
+
+struct XsanModuleAddressSanitizer : public ModuleAddressSanitizer {
+public:
+  XsanModuleAddressSanitizer(Module &M, bool CompileKernel = false,
+                             bool Recover = false, bool UseGlobalsGC = true,
+                             bool UseOdrIndicator = true,
+                             AsanDtorKind DestructorKind = AsanDtorKind::Global)
+      : ModuleAddressSanitizer(M, CompileKernel, Recover, UseGlobalsGC,
+                               UseOdrIndicator, DestructorKind) {}
+
+  bool instrumentModule(Module &M);
+  /// FIXME: something wrong in the compilation for testcase init-order-dlopen.cpp
+  bool markSanitizerGlobals(Module &M);
+  bool markSanitizerGlobalsElf(Module &M,
+                               ArrayRef<GlobalVariable *> ExtendedGlobals,
+                               ArrayRef<Constant *> MetadataInitializers,
+                               const std::string &UniqueModuleId);
 };
 
 // Stack poisoning does not play well with exception handling.
@@ -1164,17 +1183,17 @@ PreservedAnalyses ModuleAddressSanitizerPass::run(Module &M,
   if (__xsan::checkIfAlreadyInstrumented(M, "nosanitize_address"))
     return PreservedAnalyses::all();
 
-  ModuleAddressSanitizer ModuleSanitizer(M, Options.CompileKernel,
-                                         Options.Recover, UseGlobalGC,
-                                         UseOdrIndicator, DestructorKind);
+  XsanModuleAddressSanitizer ModuleSanitizer(M, Options.CompileKernel,
+                                             Options.Recover, UseGlobalGC,
+                                             UseOdrIndicator, DestructorKind);
   bool Modified = false;
   auto &FAM = MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   const StackSafetyGlobalInfo *const SSGI =
       ClUseStackSafety ? &MAM.getResult<StackSafetyGlobalAnalysis>(M) : nullptr;
   for (Function &F : M) {
-    XsanAddressSanitizer FunctionSanitizer(M, SSGI, Options.CompileKernel,
-                                     Options.Recover, Options.UseAfterScope,
-                              Options.UseAfterReturn);
+    XsanAddressSanitizer FunctionSanitizer(
+        M, SSGI, Options.CompileKernel, Options.Recover, Options.UseAfterScope,
+        Options.UseAfterReturn);
     Modified |= FunctionSanitizer.instrumentFunction(F, FAM);
   }
   Modified |= ModuleSanitizer.instrumentModule(M);
@@ -3853,6 +3872,261 @@ bool XsanAddressSanitizer::instrumentFunction(Function &F,
                     << F << "\n");
 
   return FunctionModified;
+}
+
+
+static bool isUbsanRootGlobal(const GlobalVariable &G) {
+  // UBSan's globals are anonymous
+  if (!G.getName().empty()) {
+    return false;
+  }
+
+  // UBSan's root globals are used by __ubsan_handle_* 
+  const auto *User = *G.user_begin();
+  
+  if (const auto *CB = dyn_cast<CallBase>(User)) {
+    if (!CB->hasMetadata(LLVMContext::MD_nosanitize)) {
+      return false;
+    }
+    auto *Callee = CB->getCalledFunction();
+    if (Callee && Callee->getName().startswith("__ubsan_handle_")) {
+      return true;
+    }
+  } else {
+    return false;
+  }
+
+  return false;
+}
+
+static bool isUbsanGlobal(const GlobalVariable &G) {
+  // UBSan would add no_sanitize_address metadata to globals if ASan is enabled.
+  if (!G.hasSanitizerMetadata() || !G.getSanitizerMetadata().NoAddress) {
+    return false;
+  }
+
+  // UBSan's globals must be used.
+  if (G.user_empty() || G.user_begin() == G.user_end()) {
+    return false;
+  }
+
+  // check whether this global is not constant, i.e., not in rodata section
+  if (G.isConstant()) {
+    return false;
+  }
+
+  // /// FIXME: Shoule we realy need to poison these globals?
+  // // UBSan's ".src*" globals are used as initializers
+  // if (G.getName().startswith(".src")) {
+  //   /*
+  //   @.src = private unnamed_addr constant [9 x i8] c"./demo.c\00",
+  //   no_sanitize_address, align 1
+
+  //   @0 = private unnamed_addr global
+  //   { { ptr, i32, i32 }, { ptr, i32, i32 }, i32}
+  //   { { ptr, i32, i32 } { ptr @.src, i32 10, i32 10 },
+  //     { ptr, i32, i32 } { ptr @.src.1, i32 61, i32 62 }, 
+  //     i32 1 },
+  //   no_sanitize_address
+  //   */
+
+  //   // check linkage
+  //   if (G.getLinkage() != GlobalValue::LinkageTypes::PrivateLinkage) {
+  //     return false;
+  //   }
+
+  //   // check type: must be [N x i8]
+  //   Type *Ty = G.getInitializer()->getType();
+  //   if (!Ty->isArrayTy() || !Ty->getArrayElementType()->isIntegerTy(8)) {
+  //     return false;
+  //   }
+
+  //   // check user, must be component of aggregate type
+  //   for (auto *U : G.users()) {
+  //     if (!isa<ConstantAggregate>(U)) {
+  //       return false;
+  //     }
+  //   }
+
+  //   return true;
+  // }
+
+  return isUbsanRootGlobal(G);
+}
+
+static void collectUbsanInteriorGlobals(
+     Module &M, SmallVectorImpl< GlobalVariable *> &SanitizerGlobals) {
+  for (auto &G : M.globals()) {
+    if (!isUbsanGlobal(G)) {
+      continue;
+    }
+    SanitizerGlobals.push_back(&G);
+  }
+}
+
+static SmallVector< GlobalVariable *, 16>
+collectSanitizerInteriorGlobals( Module &M) {
+  SmallVector< GlobalVariable *, 16> SanitizerGlobals;
+  collectUbsanInteriorGlobals(M, SanitizerGlobals);
+  return SanitizerGlobals;
+}
+
+bool XsanModuleAddressSanitizer::instrumentModule(Module &M) {
+  markSanitizerGlobals(M);
+  return ModuleAddressSanitizer::instrumentModule(M);
+}
+
+bool XsanModuleAddressSanitizer::markSanitizerGlobals(Module &M) {
+  if (!__xsan::shouldAsanPoisonInternalGlobals()) {
+    return false;
+  }
+
+  SmallVector<GlobalVariable *, 16> SanitizerGlobals =
+      collectSanitizerInteriorGlobals(M);
+
+  size_t n = SanitizerGlobals.size();
+  if (n == 0) {
+    return false;
+  }
+
+  auto &DL = M.getDataLayout();
+
+  // A global is described by a structure
+  //   size_t beg;
+  //   size_t size;
+  //   size_t size_with_redzone;
+  //   const char *name;
+  //   const char *module_name;
+  //   size_t has_dynamic_init;
+  //   size_t padding_for_windows_msvc_incremental_link;
+  //   size_t odr_indicator;
+  // We initialize an array of such structures and pass it to a run-time call.
+  StructType *GlobalStructTy =
+      StructType::get(IntptrTy, IntptrTy, IntptrTy, IntptrTy, IntptrTy,
+                      IntptrTy, IntptrTy, IntptrTy);
+  SmallVector<Constant *, 16> Initializers(n);
+
+  // We shouldn't merge same module names, as this string serves as unique
+  // module ID in runtime.
+  GlobalVariable *ModuleName = createPrivateGlobalForString(
+      M, M.getModuleIdentifier(), /*AllowMerging*/ false, kAsanGenPrefix);
+
+  // TODO: Symbol names in the descriptor can be demangled by the runtime
+  // library. This could save ~0.4% of VM size for a private large binary.
+  GlobalVariable *Name =
+      createPrivateGlobalForString(M, "__xsan_internal",
+                                    /*AllowMerging*/ true, kAsanGenPrefix);
+
+  for (size_t i = 0; i < n; i++) {
+    GlobalVariable *G = SanitizerGlobals[i];
+    G->setName("__xsan_inner_" + Twine(i));
+
+
+    GlobalValue::SanitizerMetadata MD;
+    if (G->hasSanitizerMetadata())
+      MD = G->getSanitizerMetadata();
+
+    Type *Ty = G->getValueType();
+    const uint64_t SizeInBytes = DL.getTypeAllocSize(Ty);
+    const uint64_t SizeAlignment = getMinRedzoneSizeForGlobal();
+    const uint64_t SizeAlignPaddingBytes = alignTo(SizeInBytes, SizeAlignment) -
+                                          SizeInBytes;
+
+    G->setAlignment(MaybeAlign(SizeAlignment));
+
+    Constant *ODRIndicator =
+        ConstantExpr::getNullValue(Type::getInt8PtrTy(M.getContext()));
+    GlobalValue *InstrumentedGlobal = G;
+
+    // bool CanUsePrivateAliases =
+    //     TargetTriple.isOSBinFormatELF() || TargetTriple.isOSBinFormatMachO() ||
+    //     TargetTriple.isOSBinFormatWasm();
+    // if (CanUsePrivateAliases && UsePrivateAlias) {
+    //   // Create local alias for NewGlobal to avoid crash on ODR between
+    //   // instrumented and non-instrumented libraries.
+    //   InstrumentedGlobal =
+    //       GlobalAlias::create(GlobalValue::PrivateLinkage, "", G);
+    // }
+
+    // Consider the whole global as a redzone.
+    Constant *Initializer = ConstantStruct::get(
+        GlobalStructTy,
+        ConstantExpr::getPointerCast(InstrumentedGlobal, IntptrTy),
+        ConstantInt::get(IntptrTy, SizeInBytes),
+        ConstantInt::get(IntptrTy, SizeInBytes + SizeAlignPaddingBytes),
+        ConstantExpr::getPointerCast(Name, IntptrTy),
+        ConstantExpr::getPointerCast(ModuleName, IntptrTy),
+        ConstantInt::get(IntptrTy, MD.IsDynInit),
+        Constant::getNullValue(IntptrTy),
+        ConstantExpr::getPointerCast(ODRIndicator, IntptrTy));
+
+
+    Initializers[i] = Initializer;
+  }
+
+  // // Add instrumented globals to llvm.compiler.used list to avoid LTO from
+  // // ConstantMerge'ing them.
+  // SmallVector<GlobalValue *, 16> GlobalsToAddToUsedList;
+  // for (size_t i = 0; i < n; i++) {
+  //   GlobalVariable *G = NewGlobals[i];
+  //   if (G->getName().empty()) continue;
+  //   GlobalsToAddToUsedList.push_back(G);
+  // }
+  // appendToCompilerUsed(M, ArrayRef<GlobalValue *>(GlobalsToAddToUsedList));
+
+  std::string ELFUniqueModuleId =
+      (UseGlobalsGC && TargetTriple.isOSBinFormatELF()) ? getUniqueModuleId(&M)
+                                                        : "";
+
+  if (!ELFUniqueModuleId.empty()) {
+    markSanitizerGlobalsElf(M, SanitizerGlobals, Initializers, ELFUniqueModuleId);
+  } else if (UseGlobalsGC && TargetTriple.isOSBinFormatCOFF()) {
+
+  } else if (UseGlobalsGC && ShouldUseMachOGlobalsSection()) {
+
+  } else {
+    // InstrumentGlobalsWithMetadataArray(IRB, M, NewGlobals, Initializers);
+  }
+
+  // Create calls for poisoning before initializers run and unpoisoning after.
+  if (ClInitializers)
+    createInitializerPoisonCalls(M, ModuleName);
+
+  LLVM_DEBUG(dbgs() << M);
+  return true;
+}
+
+bool XsanModuleAddressSanitizer::markSanitizerGlobalsElf(
+    Module &M, ArrayRef<GlobalVariable *> SanitizerGlobals,
+    ArrayRef<Constant *> MetadataInitializers,
+    const std::string &UniqueModuleId) {
+  assert(SanitizerGlobals.size() == MetadataInitializers.size());
+
+  // Putting globals in a comdat changes the semantic and potentially cause
+  // false negative odr violations at link time. If odr indicators are used, we
+  // keep the comdat sections, as link time odr violations will be dectected on
+  // the odr indicator symbols.
+  bool UseComdatForGlobalsGC = UseOdrIndicator;
+
+  SmallVector<GlobalValue *, 16> MetadataGlobals(SanitizerGlobals.size());
+  for (size_t i = 0; i < SanitizerGlobals.size(); i++) {
+    GlobalVariable *G = SanitizerGlobals[i];
+    GlobalVariable *Metadata =
+        CreateMetadataGlobal(M, MetadataInitializers[i], G->getName());
+    MDNode *MD = MDNode::get(M.getContext(), ValueAsMetadata::get(G));
+    Metadata->setMetadata(LLVMContext::MD_associated, MD);
+    MetadataGlobals[i] = Metadata;
+
+    if (UseComdatForGlobalsGC)
+      SetComdatForGlobalMetadata(G, Metadata, UniqueModuleId);
+  }
+
+  // Update llvm.compiler.used, adding the new metadata globals. This is
+  // needed so that during LTO these variables stay alive.
+  if (!MetadataGlobals.empty())
+    appendToCompilerUsed(M, MetadataGlobals);
+
+  return true;
 }
 
 #ifndef XSAN_PASS

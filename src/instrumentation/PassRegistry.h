@@ -46,4 +46,5 @@ void registerTsanForClangAndOpt(llvm::PassBuilder &PB);
 // --------- Use for XSan's optimization ---------------
 bool shouldTsanOptimizeLoadStores();
 bool shouldAsanOptimizeLoadStores();
+bool shouldAsanPoisonInternalGlobals();
 } // namespace __xsan

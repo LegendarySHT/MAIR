@@ -81,6 +81,12 @@ static cl::opt<bool> ClOptTsanLoadStore("xsan-tsan-opt-load-store",
 static cl::opt<bool> ClOptAsanLoadStore("xsan-asan-opt-load-store",
                                cl::desc("Reduce recurring load/stores"),
                                cl::Hidden, cl::init(true));
+
+/// There is compile bug for testcase init-order-dlopen.cpp, disable this option
+/// for now.
+static cl::opt<bool> ClAsanPoisonInternalGlobal("xsan-asan-poison-internal-global",
+                               cl::desc("Poison internal globals with ASan"),
+                               cl::Hidden, cl::init(false));
 namespace __xsan {
 
 bool shouldTsanOptimizeLoadStores() {
@@ -89,6 +95,10 @@ bool shouldTsanOptimizeLoadStores() {
 
 bool shouldAsanOptimizeLoadStores() {
   return ClOptXsan && ClOptAsanLoadStore;
+}
+
+bool shouldAsanPoisonInternalGlobals() {
+  return ClAsanPoisonInternalGlobal;
 }
 
 LLVM_ATTRIBUTE_WEAK
