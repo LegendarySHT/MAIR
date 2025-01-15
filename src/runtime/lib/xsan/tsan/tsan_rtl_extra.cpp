@@ -5,6 +5,56 @@
 
 #include "../xsan_common_defs.h"
 namespace __tsan {
+
+static atomic_uint8_t TsanDisabled {0};
+
+static struct {
+  int ignore_reads_and_writes;
+  int ignore_sync;
+} main_thread_state;
+
+static void StoreCurrentTsanState(ThreadState *thr) {
+  main_thread_state.ignore_reads_and_writes = thr->ignore_reads_and_writes;
+  main_thread_state.ignore_sync = thr->ignore_sync;
+}
+
+/// Used for longjmp in signal handlers
+/// 1. CallUserSignalHandler set and recover state before and after the signal
+///    handler
+/// 2. signal handler calls longjmp, leading to the state not being recovered in
+///    CallUserSignalHandler unexpectly.
+/// 3. Therefore, we provide this function to recover the state in Longjmp.
+void RestoreTsanState(ThreadState *thr) {
+  thr->ignore_reads_and_writes = main_thread_state.ignore_reads_and_writes;
+  thr->ignore_sync = main_thread_state.ignore_sync;
+}
+
+void DisableTsan(ThreadState *thr) {
+  if (atomic_load_relaxed(&thr->in_signal_handler)) {
+    return;
+  }
+  if (atomic_exchange(&TsanDisabled, 1, memory_order_relaxed) == 1)
+    return;
+
+  // ThreadIgnoreSyncBegin(thr, 0);
+  ThreadIgnoreBegin(thr, 0);
+
+  StoreCurrentTsanState(thr);
+}
+
+void EnableTsan(ThreadState *thr) {
+  if (atomic_load_relaxed(&thr->in_signal_handler)) {
+    return;
+  }
+  if (atomic_exchange(&TsanDisabled, 0, memory_order_relaxed) == 0)
+    return;
+
+  ThreadIgnoreEnd(thr);
+  // ThreadIgnoreSyncEnd(thr);
+
+  StoreCurrentTsanState(thr);
+}
+
 ScopedIgnoreTsan::ScopedIgnoreTsan(bool enable) : enable_(enable) {
 #if !SANITIZER_GO
   if (enable_) {
@@ -181,50 +231,4 @@ TSAN_INTERCEPT_AND_IGNORE(bool, _ZN11__sanitizer23IsAccessibleMemoryRangeEmm,
 // ----------- Intercept Data Race Checking Functions -----------
 
 
-#define TSAN_INTERCEPT_AND_GUARD(ret, f, params, args) \
-  ret XSAN_REAL(f) params;                             \
-  ret XSAN_WRAP(f) params {                            \
-    TSAN_CHECK_GUARD;                                       \
-    return XSAN_REAL(f) args;                          \
-  }
-
-using namespace __tsan;
-// void MemoryAccess(ThreadState* thr, uptr pc, uptr addr, 
-//                   uptr size, AccessType typ)
-TSAN_INTERCEPT_AND_GUARD(void, _ZN6__tsan12MemoryAccessEPNS_11ThreadStateEmmmm,
-                         (ThreadState * thr, uptr pc, uptr addr, uptr size,
-                          AccessType typ),
-                         (thr, pc, addr, size, typ))
-
-// void MemoryAccess16(ThreadState* thr, uptr pc, uptr addr,
-//                     AccessType typ)
-TSAN_INTERCEPT_AND_GUARD(void, _ZN6__tsan14MemoryAccess16EPNS_11ThreadStateEmmm,
-                         (ThreadState * thr, uptr pc, uptr addr,
-                          AccessType typ),
-                         (thr, pc, addr, typ))
-// void UnalignedMemoryAccess(ThreadState* thr, uptr pc,
-//                            uptr addr, uptr size,
-//                            AccessType typ)
-TSAN_INTERCEPT_AND_GUARD(
-    void, _ZN6__tsan21UnalignedMemoryAccessEPNS_11ThreadStateEmmmm,
-    (ThreadState * thr, uptr pc, uptr addr, uptr size, AccessType typ),
-    (thr, pc, addr, size, typ))
-
-// template <bool is_read>
-// void MemoryAccessRangeT(ThreadState* thr, uptr pc, uptr addr, uptr size)
-TSAN_INTERCEPT_AND_GUARD(
-    void, _ZN6__tsan18MemoryAccessRangeTILb0EEEvPNS_11ThreadStateEmmm,
-    (ThreadState * thr, uptr pc, uptr addr, uptr size), (thr, pc, addr, size))
-TSAN_INTERCEPT_AND_GUARD(
-    void, _ZN6__tsan18MemoryAccessRangeTILb1EEEvPNS_11ThreadStateEmmm,
-    (ThreadState * thr, uptr pc, uptr addr, uptr size), (thr, pc, addr, size))
-
-// void MemoryRangeFreed(ThreadState* thr, uptr pc, uptr addr, uptr size)
-TSAN_INTERCEPT_AND_GUARD(void,
-                         _ZN6__tsan16MemoryRangeFreedEPNS_11ThreadStateEmmm,
-                         (ThreadState * thr, uptr pc, uptr addr, uptr size),
-                         (thr, pc, addr, size))
-
-#undef ADDR_GUARD
-#undef TSAN_INTERCEPT_AND_GUARD
 }

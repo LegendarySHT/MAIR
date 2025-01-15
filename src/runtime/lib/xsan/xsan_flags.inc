@@ -12,3 +12,6 @@
 
 XSAN_FLAG(bool, replace_intrin, true,
           "If set, uses custom wrappers for memset/memcpy/memmove intrinsics.")
+
+XSAN_FLAG(bool, tsan_ignore_single_thread, true,
+          "If set, disable TSan on single-threaded scenarios as possible.")

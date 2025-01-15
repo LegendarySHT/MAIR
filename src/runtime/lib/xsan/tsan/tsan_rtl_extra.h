@@ -23,6 +23,16 @@ class ScopedIgnoreTsan {
   bool enable_;
 };
 
+void DisableTsan(ThreadState *thr);
+void EnableTsan(ThreadState *thr);
+/// Used for longjmp in signal handlers
+/// 1. CallUserSignalHandler set and recover state before and after the signal
+///    handler
+/// 2. signal handler calls longjmp, leading to the state not being recovered in
+///    CallUserSignalHandler unexpectly.
+/// 3. Therefore, we provide this function to recover the state in Longjmp.
+void RestoreTsanState(ThreadState *thr);
+
 #if SANITIZER_DEBUG
 #  define TSAN_ADDR_GUARD_CONDITION (!IsAppMem(addr))
 #else

@@ -87,6 +87,9 @@ static void ThreadCheckIgnore(ThreadState *thr) {}
 #endif
 
 void ThreadFinalize(ThreadState *thr) {
+  if (support_single_thread_optimization(thr)) {
+    EnableTsan(thr);
+  }
   ThreadCheckIgnore(thr);
 #if !SANITIZER_GO
   if (!ShouldReport(thr, ReportTypeThreadLeak))
@@ -129,9 +132,25 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
       arg.sync_epoch = ctx->global_epoch;
       IncrementEpoch(thr);
     }
+    atomic_fetch_add(&ctx->num_alive_threads, 1, memory_order_relaxed);
+    atomic_fetch_add(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
+    
+    /* Sub-Threads Creation */
+    if (support_single_thread_optimization(thr)) {
+      EnableTsan(thr);
+    }
+  } else {
+    /* Main Thread Creation */
+    atomic_store_relaxed(&ctx->num_alive_threads, 1);
+    atomic_store_relaxed(&ctx->num_unjoined_threads, 1);
+
+    // Delay to ThreadStart, as some settings of thr rely on thr->ignore_sync
+    // being false.
+    // if (support_single_thread_optimization()) {
+    //   DisableTsan(cur_thread());
+    // }
   }
-  atomic_fetch_add(&ctx->num_alive_threads, 1, memory_order_relaxed);
-  atomic_fetch_add(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
+
   Tid tid = ctx->thread_registry.CreateThread(uid, detached, parent, &arg);
   DPrintf("#%d: ThreadCreate tid=%d uid=%zu\n", parent, tid, uid);
   return tid;
@@ -224,6 +243,11 @@ void ThreadStart(ThreadState *thr, Tid tid, tid_t os_id,
       ImitateTlsWrite(thr, tls_addr, tls_size);
   }
 #endif
+
+  /// Disable TSan if only main thread is alive.
+  if (support_single_thread_optimization(thr)) {
+    DisableTsan(cur_thread());
+  }
 }
 
 void ThreadContext::OnStarted(void *arg) {
@@ -335,6 +359,9 @@ void ThreadJoin(ThreadState *thr, uptr pc, Tid tid) {
   }
   Free(arg.sync);
   atomic_fetch_sub(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
+  if (support_single_thread_optimization(thr) && is_now_all_joined()) {
+    DisableTsan(thr);
+  }
 }
 
 void ThreadContext::OnJoined(void *ptr) {

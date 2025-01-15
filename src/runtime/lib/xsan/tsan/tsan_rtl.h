@@ -392,25 +392,24 @@ struct Context {
 #endif
 
   // Count of alive threads.
-  atomic_uint32_t num_alive_threads;
+  atomic_uint32_t num_alive_threads {0};
   // Count of unjoined threads.
-  atomic_uint32_t num_unjoined_threads;
+  atomic_uint32_t num_unjoined_threads {0};
 };
 
 extern Context *ctx;  // The one and the only global runtime context.
 
 ALWAYS_INLINE bool is_tsan_initialized() { return ctx && ctx->initialized; }
-ALWAYS_INLINE bool support_single_thread_optimization() {
-  return __xsan::flags()->tsan_ignore_single_thread && ctx &&
-         cur_thread()->tid == kMainTid;
+ALWAYS_INLINE bool support_single_thread_optimization(ThreadState *thr) {
+  return __xsan::flags()->tsan_ignore_single_thread && ctx && thr->tid == kMainTid;
 }
 ALWAYS_INLINE bool is_now_single_threaded() {
-  return support_single_thread_optimization() &&
-         (atomic_load(&ctx->num_alive_threads, memory_order_relaxed) <= 1);
+  DCHECK_EQ(cur_thread()->tid, kMainTid);
+  return (atomic_load(&ctx->num_alive_threads, memory_order_relaxed) <= 1);
 }
 ALWAYS_INLINE bool is_now_all_joined() {
-  return support_single_thread_optimization() &&
-         (atomic_load(&ctx->num_unjoined_threads, memory_order_relaxed) <= 1);
+  DCHECK_EQ(cur_thread()->tid, kMainTid);
+  return (atomic_load(&ctx->num_unjoined_threads, memory_order_relaxed) <= 1);
 }
 
 ALWAYS_INLINE Flags *flags() {

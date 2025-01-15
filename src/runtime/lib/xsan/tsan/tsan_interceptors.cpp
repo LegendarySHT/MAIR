@@ -22,6 +22,7 @@
 #include "tsan_interceptors.h"
 #include "tsan_interface.h"
 #include "tsan_platform.h"
+#include "tsan_rtl_extra.h"
 #include "tsan_suppressions.h"
 #include "tsan_rtl.h"
 #include "tsan_mman.h"
@@ -554,6 +555,10 @@ static void LongJmp(ThreadState *thr, uptr *env) {
       ThreadSignalContext *sctx = SigCtx(thr);
       if (sctx) {
         sctx->int_signal_send = buf->int_signal_send;
+      }
+
+      if (atomic_load_relaxed(&thr->in_signal_handler) && support_single_thread_optimization(thr)) {
+        RestoreTsanState(thr);
       }
       atomic_store(&thr->in_blocking_func, buf->in_blocking_func,
           memory_order_relaxed);
