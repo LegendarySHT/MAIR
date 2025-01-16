@@ -124,6 +124,12 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
   Tid parent = kInvalidTid;
   OnCreatedArgs arg = {nullptr, 0, kInvalidStackID};
   if (thr) {
+    atomic_fetch_add(&ctx->num_alive_threads, 1, memory_order_relaxed);
+    atomic_fetch_add(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
+    /* Sub-Threads Creation */
+    if (support_single_thread_optimization(thr)) {
+      EnableMainThreadTsan(thr);
+    }
     parent = thr->tid;
     arg.stack = CurrentStackId(thr, pc);
     if (!thr->ignore_sync) {
@@ -131,13 +137,6 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
       thr->clock.ReleaseStore(&arg.sync);
       arg.sync_epoch = ctx->global_epoch;
       IncrementEpoch(thr);
-    }
-    atomic_fetch_add(&ctx->num_alive_threads, 1, memory_order_relaxed);
-    atomic_fetch_add(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
-    
-    /* Sub-Threads Creation */
-    if (support_single_thread_optimization(thr)) {
-      EnableMainThreadTsan(thr);
     }
   } else {
     /* Main Thread Creation */
