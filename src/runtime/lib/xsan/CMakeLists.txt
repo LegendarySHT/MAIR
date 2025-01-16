@@ -424,9 +424,12 @@ include(AddWrapSyms)
 #   Generate wrapped symbols file, which contains all symbols that need to be 
 #   wrapped by _wrap=<symbol> linker option.
 create_wrap_symbols_target(
+  generate_wrap_symbols
   OUT ${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt
   IN ${WRAPPED_SYMBOLS}
 )
+
+set(XSAN_COMMON_DEPS generate_wrap_symbols)
 
 set(XSAN_LINK_FLAGS "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt")
 
@@ -467,6 +470,7 @@ if(NOT APPLE)
         CFLAGS ${XSAN_RTL_CFLAGS}
         LINK_FLAGS ${XSAN_LINK_FLAGS}
         DEFS ${XSAN_COMMON_DEFINITIONS}
+        DEPS ${XSAN_COMMON_DEPS}
         PARENT_TARGET xsan)
 
     add_compiler_rt_runtime(clang_rt.xsan_cxx
@@ -477,6 +481,7 @@ if(NOT APPLE)
         CFLAGS ${XSAN_RTL_CFLAGS}
         LINK_FLAGS ${XSAN_LINK_FLAGS}
         DEFS ${XSAN_COMMON_DEFINITIONS}
+        DEPS ${XSAN_COMMON_DEPS}
         PARENT_TARGET xsan)
     
     add_compiler_rt_runtime(clang_rt.xsan_static
@@ -486,6 +491,7 @@ if(NOT APPLE)
         CFLAGS ${XSAN_RTL_CFLAGS}
         LINK_FLAGS ${XSAN_LINK_FLAGS}
         DEFS ${XSAN_COMMON_DEFINITIONS}
+        DEPS ${XSAN_COMMON_DEPS}
         PARENT_TARGET xsan)
     
     add_compiler_rt_runtime(clang_rt.xsan-preinit
@@ -495,6 +501,7 @@ if(NOT APPLE)
         CFLAGS ${XSAN_RTL_CFLAGS}
         LINK_FLAGS ${XSAN_LINK_FLAGS}
         DEFS ${XSAN_COMMON_DEFINITIONS}
+        DEPS ${XSAN_COMMON_DEPS}
         PARENT_TARGET xsan)
   endif()
 

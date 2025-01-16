@@ -73,7 +73,7 @@ function(generate_wrap_symbols)
     endif()
 endfunction()
 
-function(create_wrap_symbols_target)
+function(create_wrap_symbols_target TARGET_NAME)
     # Use cmake_parse_arguments to parse named arguments
     cmake_parse_arguments(GWS
         ""        # No options
@@ -109,9 +109,13 @@ function(create_wrap_symbols_target)
         COMMENT "Generating wrapped symbols file ${out_file}"
         DEPENDS ${in_files}  # Input files as dependencies
     )
-    add_custom_target(generate_wrap_symbols ALL
+    add_custom_target(${TARGET_NAME} ALL
         DEPENDS ${out_file}
     )
+
+    message_green("TARGET_NAME: ${TARGET_NAME}")
+
+    set(${TARGET_NAME} ${TARGET_NAME} PARENT_SCOPE)
 
     if(in_files)
         # Format input file list for display
