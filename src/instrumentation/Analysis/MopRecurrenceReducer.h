@@ -68,7 +68,7 @@ public:
   */
   SmallVector<const Instruction *, 16>
   distillRecurringChecks(const SmallVectorImpl<const Instruction *> &Insts,
-                         bool WriteSensitive, bool IgnoreCalls = false);
+                         bool IsTsan, bool IgnoreCalls = false);
 
 private:
   Function &F;

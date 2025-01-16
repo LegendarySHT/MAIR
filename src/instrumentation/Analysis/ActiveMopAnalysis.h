@@ -11,7 +11,7 @@ namespace __xsan {
 
 using namespace llvm;
 
-// - ignore sanitizer-instrumented IRs and BBs. 
+// - ignore sanitizer-instrumented IRs and BBs.
 static bool isInterestingMop(const Instruction &I, bool IgnoreAtomic = true) {
   if (I.hasMetadata(LLVMContext::MD_nosanitize))
     return false;
@@ -124,10 +124,37 @@ private:
     BitVectorSet Reachable;
     BitVectorSet NotActive;
 
-    Lattice(unsigned NumMops);
+    /*
+    If applied to TSan, we must consider the memory barriers.
+    i.e., RELEASE/ACQUIRE.
+    Therefore, for TSan, we extend this lattice
+    from
+        ⊥ -> ~ -> ⊤
+    to
+        ⊥ -> ~ -> A -> ⊤
+              |-> R ->|
+    where A represents any acquire barrier, and R represents any release
+    barrier. before this program point.
+
+    If KillingI dominates DeadI (Killing --> Dead),
+    DeadI could not be eliminated if there is a release barrier between them,
+    as the DeadI is not guarded by the release barrier.
+    Otherwise, FN arises if other threads access the same memory location
+    after crossing the relevant acquire barrier.
+    Similarly, if KillingI post-dominate DeadI (Dead --> Killing).
+    DeadI could not be eliminated if there is an acquire barrier between
+    them, as the DeadI is not guarded by the acquire barrier.
+    */
+    BitVectorSet AnyAcq;
+    BitVectorSet AnyRel;
+    bool UsedForTsan;
+
+    Lattice(unsigned NumMops, bool UsedForTsan);
 
     // Inplace version of kill function.
     void kill();
+    void killAcq();
+    void killRel();
 
     /// a = a ∨ b, to be the least upper bound.
     void join(const Lattice &Other);
@@ -136,6 +163,11 @@ private:
 
     inline bool isActive(MopID Id) const {
       return Reachable.test(Id) && !NotActive.test(Id);
+    }
+
+    inline bool isActive(MopID Id, bool Acq) const {
+      return isActive(Id) &&
+             ((Acq && !AnyAcq.test(Id)) || (!Acq && !AnyRel.test(Id)));
     }
   };
 
@@ -146,7 +178,11 @@ private:
     const BitVectorSet UseGen;
     const BitVectorSet NotUseGen;
     const BitVectorSet Gen;
-    bool ContainsCall; // UseKill
+    const BitVectorSet GenAcq;
+    const BitVectorSet GenRel;
+    const bool ContainsCall; // UseKill
+    const bool ContainsAcq;  // UseKillAcq
+    const bool ContainsRel;  // UseKillRel
   };
 
 private:
@@ -169,11 +205,11 @@ private:
   const BlockInfo &getBlockInfo(const BasicBlock *BB) const;
   BlockInfo &getBlockInfo(const BasicBlock *BB);
 
-  /// @brief Checks if a Mop is reachable after the given basic block.
-  bool isMopActiveAfter(MopID Mop, const BasicBlock *BB) const;
+  /// @brief Checks if a Mop is active after the given basic block.
+  bool isMopActiveAfter(MopID Mop, const BasicBlock *BB, const bool Acq) const;
 
-  /// @brief Checks if a Mop is reachable before the given basic block.
-  bool isMopActiveBefore(MopID Mop, const BasicBlock *BB) const;
+  /// @brief Checks if a Mop is active before the given basic block.
+  bool isMopActiveBefore(MopID Mop, const BasicBlock *BB, const bool Acq) const;
 
   void printInfo(const BlockInfo &info, raw_ostream &OS) const;
 
@@ -199,20 +235,22 @@ public:
   /// @param F The LLVM function to analyze.
   /// @param MOPs An optional externally provided list of MOP instructions.
   ActiveMopAnalysis(Function &F,
-                    const SmallVectorImpl<const Instruction *> &MOPs);
+                    const SmallVectorImpl<const Instruction *> &MOPs,
+                    bool UsedForTsan);
 
   /// @brief Constructor that automatically extracts MOPs from the function.
   ///
   /// @param F The LLVM function to analyze.
-  ActiveMopAnalysis(Function &F);
+  ActiveMopAnalysis(Function &F, bool UsedForTsan);
 
   /// @brief Determines if a MOP is reachable from one instruction to another.
   ///
   /// @param From The starting instruction.
   /// @param To The target instruction.
+  /// @param IsToDead True if the target instruction is used for dead I.
   /// @return True if the MOP is reachable, false otherwise.
-  bool isOneMopActiveToAnother(const Instruction *From,
-                               const Instruction *To) const;
+  bool isOneMopActiveToAnother(const Instruction *From, const Instruction *To,
+                               bool IsToDead) const;
 
   /// @brief Prints the analysis results to the specified raw_ostream.
   ///
@@ -232,5 +270,6 @@ private:
   const Function &F;
 
   bool Analyzed;
+  const bool UsedForTsan;
 };
 } // namespace __xsan

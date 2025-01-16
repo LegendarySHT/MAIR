@@ -509,7 +509,7 @@ This is the dominating set problem in directed graph.
 */
 SmallVector<const Instruction *, 16>
 MopRecurrenceReducer::distillRecurringChecks(
-    const SmallVectorImpl<const Instruction *> &Insts, bool WriteSensitive,
+    const SmallVectorImpl<const Instruction *> &Insts, bool IsTsan,
     bool IgnoreCalls) {
   if (Insts.size() < 2) {
     return SmallVector<const Instruction *, 16>(Insts.begin(), Insts.end());
@@ -519,6 +519,8 @@ MopRecurrenceReducer::distillRecurringChecks(
   SmallSetVector<const Instruction *, 16> CandidatesSet;
 
   MOPState State(F, FAM);
+
+  bool WriteSensitive = IsTsan;
 
   /*
     - Contains(range1, range2), considering aliases.
@@ -556,14 +558,17 @@ MopRecurrenceReducer::distillRecurringChecks(
 
   /*
     - no-clobbering-calls between MOP1 and MOP2
+    (For TSan, we also pay extra attention to atomic instructions with
+     RELEASE/ACQUIRE memory ordering)
   */
   if (!IgnoreCalls) {
-    ActiveMopAnalysis Analysis(F, Candidates);
+    ActiveMopAnalysis Analysis(F, Candidates, IsTsan);
     for (auto &[Killing, Dead, From, Blocked] : Edges) {
-      const Instruction *To = (From == Killing) ? Dead : Killing;
+      const bool IsToDead = From == Killing;
+      const Instruction *To = IsToDead ? Dead : Killing;
       // If there is a call between any path from FromI to ToI, then the
       // corresponding MOPs are not recurring.
-      Blocked = !Analysis.isOneMopActiveToAnother(From, To);
+      Blocked = !Analysis.isOneMopActiveToAnother(From, To, IsToDead);
     }
   }
 

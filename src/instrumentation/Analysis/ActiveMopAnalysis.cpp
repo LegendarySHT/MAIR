@@ -17,6 +17,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/Support/AtomicOrdering.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -49,6 +50,83 @@ static bool isClobberingCall(const Instruction *Inst,
   return true;
 }
 
+
+static AtomicOrdering getOrder(const Instruction *I) {
+  // TODO: Ask TTI whether synchronization scope is between threads.
+  auto SSID = getAtomicSyncScopeID(I);
+  if (!SSID)
+    return AtomicOrdering::NotAtomic;
+  // SyncScope = SingleThread --> NotAtomic for TSan
+  if ((isa<LoadInst>(I) || isa<StoreInst>(I)) &&
+      (SSID.value() == SyncScope::SingleThread))
+    return AtomicOrdering::NotAtomic;
+
+  if (const auto *LI = dyn_cast<LoadInst>(I)) {
+    return LI->getOrdering();
+  }
+  if (const auto *SI = dyn_cast<StoreInst>(I)) {
+    return SI->getOrdering();
+  }
+  if (const auto *RMWI = dyn_cast<AtomicRMWInst>(I)) {
+    return RMWI->getOrdering();
+  }
+  if (const auto *CXI = dyn_cast<AtomicCmpXchgInst>(I)) {
+    // CAS : read & write if success, only read if failure.
+    AtomicOrdering SuccessOrder = CXI->getSuccessOrdering();
+    AtomicOrdering FailureOrder = CXI->getFailureOrdering();
+    if (SuccessOrder == FailureOrder)
+      return SuccessOrder;
+    // Memory Order Set is partially ordered as follows:
+    //   not_atomic-->unordered-->relaxed-->release-->acq_rel-->seq_cst
+    //                        |-->acquire-->|
+    // Return the least upper bound of the two orders
+    if (SuccessOrder == AtomicOrdering::Release ||
+        SuccessOrder == AtomicOrdering::Acquire) {
+      return AtomicOrdering::AcquireRelease;
+    }
+    using u8 = unsigned char;
+    return static_cast<AtomicOrdering>(
+        std::max(static_cast<u8>(SuccessOrder), static_cast<u8>(FailureOrder)));
+  }
+  if (const auto *FENCE = dyn_cast<FenceInst>(I)) {
+    /// TODO: TSan does not support handling of fences for now. Therefore, we
+    /// just return NotAtomic.
+    return AtomicOrdering::NotAtomic;
+  }
+
+  return AtomicOrdering::NotAtomic;
+}
+
+/// TSan is sensitive to synchronization intruction as follows:
+/// - atomic load/store
+/// - fence
+/// - atomic cmpxchg
+/// - atomicrmw
+/// except their memory order is relaxed.
+/// Notably, TSan disables ClInstrumentReadBeforeWrite by default, which
+/// does not consider atomic operations/fences, leading to false negatives.
+static void getAtomicInsnOrder(const Instruction *Inst, bool &IsAcq,
+                               bool &IsRel) {
+  AtomicOrdering Order = getOrder(Inst);
+  switch (Order) {
+  case AtomicOrdering::NotAtomic:
+  case AtomicOrdering::Unordered:
+  case AtomicOrdering::Monotonic:
+    return;
+  case AtomicOrdering::Acquire:
+    IsAcq = true;
+    return;
+  case AtomicOrdering::Release:
+    IsRel = true;
+    return;
+  case AtomicOrdering::AcquireRelease:
+  case AtomicOrdering::SequentiallyConsistent:
+    IsAcq = true;
+    IsRel = true;
+    return;
+  }
+}
+
 /// @brief Checks if one instruction is reachable from another within the same
 /// basic block.
 static bool isActiveInTheSameBlock(const Instruction *From,
@@ -67,30 +145,31 @@ static bool isActiveInTheSameBlock(const Instruction *From,
                    "should be before ToI");
 }
 
-static bool isReachableAmongBlocks(const Instruction *From,
-                                   const Instruction *To) {
-  const BasicBlock *FromBB = From->getParent();
-  const BasicBlock *ToBB = To->getParent();
-  if (FromBB == ToBB) {
-    return isActiveInTheSameBlock(From, To);
-  }
-
-  if (!isActiveInTheSameBlock(ToBB->getFirstNonPHIOrDbgOrLifetime(), To) ||
-      !isActiveInTheSameBlock(From, FromBB->getTerminator())) {
-    return false;
-  }
-
-  for (const auto *BB : depth_first(FromBB)) {
-    if (BB == ToBB) {
+static bool isActiveInTheSameBlock(const Instruction *From,
+                                   const Instruction *To, const bool Acq) {
+  const Instruction *Inst = From;
+  bool HasAcq = false, HasRel = false;
+  do {
+    if (Inst == To) {
+      return true;
     }
-  }
+    if (isClobberingCall(Inst)) {
+      return false;
+    }
+    getAtomicInsnOrder(Inst, HasAcq, HasRel);
+    if (Acq && HasAcq || !Acq && HasRel) {
+      return false;
+    }
+  } while ((Inst = Inst->getNextNonDebugInstruction()));
 
-  llvm_unreachable("From and To should be in the same basic block and From "
-                   "should be before To");
+  llvm_unreachable("From and To should be in the same basic block and FromI "
+                   "should be before ToI");
 }
 
-ActiveMopAnalysis::Lattice::Lattice(unsigned NumMops)
-    : Reachable(NumMops, false), NotActive(NumMops, false) {}
+ActiveMopAnalysis::Lattice::Lattice(unsigned NumMops, bool UsedForTsan)
+    : Reachable(NumMops, false), NotActive(NumMops, false),
+      AnyAcq(UsedForTsan ? NumMops : 0, false),
+      AnyRel(UsedForTsan ? NumMops : 0, false), UsedForTsan(UsedForTsan) {}
 
 void ActiveMopAnalysis::Lattice::kill() {
   /// ⊥ → ⊥, else -> ⊤
@@ -98,13 +177,36 @@ void ActiveMopAnalysis::Lattice::kill() {
   NotActive = Reachable;
 }
 
+void ActiveMopAnalysis::Lattice::killAcq() {
+  if (LLVM_UNLIKELY(!UsedForTsan)) {
+    return;
+  }
+  /// ⊥ → ⊥, else -> A
+  /// Can be implemented as AnyAcq = Reachable.
+  AnyAcq = Reachable;
+}
+
+void ActiveMopAnalysis::Lattice::killRel() {
+  if (LLVM_UNLIKELY(!UsedForTsan)) {
+    return;
+  }
+  /// ⊥ → ⊥, else -> R
+  /// Can be implemented as AnyRel = Reachable.
+  AnyRel = Reachable;
+}
+
 void ActiveMopAnalysis::Lattice::join(const Lattice &Other) {
   Reachable |= Other.Reachable;
   NotActive |= Other.NotActive;
+  if (UsedForTsan) {
+    AnyAcq |= Other.AnyAcq;
+    AnyRel |= Other.AnyRel;
+  }
 }
 
 bool ActiveMopAnalysis::Lattice::operator==(const Lattice &Other) const {
-  return Reachable == Other.Reachable && NotActive == Other.NotActive;
+  return Reachable == Other.Reachable && NotActive == Other.NotActive &&
+         (!UsedForTsan || (AnyAcq == Other.AnyAcq && AnyRel == Other.AnyRel));
 }
 
 SmallVector<const Instruction *, 64>
@@ -151,10 +253,14 @@ ActiveMopAnalysis::BlockInfo
 ActiveMopAnalysis::getInitializedBlockInfo(const BasicBlock &BB) const {
   unsigned NumMops = MopList.size();
   BitVectorSet GenSet(NumMops, false);
+  BitVectorSet GenAcqSet(UsedForTsan ? NumMops : 0, false);
+  BitVectorSet GenRelSet(UsedForTsan ? NumMops : 0, false);
+
   BitVectorSet UseGen(NumMops, false);
   BitVectorSet NotUseGen(NumMops, false);
 
   bool ContainsCall = false;
+  bool ContainsAcq = false, ContainsRel = false;
 
   // Traverse instructions in reverse to find MOPs that are not followed by
   // calls.
@@ -162,23 +268,41 @@ ActiveMopAnalysis::getInitializedBlockInfo(const BasicBlock &BB) const {
     if (!ContainsCall && isClobberingCall(&I)) {
       ContainsCall = true;
     }
-    if (isInterestingMop(I)) {
-      auto MapIt = MopMap.find(&I);
-      if (MapIt != MopMap.end()) {
-        MopID MopId = MapIt->second;
-        UseGen.set(MopId);
-        NotUseGen.set(MopId);
-        if (ContainsCall) {
-          GenSet.set(MopId);
-        }
-      }
+    if (UsedForTsan) {
+      getAtomicInsnOrder(&I, ContainsAcq, ContainsRel);
+    }
+    if (!isInterestingMop(I)) {
+      continue;
+    }
+    auto MapIt = MopMap.find(&I);
+    if (MapIt == MopMap.end())
+      continue;
+    MopID MopId = MapIt->second;
+    UseGen.set(MopId);
+    NotUseGen.set(MopId);
+    if (ContainsCall) {
+      GenSet.set(MopId);
+    }
+    if (LLVM_UNLIKELY(ContainsAcq)) {
+      GenAcqSet.set(MopId);
+    }
+    if (LLVM_UNLIKELY(ContainsRel)) {
+      GenRelSet.set(MopId);
     }
   }
 
   NotUseGen.flip();
 
-  return {Lattice(NumMops),     Lattice(NumMops),  std::move(UseGen),
-          std::move(NotUseGen), std::move(GenSet), ContainsCall};
+  return {Lattice(NumMops, UsedForTsan),
+          Lattice(NumMops, UsedForTsan),
+          std::move(UseGen),
+          std::move(NotUseGen),
+          std::move(GenSet),
+          std::move(GenAcqSet),
+          std::move(GenRelSet),
+          ContainsCall,
+          ContainsAcq,
+          ContainsRel};
 }
 
 const ActiveMopAnalysis::BlockInfo &
@@ -197,16 +321,16 @@ ActiveMopAnalysis::getBlockInfo(const BasicBlock *BB) {
   return It->getSecond();
 }
 
-bool ActiveMopAnalysis::isMopActiveAfter(MopID Mop,
-                                         const BasicBlock *BB) const {
+bool ActiveMopAnalysis::isMopActiveAfter(MopID Mop, const BasicBlock *BB,
+                                         const bool Acq) const {
   const BlockInfo &Info = getBlockInfo(BB);
-  return Info.OUT.isActive(Mop);
+  return UsedForTsan ? Info.OUT.isActive(Mop, Acq) : Info.OUT.isActive(Mop);
 }
 
-bool ActiveMopAnalysis::isMopActiveBefore(MopID Mop,
-                                          const BasicBlock *BB) const {
+bool ActiveMopAnalysis::isMopActiveBefore(MopID Mop, const BasicBlock *BB,
+                                          const bool Acq) const {
   const BlockInfo &Info = getBlockInfo(BB);
-  return Info.IN.isActive(Mop);
+  return UsedForTsan ? Info.IN.isActive(Mop, Acq) : Info.IN.isActive(Mop);
 }
 
 void ActiveMopAnalysis::printInfo(const BlockInfo &Info,
@@ -245,14 +369,16 @@ bool ActiveMopAnalysis::suitableToAnlyze() {
 }
 
 ActiveMopAnalysis::ActiveMopAnalysis(
-    Function &F, const SmallVectorImpl<const Instruction *> &MOPs)
-    : MopList(MOPs.begin(), MOPs.end()), F(F), Analyzed(false) {
+    Function &F, const SmallVectorImpl<const Instruction *> &MOPs,
+    bool UsedForTsan)
+    : MopList(MOPs.begin(), MOPs.end()), F(F), Analyzed(false),
+      UsedForTsan(UsedForTsan) {
   if (suitableToAnlyze())
     dataflowAnalyze();
 }
 
-ActiveMopAnalysis::ActiveMopAnalysis(Function &F)
-    : ActiveMopAnalysis(F, extractMOPs(F)) {}
+ActiveMopAnalysis::ActiveMopAnalysis(Function &F, bool UsedForTsan)
+    : ActiveMopAnalysis(F, extractMOPs(F), UsedForTsan) {}
 
 bool ActiveMopAnalysis::updateInfo(const BasicBlock *BB) {
   BlockInfo &Info = getBlockInfo(BB);
@@ -286,6 +412,14 @@ ActiveMopAnalysis::transfer(const BlockInfo &Info) const {
   if (Info.ContainsCall) {
     NewOUT.kill();
   }
+  if (UsedForTsan) {
+    if (LLVM_UNLIKELY(Info.ContainsAcq)) {
+      NewOUT.killAcq();
+    }
+    if (LLVM_UNLIKELY(Info.ContainsRel)) {
+      NewOUT.killRel();
+    }
+  }
 
   // OUT = UseGen? Gen : (HasCall? Kill(IN) : IN)
   // ==>
@@ -299,6 +433,14 @@ ActiveMopAnalysis::transfer(const BlockInfo &Info) const {
   //     OUT |= (UseGen & Gen) # Gen = UseGen & Gen naturally
   NewOUT.NotActive &= Info.NotUseGen;
   NewOUT.NotActive |= Info.Gen;
+
+  // Similarly
+  if (UsedForTsan) {
+    NewOUT.AnyAcq &= Info.NotUseGen;
+    NewOUT.AnyAcq |= Info.GenAcq;
+    NewOUT.AnyRel &= Info.NotUseGen;
+    NewOUT.AnyRel |= Info.GenRel;
+  }
 
   return NewOUT;
 }
@@ -348,38 +490,57 @@ void ActiveMopAnalysis::dataflowAnalyze() {
 }
 
 bool ActiveMopAnalysis::isOneMopActiveToAnother(const Instruction *From,
-                                                const Instruction *To) const {
+                                                const Instruction *To,
+                                                const bool IsToDead) const {
   const BasicBlock *FromBB = From->getParent();
   const BasicBlock *ToBB = To->getParent();
 
+  /*
+    If KillingI dominates DeadI, i.e., From is killing and To is dead,
+    KillingI is not active to DeadI if exists any RELEASE barrier between them.
+
+    If KillingI post-dominate DeadI, i.e., To is killing and From is dead,
+    KillingI is not active to DeadI if exists any ACQUIRE barrier between them.
+  */
+  const bool ConsiderAcqOrRel = !IsToDead;
+  const bool UsedForTsan = this->UsedForTsan;
+
+  const auto isOneActiveToAnotherInTheSameBlock =
+      [UsedForTsan, ConsiderAcqOrRel](const Instruction *KillingI,
+                                      const Instruction *DeadI) {
+        return UsedForTsan
+                   ? isActiveInTheSameBlock(KillingI, DeadI, ConsiderAcqOrRel)
+                   : isActiveInTheSameBlock(KillingI, DeadI);
+      };
+
   if (!Analyzed) {
     assert(FromBB == ToBB && "From and To should be in the same basic block");
-    return isActiveInTheSameBlock(From, To);
+    return isOneActiveToAnotherInTheSameBlock(From, To);
   }
 
   MopID FromId = getMopId(From);
 
   // If a MOP is reachable in the OUT[ToBB], then it must be reachable for To.
-  if (isMopActiveAfter(FromId, ToBB)) {
+  if (isMopActiveAfter(FromId, ToBB, ConsiderAcqOrRel)) {
     return true;
   }
 
   // If From and To belong to the same basic block, then we can use the
   // internal reachability test.
   if (FromBB == ToBB) {
-    return isActiveInTheSameBlock(From, To);
+    return isOneActiveToAnotherInTheSameBlock(From, To);
   }
 
   // If the external From is not reachable in the IN[ToBB], then it must not be
   // reachable for To.
-  if (!isMopActiveBefore(FromId, ToBB)) {
+  if (!isMopActiveBefore(FromId, ToBB, ConsiderAcqOrRel)) {
     assert(ToBB != FromBB && "ToBB should not be the same as FromBB");
     return false;
   }
 
   // Eventually, we need to check if the entry of the ToBB can reach To.
   const Instruction *Entry = ToBB->getFirstNonPHIOrDbgOrLifetime();
-  return isActiveInTheSameBlock(Entry, To);
+  return isOneActiveToAnotherInTheSameBlock(Entry, To);
 }
 
 const SmallVector<const Instruction *, 64> &
