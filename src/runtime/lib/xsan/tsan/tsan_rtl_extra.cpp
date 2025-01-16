@@ -30,13 +30,13 @@ void RestoreTsanState(ThreadState *thr) {
 }
 
 static void DisableTsan(ThreadState *thr) {
-  // ThreadIgnoreSyncBegin(thr, 0);
+  ThreadIgnoreSyncBegin(thr, 0);
   ThreadIgnoreBegin(thr, 0);
 }
 
 static void EnableTsan(ThreadState *thr) {
   ThreadIgnoreEnd(thr);
-  // ThreadIgnoreSyncEnd(thr);
+  ThreadIgnoreSyncEnd(thr);
 }
 
 void DisableMainThreadTsan(ThreadState *thr) {
