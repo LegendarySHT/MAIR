@@ -29,28 +29,36 @@ void RestoreTsanState(ThreadState *thr) {
   thr->ignore_sync = main_thread_state.ignore_sync;
 }
 
-void DisableTsan(ThreadState *thr) {
+static void DisableTsan(ThreadState *thr) {
+  // ThreadIgnoreSyncBegin(thr, 0);
+  ThreadIgnoreBegin(thr, 0);
+}
+
+static void EnableTsan(ThreadState *thr) {
+  ThreadIgnoreEnd(thr);
+  // ThreadIgnoreSyncEnd(thr);
+}
+
+void DisableMainThreadTsan(ThreadState *thr) {
   if (atomic_load_relaxed(&thr->in_signal_handler)) {
     return;
   }
   if (atomic_exchange(&TsanDisabled, 1, memory_order_relaxed) == 1)
     return;
 
-  // ThreadIgnoreSyncBegin(thr, 0);
-  ThreadIgnoreBegin(thr, 0);
+  DisableTsan(thr);
 
   StoreCurrentTsanState(thr);
 }
 
-void EnableTsan(ThreadState *thr) {
+void EnableMainThreadTsan(ThreadState *thr) {
   if (atomic_load_relaxed(&thr->in_signal_handler)) {
     return;
   }
   if (atomic_exchange(&TsanDisabled, 0, memory_order_relaxed) == 0)
     return;
 
-  ThreadIgnoreEnd(thr);
-  // ThreadIgnoreSyncEnd(thr);
+  EnableTsan(thr);
 
   StoreCurrentTsanState(thr);
 }

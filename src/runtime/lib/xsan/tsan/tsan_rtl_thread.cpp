@@ -88,7 +88,7 @@ static void ThreadCheckIgnore(ThreadState *thr) {}
 
 void ThreadFinalize(ThreadState *thr) {
   if (support_single_thread_optimization(thr)) {
-    EnableTsan(thr);
+    EnableMainThreadTsan(thr);
   }
   ThreadCheckIgnore(thr);
 #if !SANITIZER_GO
@@ -137,7 +137,7 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
     
     /* Sub-Threads Creation */
     if (support_single_thread_optimization(thr)) {
-      EnableTsan(thr);
+      EnableMainThreadTsan(thr);
     }
   } else {
     /* Main Thread Creation */
@@ -147,7 +147,7 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
     // Delay to ThreadStart, as some settings of thr rely on thr->ignore_sync
     // being false.
     // if (support_single_thread_optimization()) {
-    //   DisableTsan(cur_thread());
+    //   DisableMainThreadTsan(cur_thread());
     // }
   }
 
@@ -246,7 +246,7 @@ void ThreadStart(ThreadState *thr, Tid tid, tid_t os_id,
 
   /// Disable TSan if only main thread is alive.
   if (support_single_thread_optimization(thr)) {
-    DisableTsan(cur_thread());
+    DisableMainThreadTsan(cur_thread());
   }
 }
 
@@ -360,7 +360,7 @@ void ThreadJoin(ThreadState *thr, uptr pc, Tid tid) {
   Free(arg.sync);
   atomic_fetch_sub(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
   if (support_single_thread_optimization(thr) && is_now_all_joined()) {
-    DisableTsan(thr);
+    DisableMainThreadTsan(thr);
   }
 }
 
