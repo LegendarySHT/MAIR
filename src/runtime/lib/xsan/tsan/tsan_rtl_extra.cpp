@@ -235,8 +235,36 @@ TSAN_INTERCEPT_AND_IGNORE(bool, _ZN11__sanitizer23IsAccessibleMemoryRangeEmm,
 #undef TSAN_INTERCEPT_AND_IGNORE
 #undef TSAN_INTERCEPT_AND_IGNORE_VOID
 
-
+using namespace __tsan;
 // ----------- Intercept Data Race Checking Functions -----------
-
-
+/// void MemoryRangeImitateWrite(ThreadState* thr, uptr pc, 
+///                              uptr addr, uptr size)
+XSAN_WRAPPER(void, _ZN6__tsan23MemoryRangeImitateWriteEPNS_11ThreadStateEmmm,
+              ThreadState* thr, uptr pc, uptr addr, uptr size) {
+  /// FIXME: is it a bug? should report to TSan officiallly?
+  /// We should directly return if fast_state.GetIgnoreBit() is true,
+  /// Because
+  ///   1. fast_state.ignore_accesses_ shares the same bit with
+  ///      shadow.is_atomic_
+  ///      -->
+  ///      If not return while fast_state.ignore_accesses_ be true,
+  ///      Shadow with access type ATOMIC will be stored.
+  ///   2. TraceMemoryAccessRange is not allowed to be atomic
+  ///      -->
+  ///      TSan cannot restore a stack from access range event if the relevant
+  ///      access event is not atomic (Shadow with access type ATOMIC).
+  ///   3. If race happens, TSan will restore the stack trace of the past access
+  ///   from
+  ///      the relevant conflicted shadow. If the stack trace cannot be
+  ///      restored, TSan will give up the race report.
+  /// i.e., even if we store the shadows while fast_state.ignore_accesses_ is
+  /// true, we cannot restore the stack from the access range event, leading to
+  /// the relevant potential races would never be reported.
+  ///
+  /// In other words, recording the access range is in vain if
+  /// fast_state.GetIgnoreBit() is set.
+  if (UNLIKELY(thr->fast_state.GetIgnoreBit()))
+    return;
+  XSAN_REAL(_ZN6__tsan23MemoryRangeImitateWriteEPNS_11ThreadStateEmmm)(thr, pc, addr, size);
+}
 }
