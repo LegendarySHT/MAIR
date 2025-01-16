@@ -68,9 +68,9 @@ ScopedIgnoreTsan::ScopedIgnoreTsan(bool enable) : enable_(enable) {
   if (enable_) {
     ThreadState *thr = cur_thread();
     nomalloc_ = thr->nomalloc;
+    in_signal_handler_ = atomic_load_relaxed(&thr->in_signal_handler);
+    DisableTsan(thr);
     thr->nomalloc = false;
-    thr->ignore_sync++;
-    thr->ignore_reads_and_writes++;
     atomic_store_relaxed(&thr->in_signal_handler, 0);
   }
 #endif
@@ -81,9 +81,8 @@ ScopedIgnoreTsan::~ScopedIgnoreTsan() {
   if (enable_) {
     ThreadState *thr = cur_thread();
     thr->nomalloc = nomalloc_;
-    thr->ignore_sync--;
-    thr->ignore_reads_and_writes--;
-    atomic_store_relaxed(&thr->in_signal_handler, 0);
+    atomic_store_relaxed(&thr->in_signal_handler, in_signal_handler_);
+    EnableTsan(thr);
   }
 #endif
 }

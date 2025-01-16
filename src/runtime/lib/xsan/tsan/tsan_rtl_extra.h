@@ -20,6 +20,7 @@ class ScopedIgnoreTsan {
 
  private:
   bool nomalloc_;
+  uptr in_signal_handler_;
   bool enable_;
 };
 
