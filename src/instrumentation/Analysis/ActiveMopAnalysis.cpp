@@ -293,16 +293,13 @@ ActiveMopAnalysis::getInitializedBlockInfo(const BasicBlock &BB) const {
 
   NotUseGen.flip();
 
-  return {Lattice(NumMops, UsedForTsan),
-          Lattice(NumMops, UsedForTsan),
-          std::move(UseGen),
-          std::move(NotUseGen),
-          std::move(GenSet),
-          std::move(GenAcqSet),
-          std::move(GenRelSet),
-          ContainsCall,
-          ContainsAcq,
-          ContainsRel};
+  const BlockInvariant Invariant = {std::move(UseGen),    std::move(NotUseGen),
+                                    std::move(GenSet),    std::move(GenAcqSet),
+                                    std::move(GenRelSet), ContainsCall,
+                                    ContainsAcq,          ContainsRel};
+
+  return {Lattice(NumMops, UsedForTsan), Lattice(NumMops, UsedForTsan),
+          Invariant};
 }
 
 const ActiveMopAnalysis::BlockInfo &
@@ -406,17 +403,19 @@ ActiveMopAnalysis::Lattice
 ActiveMopAnalysis::transfer(const BlockInfo &Info) const {
   /// Implace version of tranfer function.
   Lattice NewOUT = Info.IN;
+
+  const BlockInvariant &Invariant = Info.Invariant;
   // OUT = (HasCall? Kill(IN) : IN)
   // => OUT = IN
   //    if (UseKill) OUT.kill()
-  if (Info.ContainsCall) {
+  if (Invariant.ContainsCall) {
     NewOUT.kill();
   }
   if (UsedForTsan) {
-    if (LLVM_UNLIKELY(Info.ContainsAcq)) {
+    if (LLVM_UNLIKELY(Invariant.ContainsAcq)) {
       NewOUT.killAcq();
     }
-    if (LLVM_UNLIKELY(Info.ContainsRel)) {
+    if (LLVM_UNLIKELY(Invariant.ContainsRel)) {
       NewOUT.killRel();
     }
   }
@@ -425,21 +424,21 @@ ActiveMopAnalysis::transfer(const BlockInfo &Info) const {
   // ==>
   //       Gen = {~, ⊤} --> {10, 11}
   //    UseGen = 1 -->  OUT.reach = 1
-  NewOUT.Reachable |= Info.UseGen;
+  NewOUT.Reachable |= Invariant.UseGen;
   // OUT = UseGen? Gen : (HasCall? Kill(IN) : IN)
   // ==> OUT = UseGen? Gen : OUT
   // ==> OUT = (UseGen & Gen) | (~UseGen & OUT)
   // ==> OUT &= ~UseGen
   //     OUT |= (UseGen & Gen) # Gen = UseGen & Gen naturally
-  NewOUT.NotActive &= Info.NotUseGen;
-  NewOUT.NotActive |= Info.Gen;
+  NewOUT.NotActive &= Invariant.NotUseGen;
+  NewOUT.NotActive |= Invariant.Gen;
 
   // Similarly
   if (UsedForTsan) {
-    NewOUT.AnyAcq &= Info.NotUseGen;
-    NewOUT.AnyAcq |= Info.GenAcq;
-    NewOUT.AnyRel &= Info.NotUseGen;
-    NewOUT.AnyRel |= Info.GenRel;
+    NewOUT.AnyAcq &= Invariant.NotUseGen;
+    NewOUT.AnyAcq |= Invariant.GenAcq;
+    NewOUT.AnyRel &= Invariant.NotUseGen;
+    NewOUT.AnyRel |= Invariant.GenRel;
   }
 
   return NewOUT;

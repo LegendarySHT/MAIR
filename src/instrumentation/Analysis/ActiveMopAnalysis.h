@@ -171,10 +171,8 @@ private:
     }
   };
 
-  /// @brief A structure to store the IN and OUT sets of a basic block.
-  struct BlockInfo {
-    Lattice IN;
-    Lattice OUT;
+  /// @brief A structure to store the invariant of a basic block.
+  struct BlockInvariant {
     const BitVectorSet UseGen;
     const BitVectorSet NotUseGen;
     const BitVectorSet Gen;
@@ -183,6 +181,12 @@ private:
     const bool ContainsCall; // UseKill
     const bool ContainsAcq;  // UseKillAcq
     const bool ContainsRel;  // UseKillRel
+  };
+  /// @brief A structure to store the IN and OUT sets of a basic block.
+  struct BlockInfo {
+    Lattice IN;
+    Lattice OUT;
+    const BlockInvariant Invariant;
   };
 
 private:
