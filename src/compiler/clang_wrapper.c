@@ -266,7 +266,10 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
     })
 
     OPT_EQ_AND_THEN(cur, "-ubsan", {
-      xsanTy = UBSan;
+      /// Only if no other sanitizer is specified, we treat it as UBSan
+      /// standalone.
+      if (!has_any(&xsan_options))
+        xsanTy = UBSan;
       set(&xsan_options, UBSan);
       continue;
     })
