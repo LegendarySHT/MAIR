@@ -245,6 +245,10 @@ u8 has_any(XsanOption *opt) {
     __VA_ARGS__                                                                \
   }
 
+#define ADD_MIDDLE_END_OPTION(opt)                                             \
+  cc_params[cc_par_cnt++] = "-mllvm";                                          \
+  cc_params[cc_par_cnt++] = (opt);
+
 static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
@@ -369,36 +373,31 @@ static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   // -fsanitize-address-use-after-return=<mode>
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_GET_VAL_AND_THEN(arg, "use-after-return", {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] =
-        alloc_printf("-sanitize-address-use-after-return=%s", val);
+    ADD_MIDDLE_END_OPTION(
+        alloc_printf("-sanitize-address-use-after-return=%s", val));
     return 0;
   })
 
   // -fsanitize-address-use-after-scope
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_EQ_AND_THEN(arg, "use-after-scope", {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = is_neg ? "-sanitize-address-use-after-scope=0"
-                                     : "-sanitize-address-use-after-scope";
+    ADD_MIDDLE_END_OPTION(is_neg ? "-sanitize-address-use-after-scope=0"
+                                 : "-sanitize-address-use-after-scope");
     return 0;
   })
 
   // -fsanitize-address-use-odr-indicator
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_EQ_AND_THEN(arg, "use-odr-indicator", {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = is_neg ? "-sanitize-address-use-odr-indicator=0"
-                                     : "-sanitize-address-use-odr-indicator";
+    ADD_MIDDLE_END_OPTION(is_neg ? "-sanitize-address-use-odr-indicator=0"
+                                 : "-sanitize-address-use-odr-indicator");
     return 0;
   })
 
   // -fsanitize-address-destructor=<value>
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_GET_VAL_AND_THEN(arg, "destructor", {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] =
-        alloc_printf("sanitize-address-destructor=%s", val);
+    ADD_MIDDLE_END_OPTION(alloc_printf("-sanitize-address-destructor=%s", val));
     return 0;
   })
 
@@ -406,10 +405,8 @@ static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   OPT_EQ_AND_THEN(arg, "outline-instrumentation", {
     // clang driver translates this frontend option to middle-end options
     //          -mllvm -asan-instrumentation-with-call-threshold=0
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = is_neg
-                                  ? "-as-instrumentation-with-call-threshold"
-                                  : "-as-instrumentation-with-call-threshold=0";
+    ADD_MIDDLE_END_OPTION(is_neg ? "-as-instrumentation-with-call-threshold"
+                                 : "-as-instrumentation-with-call-threshold=0");
     return 1;
   })
 
@@ -448,8 +445,7 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
     if (!is_neg) {
       return 0;
     }
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-ts-instrument-atomics=0";
+    ADD_MIDDLE_END_OPTION("-ts-instrument-atomics=0");
     return 1;
   })
 
@@ -460,8 +456,7 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
     if (!is_neg) {
       return 0;
     }
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-ts-instrument-func-entry-exit=0";
+    ADD_MIDDLE_END_OPTION("-ts-instrument-func-entry-exit=0");
     return 1;
   })
 
@@ -473,10 +468,8 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
     if (!is_neg) {
       return 0;
     }
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-ts-instrument-memory-accesses=0";
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-ts-instrument-memintrinsics=0";
+    ADD_MIDDLE_END_OPTION("-ts-instrument-memory-accesses=0");
+    ADD_MIDDLE_END_OPTION("-ts-instrument-memintrinsics=0");
     return 1;
   })
 
@@ -651,15 +644,13 @@ static void add_pass_options(enum SanitizerType sanTy) {
     return;
   }
 
-  if (has(&xsan_options, ASan)){
+  if (has(&xsan_options, ASan)) {
     if (!asan_use_globals_gc()) {
-      cc_params[cc_par_cnt++] = "-mllvm";
-      cc_params[cc_par_cnt++] = "-asan-globals-gc=0";
+      ADD_MIDDLE_END_OPTION("-asan-globals-gc=0");
     }
 
     if (has(&xsan_recover_options, ASan)) {
-      cc_params[cc_par_cnt++] = "-mllvm";
-      cc_params[cc_par_cnt++] = "-sanitize-recover-address";
+      ADD_MIDDLE_END_OPTION("-sanitize-recover-address");
     }
   }
 }
@@ -724,12 +715,10 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   if (sanTy != XSan)
     return;
   if (!has(&xsan_options, ASan)) {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-xsan-disable-asan";
+    ADD_MIDDLE_END_OPTION("-xsan-disable-asan");
   }
   if (!has(&xsan_options, TSan)) {
-    cc_params[cc_par_cnt++] = "-mllvm";
-    cc_params[cc_par_cnt++] = "-xsan-disable-tsan";
+    ADD_MIDDLE_END_OPTION("-xsan-disable-tsan");
   }
 }
 
