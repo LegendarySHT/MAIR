@@ -168,15 +168,18 @@ static void find_obj(u8* argv0) {
 }
 
 struct FrontEndOpt {
+  // Middle-end options could not transfer to the asm compilation.
+  u8 AsmAsSource;
   /* -no-integrated-as , 0 dy default */
   u8 DisableIntegratedAS;
   u8 SanitizeAddressGlobalsDeadStripping;
   enum ObjectFormatType obj_format;
-} frontend_opt = {.DisableIntegratedAS = 0,
-                   .SanitizeAddressGlobalsDeadStripping = 1,
+} frontend_opt = {.AsmAsSource = 0,
+                  .DisableIntegratedAS = 0,
+                  .SanitizeAddressGlobalsDeadStripping = 1,
 // { MachO, COFF, ELF, GOFF, XCOFF, UnknownObjectFormat };
 #if defined(__APPLE__)
-                   .obj_format = MachO
+                  .obj_format = MachO
 #elif defined(__linux__)
                    .obj_format = ELF
 #elif defined(_WIN32)
@@ -246,8 +249,10 @@ u8 has_any(XsanOption *opt) {
   }
 
 #define ADD_MIDDLE_END_OPTION(opt)                                             \
-  cc_params[cc_par_cnt++] = "-mllvm";                                          \
-  cc_params[cc_par_cnt++] = (opt);
+  if (!frontend_opt.AsmAsSource) {                                             \
+    cc_params[cc_par_cnt++] = "-mllvm";                                        \
+    cc_params[cc_par_cnt++] = (opt);                                           \
+  }
 
 static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   enum SanitizerType xsanTy = SanNone;
@@ -712,8 +717,9 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   /**
    * Transfer the option to pass by `-mllvm -<opt>`
    */
-  if (sanTy != XSan)
+  if (sanTy != XSan) {
     return;
+  }
   if (!has(&xsan_options, ASan)) {
     ADD_MIDDLE_END_OPTION("-xsan-disable-asan");
   }
@@ -849,6 +855,26 @@ static void sync_hook_id(char *dst, char *src) {
   fclose(dst_f);
 }
 
+static u8 handle_x_option(const u8* const* arg) {
+  u8 *cur = arg[0];
+  // Check prefix "-x"
+  if (cur[0] != '-' || cur[1] != 'x') {
+    return 0;
+  }
+
+  // If cur == '-xsan', just skip it.
+  OPT_EQ_AND_THEN(cur + 2, "san", { return 0; })
+
+  const u8 *language = (cur[2] == '\0') ? arg[1] : cur + 2;
+
+  // assembler & assembler-with-cpp (with preprocessor)
+  if (!strcmp(language, "assembler") ||
+     !strcmp(language, "assembler-with-cpp")) {
+    frontend_opt.AsmAsSource = 1;
+  }
+  return 1;
+}
+
 /* Copy argv to cc_params, making the necessary edits. */
 static void edit_params(u32 argc, const char** argv) {
 
@@ -904,9 +930,7 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strcmp(cur, "-m32")) bit_mode = 32;
     else if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
     else if (!strcmp(cur, "-m64")) bit_mode = 64;
-    else if (!strcmp(cur, "-xc++")) x_set = 1;
-    else if (!strcmp(cur, "-xc")) x_set = 1;
-    else if (!strcmp(cur, "-x")) x_set = 1;
+    else if (handle_x_option(&cur)) x_set = 1;
     else if (!strcmp(cur, "-fsanitize=address") ||
              !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
     else if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
@@ -940,6 +964,23 @@ static void edit_params(u32 argc, const char** argv) {
         }
         continue;
       })
+
+      // If source file is assembly, set AsmAsSource.
+      if (frontend_opt.AsmAsSource) {
+        continue;
+      }
+      // Clang has a list: https://github.com/llvm/llvm-project/blob/b9f3b7f89a4cb4cf541b7116d9389c73690f78fa/clang/lib/Driver/Types.cpp#L293
+      // assembly_source_extensions = ('.s', '.asm')
+      // assembly_needing_c_preprocessor_source_extensions = ('.S')
+      // Check the suffix
+      const char* suffix = strrchr(cur, '.');
+      if (!suffix)
+        continue;
+      if (!strcmp(suffix, ".s") || !strcmp(suffix, ".S") ||
+          !strcmp(suffix, ".asm")) {
+        frontend_opt.AsmAsSource = 1;
+        continue;
+      }
     }
   }
 
@@ -967,7 +1008,10 @@ static void edit_params(u32 argc, const char** argv) {
     See ASan's testcase "init_fini_sections.cpp" for details.
   */
   regist_pass_plugin(xsanTy);
-  add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+  // *.c/cpp -o *.o, don't link sanitizer runtime library.
+  if (!have_c) {
+    add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+  }
 
   while (--argc) {
     const u8* cur = *(++argv);
