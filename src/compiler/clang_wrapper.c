@@ -1024,6 +1024,12 @@ static void edit_params(u32 argc, const char** argv) {
       continue;
     }
 
+    if (frontend_opt.AsmAsSource && !strcmp(cur, "-mllvm")) {
+      ++argv;
+      --argc;
+      continue;
+    }
+
     cc_params[cc_par_cnt++] = cur;
 
   }
