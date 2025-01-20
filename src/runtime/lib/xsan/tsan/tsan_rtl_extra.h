@@ -34,6 +34,8 @@ void EnableMainThreadTsan(ThreadState *thr);
 /// 3. Therefore, we provide this function to recover the state in Longjmp.
 void RestoreTsanState(ThreadState *thr);
 
+extern THREADLOCAL bool MainThreadTsanDisabled;
+
 #if SANITIZER_DEBUG
 #  define TSAN_ADDR_GUARD_CONDITION (!IsAppMem(addr))
 #else
@@ -44,14 +46,16 @@ void RestoreTsanState(ThreadState *thr);
 //   - Check : should be disabled when all sub-threads are joined
 //   - Store : should be disabled when in single thread
 
-#define TSAN_CHECK_GUARD_CONDIITON (is_now_all_joined())
+#define TSAN_CHECK_GUARD_CONDIITON \
+  (MainThreadTsanDisabled /* Fast Version of thr->fast_state.GetIgnoreBit()*/)
+
 /// FIXME: Shall we really need to guard the metatdat store?
 /// StoreShadow is just one atomic operation, while TraceAccess is
 /// relatively expensive.
 #define TSAN_STORE_GUARD_CONDIITON (is_now_single_threaded())
 
-#define TSAN_CHECK_GUARD                                         \
-  if (TSAN_ADDR_GUARD_CONDITION || TSAN_CHECK_GUARD_CONDIITON) { \
-    return;                                                      \
+#define TSAN_CHECK_GUARD(thr)                                          \
+  if (TSAN_CHECK_GUARD_CONDIITON || TSAN_ADDR_GUARD_CONDITION) { \
+    return;                                                            \
   }
 }  // namespace __tsan
