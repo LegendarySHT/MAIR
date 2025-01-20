@@ -6,7 +6,8 @@
 #include "../xsan_common_defs.h"
 namespace __tsan {
 
-static atomic_uint8_t TsanDisabled {0};
+// Only set/read in main thread, hence no need for atomic ops.
+THREADLOCAL bool MainThreadTsanDisabled = false;
 
 static struct {
   int ignore_reads_and_writes;
@@ -43,8 +44,13 @@ void DisableMainThreadTsan(ThreadState *thr) {
   if (atomic_load_relaxed(&thr->in_signal_handler)) {
     return;
   }
-  if (atomic_exchange(&TsanDisabled, 1, memory_order_relaxed) == 1)
+  if (thr->tid != kMainTid) {
+    CHECK(0 && "DisableMainThreadTsan called for non-main thread");
+  }
+  if (MainThreadTsanDisabled) {
     return;
+  }
+  MainThreadTsanDisabled = true;
 
   DisableTsan(thr);
 
@@ -55,8 +61,14 @@ void EnableMainThreadTsan(ThreadState *thr) {
   if (atomic_load_relaxed(&thr->in_signal_handler)) {
     return;
   }
-  if (atomic_exchange(&TsanDisabled, 0, memory_order_relaxed) == 0)
+  if (!MainThreadTsanDisabled) {
     return;
+  }
+  if (thr->tid != kMainTid) {
+    CHECK(0 && "EnableMainThreadTsan called for non-main thread");
+  }
+
+  MainThreadTsanDisabled = false;
 
   EnableTsan(thr);
 
