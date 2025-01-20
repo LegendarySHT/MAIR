@@ -494,6 +494,7 @@ static u8 handle_ubsan_options(const char* opt) {
 */
 static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
                                    enum SanitizerType sanTy) {
+  OPT_EQ_AND_THEN(arg, "-lib-only", { return 1; })
 
   if (OPT_EQ(arg, "-asan") || OPT_EQ(arg, "-tsan") 
       || OPT_EQ(arg, "-ubsan") || OPT_EQ(arg, "-xsan")) {
@@ -881,6 +882,7 @@ static void edit_params(u32 argc, const char** argv) {
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
      preprocessor_only = 0, have_unroll = 0, have_o = 0, have_pic = 0,
      have_c = 0, partial_linking = 0;
+  u8 only_lib = 0;
   const u8 *name;
   enum SanitizerType xsanTy = SanNone;
   u8 is_cxx = 0;
@@ -946,6 +948,11 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strncmp(cur, "-O", 2)) have_o = 1;
     else if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
     else {
+      OPT_EQ_AND_THEN(cur, "-lib-only", {
+        only_lib = 1;
+        continue;
+      })
+
       // For ASan's global gc option.
       // Search "-asan-globals-gc=0" in this file for details.
       OPT_EQ_AND_THEN(cur, "-no-integrated-as", {
@@ -990,7 +997,8 @@ static void edit_params(u32 argc, const char** argv) {
     cc_params[cc_par_cnt++] = "none";
   }
 
-  init_sanitizer_setting(xsanTy);
+  if (!only_lib)
+    init_sanitizer_setting(xsanTy);
 
   /*
     We should put the sanitizer static runtime library just ahead of the
@@ -1007,7 +1015,8 @@ static void edit_params(u32 argc, const char** argv) {
 
     See ASan's testcase "init_fini_sections.cpp" for details.
   */
-  regist_pass_plugin(xsanTy);
+  if (!only_lib)
+    regist_pass_plugin(xsanTy);
   // *.c/cpp -o *.o, don't link sanitizer runtime library.
   if (!have_c) {
     add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
@@ -1034,7 +1043,8 @@ static void edit_params(u32 argc, const char** argv) {
 
   }
 
-  add_pass_options(xsanTy);
+  if (!only_lib)
+    add_pass_options(xsanTy);
 
   if (getenv("X_HARDEN")) {
 
