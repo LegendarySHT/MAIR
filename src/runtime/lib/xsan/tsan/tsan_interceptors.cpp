@@ -2758,11 +2758,13 @@ namespace __tsan {
 SANITIZER_WEAK_ATTRIBUTE void InitializeLibdispatchInterceptors() {}
 
 void InitializeInterceptors() {
-#if !SANITIZER_APPLE
-  // We need to setup it early, because functions like dlsym() can call it.
-  REAL(memset) = internal_memset;
-  REAL(memcpy) = internal_memcpy;
-#endif
+  /// Moved to the beginning of InitializeXsanInterceptors
+  // #if !SANITIZER_APPLE
+  //   // We need to setup it early, because functions like dlsym() can call it.
+  //   REAL(memset) = internal_memset;
+  //   REAL(memcpy) = internal_memcpy;
+  // #endif
+
   /// Moved to XSan's init routine.
   // __interception::DoesNotSupportStaticLinking();
 

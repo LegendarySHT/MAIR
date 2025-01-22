@@ -1260,6 +1260,13 @@ void InitializeXsanInterceptors() {
   static bool was_called_once;
   CHECK(!was_called_once);
   was_called_once = true;
+#  if !SANITIZER_APPLE
+  /// Mirgated from tsan's InitializeInterceptors().
+  /// InitializeCommonInterceptors setup REAL(memset) and REAL(memcpy).
+  // We need to setup it early, because functions like dlsym() can call it.
+  REAL(memset) = internal_memset;
+  REAL(memcpy) = internal_memcpy;
+#  endif
   InitializePlatformInterceptors();
   InitializeCommonInterceptors();
 #  if !XSAN_CONTAINS_TSAN
