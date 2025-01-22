@@ -822,13 +822,12 @@ void FuncEntry(ThreadState *thr, uptr pc) {
   /// Avoid buffer overflow in the scenario of stack overflow.
   /// Reserve one more slot to store current PC.
   bool stack_overflow = thr->shadow_stack_pos >= thr->shadow_stack_end - 1;
-  uptr *pos =
-      stack_overflow ? thr->shadow_stack_end - 2 : thr->shadow_stack_pos;
-  pos[0] = pc;
-  if (stack_overflow) {
+  if (UNLIKELY(stack_overflow)) {
+    thr->shadow_stack_end[-2] = pc; 
     // store the overflow count
     thr->stack_overflow++;
   } else {
+    thr->shadow_stack_pos[0] = pc;
     thr->shadow_stack_pos++;
   }
 }
@@ -842,7 +841,7 @@ void FuncExit(ThreadState *thr) {
 #if !SANITIZER_GO
   DCHECK_LT(thr->shadow_stack_pos, thr->shadow_stack_end);
 #endif
-  if (thr->stack_overflow) {
+  if (UNLIKELY(thr->stack_overflow)) {
     thr->stack_overflow--;
   } else {
     thr->shadow_stack_pos--;
