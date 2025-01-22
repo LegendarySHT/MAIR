@@ -595,6 +595,14 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
       
         cc_params[cc_par_cnt++] = "-fno-sanitize=function";
       }
+
+      /// -object-size options is duplicated with -fsanitize=address.
+      if (has(&xsan_options, ASan)) {
+        /// What's more, in LLVM 15, -fsanitize=object-size affects the 
+        /// the function inlining, which may cause some performance issues.
+        /// For those case using libc++: std::string str; str.size(); 
+        cc_params[cc_par_cnt++] = "-fno-sanitize=object-size";
+      }
     }
     break;
   case SanNone:
