@@ -20,147 +20,123 @@
 using namespace __tsan;
 
 void __tsan_read1(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 1, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 1, kAccessRead);
 }
 
 void __tsan_read2(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 2, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 2, kAccessRead);
 }
 
 void __tsan_read4(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 4, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 4, kAccessRead);
 }
 
 void __tsan_read8(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 8, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 8, kAccessRead);
 }
 
 void __tsan_read16(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess16(thr, CALLERPC, (uptr)addr, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess16(cur_thread(), CALLERPC, (uptr)addr, kAccessRead);
 }
 
 void __tsan_write1(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 1, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 1, kAccessWrite);
 }
 
 void __tsan_write2(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 2, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 2, kAccessWrite);
 }
 
 void __tsan_write4(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 4, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 4, kAccessWrite);
 }
 
 void __tsan_write8(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)addr, 8, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 8, kAccessWrite);
 }
 
 void __tsan_write16(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess16(thr, CALLERPC, (uptr)addr, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess16(cur_thread(), CALLERPC, (uptr)addr, kAccessWrite);
 }
 
 void __tsan_read1_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 1, kAccessRead | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 1, kAccessRead | kAccessExternalPC);
 }
 
 void __tsan_read2_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 2, kAccessRead | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 2, kAccessRead | kAccessExternalPC);
 }
 
 void __tsan_read4_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 4, kAccessRead | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 4, kAccessRead | kAccessExternalPC);
 }
 
 void __tsan_read8_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 8, kAccessRead | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 8, kAccessRead | kAccessExternalPC);
 }
 
 void __tsan_write1_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 1, kAccessWrite | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 1, kAccessWrite | kAccessExternalPC);
 }
 
 void __tsan_write2_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 2, kAccessWrite | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 2, kAccessWrite | kAccessExternalPC);
 }
 
 void __tsan_write4_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 4, kAccessWrite | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 4, kAccessWrite | kAccessExternalPC);
 }
 
 void __tsan_write8_pc(void *addr, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, STRIP_PAC_PC(pc), (uptr)addr, 8, kAccessWrite | kAccessExternalPC);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccess(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, 8, kAccessWrite | kAccessExternalPC);
 }
 
 ALWAYS_INLINE USED void __tsan_unaligned_read2(const void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  UnalignedMemoryAccess(thr, CALLERPC, (uptr)addr, 2, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  UnalignedMemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 2, kAccessRead);
 }
 
 ALWAYS_INLINE USED void __tsan_unaligned_read4(const void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  UnalignedMemoryAccess(thr, CALLERPC, (uptr)addr, 4, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  UnalignedMemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 4, kAccessRead);
 }
 
 ALWAYS_INLINE USED void __tsan_unaligned_read8(const void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  UnalignedMemoryAccess(thr, CALLERPC, (uptr)addr, 8, kAccessRead);
+  TSAN_CHECK_GUARD(addr)
+  UnalignedMemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 8, kAccessRead);
 }
 
 ALWAYS_INLINE USED void __tsan_unaligned_write2(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  UnalignedMemoryAccess(thr, CALLERPC, (uptr)addr, 2, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  UnalignedMemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 2, kAccessWrite);
 }
 
 ALWAYS_INLINE USED void __tsan_unaligned_write4(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  UnalignedMemoryAccess(thr, CALLERPC, (uptr)addr, 4, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  UnalignedMemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 4, kAccessWrite);
 }
 
 ALWAYS_INLINE USED void __tsan_unaligned_write8(void *addr) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  UnalignedMemoryAccess(thr, CALLERPC, (uptr)addr, 8, kAccessWrite);
+  TSAN_CHECK_GUARD(addr)
+  UnalignedMemoryAccess(cur_thread(), CALLERPC, (uptr)addr, 8, kAccessWrite);
 }
 
 extern "C" {
@@ -206,16 +182,14 @@ extern "C" {
 void __tsan_vptr_update(void **vptr_p, void *new_val) {
   if (*vptr_p == new_val)
     return;
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)vptr_p, sizeof(*vptr_p),
+  TSAN_CHECK_GUARD(vptr_p)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)vptr_p, sizeof(*vptr_p),
                kAccessWrite | kAccessVptr);
 }
 
 void __tsan_vptr_read(void **vptr_p) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccess(thr, CALLERPC, (uptr)vptr_p, sizeof(*vptr_p),
+  TSAN_CHECK_GUARD(vptr_p)
+  MemoryAccess(cur_thread(), CALLERPC, (uptr)vptr_p, sizeof(*vptr_p),
                kAccessRead | kAccessVptr);
 }
 
@@ -228,25 +202,21 @@ void __tsan_ignore_thread_begin() { ThreadIgnoreBegin(cur_thread(), CALLERPC); }
 void __tsan_ignore_thread_end() { ThreadIgnoreEnd(cur_thread()); }
 
 void __tsan_read_range(void *addr, uptr size) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccessRange(thr, CALLERPC, (uptr)addr, size, false);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccessRange(cur_thread(), CALLERPC, (uptr)addr, size, false);
 }
 
 void __tsan_write_range(void *addr, uptr size) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccessRange(thr, CALLERPC, (uptr)addr, size, true);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccessRange(cur_thread(), CALLERPC, (uptr)addr, size, true);
 }
 
 void __tsan_read_range_pc(void *addr, uptr size, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccessRange(thr, STRIP_PAC_PC(pc), (uptr)addr, size, false);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccessRange(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, size, false);
 }
 
 void __tsan_write_range_pc(void *addr, uptr size, void *pc) {
-  __tsan::ThreadState *thr = cur_thread();
-  TSAN_CHECK_GUARD(thr)
-  MemoryAccessRange(thr, STRIP_PAC_PC(pc), (uptr)addr, size, true);
+  TSAN_CHECK_GUARD(addr)
+  MemoryAccessRange(cur_thread(), STRIP_PAC_PC(pc), (uptr)addr, size, true);
 }

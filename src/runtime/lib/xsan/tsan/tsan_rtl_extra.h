@@ -11,6 +11,7 @@ namespace __tsan {
 
 /// Comes from  interceptor_ctx()->finalize_key;
 unsigned& finalize_key();
+bool IsAppMem(uptr mem);
 
 class ScopedIgnoreTsan {
  public:
@@ -37,9 +38,9 @@ void RestoreTsanState(ThreadState *thr);
 extern THREADLOCAL bool MainThreadTsanDisabled;
 
 #if SANITIZER_DEBUG
-#  define TSAN_ADDR_GUARD_CONDITION (!IsAppMem(addr))
+#  define TSAN_ADDR_GUARD_CONDITION(addr) (!IsAppMem((uptr)(addr)))
 #else
-#  define TSAN_ADDR_GUARD_CONDITION (0)
+#  define TSAN_ADDR_GUARD_CONDITION(addr) (0)
 #endif
 
 // CheckRaces consists of TWO parts:
@@ -54,8 +55,8 @@ extern THREADLOCAL bool MainThreadTsanDisabled;
 /// relatively expensive.
 #define TSAN_STORE_GUARD_CONDIITON (is_now_single_threaded())
 
-#define TSAN_CHECK_GUARD(thr)                                          \
-  if (TSAN_CHECK_GUARD_CONDIITON || TSAN_ADDR_GUARD_CONDITION) { \
+#define TSAN_CHECK_GUARD(addr)                                         \
+  if (TSAN_CHECK_GUARD_CONDIITON || TSAN_ADDR_GUARD_CONDITION(addr)) { \
     return;                                                            \
   }
 }  // namespace __tsan
