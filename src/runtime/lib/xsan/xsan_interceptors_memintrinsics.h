@@ -81,8 +81,8 @@ struct XsanInterceptorContext {
 #define TSAN_ACCESS_MEMORY_RANGE(ctx, offset, size, isWrite)                 \
   do {                                                                       \
     XsanInterceptorContext *_ctx = (XsanInterceptorContext *)(ctx);          \
-    auto [thr, pc] = _ctx->xsan_ctx.tsan_ctx_;                               \
     if (_ctx) {                                                              \
+      auto [thr, pc] = _ctx->xsan_ctx.tsan_ctx_;                             \
       __tsan::MemoryAccessRange(thr, pc, (uptr)(offset), (size), (isWrite)); \
     } else {                                                                 \
       __tsan::MemoryAccessRange(__tsan::cur_thread_init(), GET_CURRENT_PC(), \
