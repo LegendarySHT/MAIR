@@ -7,6 +7,7 @@
 #pragma once
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Function.h"
@@ -14,19 +15,10 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/PassManager.h"
 
 namespace __xsan {
-using llvm::BasicBlock;
-using llvm::DILocation;
-using llvm::DISubprogram;
-using llvm::Function;
-using llvm::Instruction;
-using llvm::IRBuilder;
-using llvm::LLVMContext;
-using llvm::MDNode;
-using llvm::Module;
-using llvm::None;
-using llvm::StringRef;
+using namespace llvm;
 
 /// Check if module has flag attached, if not add the flag.
 bool checkIfAlreadyInstrumented(Module &M, StringRef Flag);
@@ -79,5 +71,44 @@ void MarkAsDelegatedToXsan(Instruction &I);
 bool IsDelegatedToXsan(const Instruction &I);
 
 bool ShouldSkip(const Instruction &I);
+
+/*
+ Optimize in simple canonical loop, i.e., no branching, no function call:
+  1. Relocate invariant checks: if a loop invariant is used in the loop, sink
+      it out of the loop.
+  2. Combine preiodic checks: combine temporal adjacent periodic checks into a
+      single check.
+*/
+class LoopMopInstrumenter {
+public:
+  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM);
+  /*
+   1. Relocate invariant checks: if a loop invariant is used in the loop, sink
+      it out of the loop.
+   2. Combine preiodic checks: combine temporal adjacent periodic checks into a
+      single check.
+   */
+  void instrument();
+private:
+  bool isSimpleLoop(const Loop *L);
+  // hoist / sink the checks if their checked addresses are loop invariant
+  void relocateInvariantChecks();
+  // Induction-based Instrumentation
+  bool combinePeriodicChecks(bool RangeAccessOnly = true);
+
+
+  Function &F;
+  FunctionAnalysisManager &FAM;
+  SmallPtrSet<const Loop *, 16> SimpleLoops;
+  SmallPtrSet<const Loop *, 16> ComplexLoops;
+
+  FunctionCallee XsanRangeRead;
+  FunctionCallee XsanRangeWrite;
+
+  // Accesses sizes are powers of two: 1, 2, 4, 8, 16.
+  static const size_t kNumberOfAccessSizes = 5;
+  FunctionCallee XsanPeriodRead[kNumberOfAccessSizes];
+  FunctionCallee XsanPeriodWrite[kNumberOfAccessSizes];
+};
 
 } // namespace __xsan

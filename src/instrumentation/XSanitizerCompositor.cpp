@@ -1,4 +1,5 @@
 #include "AttributeTaggingPass.hpp"
+#include "Instrumentation.h"
 #include "PassRegistry.h"
 #include "xsan_common.h"
 #include "llvm/IR/PassManager.h"
@@ -64,6 +65,14 @@ SanitizerCompositorPass::SanitizerCompositorPass() {}
 
 PreservedAnalyses SanitizerCompositorPass::run(Module &M,
                                                ModuleAnalysisManager &MAM) {
+  FunctionAnalysisManager &FAM =
+      MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+
+  for (auto &F : M) {
+    LoopMopInstrumenter LoopInstrumenter(F, FAM);
+    LoopInstrumenter.instrument();
+  }
+  
   SubSanitizers Sanitizers = __xsan::loadSubSanitizers();
   /// Unlike ModulePassManager, SubSanitizers does not invalidate Analysises
   /// between the runnings of sanitizers' passes.
