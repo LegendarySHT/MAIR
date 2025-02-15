@@ -13,6 +13,7 @@
 
 #include "asan/asan_mapping.h"
 #include "tsan/orig/tsan_interface.h"
+#include "xsan_interceptors.h"
 #include "xsan_internal.h"
 
 using namespace __xsan;
@@ -79,4 +80,64 @@ void __sanitizer_unaligned_store64(uu64 *addr, u64 v) {
   *addr = v;
   __tsan_unaligned_write8(addr);
 }
+
+SANITIZER_INTERFACE_ATTRIBUTE
+void __xsan_read_range(const void *beg, const void *end) {
+  if (UNLIKELY(beg == end))
+    return;
+  if (UNLIKELY(beg > end)) {
+    Swap(beg, end);
+  }
+  uptr size = (uptr)end - (uptr)beg;
+  /// TODO: use a more specific function to perform the check.
+  XSAN_READ_RANGE((void *)nullptr, beg, size);
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
+void __xsan_write_range(const void *beg, const void *end) {
+  if (UNLIKELY(beg == end))
+    return;
+  if (UNLIKELY(beg > end)) {
+    Swap(beg, end);
+  }
+  uptr size = (uptr)end - (uptr)beg;
+  Printf("beg: %p, end: %p, size: %lx\n", beg, end, size);
+  XSAN_WRITE_RANGE((void *)nullptr, beg, size);
+}
+
+/// TODO: use SIMD to perform the check.
+#define XSAN_PERIODICAL_READ_CALLBACK(size)                                   \
+  SANITIZER_INTERFACE_ATTRIBUTE                                               \
+  void __xsan_period_read##size(const void *beg, const void *end, s64 step) { \
+    if (UNLIKELY(beg == end))                                                 \
+      return;                                                                 \
+    DCHECK(step > (size) && "Invalid arguments");                             \
+    for (uptr offset = (uptr)beg; offset < (uptr)end; offset += step) {       \
+      __tsan_read##size((void *)offset);                                      \
+      __asan_load##size(offset);                                              \
+    }                                                                         \
+  }
+
+#define XSAN_PERIODICAL_WRITE_CALLBACK(size)                                   \
+  SANITIZER_INTERFACE_ATTRIBUTE                                                \
+  void __xsan_period_write##size(const void *beg, const void *end, s64 step) { \
+    if (UNLIKELY(beg == end))                                                  \
+      return;                                                                  \
+    DCHECK(step > (size) && "Invalid arguments");                              \
+    for (uptr offset = (uptr)beg; offset < (uptr)end; offset += step) {        \
+      __tsan_write##size((void *)offset);                                      \
+      __asan_store##size(offset);                                              \
+    }                                                                          \
+  }
+
+XSAN_PERIODICAL_READ_CALLBACK(1)
+XSAN_PERIODICAL_READ_CALLBACK(2)
+XSAN_PERIODICAL_READ_CALLBACK(4)
+XSAN_PERIODICAL_READ_CALLBACK(8)
+XSAN_PERIODICAL_READ_CALLBACK(16)
+XSAN_PERIODICAL_WRITE_CALLBACK(1)
+XSAN_PERIODICAL_WRITE_CALLBACK(2)
+XSAN_PERIODICAL_WRITE_CALLBACK(4)
+XSAN_PERIODICAL_WRITE_CALLBACK(8)
+XSAN_PERIODICAL_WRITE_CALLBACK(16)
 }
