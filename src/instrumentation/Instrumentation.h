@@ -72,4 +72,12 @@ struct InstrumentationIRBuilder : public IRBuilder<> {
   }
 };
 
+/// Mark an instruction as delegated to XSan.
+void MarkAsDelegatedToXsan(Instruction &I);
+
+/// Check if an instruction is delegated to XSan.
+bool IsDelegatedToXsan(const Instruction &I);
+
+bool ShouldSkip(const Instruction &I);
+
 } // namespace __xsan

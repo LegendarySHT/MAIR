@@ -3605,8 +3605,10 @@ public:
 
         auto RngFilter = make_filter_range(
             Targets.OperandsToInstrument, [&](InterestingMemoryOperand &Op) {
-              Instruction *Insn = Op.getInsn();
-              bool IsInterestingMop = isInterestingMop(*Insn);
+              Instruction &Insn = *Op.getInsn();
+              if (IsDelegatedToXsan(Insn))
+                return false;
+              bool IsInterestingMop = isInterestingMop(Insn);
               if (!IsInterestingMop) {
                 NewOperandsToInstrument.push_back(Op);
               }

@@ -972,6 +972,8 @@ bool XsanThreadSanitizer::collectTargetsToIntrument(
       // Skip instructions inserted by another instrumentation.
       if (Inst.hasMetadata(LLVMContext::MD_nosanitize))
         continue;
+      if (__xsan::IsDelegatedToXsan(Inst))
+        continue;
       if (isTsanAtomic(&Inst))
         AtomicAccesses.push_back(&Inst);
       else if (isa<LoadInst>(Inst) || isa<StoreInst>(Inst))

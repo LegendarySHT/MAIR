@@ -13,6 +13,7 @@
 #include "Instrumentation.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 
@@ -50,4 +51,27 @@ bool checkIfAlreadyInstrumented(Module &M, StringRef Flag) {
       DiagnosticInfoInstrumentation(diagInfo, DiagnosticSeverity::DS_Warning));
   return true;
 }
+
+constexpr char kDelegateMDKind[] = "xsan.delegate";
+
+static unsigned DelegateMDKindID = 0;
+
+void MarkAsDelegatedToXsan(Instruction &I) {
+  auto &Ctx = I.getContext();
+  if (!DelegateMDKindID)
+    DelegateMDKindID = Ctx.getMDKindID(kDelegateMDKind);
+  MDNode *N = MDNode::get(Ctx, None);
+  I.setMetadata(DelegateMDKindID, N);
+}
+
+bool IsDelegatedToXsan(const Instruction &I) {
+  if (!DelegateMDKindID)
+    return false;
+  return I.hasMetadata(DelegateMDKindID);
+}
+
+bool ShouldSkip(const Instruction &I) {
+  return I.hasMetadata(LLVMContext::MD_nosanitize) || IsDelegatedToXsan(I);
+}
+
 } // namespace __xsan
