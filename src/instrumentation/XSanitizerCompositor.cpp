@@ -20,6 +20,19 @@ static cl::opt<bool> ClDisableTsan(
     cl::desc("Do not use TSan's instrumentation"),
     cl::Hidden);
 
+static cl::opt<LoopOptLeval> ClLoopOpt(
+    "xsan-loop-opt", cl::desc("Loop optimization level for XSan"),
+    cl::values(
+        clEnumValN(LoopOptLeval::NoOpt, "no",
+                   "Disable loop optimization for XSan"),
+        clEnumValN(LoopOptLeval::CombineToRangeCheck, "range",
+                   "Only combine periodic checks to range check for XSan"),
+        clEnumValN(LoopOptLeval::CombinePeriodicChecks, "periodic",
+                   "Only combine periodic checks for XSan"),
+        clEnumValN(LoopOptLeval::Full, "full",
+                   "Enable all loop optimization for XSan")),
+    cl::Hidden, cl::init(LoopOptLeval::Full));
+
 namespace __xsan {
 
 bool isAsanTurnedOff() { return ClDisableAsan; }
@@ -60,7 +73,6 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
 
 } // namespace __xsan
 
-
 SanitizerCompositorPass::SanitizerCompositorPass() {}
 
 PreservedAnalyses SanitizerCompositorPass::run(Module &M,
@@ -69,10 +81,10 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
   for (auto &F : M) {
-    LoopMopInstrumenter LoopInstrumenter(F, FAM);
+    LoopMopInstrumenter LoopInstrumenter(F, FAM, ClLoopOpt);
     LoopInstrumenter.instrument();
   }
-  
+
   SubSanitizers Sanitizers = __xsan::loadSubSanitizers();
   /// Unlike ModulePassManager, SubSanitizers does not invalidate Analysises
   /// between the runnings of sanitizers' passes.

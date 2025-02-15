@@ -72,6 +72,14 @@ bool IsDelegatedToXsan(const Instruction &I);
 
 bool ShouldSkip(const Instruction &I);
 
+enum class LoopOptLeval {
+  NoOpt,                   /* No optimization */
+  RelocateInvariantChecks, /* Relocate invariant checks */
+  CombineToRangeCheck,     /* Combine periodic checks to range checks*/
+  CombinePeriodicChecks,   /* Combine periodic checks, including range checks */
+  Full                     /* RelocateInvariantChecks + CombinePeriodicChecks*/
+};
+
 /*
  Optimize in simple canonical loop, i.e., no branching, no function call:
   1. Relocate invariant checks: if a loop invariant is used in the loop, sink
@@ -81,7 +89,7 @@ bool ShouldSkip(const Instruction &I);
 */
 class LoopMopInstrumenter {
 public:
-  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM);
+  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM, LoopOptLeval OptLevel);
   /*
    1. Relocate invariant checks: if a loop invariant is used in the loop, sink
       it out of the loop.
@@ -96,7 +104,7 @@ private:
   // Induction-based Instrumentation
   bool combinePeriodicChecks(bool RangeAccessOnly = true);
 
-
+  LoopOptLeval OptLevel;
   Function &F;
   FunctionAnalysisManager &FAM;
   SmallPtrSet<const Loop *, 16> SimpleLoops;

@@ -313,8 +313,9 @@ static BasicBlock *splitNewExitBlock(BasicBlock *ExitBlock,
 }
 
 LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
-                                         FunctionAnalysisManager &FAM)
-    : F(F), FAM(FAM) {
+                                         FunctionAnalysisManager &FAM,
+                                         LoopOptLeval OptLevel)
+    : F(F), FAM(FAM), OptLevel(OptLevel) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
   IRBuilder<> IRB(Ctx);
@@ -343,8 +344,25 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
 void LoopMopInstrumenter::instrument() {
   if (F.isDeclaration() || F.empty())
     return;
-  relocateInvariantChecks();
-  bool LoopChanged = combineCyclicChecks();
+  bool LoopChanged = false;
+  switch (OptLevel) {
+  case LoopOptLeval::CombineToRangeCheck:
+    LoopChanged = combinePeriodicChecks(true);
+    break;
+  case LoopOptLeval::RelocateInvariantChecks:
+    relocateInvariantChecks();
+    break;
+  case LoopOptLeval::CombinePeriodicChecks:
+    LoopChanged = combinePeriodicChecks(false);
+    break;
+  case LoopOptLeval::Full:
+    relocateInvariantChecks();
+    LoopChanged = combinePeriodicChecks(false);
+    break;
+  case LoopOptLeval::NoOpt:
+    return;
+  }
+
   if (LoopChanged) {
     // Update LoopInfo forcefully
     // auto &LI = FAM.getResult<LoopAnalysis>(F);
