@@ -194,7 +194,7 @@ static Value *getOrInsertLoopCounter(Loop *L, InstrumentationIRBuilder &IRB,
 
   // Create a new PHI node before the first non-PHI insertion point in the
   // header
-  auto OrigInsertPt = IRB.GetInsertPoint();
+  auto *OrigInsertPt = &*IRB.GetInsertPoint();
   IRB.SetInsertPoint(&*Header->getFirstInsertionPt());
 
   LLVMContext &Ctx = Header->getContext();
@@ -217,6 +217,9 @@ static Value *getOrInsertLoopCounter(Loop *L, InstrumentationIRBuilder &IRB,
                                          "inc.loop.count", true, true);
     CounterPhi->addIncoming(Incr, Latch);
   }
+
+  // Recover the original insertion point
+  IRB.SetInsertPoint(OrigInsertPt);
   return CounterPhi;
 }
 
