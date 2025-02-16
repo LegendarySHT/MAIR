@@ -97,6 +97,7 @@ set(XSAN_LIT_TEST_TARGETS)
 add_subdirectory(asan)
 add_subdirectory(tsan)
 add_subdirectory(ubsan)
+add_subdirectory(xsan)
 
 
 
