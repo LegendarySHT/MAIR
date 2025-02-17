@@ -12,14 +12,18 @@ enum class AsanDtorKind;
 namespace __xsan {
 
 class SubSanitizers : public llvm::ModulePassManager {
+private:
+  SubSanitizers() = default;
+
 public:
+  static SubSanitizers loadSubSanitizers();
   /// Run all of the sanitizer passes on the module, and preserve all analysises
   /// between them.
   llvm::PreservedAnalyses run(llvm::Module &IR,
                               llvm::ModuleAnalysisManager &AM);
 };
 
-SubSanitizers loadSubSanitizers();
+
 
 void obtainAsanPassArgs(llvm::AddressSanitizerOptions &Opts, bool &UseGlobalGC,
                         bool &UseOdrIndicator,

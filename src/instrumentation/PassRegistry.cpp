@@ -12,7 +12,7 @@
 
 using namespace llvm;
 
-// ------------ These middle-end options are used to simulate the frontend options ------------
+// -- These middle-end options are used to simulate the frontend options --
 
 /// Set the default value to true
 /// From
@@ -70,36 +70,33 @@ static cl::opt<bool> ClAllRecover("sanitize-recover-all",
                                   cl::desc("Simulates -fsanitize-recover=all"),
                                   cl::Hidden, cl::init(false));
 
-// ------------ These middle-end options are used to perform optimization ------------
+// -- These middle-end options are used to perform optimization --
 static cl::opt<bool> ClOptXsan("xsan-opt", cl::desc("Optimize instrumentation"),
                                cl::Hidden, cl::init(true));
 
-static cl::opt<bool> ClOptTsanLoadStore("xsan-tsan-opt-load-store",
-                               cl::desc("Reduce recurring load/stores"),
-                               cl::Hidden, cl::init(true));
+static cl::opt<bool>
+    ClOptTsanLoadStore("xsan-tsan-opt-load-store",
+                       cl::desc("Reduce recurring load/stores"), cl::Hidden,
+                       cl::init(true));
 
-static cl::opt<bool> ClOptAsanLoadStore("xsan-asan-opt-load-store",
-                               cl::desc("Reduce recurring load/stores"),
-                               cl::Hidden, cl::init(true));
+static cl::opt<bool>
+    ClOptAsanLoadStore("xsan-asan-opt-load-store",
+                       cl::desc("Reduce recurring load/stores"), cl::Hidden,
+                       cl::init(true));
 
 /// There is compile bug for testcase init-order-dlopen.cpp, disable this option
 /// for now.
-static cl::opt<bool> ClAsanPoisonInternalGlobal("xsan-asan-poison-internal-global",
+static cl::opt<bool>
+    ClAsanPoisonInternalGlobal("xsan-asan-poison-internal-global",
                                cl::desc("Poison internal globals with ASan"),
                                cl::Hidden, cl::init(false));
 namespace __xsan {
 
-bool shouldTsanOptimizeLoadStores() {
-  return ClOptXsan && ClOptTsanLoadStore;
-}
+bool shouldTsanOptimizeLoadStores() { return ClOptXsan && ClOptTsanLoadStore; }
 
-bool shouldAsanOptimizeLoadStores() {
-  return ClOptXsan && ClOptAsanLoadStore;
-}
+bool shouldAsanOptimizeLoadStores() { return ClOptXsan && ClOptAsanLoadStore; }
 
-bool shouldAsanPoisonInternalGlobals() {
-  return ClAsanPoisonInternalGlobal;
-}
+bool shouldAsanPoisonInternalGlobals() { return ClAsanPoisonInternalGlobal; }
 
 LLVM_ATTRIBUTE_WEAK
 bool isAsanTurnedOff() { return false; }
@@ -180,7 +177,7 @@ PreservedAnalyses SubSanitizers::run(Module &IR, ModuleAnalysisManager &AM) {
   return PA;
 }
 
-SubSanitizers loadSubSanitizers() {
+SubSanitizers SubSanitizers::loadSubSanitizers() {
   SubSanitizers Sanitizers;
   // ---------- Collect targets to instrument first ----------------
   FunctionPassManager FPM;
