@@ -1,4 +1,7 @@
-// RUN: %clang_tsan -O1 %s -o %t && ASAN_OPTIONS=detect_stack_use_after_return=0 %run %t 2>&1 | FileCheck %s
+// If ASan and TSan are enabled together, more registers would be used at function `foobar`.
+// Accordingly, `foobar` push more registers onto the stack, which leads to its `&s` is 
+// different from `&s` in `barfoo`.
+// RUN: %clang_tsan -fno-sanitize=address -O1 %s -o %t && ASAN_OPTIONS=detect_stack_use_after_return=0 %run %t 2>&1 | FileCheck %s
 #include "test.h"
 
 // Test case https://github.com/google/sanitizers/issues/494
