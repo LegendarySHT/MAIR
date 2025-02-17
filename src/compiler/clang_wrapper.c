@@ -304,30 +304,46 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
     // -fsanitize=<value> / -fno-sanitize=<value>
     OPT_GET_VAL_AND_THEN(cur, "sanitize", {
       enum SanitizerType sanTy = SanNone;
-      if (OPT_EQ(val, "all")) {
-        sanTy = XSan;
-      } else if (OPT_EQ(val, "address")) {
-        sanTy = ASan;
-      } else if (OPT_EQ(val, "thread")) {
-        sanTy = TSan;
-      } else if (OPT_EQ(val, "undefined")) {
-        sanTy = UBSan;
+      // split value by ',' : -fsanitize=address,undefined
+      char *val_str = ck_strdup(val);
+      char *val_ptr = val_str;
+      while (1) {
+        char *comma = strchr(val_ptr, ',');
+        if (comma) {
+          *comma = 0;
+        }
+        if (OPT_EQ(val_ptr, "address")) {
+          sanTy = ASan;
+        } else if (OPT_EQ(val_ptr, "thread")) {
+          sanTy = TSan;
+        } else if (OPT_EQ(val_ptr, "undefined")) {
+          sanTy = UBSan;
+        } else if (OPT_EQ(val_ptr, "all")) {
+          sanTy = XSan;
+        } else {
+          /// TODO: support other sanitizers
+        }
+        if (is_neg) {
+          clear(&xsan_options, sanTy);
+        } else {
+          set(&xsan_options, sanTy);
+        }
+        if (!comma) {
+          break;
+        }
+        val_ptr = comma + 1;
       }
-
-      if (is_neg) {
-        clear(&xsan_options, sanTy);
-      } else {
-        set(&xsan_options, sanTy);
-      }
-
+      ck_free(val_str);
       continue;
     })
   }
 
-  /// Use our out-of-tree runtime
-  if (xsanTy != SanNone && !has_any(&xsan_options)) {
-    xsanTy = SanNone;
-  }
+
+  /// TODO: figure out whether we need to do that.
+  // /// Use our out-of-tree runtime
+  // if (xsanTy != SanNone && !has_any(&xsan_options)) {
+  //   xsanTy = SanNone;
+  // }
 
   return xsanTy;
 }
@@ -577,6 +593,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     }
     if (has(&xsan_options, UBSan)) {
       cc_params[cc_par_cnt++] = "-fsanitize=undefined";
+      /// FIXME:
       if (!!getenv("XSAN_IN_ASAN_TEST") || !!getenv("XSAN_IN_TSAN_TEST")) {
         /// There are so many C testcases of TSan/ASan end with suffix ".cpp",
         /// leading to the compiler frontend set `getLangOpts().CPlusPlus =
