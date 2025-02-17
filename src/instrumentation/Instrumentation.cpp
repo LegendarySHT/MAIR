@@ -564,7 +564,6 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     }
 
     auto *ExitBlock = Loop->getUniqueExitBlock();
-    auto *Header = Loop->getHeader();
     auto *Exiting = Loop->getExitingBlock();
 
     /* 2. Combine periodic MOPs into a single range check */
@@ -573,8 +572,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     // to add
     bool IsMopBeforeExiting = DT.dominates(Inst->getParent(), Exiting);
 
-    // The only predecessor of exit should be the header.
-    if (ExitBlock->getUniquePredecessor() != Header) {
+    // The only predecessor of exit should be the exiting block.
+    if (ExitBlock->getUniquePredecessor() != Exiting) {
       // Update ExitBlock
       ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
       LoopChanged = true;
