@@ -1,6 +1,7 @@
 #pragma once
 
 #include "llvm/IR/PassManager.h"
+#include "llvm/Passes/OptimizationLevel.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 
@@ -23,7 +24,19 @@ public:
                               llvm::ModuleAnalysisManager &AM);
 };
 
+/*
+ A straightforward approach is to reuse the O1/O2/O3 optimization pipeline,
+ which performs a excellent optimization on the code. However, this approach
+ will bring compilation overhead, and most optimizations are repeated
+ pointlessly.
 
+ We just need to add some optimization passes designated for sanitizers!
+
+ Therefore, we manually selected some low-cost and effective optimization
+ passes.
+ */
+llvm::ModulePassManager
+createPostOptimizationPasses(llvm::OptimizationLevel Level);
 
 void obtainAsanPassArgs(llvm::AddressSanitizerOptions &Opts, bool &UseGlobalGC,
                         bool &UseOdrIndicator,

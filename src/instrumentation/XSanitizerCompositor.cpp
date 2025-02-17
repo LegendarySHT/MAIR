@@ -31,6 +31,11 @@ static cl::opt<LoopOptLeval> ClLoopOpt(
                    "Enable all loop optimization for XSan")),
     cl::Hidden, cl::init(LoopOptLeval::Full));
 
+static cl::opt<bool> ClPostOpt(
+    "xsan-post-opt", cl::init(true),
+    cl::desc("Whether to perform post-sanitziers optimizations for XSan"),
+    cl::Hidden);
+
 namespace __xsan {
 
 bool isAsanTurnedOff() { return ClDisableAsan; }
@@ -39,12 +44,15 @@ bool isTsanTurnedOff() { return ClDisableTsan; }
 class SanitizerCompositorPass
     : public llvm::PassInfoMixin<SanitizerCompositorPass> {
 public:
-  SanitizerCompositorPass();
+  SanitizerCompositorPass(OptimizationLevel level);
   llvm::PreservedAnalyses run(llvm::Module &M, llvm::ModuleAnalysisManager &AM);
   //   void printPipeline(llvm::raw_ostream &OS,
   //                      llvm::function_ref<llvm::StringRef(llvm::StringRef)>
   //                      MapClassName2PassName);
   static bool isRequired() { return true; }
+
+private:
+  OptimizationLevel Level;
 };
 
 void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
@@ -52,7 +60,7 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
 
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
-        MPM.addPass(SanitizerCompositorPass());
+        MPM.addPass(SanitizerCompositorPass(level));
       });
 
   // 这里注册opt回调的名称
@@ -62,7 +70,7 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
         if (Name == "xsan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
           MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
-          MPM.addPass(SanitizerCompositorPass());
+          MPM.addPass(SanitizerCompositorPass(OptimizationLevel::O0));
           return true;
         }
         return false;
@@ -71,7 +79,8 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
 
 } // namespace __xsan
 
-SanitizerCompositorPass::SanitizerCompositorPass() {}
+SanitizerCompositorPass::SanitizerCompositorPass(OptimizationLevel level)
+    : Level(level) {}
 
 PreservedAnalyses SanitizerCompositorPass::run(Module &M,
                                                ModuleAnalysisManager &MAM) {
@@ -87,6 +96,16 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
   /// Unlike ModulePassManager, SubSanitizers does not invalidate Analysises
   /// between the runnings of sanitizers' passes.
   PreservedAnalyses PA = Sanitizers.run(M, MAM);
+  if (Level.getSpeedupLevel() > 0 && ClPostOpt) {
+    ModulePassManager PostOpts = createPostOptimizationPasses(Level);
+    /// Invalidate Analyses to re-run them with the post-optimization passes.
+    MAM.invalidate(M, PA);
+    for (auto &F : M) {
+      FAM.invalidate(F, PA);
+    }
+    PostOpts.run(M, MAM);
+  }
+
   return PA;
 }
 

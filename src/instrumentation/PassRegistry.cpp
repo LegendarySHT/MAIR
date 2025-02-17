@@ -4,11 +4,19 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
 
+#include "llvm/Passes/OptimizationLevel.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
-#include "llvm/Transforms/Instrumentation/AddressSanitizerCommon.h"
 #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
-
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
+#include "llvm/Transforms/Scalar/EarlyCSE.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/InstSimplifyPass.h"
+#include "llvm/Transforms/Scalar/LoopLoadElimination.h"
+#include "llvm/Transforms/Scalar/LoopSink.h"
+#include "llvm/Transforms/Scalar/SCCP.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/TailRecursionElimination.h"
 
 using namespace llvm;
 
@@ -201,6 +209,61 @@ SubSanitizers SubSanitizers::loadSubSanitizers() {
   }
 
   return Sanitizers;
+}
+
+/// TODO: explore a more efficient optimization pipeline for XSAN.
+llvm::ModulePassManager createPostOptimizationPasses(OptimizationLevel Level) {
+  ModulePassManager MPM;
+  FunctionPassManager FPM;
+
+  // SimplifyCFG: simplify the CFG to improve optimization
+  FPM.addPass(SimplifyCFGPass());
+  // InstSimplify: simplify instructions
+  FPM.addPass(InstSimplifyPass());
+  // EarlyCSE: eliminate common subexpressions that are not loop-invariant
+  FPM.addPass(EarlyCSEPass());
+  FPM.addPass(SimplifyCFGPass());
+  // InstCombine: peep-hole optiimization of instructions
+  FPM.addPass(InstCombinePass());
+  FPM.addPass(SimplifyCFGPass());
+
+  if (Level.getSpeedupLevel() >= 2) {
+    // GVN: global value numbering, is a O2 optimization
+    // eliminates inter-blocks redundant computations by numbering.
+    FPM.addPass(GVNPass());
+    FPM.addPass(InstCombinePass());
+    FPM.addPass(SimplifyCFGPass());
+  }
+
+  /* Loop Optimizations */
+
+  // LoopSimplify: simplify loops
+  FPM.addPass(LoopSimplifyPass());
+  // LCSSA: convert loops to static single assignment form
+  FPM.addPass(LCSSAPass());
+  // SCCPPass: detect and optimize single-condition critical sections
+  FPM.addPass(SCCPPass());
+  // LoopLoadElimination: load elimination in loops
+  FPM.addPass(LoopLoadEliminationPass());
+  // LoopSink: sinking some inst in loops
+  FPM.addPass(LoopSinkPass());
+
+  // // LICM: loop invariant code motion (O3 optimization)
+  // LICMPass pas;
+  // FPM.addPass(LICMPass());
+
+  /* Inst Combine */
+  // InstCombine: combine redundant instructions
+  FPM.addPass(InstCombinePass());
+  // SimplifyCFG: simplify the CFG after instcombine
+  FPM.addPass(SimplifyCFGPass());
+
+  /* Tail Call Elimination */
+  /// TODO: figrue out is it OKay?
+  FPM.addPass(TailCallElimPass());
+
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
+  return MPM;
 }
 
 static void addAsanToMPM(ModulePassManager &MPM) {
