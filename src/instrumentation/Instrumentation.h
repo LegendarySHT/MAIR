@@ -6,9 +6,11 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -88,6 +90,17 @@ enum class LoopOptLeval {
       single check.
 */
 class LoopMopInstrumenter {
+private:
+  struct LoopMop {
+    Instruction *Mop;
+    Value *Address;
+    Loop *Loop;
+    const size_t MopSize;
+    /* If true, the Mop might not be executed in every iteration of the loop. */
+    const bool InBranch;
+    const bool IsWrite;
+  };
+
 public:
   LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM, LoopOptLeval OptLevel);
   /*
@@ -98,7 +111,15 @@ public:
    */
   void instrument();
 private:
+  // A simple loop is currently defined as a loop with
+  // 1. single header, exit, latch, exiting. predecessor.
+  // 2. conatains no atomic instructions and
+  //    no function calls (apart from pure readonly function)
   bool isSimpleLoop(const Loop *L);
+
+  // Collect loop mop candidates, i.e., MOPs that in SIMPLE loops.
+  void collectLoopMopCandidates();
+  SmallVectorImpl<LoopMop> &getLoopMopCandidates();
   // hoist / sink the checks if their checked addresses are loop invariant
   void relocateInvariantChecks();
   // Induction-based Instrumentation
@@ -107,8 +128,12 @@ private:
   LoopOptLeval OptLevel;
   Function &F;
   FunctionAnalysisManager &FAM;
+  const DataLayout &DL;
+
   SmallPtrSet<const Loop *, 16> SimpleLoops;
   SmallPtrSet<const Loop *, 16> ComplexLoops;
+  SmallVector<LoopMop, 16> LoopMopCandidates;
+  bool MopCollected;
 
   FunctionCallee XsanRangeRead;
   FunctionCallee XsanRangeWrite;

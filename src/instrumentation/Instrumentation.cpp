@@ -14,14 +14,15 @@
 #include "Instrumentation.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
@@ -72,6 +73,8 @@ constexpr char kDelegateMDKind[] = "xsan.delegate";
 static unsigned DelegateMDKindID = 0;
 
 void MarkAsDelegatedToXsan(Instruction &I) {
+  if (IsDelegatedToXsan(I))
+    return;
   auto &Ctx = I.getContext();
   if (!DelegateMDKindID)
     DelegateMDKindID = Ctx.getMDKindID(kDelegateMDKind);
@@ -145,10 +148,11 @@ static bool isLoopCountingPhi(PHINode *PN, BasicBlock *Predecessor,
  2. Prefer to reuse the existing loop counter (PHI node) instead of creating a
     new one.
 */
-static Value *getOrInsertLoopCounter(Loop *L, InstrumentationIRBuilder &IRB,
+static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
                                      const bool BeforeExiting) {
-  BasicBlock *Header = L->getHeader(), *Predecessor = L->getLoopPredecessor(),
-             *Latch = L->getLoopLatch();
+  BasicBlock *Header = Loop->getHeader(),
+             *Predecessor = Loop->getLoopPredecessor(),
+             *Latch = Loop->getLoopLatch();
 
   if (!Header || !Predecessor || !Latch)
     return nullptr; // If the loop does not have a header, it is unsafe to
@@ -201,7 +205,7 @@ static Value *getOrInsertLoopCounter(Loop *L, InstrumentationIRBuilder &IRB,
 
   // Preset number of incomings: 1 from preheader, plus one for each latch block
   SmallVector<BasicBlock *, 4> Latches;
-  L->getLoopLatches(Latches);
+  Loop->getLoopLatches(Latches);
   unsigned NumIncoming = 1 + Latches.size();
   PHINode *CounterPhi =
       IRB.CreatePHI(IRB.getInt64Ty(), NumIncoming, "loop.count");
@@ -227,14 +231,15 @@ static Value *getOrInsertLoopCounter(Loop *L, InstrumentationIRBuilder &IRB,
 /// Note: If MOP dominates Exiting (see @arg BeforeExiting), then Counter is
 /// the number of backedge taken counts + 1, otherwise it is the number of
 /// backedge taken counts
-static bool expandBegAndEnd(Loop *L, ScalarEvolution &SE,
+static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
                             SCEVExpander &Expander, const SCEV *Start,
                             const SCEVConstant *Step, bool BeforeExiting,
                             InstrumentationIRBuilder &IRB, Value *&Beg,
                             Value *&End) {
   // 1. Try to find an existing loop counter in the loop header (header)
-  BasicBlock *Header = L->getHeader(), *Predecessor = L->getLoopPredecessor(),
-             *Latch = L->getLoopLatch();
+  BasicBlock *Header = Loop->getHeader(),
+             *Predecessor = Loop->getLoopPredecessor(),
+             *Latch = Loop->getLoopLatch();
 
   if (!Header || !Predecessor || !Latch)
     return false; // If the loop does not have a header, it is unsafe to
@@ -254,7 +259,7 @@ static bool expandBegAndEnd(Loop *L, ScalarEvolution &SE,
 
   /* 1. Try to get the loop's backedge taken count (loop invariant) through SCEV
    */
-  const auto *BackedgeTakenCount = SE.getBackedgeTakenCount(L);
+  const auto *BackedgeTakenCount = SE.getBackedgeTakenCount(Loop);
   if (!isa<SCEVCouldNotCompute>(BackedgeTakenCount)) {
     // Note: backedge taken count does not include the first entry into the
     // header, so the actual trip count = backedge taken count + 1 Here we use
@@ -278,7 +283,7 @@ static bool expandBegAndEnd(Loop *L, ScalarEvolution &SE,
   }
 
   /* 2. If the loop count is not an invariant, manually insert a loop counter */
-  Value *Counter = getOrInsertLoopCounter(L, IRB, BeforeExiting);
+  Value *Counter = getOrInsertLoopCounter(Loop, IRB, BeforeExiting);
   if (!Counter) {
     return false;
   }
@@ -304,7 +309,7 @@ static BasicBlock *splitNewExitBlock(BasicBlock *ExitBlock,
                     MDNode::get(F.getContext(), None));
   /// TODO: support multiple exitings
   // SmallVector<BasicBlock *, 4> Exitings;
-  // L->getExitingBlocks(Exitings);
+  // Loop->getExitingBlocks(Exitings);
 
   // Update PHINodes
   /// TODO: this work only if there is only one exiting block.
@@ -318,7 +323,8 @@ static BasicBlock *splitNewExitBlock(BasicBlock *ExitBlock,
 LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
                                          FunctionAnalysisManager &FAM,
                                          LoopOptLeval OptLevel)
-    : F(F), FAM(FAM), OptLevel(OptLevel) {
+    : F(F), FAM(FAM), DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
+      MopCollected(false) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
   IRBuilder<> IRB(Ctx);
@@ -372,24 +378,103 @@ void LoopMopInstrumenter::instrument() {
     FAM.invalidate(F, PreservedAnalyses::none());
   }
 }
+SmallVectorImpl<LoopMopInstrumenter::LoopMop> &
+LoopMopInstrumenter::getLoopMopCandidates() {
+  if (!MopCollected) {
+    collectLoopMopCandidates();
+  }
+  return LoopMopCandidates;
+}
 
-bool LoopMopInstrumenter::isSimpleLoop(const Loop *L) {
-  if (!L)
+void LoopMopInstrumenter::collectLoopMopCandidates() {
+  auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+
+  // This only traverse the top-level loops, not nested loops.
+  // See LI.getTopLevelLoops() for more details.
+  for (BasicBlock &BB : F) {
+    Loop *Loop = LI.getLoopFor(&BB);
+    if (!Loop) {
+      continue;
+    }
+    if (!isSimpleLoop(Loop)) {
+      continue;
+    }
+    for (Instruction &Inst : BB) {
+      if (ShouldSkip(Inst))
+        continue;
+      /* 1. Filter out non-memory instructions */
+      Value *Addr = nullptr;
+      size_t MopSize = 0;
+      bool InBranch = false;
+      bool IsWrite = false;
+      if (auto *SI = dyn_cast<StoreInst>(&Inst)) {
+        Addr = SI->getPointerOperand();
+        MopSize = DL.getTypeStoreSizeInBits(SI->getValueOperand()->getType());
+        IsWrite = true;
+      } else if (auto *LI = dyn_cast<LoadInst>(&Inst)) {
+        Addr = LI->getPointerOperand();
+        MopSize = DL.getTypeStoreSizeInBits(LI->getType());
+        IsWrite = false;
+      }
+
+      if (!Addr)
+        continue;
+
+      /* 2. Filter out non-regular memory instructions */
+      /// Only consider 8, 16, 32, 64, 128 bit access
+      if (MopSize != 8 && MopSize != 16 && MopSize != 32 && MopSize != 64 &&
+          MopSize != 128) {
+        continue;
+      }
+
+      MopSize /= 8;
+
+      auto *LoopLatch = Loop->getLoopLatch();
+      assert(LoopLatch && "Loop must have single latch");
+      if (!DT.dominates(Inst.getParent(), LoopLatch)) {
+        // If Inst does not dominate the loop latch, it's within a loop branch
+        InBranch = true;
+      }
+
+      /*
+        struct LoopMop {
+          Instruction *Mop;
+          Value *Address;
+          Loop *Loop;
+          size_t MopSize;
+          bool InBranch;
+          bool IsWrite;
+        };
+      */
+      LoopMop Candidate = {&Inst, Addr, Loop, MopSize, InBranch, IsWrite};
+      LoopMopCandidates.push_back(Candidate);
+    }
+  }
+  MopCollected = true;
+}
+
+bool LoopMopInstrumenter::isSimpleLoop(const Loop *Loop) {
+  if (!Loop)
     return false;
-  if (SimpleLoops.contains(L))
+  if (SimpleLoops.contains(Loop))
     return true;
-  if (ComplexLoops.contains(L))
+  if (ComplexLoops.contains(Loop))
     return false;
 
   /// TODO: relax this condition
   /// ONE latch, ONE predecessor, ONE header, ONE exiting block, ONE exit block
-  if (!L->getHeader() || !L->getLoopPredecessor() || !L->getLoopLatch() ||
-      !L->getExitBlock() || !L->getExitingBlock()) {
-    ComplexLoops.insert(L);
+  if (!Loop->getHeader() || !Loop->getLoopPredecessor() ||
+      !Loop->getLoopLatch() || !Loop->getExitBlock() ||
+      !Loop->getExitingBlock()) {
+    ComplexLoops.insert(Loop);
     return false;
   }
 
-  for (const BasicBlock *BB : L->getBlocks()) {
+  // Loop that contains atomic instructions or calls is not simple.
+  // Notaly, a loop with a pure function call that does not write to
+  // memory is also considered as a simple loop.
+  for (const BasicBlock *BB : Loop->getBlocks()) {
     for (const Instruction &I : *BB) {
       if (ShouldSkip(I))
         continue;
@@ -397,12 +482,12 @@ bool LoopMopInstrumenter::isSimpleLoop(const Loop *L) {
         continue;
       /// TODO: should consider Atomic for ASan ?
       if (I.isAtomic() || isa<CallBase>(&I)) {
-        ComplexLoops.insert(L);
+        ComplexLoops.insert(Loop);
         return false;
       }
     }
   }
-  SimpleLoops.insert(L);
+  SimpleLoops.insert(Loop);
   return true;
 }
 
@@ -435,135 +520,90 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   // Get SCEV analysis result
   auto &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
   auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  auto &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
   size_t count = 0;
-  const auto &DL = F.getParent()->getDataLayout();
 
   SCEVExpander Expander(SE, DL, "expander");
 
-  for (auto &BB : F) {
-    for (auto &Inst : BB) {
-      if (ShouldSkip(Inst))
-        continue;
-      Value *Addr = nullptr;
-      size_t MopSize = 0;
-      bool IsWrite = false;
-      if (auto *SI = dyn_cast<StoreInst>(&Inst)) {
-        Addr = SI->getPointerOperand();
-        MopSize = DL.getTypeStoreSizeInBits(SI->getValueOperand()->getType());
-        IsWrite = true;
-      } else if (auto *LI = dyn_cast<LoadInst>(&Inst)) {
-        Addr = LI->getPointerOperand();
-        MopSize = DL.getTypeStoreSizeInBits(LI->getType());
-        IsWrite = false;
-      }
-
-      if (!Addr)
-        continue;
-
-      /// Only consider 8, 16, 32, 64, 128 bit access
-      if (MopSize != 8 && MopSize != 16 && MopSize != 32 && MopSize != 64 &&
-          MopSize != 128) {
-        continue;
-      }
-
-      // bit size to byte size
-      MopSize /= 8;
-
-      auto *PtrSCEV = SE.getSCEV(Addr);
-      if (!PtrSCEV)
-        continue;
-
-      /// TODO: transfer SCEVAddExpr(SCEVAddRecExpr) to
-      /// SCEVAddRecExpr(SCEVAddExpr)
-      const auto *AR = dyn_cast<SCEVAddRecExpr>(PtrSCEV);
-      if (!AR)
-        continue;
-
-      const Loop *L = AR->getLoop();
-      // We only handle those simple loops.
-      if (!isSimpleLoop(L)) {
-        continue;
-      }
-
-      const auto *Step = AR->getStepRecurrence(SE);
-
-      // ----------- Extract Loop-Invariant step -----------
-      const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
-      if (!ConstStep) {
-        // If not a constant, check if it is a Loop-Invariant
-        if (!SE.isLoopInvariant(Step, L)) {
-          continue; // Skip if not a loop invariant
-        }
-      }
-      ConstantInt *StepVal = ConstStep->getValue();
-      // Negative step is considered as positive step
-      size_t StepValInt = StepVal->getSExtValue() < 0 ? -StepVal->getSExtValue()
-                                                      : StepVal->getSExtValue();
-      bool IsRangeAccess = (StepValInt == MopSize);
-      if (RangeAccessOnly && !IsRangeAccess) {
-        // If step is not MopSize, it's not full range access, skip
-        continue;
-      }
-
-      auto *LoopLatch = L->getLoopLatch();
-      if (!DT.dominates(Inst.getParent(), LoopLatch)) {
-        // If Inst does not dominate the loop latch, it's within a loop branch,
-        // skip analysis
-        continue;
-      }
-
-      auto *ExitBlock = L->getUniqueExitBlock();
-      if (!PDT.dominates(ExitBlock, LoopLatch)) {
-        // If ExitBlock does not post-dominate the loop latch, it's within a
-        // loop branch, skip analysis
-        continue;
-      }
-
-      auto *Header = L->getHeader();
-      auto *Exiting = L->getExitingBlock();
-      if (!Exiting) {
-        continue;
-      }
-
-      // If dominates Exiting, need to add 1 to the counter, otherwise no need
-      // to add
-      bool IsMopBeforeExiting = DT.dominates(Inst.getParent(), Exiting);
-
-      // The only predecessor of exit should be the header.
-      if (ExitBlock->getUniquePredecessor() != Header) {
-
-        // Update ExitBlock
-        ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
-
-        LoopChanged = true;
-      }
-
-      InstrumentationIRBuilder IRB(&*ExitBlock->getFirstInsertionPt());
-
-      const auto *Start = AR->getStart();
-      Value *Beg, *End;
-      if (!expandBegAndEnd(const_cast<Loop *>(L), SE, Expander, Start,
-                           ConstStep, IsMopBeforeExiting, IRB, Beg, End)) {
-        // If failed to expand, skip.
-        continue;
-      }
-
-      if (IsRangeAccess) {
-        // void __xsan_read_range(const void *beg, const void *end) {
-        // void __xsan_write_range(const void *beg, const void *end) {
-        IRB.CreateCall(IsWrite ? XsanRangeWrite : XsanRangeRead, {Beg, End});
-      } else {
-        size_t Idx = countTrailingZeros(MopSize);
-        // __xsan_period_readX(const void *beg, const void *end, size_t step)
-        // __xsan_period_writeX(const void *beg, const void *end, size_t step)
-        IRB.CreateCall(IsWrite ? XsanPeriodWrite[Idx] : XsanPeriodRead[Idx],
-                       {Beg, End, StepVal});
-      }
-
-      MarkAsDelegatedToXsan(Inst);
-      count++;
+  for (LoopMop &Mop : getLoopMopCandidates()) {
+    auto &[Inst, Addr, Loop, MopSize, InBranch, IsWrite] = Mop;
+    if (InBranch) {
+      // Periodic MOPs combination is not supported in branches currently, skip.
+      continue;
     }
+
+    /* 1. Filter out non-periodic MOPs */
+
+    auto *PtrSCEV = SE.getSCEV(Addr);
+    if (!PtrSCEV)
+      continue;
+
+    /// TODO: transfer SCEVAddExpr(SCEVAddRecExpr) to
+    /// SCEVAddRecExpr(SCEVAddExpr)
+    const auto *AR = dyn_cast<SCEVAddRecExpr>(PtrSCEV);
+    if (!AR)
+      continue;
+
+    const auto *Step = AR->getStepRecurrence(SE);
+
+    // ----------- Extract Loop-Invariant step -----------
+    const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
+    if (!ConstStep) {
+      // If not a constant, check if it is a Loop-Invariant
+      if (!SE.isLoopInvariant(Step, Loop)) {
+        continue; // Skip if not a loop invariant
+      }
+    }
+    ConstantInt *StepVal = ConstStep->getValue();
+    // Negative step is considered as positive step
+    size_t StepValInt = StepVal->getSExtValue() < 0 ? -StepVal->getSExtValue()
+                                                    : StepVal->getSExtValue();
+    bool IsRangeAccess = (StepValInt == MopSize);
+    if (RangeAccessOnly && !IsRangeAccess) {
+      // If step is not MopSize, it's not full range access, skip
+      continue;
+    }
+
+    auto *ExitBlock = Loop->getUniqueExitBlock();
+    auto *Header = Loop->getHeader();
+    auto *Exiting = Loop->getExitingBlock();
+
+    /* 2. Combine periodic MOPs into a single range check */
+
+    // If dominates Exiting, need to add 1 to the counter, otherwise no need
+    // to add
+    bool IsMopBeforeExiting = DT.dominates(Inst->getParent(), Exiting);
+
+    // The only predecessor of exit should be the header.
+    if (ExitBlock->getUniquePredecessor() != Header) {
+      // Update ExitBlock
+      ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
+      LoopChanged = true;
+    }
+
+    InstrumentationIRBuilder IRB(&*ExitBlock->getFirstInsertionPt());
+
+    const auto *Start = AR->getStart();
+    Value *Beg, *End;
+    if (!expandBegAndEnd(Loop, SE, Expander, Start, ConstStep,
+                         IsMopBeforeExiting, IRB, Beg, End)) {
+      // If failed to expand, skip.
+      continue;
+    }
+
+    if (IsRangeAccess) {
+      // void __xsan_read_range(const void *beg, const void *end) {
+      // void __xsan_write_range(const void *beg, const void *end) {
+      IRB.CreateCall(IsWrite ? XsanRangeWrite : XsanRangeRead, {Beg, End});
+    } else {
+      size_t Idx = countTrailingZeros(MopSize);
+      // __xsan_period_readX(const void *beg, const void *end, size_t step)
+      // __xsan_period_writeX(const void *beg, const void *end, size_t step)
+      IRB.CreateCall(IsWrite ? XsanPeriodWrite[Idx] : XsanPeriodRead[Idx],
+                     {Beg, End, StepVal});
+    }
+
+    MarkAsDelegatedToXsan(*Inst);
+    count++;
   }
 
   if (!!getenv("XSAN_DEBUG") && count) {
