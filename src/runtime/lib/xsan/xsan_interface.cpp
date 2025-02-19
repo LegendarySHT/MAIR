@@ -12,6 +12,7 @@
 #include <sanitizer_common/sanitizer_ptrauth.h>
 
 #include "asan/asan_mapping.h"
+#include "asan_interface_internal.h"
 #include "tsan/orig/tsan_interface.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
@@ -89,6 +90,7 @@ void __xsan_read_range(const void *beg, const void *end) {
     Swap(beg, end);
   }
   uptr size = (uptr)end - (uptr)beg;
+  // Printf("beg: %p, end: %p, size: %lx\n", beg, end, size);
   /// TODO: use a more specific function to perform the check.
   XSAN_READ_RANGE((void *)nullptr, beg, size);
 }
@@ -140,4 +142,32 @@ XSAN_PERIODICAL_WRITE_CALLBACK(2)
 XSAN_PERIODICAL_WRITE_CALLBACK(4)
 XSAN_PERIODICAL_WRITE_CALLBACK(8)
 XSAN_PERIODICAL_WRITE_CALLBACK(16)
+
+/// TODO: use a macro to perform the ASan check for better performance?
+#define XSAN_READ(size)                   \
+  SANITIZER_INTERFACE_ATTRIBUTE           \
+  void __xsan_read##size(const void *p) { \
+    __asan_load##size((uptr)p);           \
+    __tsan_read##size((void *)p);         \
+  }
+
+#define XSAN_WRITE(size)                   \
+  SANITIZER_INTERFACE_ATTRIBUTE            \
+  void __xsan_write##size(const void *p) { \
+    __asan_store##size((uptr)p);           \
+    __tsan_write##size((void *)p);         \
+  }
+
+XSAN_READ(1)
+XSAN_READ(2)
+XSAN_READ(4)
+XSAN_READ(8)
+XSAN_READ(16)
+XSAN_WRITE(1)
+XSAN_WRITE(2)
+XSAN_WRITE(4)
+XSAN_WRITE(8)
+XSAN_WRITE(16)
+
+
 }
