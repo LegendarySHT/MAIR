@@ -115,13 +115,14 @@ private:
   // 1. single header, exit, latch, exiting. predecessor.
   // 2. conatains no atomic instructions and
   //    no function calls (apart from pure readonly function)
+  /// TODO: for ASan, such restrictions can be relaxed.
   bool isSimpleLoop(const Loop *L);
 
   // Collect loop mop candidates, i.e., MOPs that in SIMPLE loops.
   void collectLoopMopCandidates();
   SmallVectorImpl<LoopMop> &getLoopMopCandidates();
   // hoist / sink the checks if their checked addresses are loop invariant
-  void relocateInvariantChecks();
+  bool relocateInvariantChecks();
   // Induction-based Instrumentation
   bool combinePeriodicChecks(bool RangeAccessOnly = true);
 
@@ -143,6 +144,8 @@ private:
   static const size_t kNumberOfAccessSizes = 5;
   FunctionCallee XsanPeriodRead[kNumberOfAccessSizes];
   FunctionCallee XsanPeriodWrite[kNumberOfAccessSizes];
+  FunctionCallee XsanRead[kNumberOfAccessSizes];
+  FunctionCallee XsanWrite[kNumberOfAccessSizes];
 };
 
 } // namespace __xsan

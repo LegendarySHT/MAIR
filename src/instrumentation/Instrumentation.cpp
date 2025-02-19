@@ -13,8 +13,10 @@
 
 #include "Instrumentation.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/IR/BasicBlock.h"
@@ -37,7 +39,6 @@
 using namespace llvm;
 
 #define DEBUG_TYPE "xsan_opt"
-
 
 static cl::opt<bool> ClIgnoreRedundantInstrumentation(
     "ignore-redundant-instrumentation",
@@ -354,6 +355,11 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
     XsanPeriodWrite[i] = M.getOrInsertFunction(
         "__xsan_period_write" + ByteSizeStr, Attr, IRB.getVoidTy(),
         IRB.getInt8PtrTy(), IRB.getInt8PtrTy(), IRB.getInt64Ty());
+
+    XsanRead[i] = M.getOrInsertFunction("__xsan_read" + ByteSizeStr, Attr,
+                                        IRB.getVoidTy(), IRB.getInt8PtrTy());
+    XsanWrite[i] = M.getOrInsertFunction("__xsan_write" + ByteSizeStr, Attr,
+                                         IRB.getVoidTy(), IRB.getInt8PtrTy());
   }
 }
 
@@ -372,8 +378,8 @@ void LoopMopInstrumenter::instrument() {
     LoopChanged = combinePeriodicChecks(false);
     break;
   case LoopOptLeval::Full:
-    relocateInvariantChecks();
-    LoopChanged = combinePeriodicChecks(false);
+    LoopChanged = relocateInvariantChecks();
+    LoopChanged |= combinePeriodicChecks(false);
     break;
   case LoopOptLeval::NoOpt:
     return;
@@ -628,7 +634,77 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   return LoopChanged;
 }
 
-void LoopMopInstrumenter::relocateInvariantChecks() {
-  /// TODO:
+bool LoopMopInstrumenter::relocateInvariantChecks() {
+  bool LoopChanged = false;
+  auto &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
+  for (LoopMop &Mop : getLoopMopCandidates()) {
+    auto &[Inst, Addr, L, MopSize, InBranch, IsWrite] = Mop;
+    if (!L->isLoopInvariant(Addr)) {
+      // Skip if Addr is not a loop invariant
+      continue;
+    }
+
+    // We should alse consider the branch from header to MOP if InBranch is
+    // false.
+    bool IsInBranch =
+        InBranch ? InBranch : PDT.dominates(Inst->getParent(), L->getHeader());
+
+    // Top loop to maintain the invarianty of Addr
+    Loop *TopL = L, *ParentL = L->getParentLoop();
+    while (ParentL && ParentL->isLoopInvariant(Addr) &&
+           /// TODO: for ASan, simple loop is not necessary, we need to relax
+           /// this condition
+           isSimpleLoop(ParentL)) {
+      TopL = ParentL;
+      ParentL = TopL->getParentLoop();
+    }
+
+    // errs() << "In Branch: " << InBranch << "\n";
+    // errs() << "Is In Branch: " << IsInBranch << "\n";
+    if (!IsInBranch) {
+      auto *Preheader = TopL->getLoopPreheader();
+      Instruction *InsertPt;
+      if (Preheader) {
+        InsertPt = Preheader->getTerminator();
+      } else {
+        // If no preheader, sinstrument on the exit.
+        auto *ExitBlock = TopL->getUniqueExitBlock();
+        auto *Exiting = TopL->getExitingBlock();
+
+        // The only predecessor of exit should be the exiting block.
+        if (ExitBlock->getUniquePredecessor() != Exiting) {
+          // Update ExitBlock
+          ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
+          LoopChanged = true;
+        }
+        InsertPt = &*ExitBlock->getFirstInsertionPt();
+      }
+
+      InstrumentationIRBuilder IRB(InsertPt);
+      size_t Idx = countTrailingZeros(MopSize);
+      // __xsan_readX(const void *beg)
+      // __xsan_writeX(const void *beg)
+      IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
+      MarkAsDelegatedToXsan(*Inst);
+      NumInvChecksRelocated++;
+    } else {
+      /// TODO: insert bool variable to indicate if the MOP is executed in loop.
+    }
+  }
+
+  if (DebugPrint && NumInvChecksRelocated) {
+    // print in orange color
+    errs() << "\033[33m";
+    errs() << "--- " << F.getName() << " ---\n";
+    // print in grey color
+    errs() << "\033[37m";
+    errs() << "Relocated Loop Invariant Mop Checks: ";
+    // print in red color
+    errs() << "\033[31m";
+    errs() << NumInvChecksRelocated;
+
+    errs() << "\033[0m\n";
+  }
+  return LoopChanged;
 }
 } // namespace __xsan
