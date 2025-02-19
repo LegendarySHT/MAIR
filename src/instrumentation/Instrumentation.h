@@ -134,6 +134,7 @@ private:
   SmallPtrSet<const Loop *, 16> ComplexLoops;
   SmallVector<LoopMop, 16> LoopMopCandidates;
   bool MopCollected;
+  bool DebugPrint;
 
   FunctionCallee XsanRangeRead;
   FunctionCallee XsanRangeWrite;

@@ -5,6 +5,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -25,6 +26,10 @@
 #include <type_traits>
 
 using namespace llvm;
+
+#define DEBUG_TYPE "xsan-recurrence-reducer"
+
+STATISTIC(NumRecurentChecks, "Number of recurent checks reduced.");
 
 namespace __xsan {
 
@@ -497,7 +502,7 @@ void RecurringGraph::fillDominatingSet(
 
 MopRecurrenceReducer::MopRecurrenceReducer(Function &F,
                                            FunctionAnalysisManager &FAM)
-    : F(F), FAM(FAM) {}
+    : F(F), FAM(FAM), DebugPrint(!!getenv("XSAN_DEBUG")) {}
 
 /*
 Distill any pair of MOPs satisfying the following 4 cases:
@@ -577,6 +582,28 @@ MopRecurrenceReducer::distillRecurringChecks(
   /* Dominating set problem solving */
   RGraph.fillDominatingSet(DistilledMops);
 
+  NumRecurentChecks += Insts.size() - DistilledMops.size();
+
+  // Print debug information
+  if (DebugPrint) {
+    // print in orange color
+    errs() << "\033[33m";
+    errs() << "--- " << F.getName() << " ---\n";
+    // print in grey color
+    errs() << "\033[37m";
+    errs() << "Distilled: ";
+    // print in red color
+    errs() << "\033[31m";
+    errs() << Insts.size();
+    // print in grey color
+    errs() << "\033[37m";
+    errs() << " --> ";
+    // Print in green color
+    errs() << "\033[32m";
+    errs() << DistilledMops.size() << "\n";
+    // Print in default color
+    errs() << "\033[0m";
+  }
   return DistilledMops;
 }
 } // namespace __xsan

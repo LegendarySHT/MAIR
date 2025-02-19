@@ -13,6 +13,7 @@
 
 #include "Instrumentation.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -35,9 +36,15 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "xsan_opt"
+
+
 static cl::opt<bool> ClIgnoreRedundantInstrumentation(
     "ignore-redundant-instrumentation",
     cl::desc("Ignore redundant instrumentation"), cl::Hidden, cl::init(false));
+
+STATISTIC(NumInvChecksRelocated, "Number of loop invariant checks relocated.");
+STATISTIC(NumPeriodChecksCombined, "Number of loop periodic checks combined.");
 namespace {
 /// Diagnostic information for IR instrumentation reporting.
 class DiagnosticInfoInstrumentation : public DiagnosticInfo {
@@ -324,7 +331,7 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
                                          FunctionAnalysisManager &FAM,
                                          LoopOptLeval OptLevel)
     : F(F), FAM(FAM), DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
-      MopCollected(false) {
+      MopCollected(false), DebugPrint(!!getenv("XSAN_DEBUG")) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
   IRBuilder<> IRB(Ctx);
@@ -520,7 +527,6 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   // Get SCEV analysis result
   auto &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
   auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  size_t count = 0;
 
   SCEVExpander Expander(SE, DL, "expander");
 
@@ -602,10 +608,10 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     }
 
     MarkAsDelegatedToXsan(*Inst);
-    count++;
+    NumPeriodChecksCombined++;
   }
 
-  if (!!getenv("XSAN_DEBUG") && count) {
+  if (DebugPrint && NumPeriodChecksCombined) {
     // print in orange color
     errs() << "\033[33m";
     errs() << "--- " << F.getName() << " ---\n";
@@ -614,7 +620,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     errs() << "Combined Loop Mops: ";
     // print in red color
     errs() << "\033[31m";
-    errs() << count;
+    errs() << NumPeriodChecksCombined;
 
     errs() << "\033[0m\n";
   }
