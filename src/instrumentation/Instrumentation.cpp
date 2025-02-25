@@ -510,6 +510,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
   SCEVExpander Expander(SE, DL, "expander");
 
+  // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
+  // their IR order.
   for (LoopMop &Mop : getLoopMopCandidates()) {
     auto &[Inst, Addr, Loop, MopSize, InBranch, IsWrite] = Mop;
     if (InBranch) {
@@ -660,6 +662,8 @@ static Instruction *instrumentIndicator(Instruction *Inst,
 
 bool LoopMopInstrumenter::relocateInvariantChecks() {
   bool LoopChanged = false;
+  Instruction *LastInertPt = nullptr;
+  BasicBlock *LastBB = nullptr;
   for (LoopMop &Mop : getLoopMopCandidates()) {
     auto &[Inst, Addr, L, MopSize, InBranch, IsWrite] = Mop;
     if (!L->isLoopInvariant(Addr)) {
@@ -682,10 +686,18 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     bool IsInBranch =
         InBranch ? InBranch : !PDT.dominates(Inst->getParent(), Preheader);
 
+    /* Get the insert point for invariant check relocating */
     Instruction *InsertPt;
-
+    bool SameBBWithLast = LastBB && LastBB == Inst->getParent();
     bool SinkToExit = IsInBranch || !Preheader;
-    if (SinkToExit) {
+    if (SameBBWithLast) {
+      // Just reuse the last insert point
+      InsertPt = LastInertPt;
+    } else if (!SinkToExit) {
+      // If has preheader and not in branch, insert at the terminator of the
+      // preheader.
+      InsertPt = Preheader->getTerminator();
+    } else {
       // If no preheader, sinstrument on the exit.
       auto *ExitBlock = TopL->getUniqueExitBlock();
       auto *Exiting = TopL->getExitingBlock();
@@ -709,10 +721,6 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
         // If not in branch, insert at the beginning of the exit block.
         InsertPt = &*ExitBlock->getFirstInsertionPt();
       }
-    } else {
-      // If has preheader and not in branch, insert at the terminator of the
-      // preheader.
-      InsertPt = Preheader->getTerminator();
     }
 
     size_t Idx = countTrailingZeros(MopSize);
@@ -722,6 +730,8 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     // __xsan_writeX(const void *beg)
     IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
     MarkAsDelegatedToXsan(*Inst);
+    LastInertPt = InsertPt;
+    LastBB = Inst->getParent();
     NumInvChecksRelocated++;
   }
 

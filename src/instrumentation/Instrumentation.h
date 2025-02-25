@@ -121,6 +121,8 @@ private:
   bool isSimpleLoop(const Loop *L);
 
   // Collect loop mop candidates, i.e., MOPs that in SIMPLE loops.
+  // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
+  // their IR order.
   void collectLoopMopCandidates();
   SmallVectorImpl<LoopMop> &getLoopMopCandidates();
   // hoist / sink the checks if their checked addresses are loop invariant
