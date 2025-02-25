@@ -34,6 +34,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 using namespace llvm;
@@ -303,35 +304,13 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
   return true;
 }
 
-/// Exiting --> Exit
-/// ===>
-/// Exiting --> NewExit --> Exit
-/// @return NewExit : the new exit block
-static BasicBlock *splitNewExitBlock(BasicBlock *ExitBlock,
-                                     BasicBlock *Exiting) {
-  Function &F = *ExitBlock->getParent();
-  auto *NewExitBlock =
-      BasicBlock::Create(F.getContext(), "xsan.loop.exit", &F, ExitBlock);
-  BranchInst::Create(ExitBlock, NewExitBlock)
-      ->setMetadata(LLVMContext::MD_nosanitize,
-                    MDNode::get(F.getContext(), None));
-  /// TODO: support multiple exitings
-  // SmallVector<BasicBlock *, 4> Exitings;
-  // Loop->getExitingBlocks(Exitings);
-
-  // Update PHINodes
-  /// TODO: this work only if there is only one exiting block.
-  ExitBlock->replacePhiUsesWith(Exiting, NewExitBlock);
-  // Update terminator
-  auto *Term = Exiting->getTerminator();
-  Term->replaceSuccessorWith(ExitBlock, NewExitBlock);
-  return NewExitBlock;
-}
-
 LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
                                          FunctionAnalysisManager &FAM,
                                          LoopOptLeval OptLevel)
-    : F(F), FAM(FAM), DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
+    : F(F), FAM(FAM), LI(FAM.getResult<LoopAnalysis>(F)),
+      DT(FAM.getResult<DominatorTreeAnalysis>(F)),
+      PDT(FAM.getResult<PostDominatorTreeAnalysis>(F)),
+      DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
       MopCollected(false), DebugPrint(!!getenv("XSAN_DEBUG")) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
@@ -383,12 +362,6 @@ void LoopMopInstrumenter::instrument() {
     break;
   case LoopOptLeval::NoOpt:
     return;
-  }
-
-  if (LoopChanged) {
-    // Update LoopInfo forcefully
-    // auto &LI = FAM.getResult<LoopAnalysis>(F);
-    FAM.invalidate(F, PreservedAnalyses::none());
   }
 }
 SmallVectorImpl<LoopMopInstrumenter::LoopMop> &
@@ -532,7 +505,6 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   bool LoopChanged = false;
   // Get SCEV analysis result
   auto &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
 
   SCEVExpander Expander(SE, DL, "expander");
 
@@ -587,7 +559,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     // The only predecessor of exit should be the exiting block.
     if (ExitBlock->getUniquePredecessor() != Exiting) {
       // Update ExitBlock
-      ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
+      ExitBlock =
+          SplitEdge(Exiting, ExitBlock, &DT, &LI, nullptr, "xsan.loop.exit");
       LoopChanged = true;
     }
 

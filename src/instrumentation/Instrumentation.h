@@ -9,9 +9,11 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
@@ -129,6 +131,9 @@ private:
   LoopOptLeval OptLevel;
   Function &F;
   FunctionAnalysisManager &FAM;
+  LoopInfo &LI;
+  DominatorTree &DT;
+  PostDominatorTree &PDT;
   const DataLayout &DL;
 
   SmallPtrSet<const Loop *, 16> SimpleLoops;

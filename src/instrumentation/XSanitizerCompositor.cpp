@@ -88,6 +88,8 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
   for (auto &F : M) {
+    if (F.isDeclaration() || F.empty())
+      continue;
     LoopMopInstrumenter LoopInstrumenter(F, FAM, ClLoopOpt);
     LoopInstrumenter.instrument();
   }
