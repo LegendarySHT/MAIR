@@ -357,8 +357,10 @@ void LoopMopInstrumenter::instrument() {
     LoopChanged = combinePeriodicChecks(false);
     break;
   case LoopOptLeval::Full:
-    LoopChanged = relocateInvariantChecks();
     LoopChanged |= combinePeriodicChecks(false);
+    // Invariant checks might insert new branches, so we need to run it later
+    // than CombinePeriodicChecks.
+    LoopChanged |= relocateInvariantChecks();
     break;
   case LoopOptLeval::NoOpt:
     return;
@@ -607,21 +609,63 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   return LoopChanged;
 }
 
+// Instrument a flag variable to indicate if the MOP is executed in loop.
+// Returns the new insert point pointing to the new branch.
+// --- Before instrumentation ---
+// Exit:
+//   ...
+//
+// --- After instrumentation ---
+// Exit:
+//   indicator = ...; // new instruction
+//   if (indicator) {
+//     --> insert here
+//   }
+static Instruction *instrumentIndicator(Instruction *Inst,
+                                        BasicBlock *ExitBlock,
+                                        DominatorTree &DT, LoopInfo &LI) {
+  /// TODO: do not rely on the optimization, just instrument a GOOD IR with
+  /// PHINode.
+
+  /* Insert code to get the indicator indicating if the MOP is executed in loop
+   */
+
+  Function *F = Inst->getParent()->getParent();
+  BasicBlock &Entry = F->getEntryBlock();
+
+  InstrumentationIRBuilder IRB(&*Entry.getFirstInsertionPt());
+  auto *IndicatorAlloc =
+      IRB.CreateAlloca(IRB.getInt1Ty(), nullptr, "indicator");
+
+  IRB.SetInsertPoint(Inst);
+  IRB.CreateStore(IRB.getTrue(), IndicatorAlloc);
+
+  IRB.SetInsertPoint(&*ExitBlock->getFirstInsertionPt());
+  auto *Indicator = IRB.CreateLoad(IRB.getInt1Ty(), IndicatorAlloc);
+
+  /* Insert new branch according to the value of indicator */
+  Instruction *EqTrue =
+      (Instruction *)IRB.CreateICmpEQ(Indicator, IRB.getTrue());
+  /*
+    If DT (DominatorTree) is used to be updated in other places, we cannot use
+    DTU (DomTreeUpdater) here, because we need to consider the consistence with
+    the DT. As if DTU is used, the new DT should be obtained by
+    DTU.getDomTree().
+  */
+  auto *Term = SplitBlockAndInsertIfThen(EqTrue, EqTrue->getNextNode(), false,
+                                         nullptr, &DT, &LI);
+
+  return Term;
+}
+
 bool LoopMopInstrumenter::relocateInvariantChecks() {
   bool LoopChanged = false;
-  auto &PDT = FAM.getResult<PostDominatorTreeAnalysis>(F);
   for (LoopMop &Mop : getLoopMopCandidates()) {
     auto &[Inst, Addr, L, MopSize, InBranch, IsWrite] = Mop;
     if (!L->isLoopInvariant(Addr)) {
       // Skip if Addr is not a loop invariant
       continue;
     }
-
-    // We should alse consider the branch from header to MOP if InBranch is
-    // false.
-    bool IsInBranch =
-        InBranch ? InBranch : PDT.dominates(Inst->getParent(), L->getHeader());
-
     // Top loop to maintain the invarianty of Addr
     Loop *TopL = L, *ParentL = L->getParentLoop();
     while (ParentL && ParentL->isLoopInvariant(Addr) &&
@@ -632,37 +676,53 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
       ParentL = TopL->getParentLoop();
     }
 
-    // errs() << "In Branch: " << InBranch << "\n";
-    // errs() << "Is In Branch: " << IsInBranch << "\n";
-    if (!IsInBranch) {
-      auto *Preheader = TopL->getLoopPreheader();
-      Instruction *InsertPt;
-      if (Preheader) {
-        InsertPt = Preheader->getTerminator();
-      } else {
-        // If no preheader, sinstrument on the exit.
-        auto *ExitBlock = TopL->getUniqueExitBlock();
-        auto *Exiting = TopL->getExitingBlock();
+    auto *Preheader = TopL->getLoopPreheader();
+    // We should alse consider the branch from preheader to MOP if InBranch is
+    // false.
+    bool IsInBranch =
+        InBranch ? InBranch : !PDT.dominates(Inst->getParent(), Preheader);
 
-        // The only predecessor of exit should be the exiting block.
-        if (ExitBlock->getUniquePredecessor() != Exiting) {
-          // Update ExitBlock
-          ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
-          LoopChanged = true;
+    Instruction *InsertPt;
+
+    bool SinkToExit = IsInBranch || !Preheader;
+    if (SinkToExit) {
+      // If no preheader, sinstrument on the exit.
+      auto *ExitBlock = TopL->getUniqueExitBlock();
+      auto *Exiting = TopL->getExitingBlock();
+
+      // The only predecessor of exit should be the exiting block.
+      if (ExitBlock->getUniquePredecessor() != Exiting) {
+        // Update ExitBlock
+        // ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
+        ExitBlock =
+            SplitEdge(Exiting, ExitBlock, &DT, &LI, nullptr, "xsan.loop.exit");
+
+        LoopChanged = true;
+      }
+      if (IsInBranch) {
+        // Insert indicator to indicate if the MOP is executed in loop.
+        InsertPt = instrumentIndicator(Inst, ExitBlock, DT, LI);
+        if (!InsertPt) {
+          continue;
         }
+      } else {
+        // If not in branch, insert at the beginning of the exit block.
         InsertPt = &*ExitBlock->getFirstInsertionPt();
       }
-
-      InstrumentationIRBuilder IRB(InsertPt);
-      size_t Idx = countTrailingZeros(MopSize);
-      // __xsan_readX(const void *beg)
-      // __xsan_writeX(const void *beg)
-      IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
-      MarkAsDelegatedToXsan(*Inst);
-      NumInvChecksRelocated++;
     } else {
-      /// TODO: insert bool variable to indicate if the MOP is executed in loop.
+      // If has preheader and not in branch, insert at the terminator of the
+      // preheader.
+      InsertPt = Preheader->getTerminator();
     }
+
+    size_t Idx = countTrailingZeros(MopSize);
+
+    InstrumentationIRBuilder IRB(InsertPt);
+    // __xsan_readX(const void *beg)
+    // __xsan_writeX(const void *beg)
+    IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
+    MarkAsDelegatedToXsan(*Inst);
+    NumInvChecksRelocated++;
   }
 
   if (DebugPrint && NumInvChecksRelocated) {
