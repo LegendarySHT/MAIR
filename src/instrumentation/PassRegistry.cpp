@@ -17,6 +17,7 @@
 #include "llvm/Transforms/Scalar/SCCP.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/Scalar/TailRecursionElimination.h"
+#include "llvm/Transforms/Utils/Mem2Reg.h"
 
 using namespace llvm;
 
@@ -216,6 +217,9 @@ llvm::ModulePassManager createPostOptimizationPasses(OptimizationLevel Level) {
   ModulePassManager MPM;
   FunctionPassManager FPM;
 
+  // PromotePass: promote alloca/load/store instructions to registers, 
+  // i.e., -mem2reg
+  FPM.addPass(PromotePass());
   // SimplifyCFG: simplify the CFG to improve optimization
   FPM.addPass(SimplifyCFGPass());
   // InstSimplify: simplify instructions
