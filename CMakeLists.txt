@@ -40,7 +40,7 @@ if (CLANG_C_COMPILER)
 
     message(STATUS "Clang found and set as default compiler: ${CLANG_C_COMPILER}")
 else()
-    message(STATUS "No Clang not found, using system default compiler (cc).")
+    message(WARNING "Clang not found, use system default compiler (cc).")
 endif()
 
 message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
