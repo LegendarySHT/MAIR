@@ -56,7 +56,8 @@ tsan_incdir = config.test_source_root + "/../"
 clang_tsan_cflags = (
     [
         # "-fsanitize=thread", 
-        "-tsan",
+        # "-tsan",
+        "-xsan",
         "-Wall",
     ]
     + [config.target_cflags]

@@ -26,7 +26,8 @@ ubsan_lit_test_mode = get_required_attr(config, "ubsan_lit_test_mode")
 if ubsan_lit_test_mode == "Standalone":
     config.available_features.add("ubsan-standalone")
     config.available_features.add("ubsan-xsan")
-    clang_ubsan_cflags = []
+    clang_ubsan_cflags = ["-xsan", "-fno-sanitize=undefined"]
+    default_ubsan_opts += ['detect_leaks=0']
 elif ubsan_lit_test_mode == "StandaloneStatic":
     config.available_features.add("ubsan-standalone-static")
     clang_ubsan_cflags = ["-static-libsan"]

@@ -62,7 +62,8 @@ target_cxxflags = config.cxx_mode_flags + target_cflags
 clang_asan_static_cflags = (
     [
         # "-fsanitize=address",
-        "-asan",
+        # "-asan",
+        "-xsan",
         "-mno-omit-leaf-frame-pointer",
         "-fno-omit-frame-pointer",
         "-fno-optimize-sibling-calls",
