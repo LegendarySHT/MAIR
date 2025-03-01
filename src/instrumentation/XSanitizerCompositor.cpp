@@ -1,6 +1,7 @@
 #include "AttributeTaggingPass.hpp"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
+#include "Utils/Logging.h"
 #include "xsan_common.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
@@ -107,6 +108,8 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
     }
     PostOpts.run(M, MAM);
   }
+
+  Log.displayLogs();
 
   return PA;
 }

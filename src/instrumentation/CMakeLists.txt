@@ -18,6 +18,7 @@ set(XSAN_PASS_COMMON
   PassRegistry.cpp
   Analysis/ActiveMopAnalysis.cpp
   Analysis/MopRecurrenceReducer.cpp
+  Utils/Logging.cpp
 )
 
 # TODO: all pass into 1 so

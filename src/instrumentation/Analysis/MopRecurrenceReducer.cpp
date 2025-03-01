@@ -1,4 +1,5 @@
 #include "MopRecurrenceReducer.h"
+#include "../Utils/Logging.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -585,25 +586,12 @@ MopRecurrenceReducer::distillRecurringChecks(
 
   NumRecurentChecks += Insts.size() - DistilledMops.size();
 
-  // Print debug information
+  // Collect debug information
   if (DebugPrint) {
-    // print in orange color
-    errs() << "\033[33m";
-    errs() << "--- " << F.getName() << " ---\n";
-    // print in grey color
-    errs() << "\033[37m";
-    errs() << "Distilled: ";
-    // print in red color
-    errs() << "\033[31m";
-    errs() << Insts.size();
-    // print in grey color
-    errs() << "\033[37m";
-    errs() << " --> ";
-    // Print in green color
-    errs() << "\033[32m";
-    errs() << DistilledMops.size() << "\n";
-    // Print in default color
-    errs() << "\033[0m";
+    Log.setFunction(F.getName());
+    Log.addLog(IsTsan ? "[ReccOpt] [TSan] Reducing Recurr. Checks"
+                      : "[ReccOpt] [ASan] Reducing Recurr. Checks",
+               Insts.size(), DistilledMops.size());
   }
   return DistilledMops;
 }

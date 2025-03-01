@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Instrumentation.h"
+#include "Utils/Logging.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -594,18 +595,10 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     NumPeriodChecksCombined++;
   }
 
-  if (DebugPrint && NumPeriodChecksCombined) {
-    // print in orange color
-    errs() << "\033[33m";
-    errs() << "--- " << F.getName() << " ---\n";
-    // print in grey color
-    errs() << "\033[37m";
-    errs() << "Combined Loop Mops: ";
-    // print in red color
-    errs() << "\033[31m";
-    errs() << NumPeriodChecksCombined;
-
-    errs() << "\033[0m\n";
+  if (DebugPrint) {
+    Log.setFunction(F.getName());
+    Log.addLog("[LoopOpt] #{Combined Loop Mops}",
+               NumPeriodChecksCombined.getValue());
   }
 
   return LoopChanged;
@@ -735,19 +728,12 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     NumInvChecksRelocated++;
   }
 
-  if (DebugPrint && NumInvChecksRelocated) {
-    // print in orange color
-    errs() << "\033[33m";
-    errs() << "--- " << F.getName() << " ---\n";
-    // print in grey color
-    errs() << "\033[37m";
-    errs() << "Relocated Loop Invariant Mop Checks: ";
-    // print in red color
-    errs() << "\033[31m";
-    errs() << NumInvChecksRelocated;
-
-    errs() << "\033[0m\n";
+  if (DebugPrint) {
+    Log.setFunction(F.getName());
+    Log.addLog("[LoopOpt] #{Relocated Loop Mops}",
+               NumInvChecksRelocated.getValue());
   }
+
   return LoopChanged;
 }
 } // namespace __xsan
