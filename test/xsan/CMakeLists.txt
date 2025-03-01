@@ -151,4 +151,4 @@ add_lit_testsuite(check-xsan "Running the XSan-specific tests"
 list(APPEND XSAN_LIT_TEST_TARGETS check-xsan)
 set(XSAN_LIT_TEST_TARGETS "${XSAN_LIT_TEST_TARGETS}" PARENT_SCOPE)
 
-message_green("ready to test ASan/ASan@XSan")
+message_green("ready to test XSan/XSan@XSan")

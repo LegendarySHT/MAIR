@@ -5,12 +5,13 @@ set(XSAN_TEST_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(SANITIZER_COMMON_LIT_TEST_DEPS)
 
 # Disable UBSan-MSan test for now
+### TODO: enable UBSan-MSan test
 set(COMPILER_RT_HAS_MSAN FALSE)
 
 set(UBSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 set(ASAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 set(TSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
-# set(MSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
+set(MSAN_SUPPORTED_ARCH ${XSAN_SUPPORTED_ARCH})
 
 # To make `get_test_cc_for_arch` happy
 # Now we inherite all variables from src/runtime/test/CMakeLists.txt,
@@ -97,6 +98,7 @@ set(XSAN_LIT_TEST_TARGETS)
 add_subdirectory(asan)
 add_subdirectory(tsan)
 add_subdirectory(ubsan)
+add_subdirectory(msan)
 add_subdirectory(xsan)
 
 
