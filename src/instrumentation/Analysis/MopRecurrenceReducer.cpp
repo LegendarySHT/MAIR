@@ -24,6 +24,7 @@
 #include "llvm/IR/PassManager.h"
 #include <array>
 #include <type_traits>
+#include <optional>
 
 using namespace llvm;
 

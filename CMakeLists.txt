@@ -50,6 +50,7 @@ message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 # LLVM 15 requires C++14, but we only compile the runtime and instrumentation
 # supprot C++17
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 # Load LLVMConfig.cmake. If this fails, consider setting `LLVM_DIR` to point
 # to your LLVM installation's `lib/cmake/llvm` directory.
