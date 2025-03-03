@@ -20,7 +20,8 @@
 using namespace __xsan;
 
 /// TODO: use a more generic way to perform checks.
-/// For example, provide some hooks for events, and integrate the checks into these hooks.
+/// For example, provide some hooks for events, and integrate the checks into
+/// these hooks.
 ///   - OnAllocation:
 ///   - OnFree:
 ///   - OnMemoryAccess:
@@ -103,7 +104,6 @@ void __xsan_write_range(const void *beg, const void *end) {
     Swap(beg, end);
   }
   uptr size = (uptr)end - (uptr)beg;
-  Printf("beg: %p, end: %p, size: %lx\n", beg, end, size);
   XSAN_WRITE_RANGE((void *)nullptr, beg, size);
 }
 
@@ -168,6 +168,4 @@ XSAN_WRITE(2)
 XSAN_WRITE(4)
 XSAN_WRITE(8)
 XSAN_WRITE(16)
-
-
 }
