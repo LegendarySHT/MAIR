@@ -13,6 +13,7 @@
 
 #include "Instrumentation.h"
 #include "Utils/Logging.h"
+#include "Utils/Options.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -34,9 +35,9 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include <cstdint>
 
 using namespace llvm;
 
@@ -312,7 +313,7 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
       DT(FAM.getResult<DominatorTreeAnalysis>(F)),
       PDT(FAM.getResult<PostDominatorTreeAnalysis>(F)),
       DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
-      MopCollected(false), DebugPrint(!!getenv("XSAN_DEBUG")) {
+      MopCollected(false) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
   IRBuilder<> IRB(Ctx);
@@ -595,7 +596,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     NumPeriodChecksCombined++;
   }
 
-  if (DebugPrint) {
+  if (options::ClDebug) {
     Log.setFunction(F.getName());
     Log.addLog("[LoopOpt] #{Combined Loop Mops}",
                NumPeriodChecksCombined.getValue());
@@ -728,7 +729,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     NumInvChecksRelocated++;
   }
 
-  if (DebugPrint) {
+  if (options::ClDebug) {
     Log.setFunction(F.getName());
     Log.addLog("[LoopOpt] #{Relocated Loop Mops}",
                NumInvChecksRelocated.getValue());

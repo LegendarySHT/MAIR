@@ -39,6 +39,17 @@ const cl::opt<bool> ClPostOpt(
     cl::Hidden);
 
 } // namespace opt
+
+const cl::opt<bool> ClDisableTsan("xsan-disable-tsan", cl::init(false),
+                                  cl::desc("Disable TSan instrumentation"),
+                                  cl::Hidden);
+
+const cl::opt<bool> ClDisableAsan("xsan-disable-asan", cl::init(false),
+                                  cl::desc("Disable ASan instrumentation"),
+                                  cl::Hidden);
+
+cl::opt<bool> ClDebug("xsan-debug", cl::init(false),
+                      cl::desc("Enable debug output for XSan"), cl::Hidden);
 } // namespace options
 
 } // namespace __xsan

@@ -73,7 +73,6 @@ public:
 private:
   Function &F;
   FunctionAnalysisManager &FAM;
-  bool DebugPrint;
 };
 
 } // namespace __xsan

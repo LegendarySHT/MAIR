@@ -44,6 +44,16 @@ inline LoopOptLeval loopOptLevel() {
   return ClOpt ? ClLoopOpt : LoopOptLeval::NoOpt;
 }
 } // namespace opt
+
+/// Disable TSan instrumentation.
+extern const cl::opt<bool> ClDisableTsan;
+
+/// Disable ASan instrumentation.
+extern const cl::opt<bool> ClDisableAsan;
+
+/// Enable debug output.
+extern cl::opt<bool> ClDebug;
+
 } // namespace options
 
 } // namespace __xsan

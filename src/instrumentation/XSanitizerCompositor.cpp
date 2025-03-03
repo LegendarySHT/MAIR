@@ -7,17 +7,9 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
-#include "llvm/Support/CommandLine.h"
+
 using namespace llvm;
 using namespace __xsan;
-
-static cl::opt<bool>
-    ClDisableAsan("xsan-disable-asan", cl::init(false),
-                  cl::desc("Do not use ASan's instrumentation"), cl::Hidden);
-
-static cl::opt<bool>
-    ClDisableTsan("xsan-disable-tsan", cl::init(false),
-                  cl::desc("Do not use TSan's instrumentation"), cl::Hidden);
 
 // static cl::opt<bool> ClLog(
 //     "xsan-post-opt", cl::init(true),
@@ -25,9 +17,6 @@ static cl::opt<bool>
 //     cl::Hidden);
 
 namespace __xsan {
-
-bool isAsanTurnedOff() { return ClDisableAsan; }
-bool isTsanTurnedOff() { return ClDisableTsan; }
 
 class SanitizerCompositorPass
     : public llvm::PassInfoMixin<SanitizerCompositorPass> {
@@ -72,6 +61,8 @@ SanitizerCompositorPass::SanitizerCompositorPass(OptimizationLevel level)
 
 PreservedAnalyses SanitizerCompositorPass::run(Module &M,
                                                ModuleAnalysisManager &MAM) {
+  options::ClDebug.setValue(options::ClDebug || !!std::getenv("XSAN_DEBUG"));
+
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 

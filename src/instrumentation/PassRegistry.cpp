@@ -1,5 +1,6 @@
 #include "PassRegistry.h"
 #include "AttributeTaggingPass.hpp"
+#include "Utils/Options.h"
 
 #include "llvm/IR/Module.h"
 #include "llvm/IR/PassManager.h"
@@ -89,11 +90,6 @@ namespace __xsan {
 
 bool shouldAsanPoisonInternalGlobals() { return ClAsanPoisonInternalGlobal; }
 
-LLVM_ATTRIBUTE_WEAK
-bool isAsanTurnedOff() { return false; }
-LLVM_ATTRIBUTE_WEAK
-bool isTsanTurnedOff() { return false; }
-
 void obtainAsanPassArgs(AddressSanitizerOptions &Opts, bool &UseGlobalGC,
                         bool &UseOdrIndicator,
                         llvm::AsanDtorKind &DestructorKind) {
@@ -172,20 +168,20 @@ SubSanitizers SubSanitizers::loadSubSanitizers() {
   SubSanitizers Sanitizers;
   // ---------- Collect targets to instrument first ----------------
   FunctionPassManager FPM;
-  if (!isAsanTurnedOff()) {
+  if (!options::ClDisableAsan) {
     addAsanRequireAnalysisPass(Sanitizers, FPM);
   }
-  if (!isTsanTurnedOff()) {
+  if (!options::ClDisableTsan) {
     addTsanRequireAnalysisPass(Sanitizers, FPM);
   }
   Sanitizers.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
   // ------------ Then instrument ----------------------------------
-  if (!isAsanTurnedOff()) {
+  if (!options::ClDisableAsan) {
     Sanitizers.addPass(getASanPass<ModuleAddressSanitizerPass>());
   }
 
-  if (!isTsanTurnedOff()) {
+  if (!options::ClDisableTsan) {
     Sanitizers.addPass(ModuleThreadSanitizerPass());
     Sanitizers.addPass(
         createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
@@ -199,7 +195,7 @@ llvm::ModulePassManager createPostOptimizationPasses(OptimizationLevel Level) {
   ModulePassManager MPM;
   FunctionPassManager FPM;
 
-  // PromotePass: promote alloca/load/store instructions to registers, 
+  // PromotePass: promote alloca/load/store instructions to registers,
   // i.e., -mem2reg
   FPM.addPass(PromotePass());
   // SimplifyCFG: simplify the CFG to improve optimization
@@ -253,14 +249,14 @@ llvm::ModulePassManager createPostOptimizationPasses(OptimizationLevel Level) {
 }
 
 static void addAsanToMPM(ModulePassManager &MPM) {
-  if (isAsanTurnedOff())
+  if (options::ClDisableAsan)
     return;
 
   MPM.addPass(getASanPass<ModuleAddressSanitizerPass>());
 }
 
 static void addTsanToMPM(ModulePassManager &MPM) {
-  if (isTsanTurnedOff())
+  if (options::ClDisableTsan)
     return;
   // Create ctor and init functions.
   MPM.addPass(ModuleThreadSanitizerPass());
@@ -319,10 +315,10 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
 }
 
 void registerAnalysisForXsan(PassBuilder &PB) {
-  if (!isAsanTurnedOff()) {
+  if (!options::ClDisableAsan) {
     registerAnalysisForAsan(PB);
   }
-  if (!isTsanTurnedOff()) {
+  if (!options::ClDisableTsan) {
     registerAnalysisForTsan(PB);
   }
 }

@@ -1,5 +1,6 @@
 #include "MopRecurrenceReducer.h"
 #include "../Utils/Logging.h"
+#include "../Utils/Options.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -24,8 +25,8 @@
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PassManager.h"
 #include <array>
-#include <type_traits>
 #include <optional>
+#include <type_traits>
 
 using namespace llvm;
 
@@ -504,7 +505,7 @@ void RecurringGraph::fillDominatingSet(
 
 MopRecurrenceReducer::MopRecurrenceReducer(Function &F,
                                            FunctionAnalysisManager &FAM)
-    : F(F), FAM(FAM), DebugPrint(!!getenv("XSAN_DEBUG")) {}
+    : F(F), FAM(FAM) {}
 
 /*
 Distill any pair of MOPs satisfying the following 4 cases:
@@ -587,7 +588,7 @@ MopRecurrenceReducer::distillRecurringChecks(
   NumRecurentChecks += Insts.size() - DistilledMops.size();
 
   // Collect debug information
-  if (DebugPrint) {
+  if (options::ClDebug) {
     Log.setFunction(F.getName());
     Log.addLog(IsTsan ? "[ReccOpt] [TSan] Reducing Recurr. Checks"
                       : "[ReccOpt] [ASan] Reducing Recurr. Checks",
