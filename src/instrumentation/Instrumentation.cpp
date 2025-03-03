@@ -245,9 +245,9 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
 /// backedge taken counts
 static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
                             SCEVExpander &Expander, const SCEV *Start,
-                            const SCEVConstant *Step, bool BeforeExiting,
+                            const SCEV *Step, bool BeforeExiting,
                             InstrumentationIRBuilder &IRB, Value *&Beg,
-                            Value *&End) {
+                            Value *&End, Value *&StepVal) {
   // 1. Try to find an existing loop counter in the loop header (header)
   BasicBlock *Header = Loop->getHeader(),
              *Predecessor = Loop->getLoopPredecessor(),
@@ -266,8 +266,10 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
 
   /// TODO: figure out if it is Okay to insert code in Predecessor block
   Beg = Expander.expandCodeFor(Start, IRB.getInt8PtrTy(), InsertPt);
+  StepVal = Expander.expandCodeFor(Step, IRB.getInt64Ty(), InsertPt);
 
-  bool StepIsOne = Step->getAPInt() == 1;
+  const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
+  bool StepIsOne = ConstStep && ConstStep->getAPInt() == 1;
 
   /* 1. Try to get the loop's backedge taken count (loop invariant) through SCEV
    */
@@ -300,8 +302,7 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     return false;
   }
 
-  Value *Offset =
-      StepIsOne ? Counter : IRB.CreateMul(Counter, Step->getValue());
+  Value *Offset = StepIsOne ? Counter : IRB.CreateMul(Counter, StepVal);
   End = IRB.CreateGEP(IRB.getInt8Ty(), Beg, {Offset});
 
   return true;
@@ -538,17 +539,21 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     // ----------- Extract Loop-Invariant step -----------
     const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
+    bool IsRangeAccess;
     if (!ConstStep) {
       // If not a constant, check if it is a Loop-Invariant
       if (!SE.isLoopInvariant(Step, Loop)) {
         continue; // Skip if not a loop invariant
       }
+      IsRangeAccess = false;
+    } else {
+      ConstantInt *StepVal = ConstStep->getValue();
+      // Negative step is considered as positive step
+      size_t StepValInt = StepVal->getSExtValue() < 0 ? -StepVal->getSExtValue()
+                                                      : StepVal->getSExtValue();
+      IsRangeAccess = (StepValInt == MopSize);
     }
-    ConstantInt *StepVal = ConstStep->getValue();
-    // Negative step is considered as positive step
-    size_t StepValInt = StepVal->getSExtValue() < 0 ? -StepVal->getSExtValue()
-                                                    : StepVal->getSExtValue();
-    bool IsRangeAccess = (StepValInt == MopSize);
+
     if (RangeAccessOnly && !IsRangeAccess) {
       // If step is not MopSize, it's not full range access, skip
       continue;
@@ -574,9 +579,9 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     InstrumentationIRBuilder IRB(&*ExitBlock->getFirstInsertionPt());
 
     const auto *Start = AR->getStart();
-    Value *Beg, *End;
-    if (!expandBegAndEnd(Loop, SE, Expander, Start, ConstStep,
-                         IsMopBeforeExiting, IRB, Beg, End)) {
+    Value *Beg, *End, *StepVal;
+    if (!expandBegAndEnd(Loop, SE, Expander, Start, Step, IsMopBeforeExiting,
+                         IRB, Beg, End, StepVal)) {
       // If failed to expand, skip.
       continue;
     }
