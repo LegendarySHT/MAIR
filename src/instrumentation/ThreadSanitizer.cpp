@@ -54,6 +54,7 @@
 #include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
+#include "Utils/Options.h"
 
 using namespace llvm;
 
@@ -892,7 +893,7 @@ public:
     }
 
     // Reduce recurrence of load/store instructions.
-    if (shouldTsanOptimizeLoadStores()) {
+    if (__xsan::options::opt::enableReccReductionTsan()) {
       MopRecurrenceReducer MRC(F, FAM);
 
       auto RngMap = map_range(Targets.AllLoadsAndStores,

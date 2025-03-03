@@ -92,7 +92,7 @@
 #include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
-
+#include "Utils/Options.h"
 
 using namespace llvm;
 
@@ -3599,7 +3599,7 @@ public:
       }
 
       /// Reduce recurrence between load/store instructions.
-      if (shouldAsanOptimizeLoadStores()) {
+      if (__xsan::options::opt::enableReccReductionAsan()) {
         MopRecurrenceReducer MRC(F, FAM);
         SmallVector<InterestingMemoryOperand, 16> NewOperandsToInstrument;
 

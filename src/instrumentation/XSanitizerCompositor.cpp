@@ -2,12 +2,12 @@
 #include "Instrumentation.h"
 #include "PassRegistry.h"
 #include "Utils/Logging.h"
+#include "Utils/Options.h"
 #include "xsan_common.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/CommandLine.h"
-
 using namespace llvm;
 using namespace __xsan;
 
@@ -19,23 +19,10 @@ static cl::opt<bool>
     ClDisableTsan("xsan-disable-tsan", cl::init(false),
                   cl::desc("Do not use TSan's instrumentation"), cl::Hidden);
 
-static cl::opt<LoopOptLeval> ClLoopOpt(
-    "xsan-loop-opt", cl::desc("Loop optimization level for XSan"),
-    cl::values(
-        clEnumValN(LoopOptLeval::NoOpt, "no",
-                   "Disable loop optimization for XSan"),
-        clEnumValN(LoopOptLeval::CombineToRangeCheck, "range",
-                   "Only combine periodic checks to range check for XSan"),
-        clEnumValN(LoopOptLeval::CombinePeriodicChecks, "period",
-                   "Only combine periodic checks for XSan"),
-        clEnumValN(LoopOptLeval::Full, "full",
-                   "Enable all loop optimization for XSan")),
-    cl::Hidden, cl::init(LoopOptLeval::Full));
-
-static cl::opt<bool> ClPostOpt(
-    "xsan-post-opt", cl::init(true),
-    cl::desc("Whether to perform post-sanitziers optimizations for XSan"),
-    cl::Hidden);
+// static cl::opt<bool> ClLog(
+//     "xsan-post-opt", cl::init(true),
+//     cl::desc("Whether to perform post-sanitziers optimizations for XSan"),
+//     cl::Hidden);
 
 namespace __xsan {
 
@@ -88,18 +75,21 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
-  for (auto &F : M) {
-    if (F.isDeclaration() || F.empty())
-      continue;
-    LoopMopInstrumenter LoopInstrumenter(F, FAM, ClLoopOpt);
-    LoopInstrumenter.instrument();
+  LoopOptLeval level = options::opt::loopOptLevel();
+  if (level != LoopOptLeval::NoOpt) {
+    for (auto &F : M) {
+      if (F.isDeclaration() || F.empty())
+        continue;
+      LoopMopInstrumenter LoopInstrumenter(F, FAM, level);
+      LoopInstrumenter.instrument();
+    }
   }
 
   SubSanitizers Sanitizers = SubSanitizers::loadSubSanitizers();
   /// Unlike ModulePassManager, SubSanitizers does not invalidate Analysises
   /// between the runnings of sanitizers' passes.
   PreservedAnalyses PA = Sanitizers.run(M, MAM);
-  if (Level.getSpeedupLevel() > 0 && ClPostOpt) {
+  if (Level.getSpeedupLevel() > 0 && options::opt::enablePostOpt()) {
     ModulePassManager PostOpts = createPostOptimizationPasses(Level);
     /// Invalidate Analyses to re-run them with the post-optimization passes.
     MAM.invalidate(M, PA);

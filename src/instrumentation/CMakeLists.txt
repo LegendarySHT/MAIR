@@ -19,6 +19,7 @@ set(XSAN_PASS_COMMON
   Analysis/ActiveMopAnalysis.cpp
   Analysis/MopRecurrenceReducer.cpp
   Utils/Logging.cpp
+  Utils/Options.cpp
 )
 
 # TODO: all pass into 1 so
@@ -51,6 +52,12 @@ add_llvm_pass_plugin(XSanInstPass
 )
 
 
+add_llvm_pass_plugin(TestPass
+  PARTIAL_SOURCES_INTENDED # Skip checking for else files 
+  TestPass.cpp
+  ${XSAN_PASS_COMMON}
+)
+
 target_compile_definitions(XSanInstPass PRIVATE XSAN_PASS)
 
 
@@ -58,6 +65,7 @@ set_target_properties(ASanInstPass
                       TSanInstPass
                       CovSanInstPass
                       XSanInstPass
+                      TestPass
     PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${XSAN_PASS_DIR}"
 )

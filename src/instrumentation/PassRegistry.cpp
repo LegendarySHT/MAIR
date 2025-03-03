@@ -79,20 +79,6 @@ static cl::opt<bool> ClAllRecover("sanitize-recover-all",
                                   cl::desc("Simulates -fsanitize-recover=all"),
                                   cl::Hidden, cl::init(false));
 
-// -- These middle-end options are used to perform optimization --
-static cl::opt<bool> ClOptXsan("xsan-opt", cl::desc("Optimize instrumentation"),
-                               cl::Hidden, cl::init(true));
-
-static cl::opt<bool>
-    ClOptTsanLoadStore("xsan-tsan-opt-load-store",
-                       cl::desc("Reduce recurring load/stores"), cl::Hidden,
-                       cl::init(true));
-
-static cl::opt<bool>
-    ClOptAsanLoadStore("xsan-asan-opt-load-store",
-                       cl::desc("Reduce recurring load/stores"), cl::Hidden,
-                       cl::init(true));
-
 /// There is compile bug for testcase init-order-dlopen.cpp, disable this option
 /// for now.
 static cl::opt<bool>
@@ -100,10 +86,6 @@ static cl::opt<bool>
                                cl::desc("Poison internal globals with ASan"),
                                cl::Hidden, cl::init(false));
 namespace __xsan {
-
-bool shouldTsanOptimizeLoadStores() { return ClOptXsan && ClOptTsanLoadStore; }
-
-bool shouldAsanOptimizeLoadStores() { return ClOptXsan && ClOptAsanLoadStore; }
 
 bool shouldAsanPoisonInternalGlobals() { return ClAsanPoisonInternalGlobal; }
 
