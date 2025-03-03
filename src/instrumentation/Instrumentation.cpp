@@ -16,7 +16,6 @@
 #include "Utils/Options.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -47,8 +46,10 @@ static cl::opt<bool> ClIgnoreRedundantInstrumentation(
     "ignore-redundant-instrumentation",
     cl::desc("Ignore redundant instrumentation"), cl::Hidden, cl::init(false));
 
-STATISTIC(NumInvChecksRelocated, "Number of loop invariant checks relocated.");
-STATISTIC(NumPeriodChecksCombined, "Number of loop periodic checks combined.");
+/// Number of loop invariant checks relocated.
+uint32_t NumInvChecksRelocated = 0;
+/// Number of loop periodic checks combined.
+uint32_t NumPeriodChecksCombined = 0;
 namespace {
 /// Diagnostic information for IR instrumentation reporting.
 class DiagnosticInfoInstrumentation : public DiagnosticInfo {
@@ -598,8 +599,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
   if (options::ClDebug) {
     Log.setFunction(F.getName());
-    Log.addLog("[LoopOpt] #{Combined Loop Mops}",
-               NumPeriodChecksCombined.getValue());
+    Log.addLog("[LoopOpt] #{Combined Loop Mops}", NumPeriodChecksCombined);
   }
 
   return LoopChanged;
@@ -731,8 +731,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 
   if (options::ClDebug) {
     Log.setFunction(F.getName());
-    Log.addLog("[LoopOpt] #{Relocated Loop Mops}",
-               NumInvChecksRelocated.getValue());
+    Log.addLog("[LoopOpt] #{Relocated Loop Mops}", NumInvChecksRelocated);
   }
 
   return LoopChanged;
