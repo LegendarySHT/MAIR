@@ -114,6 +114,9 @@ void __xsan_write_range(const void *beg, const void *end) {
     if (UNLIKELY(beg == end))                                                 \
       return;                                                                 \
     DCHECK(step > (size) && "Invalid arguments");                             \
+    if (UNLIKELY(step == (size))) {                                           \
+      __xsan_read_range(beg, end);                                            \
+    }                                                                         \
     for (uptr offset = (uptr)beg; offset < (uptr)end; offset += step) {       \
       __tsan_read##size((void *)offset);                                      \
       __asan_load##size(offset);                                              \
@@ -126,6 +129,9 @@ void __xsan_write_range(const void *beg, const void *end) {
     if (UNLIKELY(beg == end))                                                  \
       return;                                                                  \
     DCHECK(step > (size) && "Invalid arguments");                              \
+    if (UNLIKELY(step == (size))) {                                            \
+      __xsan_write_range(beg, end);                                            \
+    }                                                                          \
     for (uptr offset = (uptr)beg; offset < (uptr)end; offset += step) {        \
       __tsan_write##size((void *)offset);                                      \
       __asan_store##size(offset);                                              \
