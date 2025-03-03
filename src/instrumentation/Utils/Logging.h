@@ -1,14 +1,16 @@
 
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/StringSaver.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <sys/types.h>
 
 namespace __xsan {
@@ -127,15 +129,16 @@ private:
 enum class LogDataType {
   Str,
   OneInt,
+  OneIntWithDesc,
   TwoInt,
 };
-
 struct LogData {
   const StringRef Key;
   const LogDataType Type;
   const union {
-    const StringRef Str;
+    StringRef Str;
     const uint64_t OneInt;
+    const std::pair<uint32_t, StringRef> OneIntWithDesc;
     const std::pair<uint32_t, uint32_t> TwoInt;
   } Value;
 };
@@ -149,18 +152,28 @@ public:
   void setFunction(const StringRef Func) { CurrFunc = Func; }
 
   void addLog(const StringRef Key, const StringRef Value) {
-    LogData Data = {Key, LogDataType::Str, {.Str = Value}};
+    LogData Data = {
+        getLogStr(Key), LogDataType::Str, {.Str = getLogStr(Value)}};
     addLog(Data);
   }
 
   void addLog(const StringRef Key, const uint64_t Value) {
-    LogData Data = {Key, LogDataType::OneInt, {.OneInt = Value}};
+    LogData Data = {getLogStr(Key), LogDataType::OneInt, {.OneInt = Value}};
+    addLog(Data);
+  }
+
+  /// The desc is only used to describe the value, hence we use the right value
+  void addLog(const StringRef Key, const uint64_t Value, std::string &&Desc) {
+    LogData Data = {getLogStr(Key),
+                    LogDataType::OneIntWithDesc,
+                    {.OneIntWithDesc = {Value, getLogStr(Desc)}}};
     addLog(Data);
   }
 
   void addLog(const StringRef Key, const uint32_t Value1,
               const uint32_t Value2) {
-    LogData Data = {Key, LogDataType::TwoInt, {.TwoInt = {Value1, Value2}}};
+    LogData Data = {
+        getLogStr(Key), LogDataType::TwoInt, {.TwoInt = {Value1, Value2}}};
     addLog(Data);
   }
 
@@ -175,12 +188,18 @@ public:
 private:
   void printStrLog(const StringRef Value);
   void printOneIntLog(uint64_t Value);
+  void printOneIntWithDescLog(const std::pair<uint32_t, StringRef> Value);
   void printTwoIntLog(std::pair<uint32_t, uint32_t> Value);
   void printKey(const StringRef Key);
+
+  /// Use a inner storage for log string to avoid use-after-free issue.
+  StringRef getLogStr(const StringRef str) { return LogStrStorage.save(str); }
 
 private:
   static constexpr size_t MaxIntLength = 4;
   StringRef CurrFunc;
+  BumpPtrAllocator Alloc;
+  UniqueStringSaver LogStrStorage{Alloc};
   StringMap<SmallVector<LogData, 8>> GroupedBuffer;
   size_t MaxKeyLength = 0;
 };

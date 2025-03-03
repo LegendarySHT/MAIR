@@ -1,8 +1,5 @@
 #include "Logging.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Support/Format.h"
-#include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/FormattedStream.h"
 #include <cstdint>
 #include <string>
@@ -56,6 +53,23 @@ void BufferedLogger::printStrLog(const StringRef Value) {
 void BufferedLogger::printOneIntLog(uint64_t Value) {
   bold().green().log(Value).endl();
 }
+void BufferedLogger::printOneIntWithDescLog(
+    const std::pair<uint32_t, StringRef> Value) {
+  bold()
+      .green()
+      .log(Value.first)
+      .padToColumn(MaxKeyLength + 3 + MaxIntLength)
+      .white()
+      .unbold()
+      .log("(")
+      .cyan()
+      .log(Value.second)
+      .white()
+      .unbold()
+      .log(")")
+      .endl();
+}
+
 void BufferedLogger::printTwoIntLog(std::pair<uint32_t, uint32_t> Value) {
   bold()
       .red()
@@ -71,7 +85,8 @@ void BufferedLogger::printTwoIntLog(std::pair<uint32_t, uint32_t> Value) {
 }
 
 void BufferedLogger::displayLogs() {
-  if (GroupedBuffer.empty()) return;
+  if (GroupedBuffer.empty())
+    return;
   auto ScopedLog = scope();
   for (StringRef Func : GroupedBuffer.keys()) {
     const auto &Buffer = GroupedBuffer[Func];
