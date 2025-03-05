@@ -90,7 +90,7 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
     PostOpts.run(M, MAM);
   }
 
-  Log.displayLogs();
+  Log.displayLogs(M.getName());
 
   return PA;
 }

@@ -34,13 +34,13 @@ class Logger {
 private:
   class ScopeLog {
     friend class Logger;
-    ScopeLog(Logger &, const char *Title);
+    ScopeLog(Logger &, StringRef Title);
 
   public:
     ~ScopeLog();
 
   private:
-    const char *Title;
+    StringRef Title;
     Logger &Log;
   };
 
@@ -48,8 +48,8 @@ public:
   Logger() : Logger(errs()) {}
   Logger(raw_fd_ostream &os) : Os(os), IsBg(false), IsBold(false) {}
 
-  ScopeLog scope(const char *Title = nullptr) { return ScopeLog(*this, Title); }
-  Logger &delimiter(char c = '-', uint8_t width = 10, StringRef ID = "");
+  ScopeLog scope(StringRef Title = "") { return ScopeLog(*this, Title); }
+  Logger &delimiter(char c = '-', uint8_t width = 20, StringRef ID = "");
 
   Logger &padToColumn(uint16_t Column) {
     Os.PadToColumn(Column);
@@ -183,7 +183,7 @@ public:
     Buffer.push_back(Data);
   }
 
-  void displayLogs();
+  void displayLogs(StringRef Title = "");
 
 private:
   void printStrLog(const StringRef Value);

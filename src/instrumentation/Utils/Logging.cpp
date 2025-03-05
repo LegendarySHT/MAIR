@@ -9,13 +9,13 @@ using namespace llvm;
 
 __xsan::BufferedLogger Log;
 
-Logger::ScopeLog::ScopeLog(Logger &Log, const char *Title)
+Logger::ScopeLog::ScopeLog(Logger &Log, StringRef Title)
     : Log(Log), Title(Title) {
-  Log.unbold().white().delimiter('<', 20, Title);
+  Log.unbold().white().delimiter('<', 40, Title);
 }
 
 Logger::ScopeLog::~ScopeLog() {
-  Log.unbold().white().delimiter('>', 20);
+  Log.unbold().white().delimiter('>', 40);
   Log.log("\n");
   Log.reset();
   Log.flush();
@@ -84,10 +84,10 @@ void BufferedLogger::printTwoIntLog(std::pair<uint32_t, uint32_t> Value) {
       .endl();
 }
 
-void BufferedLogger::displayLogs() {
+void BufferedLogger::displayLogs(StringRef Title) {
   if (GroupedBuffer.empty())
     return;
-  auto ScopedLog = scope();
+  auto ScopedLog = scope(Title);
   for (StringRef Func : GroupedBuffer.keys()) {
     const auto &Buffer = GroupedBuffer[Func];
     if (Buffer.empty()) {
