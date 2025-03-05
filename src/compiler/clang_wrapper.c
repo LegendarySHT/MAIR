@@ -1022,8 +1022,7 @@ static void edit_params(u32 argc, const char** argv) {
     cc_params[cc_par_cnt++] = "none";
   }
 
-  if (!only_lib)
-    init_sanitizer_setting(xsanTy);
+  init_sanitizer_setting(xsanTy);
 
   /*
     We should put the sanitizer static runtime library just ahead of the
