@@ -21,6 +21,7 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/Dominators.h"
@@ -243,6 +244,18 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
 /// Note: If MOP dominates Exiting (see @arg BeforeExiting), then Counter is
 /// the number of backedge taken counts + 1, otherwise it is the number of
 /// backedge taken counts
+/// Note that, if Step is a negative constant, this function will adjust the
+/// access range accordingly as follows (see handleRangeWithNegativeStep):
+//  [Beg', End') = [End + |Step|, Beg + |Step|), i.e.,
+/// [Start + Step * LoopCount + |Step|, Start + |Step|)
+/// e.g., reads 4 bytes from 0x10, then ends at 0x04 with step -4
+///   --> Step = -4, Start = 0x10, End = 0x04, LoopCount = 2
+///   --> Beg  = 0x10 + (-4) * 2 + |-4| = 0x08
+///       End  = 0x10 + |-4| = 0x14
+///   --> We obtain the real access range [0x10, 0x14)
+/// What's more, if Step is a negative variable, this function just expands
+/// Beg and End as usual, and the relevant processing is delegated to the
+/// caller or the runtime library.
 static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
                             SCEVExpander &Expander, const SCEV *Start,
                             const SCEV *Step, bool BeforeExiting,
@@ -264,17 +277,29 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     return false;
   }
 
+  const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
+  ConstantInt *ConstStepVal = ConstStep ? ConstStep->getValue() : nullptr;
+  bool IsConstStepNegative = ConstStepVal && ConstStepVal->isNegative();
+
+  /// If Step is negative,  Start += |Step|, and the following
+  /// End = Start + Step * LoopCount will be also added by |Step|
+  if (IsConstStepNegative) {
+    const auto *PosStep = SE.getNegativeSCEV(Step);
+    Start = SE.getAddExpr(Start, PosStep);
+  }
+
   /// TODO: figure out if it is Okay to insert code in Predecessor block
   Beg = Expander.expandCodeFor(Start, IRB.getInt8PtrTy(), InsertPt);
   StepVal = Expander.expandCodeFor(Step, IRB.getInt64Ty(), InsertPt);
 
-  const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
-  bool StepIsOne = ConstStep && ConstStep->getAPInt() == 1;
+  /// Does not consider step -1, which should be used as factor of term,
+  /// negating the sign of offset.
+  bool StepIsOne = ConstStepVal && ConstStepVal->isOne();
 
-  /* 1. Try to get the loop's backedge taken count (loop invariant) through SCEV
-   */
   const auto *BackedgeTakenCount = SE.getBackedgeTakenCount(Loop);
   if (!isa<SCEVCouldNotCompute>(BackedgeTakenCount)) {
+    /* Try to get the loop's backedge taken count (loop invariant) via SCEV */
+
     // Note: backedge taken count does not include the first entry into the
     // header, so the actual trip count = backedge taken count + 1 Here we use
     // SCEVExpander to convert the SCEV expression to IR code.
@@ -293,17 +318,23 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
 
     End = Expander.expandCodeFor(EndSE, IRB.getInt8PtrTy(), InsertPt);
 
-    return true;
+  } else {
+    /* If the loop count isn't an invariant, manually insert a loop counter */
+    Value *Counter = getOrInsertLoopCounter(Loop, IRB, BeforeExiting);
+    if (!Counter) {
+      return false;
+    }
+
+    /// If Step is negative, Beg = End + |Step| = Start + Step * (LoopCount - 1)
+    Value *Offset = StepIsOne ? Counter : IRB.CreateMul(Counter, StepVal);
+    End = IRB.CreateGEP(IRB.getInt8Ty(), Beg, {Offset});
   }
 
-  /* 2. If the loop count is not an invariant, manually insert a loop counter */
-  Value *Counter = getOrInsertLoopCounter(Loop, IRB, BeforeExiting);
-  if (!Counter) {
-    return false;
+  if (IsConstStepNegative) {
+    /// If Step is negative
+    /// [Beg', End') = [End + |Step|, Beg + |Step|)
+    std::swap(Beg, End);
   }
-
-  Value *Offset = StepIsOne ? Counter : IRB.CreateMul(Counter, StepVal);
-  End = IRB.CreateGEP(IRB.getInt8Ty(), Beg, {Offset});
 
   return true;
 }
@@ -392,6 +423,7 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
     if (!isSimpleLoop(Loop)) {
       continue;
     }
+    /// TODO: filter read before/after write
     for (Instruction &Inst : BB) {
       if (ShouldSkip(Inst))
         continue;
@@ -545,6 +577,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
       if (!SE.isLoopInvariant(Step, Loop)) {
         continue; // Skip if not a loop invariant
       }
+      // If Step is not a constant, do not use range access to model.
       IsRangeAccess = false;
     } else {
       ConstantInt *StepVal = ConstStep->getValue();
