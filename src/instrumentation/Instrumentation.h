@@ -93,18 +93,22 @@ enum class LoopOptLeval {
 */
 class LoopMopInstrumenter {
 private:
+  using DupVec = SmallVector<Instruction *, 4>;
   struct LoopMop {
     Instruction *Mop;
     Value *Address;
     Loop *Loop;
     const size_t MopSize;
+    /// Records the MOPs redundant to this MOPs.
+    DupVec DupTo;
     /* If true, the Mop might not be executed in every iteration of the loop. */
     const bool InBranch;
     const bool IsWrite;
   };
 
 public:
-  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM, LoopOptLeval OptLevel);
+  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM,
+                      LoopOptLeval OptLevel);
   /*
    1. Relocate invariant checks: if a loop invariant is used in the loop, sink
       it out of the loop.
@@ -112,6 +116,7 @@ public:
       single check.
    */
   void instrument();
+
 private:
   // A simple loop is currently defined as a loop with
   // 1. single header, exit, latch, exiting. predecessor.
@@ -120,6 +125,15 @@ private:
   /// TODO: for ASan, such restrictions can be relaxed.
   bool isSimpleLoop(const Loop *L);
 
+  /// Filter out those obvious duplicate MOPs in the same BB,
+  /// being formalized as follows
+  /// For ∀m1 ≠ m2 ∈ MOPs, m1 is a duplicate of m2 if
+  ///     1. m1.addr = m2.addr
+  ///     2. m1.type = m2.type ∨ m1.type = read
+  ///     3. ∀ i ∈ (m1.loc, m2.loc), isNotCall(i)
+  /// `collectLoopMopCandidates` is the caller of this function,
+  ///  guaranting that the third condition holding.
+  void filterAndAddMops(SmallVectorImpl<LoopMop> &MOPs);
   // Collect loop mop candidates, i.e., MOPs that in SIMPLE loops.
   // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
   // their IR order.

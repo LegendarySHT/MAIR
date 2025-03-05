@@ -14,6 +14,8 @@
 #include "Instrumentation.h"
 #include "Utils/Logging.h"
 #include "Utils/Options.h"
+#include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -49,8 +51,10 @@ static cl::opt<bool> ClIgnoreRedundantInstrumentation(
 
 /// Number of loop invariant checks relocated.
 uint32_t NumInvChecksRelocated = 0;
+uint32_t NumInvChecksRelocatedDup = 0;
 /// Number of loop periodic checks combined.
 uint32_t NumPeriodChecksCombined = 0;
+uint32_t NumPeriodChecksCombinedDup = 0;
 namespace {
 /// Diagnostic information for IR instrumentation reporting.
 class DiagnosticInfoInstrumentation : public DiagnosticInfo {
@@ -412,6 +416,7 @@ LoopMopInstrumenter::getLoopMopCandidates() {
 void LoopMopInstrumenter::collectLoopMopCandidates() {
   auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  SmallVector<LoopMop, 16> LoopMops;
 
   // This only traverse the top-level loops, not nested loops.
   // See LI.getTopLevelLoops() for more details.
@@ -423,7 +428,7 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
     if (!isSimpleLoop(Loop)) {
       continue;
     }
-    /// TODO: filter read before/after write
+
     for (Instruction &Inst : BB) {
       if (ShouldSkip(Inst))
         continue;
@@ -440,6 +445,10 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
         Addr = LI->getPointerOperand();
         MopSize = DL.getTypeStoreSizeInBits(LI->getType());
         IsWrite = false;
+      } else if (isa<CallBase>(Inst)) {
+        filterAndAddMops(LoopMops);
+        LoopMops.clear();
+        continue;
       }
 
       if (!Addr)
@@ -471,11 +480,49 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
           bool IsWrite;
         };
       */
-      LoopMop Candidate = {&Inst, Addr, Loop, MopSize, InBranch, IsWrite};
-      LoopMopCandidates.push_back(Candidate);
+      LoopMop Candidate = {&Inst, Addr, Loop, MopSize, {}, InBranch, IsWrite};
+      LoopMops.push_back(Candidate);
     }
+    filterAndAddMops(LoopMops);
   }
   MopCollected = true;
+}
+
+/// Filter out those obvious duplicate MOPs in the same BB,
+/// being formalized as follows
+/// For ∀m1 ≠ m2 ∈ MOPs, m1 is a duplicate of m2 if
+///     1. m1.addr = m2.addr
+///     2. m1.type = m2.type ∨ m1.type = read
+///     3. ∀ i ∈ (m1.loc, m2.loc), isNotCall(i)
+/// `collectLoopMopCandidates` is the caller of this function,
+///  guaranting that the third condition holding.
+void LoopMopInstrumenter::filterAndAddMops(SmallVectorImpl<LoopMop> &MOPs) {
+  SmallMapVector<Value *, DupVec *, 4> SeenAddrs;
+  SmallVector<LoopMop, 8> MopsReversed;
+  /// Reserve enough space to make the space stable,
+  /// avoiding pointer to MopsReversed.back().DupTo to be invalidated.
+  MopsReversed.reserve(MOPs.size());
+  /// read-after-write MOPs do NOT exist due to the compilation optimization
+  /// Therefore, we traverse the MOPs in reverse order to retrieve the write
+  /// MOPs first if there are any read-before-write MOPs.
+  for (LoopMop &Mop : reverse(MOPs)) {
+    auto &[Inst, Addr, Loop, MopSize, DupTo, InBranch, IsWrite] = Mop;
+    auto *It = SeenAddrs.find(Addr);
+    if (It != SeenAddrs.end()) {
+      // If there are other MOPs with the same address, check if they are
+      // duplicates
+      It->second->push_back(Inst);
+    } else {
+      MopsReversed.push_back(std::move(Mop));
+      // &MopsReversed.back().DupTo is guauranteed to be stable
+      // because MopsReversed.reserve(MOPs.size()) is called.
+      // Therefore, this pointer is valid forever.
+      SeenAddrs[Addr] = &MopsReversed.back().DupTo;
+    }
+  }
+  // Move the MOPs back to the original order
+  LoopMopCandidates.append(std::make_move_iterator(MopsReversed.rbegin()),
+                           std::make_move_iterator(MopsReversed.rend()));
 }
 
 bool LoopMopInstrumenter::isSimpleLoop(const Loop *Loop) {
@@ -549,7 +596,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
   // their IR order.
   for (LoopMop &Mop : getLoopMopCandidates()) {
-    auto &[Inst, Addr, Loop, MopSize, InBranch, IsWrite] = Mop;
+    auto &[Inst, Addr, Loop, MopSize, DupTo, InBranch, IsWrite] = Mop;
     if (InBranch) {
       // Periodic MOPs combination is not supported in branches currently, skip.
       continue;
@@ -632,12 +679,17 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     }
 
     MarkAsDelegatedToXsan(*Inst);
+    for (auto *Dup : DupTo) {
+      MarkAsDelegatedToXsan(*Dup);
+      NumPeriodChecksCombinedDup++;
+    }
     NumPeriodChecksCombined++;
   }
 
   if (options::ClDebug) {
     Log.setFunction(F.getName());
     Log.addLog("[LoopOpt] #{Combined Loop Mops}", NumPeriodChecksCombined);
+    Log.addLog("[LoopOpt] #{Dup Comb. Reduction}", NumPeriodChecksCombinedDup);
   }
 
   return LoopChanged;
@@ -697,7 +749,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
   Instruction *LastInertPt = nullptr;
   BasicBlock *LastBB = nullptr;
   for (LoopMop &Mop : getLoopMopCandidates()) {
-    auto &[Inst, Addr, L, MopSize, InBranch, IsWrite] = Mop;
+    auto &[Inst, Addr, L, MopSize, DupTo, InBranch, IsWrite] = Mop;
     if (!L->isLoopInvariant(Addr)) {
       // Skip if Addr is not a loop invariant
       continue;
@@ -762,14 +814,20 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     // __xsan_writeX(const void *beg)
     IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
     MarkAsDelegatedToXsan(*Inst);
+    for (Instruction *Dup : DupTo) {
+      MarkAsDelegatedToXsan(*Dup);
+      NumInvChecksRelocatedDup++;
+    }
+    NumInvChecksRelocated++;
+  
     LastInertPt = InsertPt;
     LastBB = Inst->getParent();
-    NumInvChecksRelocated++;
   }
 
   if (options::ClDebug) {
     Log.setFunction(F.getName());
     Log.addLog("[LoopOpt] #{Relocated Loop Mops}", NumInvChecksRelocated);
+    Log.addLog("[LoopOpt] #{Dup Reloc. Reduction}", NumInvChecksRelocatedDup);
   }
 
   return LoopChanged;
