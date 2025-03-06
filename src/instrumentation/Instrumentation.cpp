@@ -418,8 +418,10 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   SmallVector<LoopMop, 16> LoopMops;
 
-  // This only traverse the top-level loops, not nested loops.
-  // See LI.getTopLevelLoops() for more details.
+  // for (auto* L : LI)  only traverse the top-level loops, not nested loops.
+  // See LI.getTopLevelLoops() for more details. Therefore, we do not directly 
+  // iterate the LoopInfo, but just iterate all MOPs and filter out those not
+  // in a loop.
   for (BasicBlock &BB : F) {
     Loop *Loop = LI.getLoopFor(&BB);
     if (!Loop) {
