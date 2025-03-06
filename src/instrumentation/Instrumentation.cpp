@@ -484,6 +484,7 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
       LoopMops.push_back(Candidate);
     }
     filterAndAddMops(LoopMops);
+    LoopMops.clear();
   }
   MopCollected = true;
 }
@@ -819,7 +820,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
       NumInvChecksRelocatedDup++;
     }
     NumInvChecksRelocated++;
-  
+
     LastInertPt = InsertPt;
     LastBB = Inst->getParent();
   }
