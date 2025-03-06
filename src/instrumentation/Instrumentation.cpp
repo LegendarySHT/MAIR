@@ -419,7 +419,7 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
   SmallVector<LoopMop, 16> LoopMops;
 
   // for (auto* L : LI)  only traverse the top-level loops, not nested loops.
-  // See LI.getTopLevelLoops() for more details. Therefore, we do not directly 
+  // See LI.getTopLevelLoops() for more details. Therefore, we do not directly
   // iterate the LoopInfo, but just iterate all MOPs and filter out those not
   // in a loop.
   for (BasicBlock &BB : F) {
@@ -605,7 +605,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
   // their IR order.
   for (LoopMop &Mop : getLoopMopCandidates()) {
-    auto &[Inst, Addr, Loop, MopSize, DupTo, InBranch, IsWrite] = Mop;
+    auto &[Inst, Addr, L, MopSize, DupTo, InBranch, IsWrite] = Mop;
     if (InBranch) {
       // Periodic MOPs combination is not supported in branches currently, skip.
       continue;
@@ -625,12 +625,20 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     const auto *Step = AR->getStepRecurrence(SE);
 
+    /// NOTE that, the direct parent LOOP of a AddRec MOP is NOT necessarily the
+    /// relevant LOOP of the AddRec, i.e., the MOP address is an invariant of
+    /// the direct parent LOOP, but changes with the outer loops.
+    L = const_cast<Loop *>(AR->getLoop());
+    if (!isSimpleLoop(L)) {
+      continue;
+    }
+
     // ----------- Extract Loop-Invariant step -----------
     const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
     bool IsRangeAccess;
     if (!ConstStep) {
       // If not a constant, check if it is a Loop-Invariant
-      if (!SE.isLoopInvariant(Step, Loop)) {
+      if (!SE.isLoopInvariant(Step, L)) {
         continue; // Skip if not a loop invariant
       }
       // If Step is not a constant, do not use range access to model.
@@ -648,8 +656,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
       continue;
     }
 
-    auto *ExitBlock = Loop->getUniqueExitBlock();
-    auto *Exiting = Loop->getExitingBlock();
+    auto *ExitBlock = L->getUniqueExitBlock();
+    auto *Exiting = L->getExitingBlock();
 
     /* 2. Combine periodic MOPs into a single range check */
 
@@ -669,8 +677,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     const auto *Start = AR->getStart();
     Value *Beg, *End, *StepVal;
-    if (!expandBegAndEnd(Loop, SE, Expander, Start, Step, IsMopBeforeExiting,
-                         IRB, Beg, End, StepVal)) {
+    if (!expandBegAndEnd(L, SE, Expander, Start, Step, IsMopBeforeExiting, IRB,
+                         Beg, End, StepVal)) {
       // If failed to expand, skip.
       continue;
     }

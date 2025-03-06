@@ -123,6 +123,8 @@ private:
   // 2. conatains no atomic instructions and
   //    no function calls (apart from pure readonly function)
   /// TODO: for ASan, such restrictions can be relaxed.
+  /// TODO: if the MOP is ahead of all exiting, multiple exitings
+  ///       do not affect the loop optimization.
   bool isSimpleLoop(const Loop *L);
 
   /// Filter out those obvious duplicate MOPs in the same BB,
