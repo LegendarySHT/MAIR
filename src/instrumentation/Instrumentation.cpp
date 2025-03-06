@@ -498,6 +498,12 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
 /// `collectLoopMopCandidates` is the caller of this function,
 ///  guaranting that the third condition holding.
 void LoopMopInstrumenter::filterAndAddMops(SmallVectorImpl<LoopMop> &MOPs) {
+  if (MOPs.empty())
+    return;
+  if (MOPs.size() == 1) {
+    LoopMopCandidates.push_back(std::move(MOPs.pop_back_val()));
+    return;
+  }
   SmallMapVector<Value *, DupVec *, 4> SeenAddrs;
   SmallVector<LoopMop, 8> MopsReversed;
   /// Reserve enough space to make the space stable,
