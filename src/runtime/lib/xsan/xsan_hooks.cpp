@@ -707,6 +707,11 @@ void AfterMmap(const XsanInterceptorContext& ctx, void *res, uptr size, int fd) 
 }
 
 void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr, uptr size) {
+  /// Size too big can cause problems with the shadow memory.
+  /// unmap on NULL is not allowed.
+  if ((sptr)size < 0 || addr == nullptr)
+    return;
+
   __tsan::BeforeMunmap(ctx, addr, size);
   __asan::BeforeMunmap(addr, size);
 }
