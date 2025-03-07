@@ -957,7 +957,7 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strcmp(cur, "-m32")) bit_mode = 32;
     else if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
     else if (!strcmp(cur, "-m64")) bit_mode = 64;
-    else if (handle_x_option(&cur)) x_set = 1;
+    else if (handle_x_option(&argv[i])) x_set = 1;
     else if (!strcmp(cur, "-fsanitize=address") ||
              !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
     else if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
