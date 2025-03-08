@@ -24,6 +24,8 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
 #include "llvm/IR/Dominators.h"
@@ -35,11 +37,14 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/PassManager.h"
+#include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 #include <cstdint>
+#include <optional>
 
 using namespace llvm;
 
@@ -66,6 +71,228 @@ public:
       : DiagnosticInfo(DK_Linker, Severity), Msg(DiagMsg) {}
   void print(DiagnosticPrinter &DP) const override { DP << Msg; }
 };
+
+/// IntTy -> IntTy, PtrTy -> IntTy with the same bitwidth.
+static IntegerType *getIntTy(Type *Ty, const DataLayout &DL) {
+  if (auto *ITy = dyn_cast<IntegerType>(Ty))
+    return ITy;
+  if (auto *PTy = dyn_cast<PointerType>(Ty)) {
+    unsigned PtrBitWidth = DL.getPointerSizeInBits(PTy->getAddressSpace());
+    return IntegerType::get(Ty->getContext(), PtrBitWidth);
+  }
+  return nullptr;
+}
+
+/// Metch standard patterns as follows:
+///    ( $EXT1(Inv1 * $EXT2($AddRec)) + Inv2 )
+/// -> ( $EXT1(Inv1 * $EXT2({Start,+,Step})) + Inv2 )
+/// which can be rewritten to:
+///   { $EXT1(Inv1 * $EXT2(Start)) + Inv2, +, $EXT1(Inv1 * $EXT2(Step)) }
+/// In fact, the two are not equivalent, they have different cycles.
+/// $Ext = zext or sext,  Inv1/Inv2 = loop invariants
+/// Note that Ext1/Ext2 might be no-op, Inv1 might be 1, Inv2 must not be
+/// zero. Therefore the standard pattern could be expanded into:
+///   ($AddRec + $Invariant)
+///   ($EXT($AddRec) + $Invariant)
+///   (($AddRec * $Inv1) + $Inv2)
+///   ($EXT($AddRec * $Inv1) + $Inv2)
+///   (($EXT($AddRec) * $Inv1) + $Inv2)
+/// e.g.,
+///   ((zext i32 {%0,+,1}<%5> to i64) + %1)<nuw>
+///   ((8 * (sext i32 {%out.0381,+,1}<%while.cond> to i64))<nsw> + %147)
+///   ({(8 * (sext i32 %i51.2 to i64))<nsw>,+,8}<nsw><%while.body189> + %244)
+/// Rewrite the AddExpr satifying the above standard form into a AddRecExpr,
+/// and further return it with the bytewidth of the inner AddRec.
+class PtrAddExpr2PtrAddRecRewriter {
+public:
+  using Result = std::pair<const SCEVAddRecExpr *, IntegerType *>;
+  static std::optional<Result>
+  getAddRecAndType(const SCEV *S, ScalarEvolution &SE) {
+    const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
+    const DataLayout &DL = SE.getDataLayout();
+    Result Res;
+    IntegerType *AddRecTy = nullptr;
+    if (AddRec) {
+      Res = {AddRec, getIntTy(AddRec->getType(), DL)};
+      return Res;
+    }
+
+    PtrAddExpr2PtrAddRecRewriter Rewriter(SE);
+    if (!Rewriter.matchAddExpr(S)) {
+      return std::nullopt;
+    }
+
+    auto NewAddRec = Rewriter.assembleNewAddRec();
+    if (!NewAddRec) {
+      return std::nullopt;
+    }
+    Res = {*NewAddRec, getIntTy(Rewriter.AddRecTy, DL)};
+    return Res;
+  }
+
+private:
+  PtrAddExpr2PtrAddRecRewriter(ScalarEvolution &SE) : SE(SE) {}
+
+  /// { $EXT1(Inv1 * $EXT2(Start)) + Inv2, +, $EXT1(Inv1 * $EXT2(Step)) }
+  std::optional<const SCEVAddRecExpr *> assembleNewAddRec() {
+    if (!Start || !Step || !L)
+      return std::nullopt;
+
+    auto NewStart = assembleNewStart();
+    auto NewStep = assembleNewStep();
+    if (!NewStart || !NewStep)
+      return std::nullopt;
+
+    /// TODO: can we derive the new flags?
+    const SCEV *NewAddRec =
+        SE.getAddRecExpr(*NewStart, *NewStep, L, SCEV::FlagAnyWrap);
+    return (const SCEVAddRecExpr *)NewAddRec;
+  }
+
+  //  $EXT1(Inv1 * $EXT2(Step))
+  std::optional<const SCEV *> assembleNewStep() {
+    if (!Step)
+      return std::nullopt;
+
+    const SCEV *NewStep = Step;
+    if (InnerExt) {
+      NewStep =
+          SE.getCastExpr(InnerExt->getSCEVType(), NewStep, InnerExt->getType());
+    }
+
+    if (Inv2Mul) {
+      NewStep = SE.getMulExpr(NewStep, Inv2Mul);
+    }
+
+    if (OuterExt) {
+      NewStep =
+          SE.getCastExpr(OuterExt->getSCEVType(), NewStep, OuterExt->getType());
+    }
+
+    return NewStep;
+  }
+
+  // $EXT1(Inv1 * $EXT2(Start)) + Inv2
+  std::optional<const SCEV *> assembleNewStart() {
+    if (!Start)
+      return std::nullopt;
+
+    const SCEV *NewStart = Start;
+    if (InnerExt) {
+      NewStart = SE.getCastExpr(InnerExt->getSCEVType(), NewStart,
+                                InnerExt->getType());
+    }
+
+    if (Inv2Mul) {
+      NewStart = SE.getMulExpr(NewStart, Inv2Mul);
+    }
+
+    if (OuterExt) {
+      NewStart = SE.getCastExpr(OuterExt->getSCEVType(), NewStart,
+                                OuterExt->getType());
+    }
+
+    NewStart = SE.getAddExpr(NewStart, Inv2Add);
+
+    return NewStart;
+  }
+
+  /// Match ( ... + Inv2 )
+  bool matchAddExpr(const SCEV *S) {
+    const SCEVAddExpr *Add = dyn_cast<SCEVAddExpr>(S);
+    if (!Add || Add->getNumOperands() != 2)
+      return false;
+    const auto *LHS = Add->getOperand(0);
+    const auto *RHS = Add->getOperand(1);
+    if (matchOuterExt(LHS)) {
+      Inv2Add = RHS;
+      // errs() << "Add: " << *Add << "\n";
+      // errs() << "\tLoop: " << L->getHeader()->getName() << "\n";
+      // errs() << "\tLoop Inv: " << SE.isLoopInvariant(Inv2Add, L) << "\n";
+
+      return SE.isLoopInvariant(Inv2Add, L);
+    }
+    reset();
+    if (matchOuterExt(RHS)) {
+      Inv2Add = LHS;
+      return SE.isLoopInvariant(Inv2Add, L);
+    }
+    return false;
+  }
+
+  /// Match $EXT1(...)
+  bool matchOuterExt(const SCEV *S) {
+    const SCEVZeroExtendExpr *ZExt = dyn_cast<SCEVZeroExtendExpr>(S);
+    if (ZExt) {
+      OuterExt = ZExt;
+    }
+    return matchMul(ZExt ? ZExt->getOperand() : S);
+  }
+
+  /// Match (Inv1 * ...)
+  bool matchMul(const SCEV *S) {
+    const SCEVMulExpr *Mul = dyn_cast<SCEVMulExpr>(S);
+    if (!Mul) {
+      return matchInnerExt(S);
+    }
+    if (Mul->getNumOperands() != 2) {
+      return false;
+    }
+    const auto *LHS = Mul->getOperand(0);
+    const auto *RHS = Mul->getOperand(1);
+    if (matchInnerExt(RHS)) {
+      Inv2Mul = LHS;
+      return SE.isLoopInvariant(Inv2Mul, L);
+    }
+    if (matchInnerExt(LHS)) {
+      Inv2Mul = RHS;
+      return SE.isLoopInvariant(Inv2Mul, L);
+    }
+    return false;
+  }
+
+  /// Match $EXT2(...)
+  bool matchInnerExt(const SCEV *S) {
+    const SCEVIntegralCastExpr *Cast = dyn_cast<SCEVIntegralCastExpr>(S);
+    if (Cast) {
+      InnerExt = Cast;
+    }
+    return matchInnerAddRec(Cast ? Cast->getOperand() : S);
+  }
+
+  /// Match {Start,+,Step}
+  bool matchInnerAddRec(const SCEV *S) {
+    const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
+    if (!AddRec)
+      return false;
+    Start = AddRec->getStart();
+    Step = AddRec->getStepRecurrence(SE);
+    L = AddRec->getLoop();
+    InnerAddRecFlags = AddRec->getNoWrapFlags();
+    AddRecTy = Start->getType();
+    return SE.isLoopInvariant(Step, L);
+  }
+
+  void reset() {
+    L = nullptr;
+    Inv2Add = Inv2Mul = Start = Step = OuterExt = nullptr;
+    InnerExt = nullptr;
+  }
+
+private:
+  ScalarEvolution &SE;
+  const Loop *L = nullptr;
+  const SCEV *Inv2Add = nullptr;
+  const SCEV *Inv2Mul = nullptr;
+  const SCEV *Start = nullptr;
+  const SCEV *Step = nullptr;
+  Type *AddRecTy;
+  /// Indicates whether the inner addrec is marked as nuw or nsw.
+  SCEV::NoWrapFlags InnerAddRecFlags;
+  const SCEVZeroExtendExpr *OuterExt = nullptr;
+  const SCEVIntegralCastExpr *InnerExt = nullptr;
+};
+
 } // namespace
 
 namespace __xsan {
@@ -166,7 +393,8 @@ static bool isLoopCountingPhi(PHINode *PN, BasicBlock *Predecessor,
     new one.
 */
 static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
-                                     const bool BeforeExiting) {
+                                     const bool BeforeExiting,
+                                     IntegerType *CounterTy = nullptr) {
   BasicBlock *Header = Loop->getHeader(),
              *Predecessor = Loop->getLoopPredecessor(),
              *Latch = Loop->getLoopLatch();
@@ -174,6 +402,11 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
   if (!Header || !Predecessor || !Latch)
     return nullptr; // If the loop does not have a header, it is unsafe to
                     // instrument
+
+  if (CounterTy == nullptr) {
+    /// Default type is i64
+    CounterTy = IRB.getInt64Ty();
+  }
 
   // If the header has > 2 predecessors, it is unsafe to instrument
   if (!Header->hasNPredecessors(2))
@@ -195,9 +428,9 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
 
     Counter = Phi;
 
-    // If not i64, cast it to i64
-    if (Counter->getType() != IRB.getInt64Ty()) {
-      Counter = IRB.CreateZExt(Counter, IRB.getInt64Ty());
+    // If not target type, cast it.
+    if (Counter->getType() != CounterTy) {
+      Counter = IRB.CreateIntCast(Counter, CounterTy, false);
     }
 
     if (ZeroBase && BeforeExiting) {
@@ -224,8 +457,7 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
   SmallVector<BasicBlock *, 4> Latches;
   Loop->getLoopLatches(Latches);
   unsigned NumIncoming = 1 + Latches.size();
-  PHINode *CounterPhi =
-      IRB.CreatePHI(IRB.getInt64Ty(), NumIncoming, "loop.count");
+  PHINode *CounterPhi = IRB.CreatePHI(CounterTy, NumIncoming, "loop.count");
 
   // Incoming value from preheader is
   CounterPhi->addIncoming(IRB.getInt64(BeforeExiting ? 1 : 0), Predecessor);
@@ -234,8 +466,9 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
   for (BasicBlock *Latch : Latches) {
     IRBuilder<> LatchBuilder(Latch->getTerminator());
     // Generate: %inc = add counterPhi, 1
-    Value *Incr = LatchBuilder.CreateAdd(CounterPhi, IRB.getInt64(1),
-                                         "inc.loop.count", true, true);
+    Value *Incr =
+        LatchBuilder.CreateAdd(CounterPhi, ConstantInt::get(CounterTy, 1),
+                               "inc.loop.count", true, true);
     CounterPhi->addIncoming(Incr, Latch);
   }
 
@@ -262,9 +495,9 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
 /// caller or the runtime library.
 static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
                             SCEVExpander &Expander, const SCEV *Start,
-                            const SCEV *Step, bool BeforeExiting,
-                            InstrumentationIRBuilder &IRB, Value *&Beg,
-                            Value *&End, Value *&StepVal) {
+                            const SCEV *Step, IntegerType *CounterTy,
+                            bool BeforeExiting, InstrumentationIRBuilder &IRB,
+                            Value *&Beg, Value *&End, Value *&StepVal) {
   // 1. Try to find an existing loop counter in the loop header (header)
   BasicBlock *Header = Loop->getHeader(),
              *Predecessor = Loop->getLoopPredecessor(),
@@ -312,6 +545,15 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     // point, such as using the loop preheader's terminal instruction
     // Theoretically, preheader is better, but a loop predecessor can also
     // work.
+    IntegerType *OrigCounterTy =
+        cast<IntegerType>(BackedgeTakenCount->getType());
+    if (OrigCounterTy != CounterTy) {
+      SCEVTypes CastOp = OrigCounterTy->getBitWidth() > CounterTy->getBitWidth()
+                             ? SCEVTypes::scTruncate
+                             : SCEVTypes::scZeroExtend;
+      BackedgeTakenCount =
+          SE.getCastExpr(CastOp, BackedgeTakenCount, CounterTy);
+    }
     const auto *IterCounter =
         BeforeExiting
             ? SE.getAddExpr(BackedgeTakenCount, SE.getConstant(IRB.getInt64(1)))
@@ -324,7 +566,8 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
 
   } else {
     /* If the loop count isn't an invariant, manually insert a loop counter */
-    Value *Counter = getOrInsertLoopCounter(Loop, IRB, BeforeExiting);
+    Value *Counter =
+        getOrInsertLoopCounter(Loop, IRB, BeforeExiting, CounterTy);
     if (!Counter) {
       return false;
     }
@@ -619,7 +862,12 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     /// TODO: transfer SCEVAddExpr(SCEVAddRecExpr) to
     /// SCEVAddRecExpr(SCEVAddExpr)
-    const auto *AR = dyn_cast<SCEVAddRecExpr>(PtrSCEV);
+    auto AddRecAndType =
+        PtrAddExpr2PtrAddRecRewriter::getAddRecAndType(PtrSCEV, SE);
+    if (!AddRecAndType.has_value()) {
+      continue;
+    }
+    auto &[AR, CounterTy] = AddRecAndType.value();
     if (!AR)
       continue;
 
@@ -684,8 +932,9 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     const auto *Start = AR->getStart();
     Value *Beg, *End, *StepVal;
-    if (!expandBegAndEnd(L, SE, Expander, Start, Step, IsMopBeforeExiting, IRB,
-                         Beg, End, StepVal)) {
+    /// TODO: consider the overflow case
+    if (!expandBegAndEnd(L, SE, Expander, Start, Step, CounterTy,
+                         IsMopBeforeExiting, IRB, Beg, End, StepVal)) {
       // If failed to expand, skip.
       continue;
     }
