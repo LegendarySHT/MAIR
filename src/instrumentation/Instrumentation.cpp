@@ -14,6 +14,7 @@
 #include "Instrumentation.h"
 #include "Utils/Logging.h"
 #include "Utils/Options.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -344,15 +345,20 @@ header:
   ...
 latch:
   %inc = add %counter, 1
+
+Only those PHINode with bitwidth >= target && bitwidth >= 32 are considered.
  */
-static bool isLoopCountingPhi(PHINode *PN, BasicBlock *Predecessor,
-                              BasicBlock *Latch, bool &ZeroBase) {
+static bool isLoopCountingPhi(IntegerType *TargetTy, PHINode *PN,
+                              BasicBlock *Predecessor, BasicBlock *Latch,
+                              bool &ZeroBase) {
   // Check if there are exactly two incoming edges
   if (PN->getNumIncomingValues() != 2)
     return false;
 
   // Check if the type is integer
-  if (!PN->getType()->isIntegerTy())
+  auto *IntTy = dyn_cast<IntegerType>(PN->getType());
+  unsigned BitWidth = IntTy->getBitWidth();
+  if (!IntTy || BitWidth < TargetTy->getBitWidth() || BitWidth < 32)
     return false;
 
   bool HasZeroOrOne = false;
@@ -384,6 +390,30 @@ static bool isLoopCountingPhi(PHINode *PN, BasicBlock *Predecessor,
     }
   }
   return HasZeroOrOne && HasAddUp;
+}
+
+/// SrcTy == TargetTy: no need to truncate
+/// SrcTy < TargetTy: invalid
+/// SrcTy > TargetTy: saturation truncate, i.e., target = src > TargetTy::max ?
+/// TargetTy::max : src
+static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
+                                 InstrumentationIRBuilder &IRB) {
+  auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
+  if (!SrcTy)
+    return nullptr;
+  if (SrcTy == TargetTy)
+    return SrcVal;
+  if (SrcTy->getBitWidth() < TargetTy->getBitWidth())
+    llvm_unreachable("Invalid truncate");
+  APInt TargetMaxInt = APInt::getMaxValue(TargetTy->getBitWidth());
+  auto *TargetMaxTySrc = ConstantInt::get(SrcTy, TargetMaxInt);
+  auto *TargetMax = ConstantInt::get(TargetTy, TargetMaxInt);
+
+  auto *TargetVal =
+      IRB.CreateSelect(IRB.CreateICmpUGT(SrcVal, TargetMaxTySrc), TargetMax,
+                       IRB.CreateTrunc(SrcVal, TargetTy));
+
+  return TargetVal;
 }
 
 /*
@@ -422,23 +452,26 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
 
     bool ZeroBase = false;
 
-    if (!isLoopCountingPhi(Phi, Predecessor, Latch, ZeroBase)) {
+    if (!isLoopCountingPhi(CounterTy, Phi, Predecessor, Latch, ZeroBase)) {
       continue;
     }
-
     Counter = Phi;
 
-    // If not target type, cast it.
-    if (Counter->getType() != CounterTy) {
-      Counter = IRB.CreateIntCast(Counter, CounterTy, false);
-    }
-
+    /// `isLoopCountingPhi` ensures that bitwidth >= 32, so we do not need to
+    /// consider the overflow of the counter.
     if (ZeroBase && BeforeExiting) {
       // If MOP is before the exiting block, we should count it from 1.
       Counter = IRB.CreateAdd(Counter, IRB.getInt64(1), "add_one", true, true);
     } else if (!ZeroBase && !BeforeExiting) {
       // If MOP is after the exiting block, we should count it from 0.
       Counter = IRB.CreateSub(Counter, IRB.getInt64(1), "sub_one", true, true);
+    }
+
+    // If not target type, cast it.
+    // e.g, u32 count32 = count64 > u32max? u32max : (u32)count64;
+    if (Counter->getType() != CounterTy) {
+      // Counter = IRB.CreateIntCast(Counter, CounterTy, false);
+      Counter = saturationTruncate(Counter, CounterTy, IRB);
     }
 
     return Counter;
@@ -466,9 +499,9 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
   for (BasicBlock *Latch : Latches) {
     IRBuilder<> LatchBuilder(Latch->getTerminator());
     // Generate: %inc = add counterPhi, 1
-    Value *Incr =
-        LatchBuilder.CreateAdd(CounterPhi, ConstantInt::get(CounterTy, 1),
-                               "inc.loop.count", true, true);
+    // Sat Add, to avoid overflow, e.g., 0xff + 1 = 0xff
+    Value *Incr = IRB.CreateBinaryIntrinsic(Intrinsic::uadd_sat, CounterPhi,
+                                            ConstantInt::get(CounterTy, 1));
     CounterPhi->addIncoming(Incr, Latch);
   }
 
@@ -932,7 +965,6 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     const auto *Start = AR->getStart();
     Value *Beg, *End, *StepVal;
-    /// TODO: consider the overflow case
     if (!expandBegAndEnd(L, SE, Expander, Start, Step, CounterTy,
                          IsMopBeforeExiting, IRB, Beg, End, StepVal)) {
       // If failed to expand, skip.
