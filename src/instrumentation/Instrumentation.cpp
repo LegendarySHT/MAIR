@@ -623,6 +623,16 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     if (!AR)
       continue;
 
+    if (!AR->isAffine()) {
+      // If AR is not in form A + B * x or A/B is not a loop-invariant,
+      // skip.
+      continue;
+    }
+
+    /// TODO: support N-op case AddRec {S_{N-1},+,S_{N-2},+,...,+,S_0}
+    /// e.g., {A, + , B, + , C} = A + x (B + C x) = A + x B + x^2 C
+    /// AR.isQuadratic() is true if A/B/C are loop-invariants.
+
     const auto *Step = AR->getStepRecurrence(SE);
 
     /// NOTE that, the direct parent LOOP of a AddRec MOP is NOT necessarily the
@@ -637,10 +647,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     const SCEVConstant *ConstStep = dyn_cast<SCEVConstant>(Step);
     bool IsRangeAccess;
     if (!ConstStep) {
-      // If not a constant, check if it is a Loop-Invariant
-      if (!SE.isLoopInvariant(Step, L)) {
-        continue; // Skip if not a loop invariant
-      }
+      // Step must be a loop invariant, guaranteed by the above AR->isAffine()
       // If Step is not a constant, do not use range access to model.
       IsRangeAccess = false;
     } else {
