@@ -483,8 +483,10 @@ static bool isLoopCountingPhi(IntegerType *TargetTy, PHINode *PN,
 
   // Check if the type is integer
   auto *IntTy = dyn_cast<IntegerType>(PN->getType());
+  if (!IntTy)
+    return false;
   unsigned BitWidth = IntTy->getBitWidth();
-  if (!IntTy || BitWidth < TargetTy->getBitWidth() || BitWidth < 32)
+  if (BitWidth < TargetTy->getBitWidth() || BitWidth < 32)
     return false;
 
   bool HasZeroOrOne = false;
