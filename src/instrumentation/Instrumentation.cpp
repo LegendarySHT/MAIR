@@ -1259,9 +1259,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     Instruction *InsertPt;
     bool SameBBWithLast = LastBB && LastBB == Inst->getParent();
     Instruction *AddrInst = dyn_cast<Instruction>(Addr);
-    bool HoistToPreheader =
-        !IsInBranch && Preheader &&
-        (!AddrInst || DT.dominates(AddrInst, Preheader->getTerminator()));
+    bool HoistToPreheader = !IsInBranch && Preheader;
     if (SameBBWithLast) {
       // Just reuse the last insert point
       InsertPt = LastInertPt;
@@ -1293,6 +1291,14 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
         // If not in branch, insert at the beginning of the exit block.
         InsertPt = &*ExitBlock->getFirstInsertionPt();
       }
+    }
+
+    /// If UBSan enabled, the de facto address invariant may be inside the loop.
+    /// For these cases, we need to copy the address into the insert point.
+    if (AddrInst && !DT.dominates(AddrInst, InsertPt)) {
+      Instruction *ClonedAddr = AddrInst->clone();
+      ClonedAddr->insertBefore(InsertPt);
+      Addr = ClonedAddr;
     }
 
     size_t Idx = countTrailingZeros(MopSize);
