@@ -1253,13 +1253,16 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     /* Get the insert point for invariant check relocating */
     Instruction *InsertPt;
     bool SameBBWithLast = LastBB && LastBB == Inst->getParent();
-    bool SinkToExit = IsInBranch || !Preheader;
+    Instruction *AddrInst = dyn_cast<Instruction>(Addr);
+    bool HoistToPreheader =
+        !IsInBranch && Preheader &&
+        (!AddrInst || DT.dominates(AddrInst, Preheader->getTerminator()));
     if (SameBBWithLast) {
       // Just reuse the last insert point
       InsertPt = LastInertPt;
-    } else if (!SinkToExit) {
-      // If has preheader and not in branch, insert at the terminator of the
-      // preheader.
+    } else if (HoistToPreheader) {
+      // If 1) preheader exists, 2) MOP is not in branch, and 3) Addr dom
+      // preheader's terminator, insert at the terminator of the preheader.
       InsertPt = Preheader->getTerminator();
     } else {
       // If no preheader, sinstrument on the exit.
