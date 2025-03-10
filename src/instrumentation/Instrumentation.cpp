@@ -1039,7 +1039,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
   // their IR order.
   for (LoopMop &Mop : getLoopMopCandidates()) {
-    auto &[Inst, Addr, L, MopSize, DupTo, InBranch, IsWrite] = Mop;
+    auto &[Inst, Addr, _, MopSize, DupTo, InBranch, IsWrite] = Mop;
     if (InBranch) {
       // Periodic MOPs combination is not supported in branches currently, skip.
       continue;
@@ -1107,7 +1107,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     /// NOTE that, the direct parent LOOP of a AddRec MOP is NOT necessarily the
     /// relevant LOOP of the AddRec, i.e., the MOP address is an invariant of
     /// the direct parent LOOP, but changes with the outer loops.
-    L = const_cast<Loop *>(AR->getLoop());
+    Loop *L = const_cast<Loop *>(AR->getLoop());
     if (!isSimpleLoop(L)) {
       continue;
     }
