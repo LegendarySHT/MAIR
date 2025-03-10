@@ -682,7 +682,7 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
   // 1. Try to find an existing loop counter in the loop header (header)
   BasicBlock *Header = Loop->getHeader(),
              *Predecessor = Loop->getLoopPredecessor(),
-             *Latch = Loop->getLoopLatch(), *Exit = Loop->getExitBlock();
+             *Latch = Loop->getLoopLatch(), *Exit = Loop->getUniqueExitBlock();
 
   if (!Header || !Predecessor || !Latch)
     return false; // If the loop does not have a header, it is unsafe to
@@ -978,8 +978,12 @@ bool LoopMopInstrumenter::isSimpleLoop(const Loop *Loop) {
 
   /// TODO: relax this condition
   /// ONE latch, ONE predecessor, ONE header, ONE exiting block, ONE exit block
+  /// Note that, some Loop may have > 1 exit, but only 1 uniq exit, hence we
+  /// use API `getUniqueExitBlock` to get the unique exit block.
+  /// i.e., switch ... %latch { ..., %exit; ..., %exit; } has 2 exits, but only
+  /// 1 uniq exit.
   if (!Loop->getHeader() || !Loop->getLoopPredecessor() ||
-      !Loop->getLoopLatch() || !Loop->getExitBlock() ||
+      !Loop->getLoopLatch() || !Loop->getUniqueExitBlock() ||
       !Loop->getExitingBlock()) {
     ComplexLoops.insert(Loop);
     return false;
