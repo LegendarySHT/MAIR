@@ -24,6 +24,7 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -568,10 +569,12 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
     /// consider the overflow of the counter.
     if (ZeroBase && BeforeExiting) {
       // If MOP is before the exiting block, we should count it from 1.
-      Counter = IRB.CreateAdd(Counter, IRB.getInt64(1), "add_one", true, true);
+      Counter = IRB.CreateAdd(Counter, ConstantInt::get(Counter->getType(), 1),
+                              "add_one", true, true);
     } else if (!ZeroBase && !BeforeExiting) {
       // If MOP is after the exiting block, we should count it from 0.
-      Counter = IRB.CreateSub(Counter, IRB.getInt64(1), "sub_one", true, true);
+      Counter = IRB.CreateSub(Counter, ConstantInt::get(Counter->getType(), 1),
+                              "sub_one", true, true);
     }
 
     return Counter;
@@ -638,7 +641,7 @@ static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
 }
 
 /// Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation
-/// i.e., target = (u64) (src >= (target_ty::max + 1) ? target_ty::max + 1 : src)
+/// i.e., target = (u64)(src >= (targ_ty::max + 1) ? targ_ty::max + 1 : src)
 static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
                                           InstrumentationIRBuilder &IRB) {
   auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
