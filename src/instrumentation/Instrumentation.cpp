@@ -295,6 +295,26 @@ private:
   const SCEVIntegralCastExpr *InnerExt = nullptr;
 };
 
+class XsanSCEVExpander : public SCEVExpander {
+public:
+  explicit XsanSCEVExpander(ScalarEvolution &se, const DataLayout &DL,
+                            const char *name, bool PreserveLCSSA = true)
+      : SCEVExpander(se, DL, name, PreserveLCSSA) {}
+  Value *expandCodeFor(const SCEV *SH, Type *Ty, Instruction *I) {
+    Instruction *LastI = I->getPrevNode();
+    Value *V = SCEVExpander::expandCodeFor(SH, Ty, I);
+    Instruction *Beg =
+        LastI ? LastI->getNextNode() : I->getParent()->getFirstNonPHI();
+    Instruction *End = I;
+    while (Beg != End) {
+      Beg->setMetadata(LLVMContext::MD_nosanitize,
+                       MDNode::get(I->getContext(), None));
+      Beg = Beg->getNextNode();
+    }
+    return V;
+  }
+};
+
 } // namespace
 
 namespace __xsan {
@@ -646,7 +666,7 @@ static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
 /// Beg and End as usual, and the relevant processing is delegated to the
 /// caller or the runtime library.
 static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
-                            SCEVExpander &Expander, const SCEV *Start,
+                            XsanSCEVExpander &Expander, const SCEV *Start,
                             const SCEV *Step, IntegerType *CounterTy,
                             bool BeforeExiting, InstrumentationIRBuilder &IRB,
                             Value *&Beg, Value *&End, Value *&StepVal) {
@@ -692,9 +712,9 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
 
     // Note: backedge taken count does not include the first entry into the
     // header, so the actual trip count = backedge taken count + 1 Here we use
-    // SCEVExpander to convert the SCEV expression to IR code.
+    // XsanSCEVExpander to convert the SCEV expression to IR code.
 
-    // Note: SCEVExpander requires DataLayout (DL) and a suitable insertion
+    // Note: XsanSCEVExpander requires DataLayout (DL) and a suitable insertion
     // point, such as using the loop preheader's terminal instruction
     // Theoretically, preheader is better, but a loop predecessor can also
     // work.
@@ -1005,7 +1025,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
   // Get SCEV analysis result
   auto &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
 
-  SCEVExpander Expander(SE, DL, "expander");
+  XsanSCEVExpander Expander(SE, DL, "expander");
 
   // Those MOPs in the same BB are guaranteed to be adjacent and ordered by
   // their IR order.
