@@ -581,6 +581,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   case TSan:
   case UBSan:
   case XSan:
+    /// TODO: support unmodified clang
     // Use env var to control clang only perform frontend 
     // transformation for sanitizers.
     setenv("XSAN_ONLY_FRONTEND", "1", 1);
@@ -613,12 +614,20 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
         cc_params[cc_par_cnt++] = "-fno-sanitize=function";
       }
 
-      /// -object-size options is duplicated with -fsanitize=address.
+      /// Some sub-functionality of UBSan is duplicated with ASan
       if (has(&xsan_options, ASan)) {
+        /// -object-size option is duplicated with -fsanitize=address, which
+        /// detects overflow issues for object accesses.
         /// What's more, in LLVM 15, -fsanitize=object-size affects the 
         /// the function inlining, which may cause some performance issues.
         /// For those case using libc++: std::string str; str.size(); 
         cc_params[cc_par_cnt++] = "-fno-sanitize=object-size";
+        /// -bounds option is duplicated with -fsanitize=address, which
+        /// detects overflow issues for array accesses.
+        cc_params[cc_par_cnt++] = "-fno-sanitize=bounds";
+        /// Similarly, -null option is duplicated with -fsanitize=address, which
+        /// detects null pointer dereferences.
+        cc_params[cc_par_cnt++] = "-fno-sanitize=null";
       }
     }
     break;
