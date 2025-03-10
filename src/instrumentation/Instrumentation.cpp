@@ -410,12 +410,17 @@ bool LoopInvariantChecker::isLoopInvariant(ScalarEvolution &SE, const SCEV *S,
 }
 
 bool LoopInvariantChecker::isLoopInvariant(Value *V, const Loop *L) const {
-  if (!UBSanExists) {
-    return L->isLoopInvariant(V);
+  bool NotInLoop = L->isLoopInvariant(V);
+  if (!UBSanExists || NotInLoop) {
+    return NotInLoop;
   }
 
   if (auto *I = dyn_cast<Instruction>(V)) {
-    return L->hasLoopInvariantOperands(I);
+    bool IsPhiNode = isa<PHINode>(I);
+    /// If in the loop, it is a loop-invariant instruction only if
+    ///   1) I is not a PHI node
+    ///   2) All operands are loop-invariant
+    return !IsPhiNode && L->hasLoopInvariantOperands(I);
   }
 
   return true;
