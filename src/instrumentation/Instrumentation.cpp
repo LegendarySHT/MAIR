@@ -638,6 +638,7 @@ static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
 }
 
 /// Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation
+/// i.e., target = (u64) (src >= (target_ty::max + 1) ? target_ty::max + 1 : src)
 static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
                                           InstrumentationIRBuilder &IRB) {
   auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
@@ -646,8 +647,8 @@ static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
 
   Value *Counter =
       (SrcTy == TargetTy) ? SrcVal : saturationTruncate(SrcVal, TargetTy, IRB);
-
-  if (SrcTy->isIntegerTy(64)) {
+  assert(SrcTy->getBitWidth() <= 64 && "Unsupported counter type");
+  if (SrcTy->getBitWidth() < 64) {
     Counter = IRB.CreateZExt(Counter, IRB.getInt64Ty());
   }
 
