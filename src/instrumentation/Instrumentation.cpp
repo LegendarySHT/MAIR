@@ -1241,7 +1241,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     }
     // Top loop to maintain the invarianty of Addr
     Loop *TopL = L, *ParentL = L->getParentLoop();
-    while (ParentL && !LIC.isLoopInvariant(Addr, ParentL) &&
+    while (ParentL && LIC.isLoopInvariant(Addr, ParentL) &&
            /// TODO: for ASan, simple loop is not necessary, we need to relax
            /// this condition
            isSimpleLoop(ParentL)) {
