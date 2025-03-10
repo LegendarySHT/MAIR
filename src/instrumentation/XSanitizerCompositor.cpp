@@ -71,7 +71,8 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
     for (auto &F : M) {
       if (F.isDeclaration() || F.empty())
         continue;
-      LoopMopInstrumenter LoopInstrumenter(F, FAM, level);
+      LoopMopInstrumenter LoopInstrumenter =
+          LoopMopInstrumenter::create(F, FAM, level);
       LoopInstrumenter.instrument();
     }
   }

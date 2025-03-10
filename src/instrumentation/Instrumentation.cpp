@@ -61,6 +61,7 @@ uint32_t NumInvChecksRelocatedDup = 0;
 /// Number of loop periodic checks combined.
 uint32_t NumPeriodChecksCombined = 0;
 uint32_t NumPeriodChecksCombinedDup = 0;
+
 namespace {
 /// Diagnostic information for IR instrumentation reporting.
 class DiagnosticInfoInstrumentation : public DiagnosticInfo {
@@ -104,35 +105,29 @@ static IntegerType *getIntTy(Type *Ty, const DataLayout &DL) {
 ///   ({(8 * (sext i32 %i51.2 to i64))<nsw>,+,8}<nsw><%while.body189> + %244)
 /// Rewrite the AddExpr satifying the above standard form into a AddRecExpr,
 /// and further return it with the bytewidth of the inner AddRec.
+using __xsan::LoopInvariantChecker;
 class PtrAddExpr2PtrAddRecRewriter {
 public:
-  using Result = std::pair<const SCEVAddRecExpr *, IntegerType *>;
-  static std::optional<Result>
-  getAddRecAndType(const SCEV *S, ScalarEvolution &SE) {
+  static std::optional<PtrAddExpr2PtrAddRecRewriter>
+  get(const SCEV *S, ScalarEvolution &SE,
+                   const LoopInvariantChecker &LIC) {
     const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
-    const DataLayout &DL = SE.getDataLayout();
-    Result Res;
-    IntegerType *AddRecTy = nullptr;
-    if (AddRec) {
-      Res = {AddRec, getIntTy(AddRec->getType(), DL)};
-      return Res;
-    }
 
-    PtrAddExpr2PtrAddRecRewriter Rewriter(SE);
+    PtrAddExpr2PtrAddRecRewriter Rewriter(SE, LIC);
     if (!Rewriter.matchAddExpr(S)) {
       return std::nullopt;
     }
 
-    auto NewAddRec = Rewriter.assembleNewAddRec();
-    if (!NewAddRec) {
-      return std::nullopt;
-    }
-    Res = {*NewAddRec, getIntTy(Rewriter.AddRecTy, DL)};
-    return Res;
+    return Rewriter;
   }
 
-private:
-  PtrAddExpr2PtrAddRecRewriter(ScalarEvolution &SE) : SE(SE) {}
+  IntegerType *getCounterTy() const {
+    return getIntTy(CounterTy, SE.getDataLayout());
+  }
+
+
+  const SCEV *getBasePtr() const { return Inv2Add; }
+  const SCEV *getBaseOffset() const { return Start; }
 
   /// { $EXT1(Inv1 * $EXT2(Start)) + Inv2, +, $EXT1(Inv1 * $EXT2(Step)) }
   std::optional<const SCEVAddRecExpr *> assembleNewAddRec() {
@@ -149,6 +144,11 @@ private:
         SE.getAddRecExpr(*NewStart, *NewStep, L, SCEV::FlagAnyWrap);
     return (const SCEVAddRecExpr *)NewAddRec;
   }
+
+private:
+  PtrAddExpr2PtrAddRecRewriter(ScalarEvolution &SE,
+                               const LoopInvariantChecker &LIC)
+      : SE(SE), LIC(LIC) {}
 
   //  $EXT1(Inv1 * $EXT2(Step))
   std::optional<const SCEV *> assembleNewStep() {
@@ -207,16 +207,12 @@ private:
     const auto *RHS = Add->getOperand(1);
     if (matchOuterExt(LHS)) {
       Inv2Add = RHS;
-      // errs() << "Add: " << *Add << "\n";
-      // errs() << "\tLoop: " << L->getHeader()->getName() << "\n";
-      // errs() << "\tLoop Inv: " << SE.isLoopInvariant(Inv2Add, L) << "\n";
-
-      return SE.isLoopInvariant(Inv2Add, L);
+      return LIC.isLoopInvariant(SE, Inv2Add, L);
     }
     reset();
     if (matchOuterExt(RHS)) {
       Inv2Add = LHS;
-      return SE.isLoopInvariant(Inv2Add, L);
+      return LIC.isLoopInvariant(SE, Inv2Add, L);
     }
     return false;
   }
@@ -243,11 +239,11 @@ private:
     const auto *RHS = Mul->getOperand(1);
     if (matchInnerExt(RHS)) {
       Inv2Mul = LHS;
-      return SE.isLoopInvariant(Inv2Mul, L);
+      return LIC.isLoopInvariant(SE, Inv2Mul, L);
     }
     if (matchInnerExt(LHS)) {
       Inv2Mul = RHS;
-      return SE.isLoopInvariant(Inv2Mul, L);
+      return LIC.isLoopInvariant(SE, Inv2Mul, L);
     }
     return false;
   }
@@ -257,6 +253,10 @@ private:
     const SCEVIntegralCastExpr *Cast = dyn_cast<SCEVIntegralCastExpr>(S);
     if (Cast) {
       InnerExt = Cast;
+      /// (u8){(u16)Start,+,Step} == {(u8)Start,+,Step}
+      if (Cast->getSCEVType() == SCEVTypes::scTruncate) {
+        CounterTy = S->getType();
+      }
     }
     return matchInnerAddRec(Cast ? Cast->getOperand() : S);
   }
@@ -270,8 +270,8 @@ private:
     Step = AddRec->getStepRecurrence(SE);
     L = AddRec->getLoop();
     InnerAddRecFlags = AddRec->getNoWrapFlags();
-    AddRecTy = Start->getType();
-    return SE.isLoopInvariant(Step, L);
+    CounterTy = Start->getType();
+    return LIC.isLoopInvariant(SE, Step, L);
   }
 
   void reset() {
@@ -282,12 +282,13 @@ private:
 
 private:
   ScalarEvolution &SE;
+  const LoopInvariantChecker &LIC;
   const Loop *L = nullptr;
   const SCEV *Inv2Add = nullptr;
   const SCEV *Inv2Mul = nullptr;
   const SCEV *Start = nullptr;
   const SCEV *Step = nullptr;
-  Type *AddRecTy;
+  Type *CounterTy;
   /// Indicates whether the inner addrec is marked as nuw or nsw.
   SCEV::NoWrapFlags InnerAddRecFlags;
   const SCEVZeroExtendExpr *OuterExt = nullptr;
@@ -297,6 +298,111 @@ private:
 } // namespace
 
 namespace __xsan {
+LoopInvariantChecker::LoopInvariantChecker(const DominatorTree &DT) : DT(DT) {
+  const Module &M = *DT.getRoot()->getModule();
+  UBSanExists = any_of(M.getFunctionList(), [&](const Function &F) {
+    return F.isDeclaration() && F.getName().startswith("__ubsan_handle");
+  });
+}
+
+/// Due to the UBSan's unmodeled functions, L.isLoopInvariant(...)
+/// is not correct. However, as we only take care those simple loops,
+/// which contains no user-defined functions.
+/// We can simply consider those Inst with loop-invariant operands as
+/// loop-invariant, which is what L.hasLoopInvariantOperands(...) does.
+bool LoopInvariantChecker::isLoopInvariant(const SCEV *S, const Loop *L) const {
+  switch (S->getSCEVType()) {
+  case scConstant:
+    return true;
+  case scPtrToInt:
+  case scTruncate:
+  case scZeroExtend:
+  case scSignExtend:
+    return isLoopInvariant(cast<SCEVCastExpr>(S)->getOperand(), L);
+  case scAddRecExpr: {
+    const SCEVAddRecExpr *AR = cast<SCEVAddRecExpr>(S);
+
+    // If L is the addrec's loop, it's computable.
+    if (AR->getLoop() == L)
+      return false;
+
+    // Add recurrences are never invariant in the function-body (null loop).
+    if (!L)
+      return false;
+
+    // Everything that is not defined at loop entry is variant.
+    if (DT.dominates(L->getHeader(), AR->getLoop()->getHeader()))
+      return false;
+    assert(!L->contains(AR->getLoop()) &&
+           "Containing loop's header does not"
+           " dominate the contained loop's header?");
+
+    // This recurrence is invariant w.r.t. L if AR's loop contains L.
+    if (AR->getLoop()->contains(L))
+      return true;
+
+    // This recurrence is variant w.r.t. L if any of its operands
+    // are variant.
+    for (const auto *Op : AR->operands())
+      if (!isLoopInvariant(Op, L))
+        return false;
+
+    // Otherwise it's loop-invariant.
+    return true;
+  }
+  case scAddExpr:
+  case scMulExpr:
+  case scUMaxExpr:
+  case scSMaxExpr:
+  case scUMinExpr:
+  case scSMinExpr:
+  case scSequentialUMinExpr: {
+    bool HasVarying = false;
+    for (const auto *Op : cast<SCEVNAryExpr>(S)->operands()) {
+      if (!isLoopInvariant(Op, L))
+        return false;
+    }
+    return true;
+  }
+  case scUDivExpr: {
+    const SCEVUDivExpr *UDiv = cast<SCEVUDivExpr>(S);
+    bool LD = isLoopInvariant(UDiv->getLHS(), L);
+    if (LD == false)
+      return false;
+    bool RD = isLoopInvariant(UDiv->getRHS(), L);
+    if (RD == false)
+      return false;
+    return LD && RD;
+  }
+  case scUnknown:
+    // All non-instruction values are loop invariant.  All instructions are loop
+    // invariant if they are not contained in the specified loop.
+    // Instructions are never considered invariant in the function body
+    // (null loop) because they are defined within the "loop".
+    return isLoopInvariant(cast<SCEVUnknown>(S)->getValue(), L);
+  case scCouldNotCompute:
+    llvm_unreachable("Attempt to use a SCEVCouldNotCompute object!");
+  }
+  llvm_unreachable("Unknown SCEV kind!");
+}
+
+bool LoopInvariantChecker::isLoopInvariant(ScalarEvolution &SE, const SCEV *S,
+                                           const Loop *L) const {
+  return UBSanExists ? isLoopInvariant(S, L) : SE.isLoopInvariant(S, L);
+}
+
+bool LoopInvariantChecker::isLoopInvariant(Value *V, const Loop *L) const {
+  if (!UBSanExists) {
+    return L->isLoopInvariant(V);
+  }
+
+  if (auto *I = dyn_cast<Instruction>(V)) {
+    return L->hasLoopInvariantOperands(I);
+  }
+
+  return true;
+}
+
 /// Check if module has flag attached, if not add the flag.
 bool checkIfAlreadyInstrumented(Module &M, StringRef Flag) {
   if (!M.getModuleFlag(Flag)) {
@@ -392,30 +498,6 @@ static bool isLoopCountingPhi(IntegerType *TargetTy, PHINode *PN,
   return HasZeroOrOne && HasAddUp;
 }
 
-/// SrcTy == TargetTy: no need to truncate
-/// SrcTy < TargetTy: invalid
-/// SrcTy > TargetTy: saturation truncate, i.e., target = src > TargetTy::max ?
-/// TargetTy::max : src
-static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
-                                 InstrumentationIRBuilder &IRB) {
-  auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
-  if (!SrcTy)
-    return nullptr;
-  if (SrcTy == TargetTy)
-    return SrcVal;
-  if (SrcTy->getBitWidth() < TargetTy->getBitWidth())
-    llvm_unreachable("Invalid truncate");
-  APInt TargetMaxInt = APInt::getMaxValue(TargetTy->getBitWidth());
-  auto *TargetMaxTySrc = ConstantInt::get(SrcTy, TargetMaxInt);
-  auto *TargetMax = ConstantInt::get(TargetTy, TargetMaxInt);
-
-  auto *TargetVal =
-      IRB.CreateSelect(IRB.CreateICmpUGT(SrcVal, TargetMaxTySrc), TargetMax,
-                       IRB.CreateTrunc(SrcVal, TargetTy));
-
-  return TargetVal;
-}
-
 /*
  Currently, we only focus on simple loops:
  1. Single header, single predecessor, single latch
@@ -467,13 +549,6 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
       Counter = IRB.CreateSub(Counter, IRB.getInt64(1), "sub_one", true, true);
     }
 
-    // If not target type, cast it.
-    // e.g, u32 count32 = count64 > u32max? u32max : (u32)count64;
-    if (Counter->getType() != CounterTy) {
-      // Counter = IRB.CreateIntCast(Counter, CounterTy, false);
-      Counter = saturationTruncate(Counter, CounterTy, IRB);
-    }
-
     return Counter;
   }
 
@@ -493,11 +568,12 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
   PHINode *CounterPhi = IRB.CreatePHI(CounterTy, NumIncoming, "loop.count");
 
   // Incoming value from preheader is
-  CounterPhi->addIncoming(IRB.getInt64(BeforeExiting ? 1 : 0), Predecessor);
+  CounterPhi->addIncoming(ConstantInt::get(CounterTy, (BeforeExiting ? 1 : 0)),
+                          Predecessor);
   // For each latch block, insert an addition instruction at its exit and add
   // the result to the PHI node
   for (BasicBlock *Latch : Latches) {
-    IRBuilder<> LatchBuilder(Latch->getTerminator());
+    IRB.SetInsertPoint(Latch->getTerminator());
     // Generate: %inc = add counterPhi, 1
     // Sat Add, to avoid overflow, e.g., 0xff + 1 = 0xff
     Value *Incr = IRB.CreateBinaryIntrinsic(Intrinsic::uadd_sat, CounterPhi,
@@ -508,6 +584,49 @@ static Value *getOrInsertLoopCounter(Loop *Loop, InstrumentationIRBuilder &IRB,
   // Recover the original insertion point
   IRB.SetInsertPoint(OrigInsertPt);
   return CounterPhi;
+}
+
+/// SrcTy == TargetTy: no need to truncate
+/// SrcTy < TargetTy: invalid
+/// SrcTy > TargetTy: saturation truncate, i.e.,
+/// target = src >= (TargetTy::max + 1) ? TargetTy::max + 1 : src
+static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
+                                 InstrumentationIRBuilder &IRB) {
+  auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
+  if (!SrcTy)
+    return nullptr;
+  if (SrcTy == TargetTy)
+    return SrcVal;
+  if (SrcTy->getBitWidth() < TargetTy->getBitWidth())
+    llvm_unreachable("Invalid truncate");
+  if (TargetTy->getBitWidth() == 64) {
+    llvm_unreachable("Invalid truncate");
+  }
+
+  uint64_t MaxIntPlusOne = (uint64_t(1) << TargetTy->getBitWidth());
+  auto *TargetMaxPlusOne = ConstantInt::get(SrcTy, MaxIntPlusOne, false);
+
+  auto *TargetVal = IRB.CreateSelect(
+      IRB.CreateICmpUGE(SrcVal, TargetMaxPlusOne), TargetMaxPlusOne, SrcVal);
+
+  return TargetVal;
+}
+
+/// Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation
+static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
+                                          InstrumentationIRBuilder &IRB) {
+  auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
+  if (!SrcTy)
+    return nullptr;
+
+  Value *Counter =
+      (SrcTy == TargetTy) ? SrcVal : saturationTruncate(SrcVal, TargetTy, IRB);
+
+  if (SrcTy->isIntegerTy(64)) {
+    Counter = IRB.CreateZExt(Counter, IRB.getInt64Ty());
+  }
+
+  return Counter;
 }
 
 /// Calculate End based on End = Beg + Step * Counter
@@ -534,13 +653,14 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
   // 1. Try to find an existing loop counter in the loop header (header)
   BasicBlock *Header = Loop->getHeader(),
              *Predecessor = Loop->getLoopPredecessor(),
-             *Latch = Loop->getLoopLatch();
+             *Latch = Loop->getLoopLatch(), *Exit = Loop->getExitBlock();
 
   if (!Header || !Predecessor || !Latch)
     return false; // If the loop does not have a header, it is unsafe to
                   // instrument
 
-  Instruction *InsertPt = Predecessor->getTerminator();
+  // Instruction *InsertPt = Predecessor->getTerminator();
+  Instruction *InsertPt = &*Exit->getFirstInsertionPt();
 
   if (!Expander.isSafeToExpandAt(Start, InsertPt)) {
     // Unsafe to expand StartSCEV at header terminator, skip.
@@ -580,17 +700,17 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     // work.
     IntegerType *OrigCounterTy =
         cast<IntegerType>(BackedgeTakenCount->getType());
-    if (OrigCounterTy != CounterTy) {
-      SCEVTypes CastOp = OrigCounterTy->getBitWidth() > CounterTy->getBitWidth()
-                             ? SCEVTypes::scTruncate
-                             : SCEVTypes::scZeroExtend;
-      BackedgeTakenCount =
-          SE.getCastExpr(CastOp, BackedgeTakenCount, CounterTy);
-    }
     const auto *IterCounter =
         BeforeExiting
             ? SE.getAddExpr(BackedgeTakenCount, SE.getConstant(IRB.getInt64(1)))
             : BackedgeTakenCount;
+
+    if (OrigCounterTy->getBitWidth() > CounterTy->getBitWidth()) {
+      APInt MaxIntPlusOne(OrigCounterTy->getBitWidth(),
+                          (uint64_t(1) << CounterTy->getBitWidth()), false);
+      IterCounter = SE.getUMinExpr(IterCounter, SE.getConstant(MaxIntPlusOne));
+    }
+
     const auto *Offset =
         (StepIsOne ? IterCounter : SE.getMulExpr(IterCounter, Step));
     const auto *EndSE = SE.getAddExpr(Start, Offset);
@@ -604,6 +724,8 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     if (!Counter) {
       return false;
     }
+    // Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation.
+    Counter = getCounterBoundedByTargetTy(Counter, CounterTy, IRB);
 
     /// If Step is negative, Beg = End + |Step| = Start + Step * (LoopCount - 1)
     Value *Offset = StepIsOne ? Counter : IRB.CreateMul(Counter, StepVal);
@@ -619,6 +741,13 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
   return true;
 }
 
+LoopMopInstrumenter LoopMopInstrumenter::create(Function &F,
+                                                FunctionAnalysisManager &FAM,
+                                                LoopOptLeval OptLevel) {
+  LoopMopInstrumenter LMI(F, FAM, OptLevel);
+  return LMI;
+}
+
 LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
                                          FunctionAnalysisManager &FAM,
                                          LoopOptLeval OptLevel)
@@ -626,7 +755,7 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
       DT(FAM.getResult<DominatorTreeAnalysis>(F)),
       PDT(FAM.getResult<PostDominatorTreeAnalysis>(F)),
       DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
-      MopCollected(false) {
+      MopCollected(false), LIC(DT) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
   IRBuilder<> IRB(Ctx);
@@ -888,19 +1017,48 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     }
 
     /* 1. Filter out non-periodic MOPs */
-
+    IntegerType *CounterTy = IntegerType::get(F.getContext(), DL.getPointerSizeInBits());
     auto *PtrSCEV = SE.getSCEV(Addr);
     if (!PtrSCEV)
       continue;
 
-    /// TODO: transfer SCEVAddExpr(SCEVAddRecExpr) to
-    /// SCEVAddRecExpr(SCEVAddExpr)
-    auto AddRecAndType =
-        PtrAddExpr2PtrAddRecRewriter::getAddRecAndType(PtrSCEV, SE);
-    if (!AddRecAndType.has_value()) {
-      continue;
+    const SCEVAddRecExpr *AR = dyn_cast<SCEVAddRecExpr>(PtrSCEV);
+
+    /*
+    There are three access models:
+    1. Range access: access [L, R)
+    2. Periodic access: access ([L, R), AccessSize, Step)
+      - Split [L, R) by Step, and access AccessSize each step.
+    3. Cyclic access: access ([L, R), Beg, End)
+      - Access [Beg, R) and [L, End)
+    */
+
+    if (!AR) {
+      /// transfer SCEVAddExpr(SCEVAddRecExpr) to SCEVAddRecExpr(SCEVAddExpr)
+      auto Rewriter =
+          PtrAddExpr2PtrAddRecRewriter::get(PtrSCEV, SE, LIC);
+      if (!Rewriter.has_value()) {
+        continue;
+      }
+      auto AddRec = Rewriter->assembleNewAddRec();
+      if (!AddRec) {
+        continue;
+      }
+      AR = *AddRec;
+      IntegerType *NewCounterTy = Rewriter->getCounterTy();
+      if (NewCounterTy->getBitWidth() < CounterTy->getBitWidth()) {
+        /// counter bitwidth < pointer bitwidth iff this is a cyclic access
+        /// We now only support those simple cases with Beg = L
+        const auto *L = Rewriter->getBasePtr();
+        /// Those cyclic accesses with ZERO offset are simple accesses.
+        if (!Rewriter->getBaseOffset()->isZero()) {
+          continue;
+        }
+        /// TODO: support cyclic access
+      }
+      CounterTy = NewCounterTy;
     }
-    auto &[AR, CounterTy] = AddRecAndType.value();
+
     if (!AR)
       continue;
 
@@ -1055,13 +1213,13 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
   BasicBlock *LastBB = nullptr;
   for (LoopMop &Mop : getLoopMopCandidates()) {
     auto &[Inst, Addr, L, MopSize, DupTo, InBranch, IsWrite] = Mop;
-    if (!L->isLoopInvariant(Addr)) {
+    if (!LIC.isLoopInvariant(Addr, L)) {
       // Skip if Addr is not a loop invariant
       continue;
     }
     // Top loop to maintain the invarianty of Addr
     Loop *TopL = L, *ParentL = L->getParentLoop();
-    while (ParentL && ParentL->isLoopInvariant(Addr) &&
+    while (ParentL && !LIC.isLoopInvariant(Addr, ParentL) &&
            /// TODO: for ASan, simple loop is not necessary, we need to relax
            /// this condition
            isSimpleLoop(ParentL)) {

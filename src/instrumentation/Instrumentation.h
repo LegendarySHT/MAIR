@@ -10,6 +10,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/PostDominators.h"
+#include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
@@ -76,6 +77,22 @@ bool IsDelegatedToXsan(const Instruction &I);
 
 bool ShouldSkip(const Instruction &I);
 
+/// Utils class to check if a value is loop invariant.
+/// Note that this class should be used at those simple loops.
+class LoopInvariantChecker {
+public:
+  LoopInvariantChecker(const DominatorTree &DT);
+  bool hasUBSan() const { return UBSanExists; }
+  bool isLoopInvariant(Value *V, const Loop *L) const;
+  bool isLoopInvariant(ScalarEvolution &SE, const SCEV *S, const Loop *L) const;
+
+private:
+  bool isLoopInvariant(const SCEV *S, const Loop *L) const;
+
+  bool UBSanExists;
+  const DominatorTree &DT;
+};
+
 enum class LoopOptLeval {
   NoOpt,                   /* No optimization */
   RelocateInvariantChecks, /* Relocate invariant checks */
@@ -98,17 +115,18 @@ private:
     Instruction *Mop;
     Value *Address;
     Loop *Loop;
-    const size_t MopSize;
+    size_t MopSize;
     /// Records the MOPs redundant to this MOPs.
     DupVec DupTo;
     /* If true, the Mop might not be executed in every iteration of the loop. */
-    const bool InBranch;
-    const bool IsWrite;
+    bool InBranch;
+    bool IsWrite;
   };
 
 public:
-  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM,
-                      LoopOptLeval OptLevel);
+  static LoopMopInstrumenter create(Function &F, FunctionAnalysisManager &FAM,
+                                    LoopOptLeval OptLevel);
+
   /*
    1. Relocate invariant checks: if a loop invariant is used in the loop, sink
       it out of the loop.
@@ -118,6 +136,9 @@ public:
   void instrument();
 
 private:
+  LoopMopInstrumenter(Function &F, FunctionAnalysisManager &FAM,
+                      LoopOptLeval OptLevel);
+
   // A simple loop is currently defined as a loop with
   // 1. single header, exit, latch, exiting. predecessor.
   // 2. conatains no atomic instructions and
@@ -168,6 +189,7 @@ private:
   FunctionCallee XsanPeriodWrite[kNumberOfAccessSizes];
   FunctionCallee XsanRead[kNumberOfAccessSizes];
   FunctionCallee XsanWrite[kNumberOfAccessSizes];
+  const LoopInvariantChecker LIC;
 };
 
 } // namespace __xsan
