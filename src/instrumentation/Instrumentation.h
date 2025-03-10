@@ -166,6 +166,9 @@ private:
   bool relocateInvariantChecks();
   // Induction-based Instrumentation
   bool combinePeriodicChecks(bool RangeAccessOnly = true);
+  // Tag the MOP and the relevant dup MOPs with !xsan.delegated metadata.
+  // Return the number of dup MOPs.
+  unsigned tagMopAsDelegated(LoopMop &Mop);
 
   LoopOptLeval OptLevel;
   Function &F;

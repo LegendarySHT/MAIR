@@ -109,8 +109,7 @@ using __xsan::LoopInvariantChecker;
 class PtrAddExpr2PtrAddRecRewriter {
 public:
   static std::optional<PtrAddExpr2PtrAddRecRewriter>
-  get(const SCEV *S, ScalarEvolution &SE,
-                   const LoopInvariantChecker &LIC) {
+  get(const SCEV *S, ScalarEvolution &SE, const LoopInvariantChecker &LIC) {
     const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
 
     PtrAddExpr2PtrAddRecRewriter Rewriter(SE, LIC);
@@ -124,7 +123,6 @@ public:
   IntegerType *getCounterTy() const {
     return getIntTy(CounterTy, SE.getDataLayout());
   }
-
 
   const SCEV *getBasePtr() const { return Inv2Add; }
   const SCEV *getBaseOffset() const { return Start; }
@@ -1039,7 +1037,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     }
 
     /* 1. Filter out non-periodic MOPs */
-    IntegerType *CounterTy = IntegerType::get(F.getContext(), DL.getPointerSizeInBits());
+    IntegerType *CounterTy =
+        IntegerType::get(F.getContext(), DL.getPointerSizeInBits());
     auto *PtrSCEV = SE.getSCEV(Addr);
     if (!PtrSCEV)
       continue;
@@ -1057,8 +1056,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     if (!AR) {
       /// transfer SCEVAddExpr(SCEVAddRecExpr) to SCEVAddRecExpr(SCEVAddExpr)
-      auto Rewriter =
-          PtrAddExpr2PtrAddRecRewriter::get(PtrSCEV, SE, LIC);
+      auto Rewriter = PtrAddExpr2PtrAddRecRewriter::get(PtrSCEV, SE, LIC);
       if (!Rewriter.has_value()) {
         continue;
       }
@@ -1076,7 +1074,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
         if (!Rewriter->getBaseOffset()->isZero()) {
           continue;
         }
-        /// TODO: support cyclic access
+        /// TODO: support cyclic access.
+        // We can assume that the GEP does not overflow.
       }
       CounterTy = NewCounterTy;
     }
@@ -1163,11 +1162,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
                      {Beg, End, StepVal});
     }
 
-    MarkAsDelegatedToXsan(*Inst);
-    for (auto *Dup : DupTo) {
-      MarkAsDelegatedToXsan(*Dup);
-      NumPeriodChecksCombinedDup++;
-    }
+    NumPeriodChecksCombinedDup += tagMopAsDelegated(Mop);
     NumPeriodChecksCombined++;
   }
 
@@ -1298,11 +1293,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     // __xsan_readX(const void *beg)
     // __xsan_writeX(const void *beg)
     IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
-    MarkAsDelegatedToXsan(*Inst);
-    for (Instruction *Dup : DupTo) {
-      MarkAsDelegatedToXsan(*Dup);
-      NumInvChecksRelocatedDup++;
-    }
+    NumInvChecksRelocatedDup += tagMopAsDelegated(Mop);
     NumInvChecksRelocated++;
 
     LastInertPt = InsertPt;
@@ -1317,4 +1308,15 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 
   return LoopChanged;
 }
+
+unsigned LoopMopInstrumenter::tagMopAsDelegated(LoopMop &Mop) {
+  Instruction *Inst = Mop.Mop;
+  auto &Dup = Mop.DupTo;
+  MarkAsDelegatedToXsan(*Inst);
+  for (Instruction *DupInst : Dup) {
+    MarkAsDelegatedToXsan(*DupInst);
+  }
+  return Dup.size();
+}
+
 } // namespace __xsan
