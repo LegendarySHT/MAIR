@@ -19,7 +19,10 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/MemorySSA.h"
+#include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -313,6 +316,21 @@ public:
     return V;
   }
 };
+
+/// Compared with `llvm::SplitEdge`, this function merges identical edges
+static BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
+                                          DominatorTree *DT, LoopInfo *LI,
+                                          MemorySSAUpdater *MSSAU,
+                                          const Twine &BBName) {
+  unsigned SuccNum = GetSuccessorNumber(From, To);
+  Instruction *LatchTerm = From->getTerminator();
+
+  CriticalEdgeSplittingOptions Options =
+      CriticalEdgeSplittingOptions(DT, LI, MSSAU)
+          .setMergeIdenticalEdges()
+          .setPreserveLCSSA();
+  return SplitKnownCriticalEdge(LatchTerm, SuccNum, Options, BBName);
+}
 
 } // namespace
 
@@ -781,6 +799,7 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
                                          FunctionAnalysisManager &FAM,
                                          LoopOptLeval OptLevel)
     : F(F), FAM(FAM), LI(FAM.getResult<LoopAnalysis>(F)),
+      MSSAU(&FAM.getResult<MemorySSAAnalysis>(F).getMSSA()),
       DT(FAM.getResult<DominatorTreeAnalysis>(F)),
       PDT(FAM.getResult<PostDominatorTreeAnalysis>(F)),
       DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
@@ -1147,9 +1166,12 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
     // The only predecessor of exit should be the exiting block.
     if (ExitBlock->getUniquePredecessor() != Exiting) {
+      // ExitBlock has > 1 uniq predecessors, edge Exiting->ExitBlock must be
+      // a critical edge, which requires |succ(pred)| > 1 or |pred(succ)| > 1.
+
       // Update ExitBlock
-      ExitBlock =
-          SplitEdge(Exiting, ExitBlock, &DT, &LI, nullptr, "xsan.loop.exit");
+      ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, &LI, &MSSAU,
+                                         "xsan.loop.exit");
       LoopChanged = true;
     }
 
@@ -1282,10 +1304,12 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 
       // The only predecessor of exit should be the exiting block.
       if (ExitBlock->getUniquePredecessor() != Exiting) {
+        // ExitBlock has > 1 uniq predecessors, edge Exiting->ExitBlock must be
+        // a critical edge, which requires |succ(pred)| > 1 or |pred(succ)| > 1.
+
         // Update ExitBlock
-        // ExitBlock = splitNewExitBlock(ExitBlock, Exiting);
-        ExitBlock =
-            SplitEdge(Exiting, ExitBlock, &DT, &LI, nullptr, "xsan.loop.exit");
+        ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, &LI, &MSSAU,
+                                           "xsan.loop.exit");
 
         LoopChanged = true;
       }

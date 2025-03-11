@@ -9,6 +9,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/BasicBlock.h"
@@ -174,6 +175,7 @@ private:
   Function &F;
   FunctionAnalysisManager &FAM;
   LoopInfo &LI;
+  MemorySSAUpdater MSSAU;
   DominatorTree &DT;
   PostDominatorTree &PDT;
   const DataLayout &DL;
