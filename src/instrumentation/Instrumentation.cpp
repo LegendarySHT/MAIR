@@ -1404,6 +1404,8 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     if (AddrInst && !DT.dominates(AddrInst, InsertPt)) {
       Instruction *ClonedAddr = AddrInst->clone();
       ClonedAddr->insertBefore(InsertPt);
+      ClonedAddr->setMetadata(LLVMContext::MD_nosanitize,
+                              MDNode::get(AddrInst->getContext(), None));
       Addr = ClonedAddr;
     }
 
