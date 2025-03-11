@@ -19,6 +19,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemorySSA.h"
@@ -113,7 +114,7 @@ using __xsan::LoopInvariantChecker;
 class PtrAddExpr2PtrAddRecRewriter {
 public:
   static std::optional<PtrAddExpr2PtrAddRecRewriter>
-  get(const SCEV *S, ScalarEvolution &SE, const LoopInvariantChecker &LIC) {
+  get(const SCEV *S, ScalarEvolution &SE, LoopInvariantChecker &LIC) {
     const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
 
     PtrAddExpr2PtrAddRecRewriter Rewriter(SE, LIC);
@@ -148,8 +149,7 @@ public:
   }
 
 private:
-  PtrAddExpr2PtrAddRecRewriter(ScalarEvolution &SE,
-                               const LoopInvariantChecker &LIC)
+  PtrAddExpr2PtrAddRecRewriter(ScalarEvolution &SE, LoopInvariantChecker &LIC)
       : SE(SE), LIC(LIC) {}
 
   //  $EXT1(Inv1 * $EXT2(Step))
@@ -284,7 +284,7 @@ private:
 
 private:
   ScalarEvolution &SE;
-  const LoopInvariantChecker &LIC;
+  LoopInvariantChecker &LIC;
   const Loop *L = nullptr;
   const SCEV *Inv2Add = nullptr;
   const SCEV *Inv2Mul = nullptr;
@@ -329,7 +329,8 @@ static BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
       CriticalEdgeSplittingOptions(DT, LI, MSSAU)
           .setMergeIdenticalEdges()
           .setPreserveLCSSA();
-  BasicBlock *SplitBB = SplitKnownCriticalEdge(LatchTerm, SuccNum, Options, BBName);
+  BasicBlock *SplitBB =
+      SplitKnownCriticalEdge(LatchTerm, SuccNum, Options, BBName);
   /*
    There is a bug when PreserveLCSSA and MergeIdenticalEdges are both set.
    1. MergeIdenticalEdges option might creare >1 identical edges from TIBB to
@@ -409,7 +410,9 @@ static BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
 } // namespace
 
 namespace __xsan {
-LoopInvariantChecker::LoopInvariantChecker(const DominatorTree &DT) : DT(DT) {
+LoopInvariantChecker::LoopInvariantChecker(const DominatorTree &DT,
+                                           AliasAnalysis &AA)
+    : DT(DT), AA(AA) {
   const Module &M = *DT.getRoot()->getModule();
   UBSanExists = any_of(M.getFunctionList(), [&](const Function &F) {
     return F.isDeclaration() && F.getName().startswith("__ubsan_handle");
@@ -421,7 +424,7 @@ LoopInvariantChecker::LoopInvariantChecker(const DominatorTree &DT) : DT(DT) {
 /// which contains no user-defined functions.
 /// We can simply consider those Inst with loop-invariant operands as
 /// loop-invariant, which is what L.hasLoopInvariantOperands(...) does.
-bool LoopInvariantChecker::isLoopInvariant(const SCEV *S, const Loop *L) const {
+bool LoopInvariantChecker::isLoopInvariant(const SCEV *S, const Loop *L) {
   switch (S->getSCEVType()) {
   case scConstant:
     return true;
@@ -498,25 +501,100 @@ bool LoopInvariantChecker::isLoopInvariant(const SCEV *S, const Loop *L) const {
 }
 
 bool LoopInvariantChecker::isLoopInvariant(ScalarEvolution &SE, const SCEV *S,
-                                           const Loop *L) const {
+                                           const Loop *L) {
   return UBSanExists ? isLoopInvariant(S, L) : SE.isLoopInvariant(S, L);
 }
 
-bool LoopInvariantChecker::isLoopInvariant(Value *V, const Loop *L) const {
+bool LoopInvariantChecker::isLoopInvariant(Value *V, const Loop *L) {
   bool NotInLoop = L->isLoopInvariant(V);
   if (!UBSanExists || NotInLoop) {
     return NotInLoop;
   }
 
-  if (auto *I = dyn_cast<Instruction>(V)) {
-    bool IsPhiNode = isa<PHINode>(I);
-    /// If in the loop, it is a loop-invariant instruction only if
-    ///   1) I is not a PHI node
-    ///   2) All operands are loop-invariant
-    return !IsPhiNode && L->hasLoopInvariantOperands(I);
+  auto *I = dyn_cast<Instruction>(V);
+  if (!I) {
+    return true;
+  }
+  bool IsPhiNode = isa<PHINode>(I);
+  if (IsPhiNode) {
+    return false;
+  }
+
+  /// If in the loop, it is a loop-invariant instruction only if
+  ///   1) I is not a PHI node
+  ///   2) All operands are loop-invariant
+  if (!L->hasLoopInvariantOperands(I)) {
+    return false;
+  }
+
+  if (LoadInst *Load = dyn_cast<LoadInst>(I)) {
+    return isLoadLoopInvariant(Load, L);
   }
 
   return true;
+}
+
+/*
+We cannot use the unified method (i.e., Intrinsic::invariant_start) to judge the
+invariance of load instructions just like what LICM does (the relevant code is
+in `isLoadInvariantInLoop` @ LICM.cpp).
+
+1. Reason 1: O0 optimization does not insert the invariant.start intrinsic.
+2. Reason 2: MSSA is incorrectly affected by calls to UBSan's functions.
+
+Therefore, we just analyze the relevant store instruction to determine if it is
+possible to write to the memory location of the load instruction.
+
+CallInst is ignored, because we assume that the Loop is a simple loop without
+any calls that may write to memory.
+*/
+bool LoopInvariantChecker::isLoadLoopInvariant(const LoadInst *LI,
+                                               const Loop *L) {
+  // 1. If the load is volatile or atomic, it cannot be considered a loop
+  // invariant
+  if (LI->isVolatile() || LI->isAtomic())
+    return false;
+
+  // 2. Check if the pointer operand of the load is invariant within the loop
+  if (!L->hasLoopInvariantOperands(LI))
+    return false;
+
+  // 3. Traverse all basic blocks within the loop to ensure no store can modify
+  // the memory location of the load
+  SmallVectorImpl<MemoryLocation> &StoreLocs = getStoresInLoopLazily(L);
+  if (StoreLocs.empty()) {
+    return true;
+  }
+
+  MemoryLocation LoadLoc = MemoryLocation::get(LI);
+  return all_of(StoreLocs, [&](auto &StoreLoc) {
+    return AA.alias(LoadLoc, StoreLoc) == AliasResult::NoAlias;
+  });
+}
+
+SmallVectorImpl<MemoryLocation> &
+LoopInvariantChecker::getStoresInLoopLazily(const Loop *L) {
+  auto It = StoresInLoop.find(L);
+  if (It != StoresInLoop.end()) {
+    return It->second;
+  }
+  SmallVector<MemoryLocation, 8> Stores;
+  for (BasicBlock *BB : L->getBlocks()) {
+    for (Instruction &I : *BB) {
+      // Ignore the load instruction itself
+      if (!I.mayWriteToMemory())
+        continue;
+
+      // If a store instruction is encountered, check if it can write to the
+      // same memory location as the load
+      if (StoreInst *SI = dyn_cast<StoreInst>(&I)) {
+        MemoryLocation StoreLoc = MemoryLocation::get(SI);
+        Stores.push_back(StoreLoc);
+      }
+    }
+  }
+  StoresInLoop[L] = std::move(Stores);
+  return StoresInLoop[L];
 }
 
 /// Check if module has flag attached, if not add the flag.
@@ -874,10 +952,11 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
                                          LoopOptLeval OptLevel)
     : F(F), FAM(FAM), LI(FAM.getResult<LoopAnalysis>(F)),
       MSSAU(&FAM.getResult<MemorySSAAnalysis>(F).getMSSA()),
+      AA(FAM.getResult<AAManager>(F)),
       DT(FAM.getResult<DominatorTreeAnalysis>(F)),
       PDT(FAM.getResult<PostDominatorTreeAnalysis>(F)),
       DL(F.getParent()->getDataLayout()), OptLevel(OptLevel),
-      MopCollected(false), LIC(DT) {
+      MopCollected(false), LIC(DT, AA) {
   Module &M = *F.getParent();
   LLVMContext &Ctx = M.getContext();
   IRBuilder<> IRB(Ctx);

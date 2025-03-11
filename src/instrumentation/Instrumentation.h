@@ -8,7 +8,9 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -82,16 +84,20 @@ bool ShouldSkip(const Instruction &I);
 /// Note that this class should be used at those simple loops.
 class LoopInvariantChecker {
 public:
-  LoopInvariantChecker(const DominatorTree &DT);
+  LoopInvariantChecker(const DominatorTree &DT, AliasAnalysis &AA);
   bool hasUBSan() const { return UBSanExists; }
-  bool isLoopInvariant(Value *V, const Loop *L) const;
-  bool isLoopInvariant(ScalarEvolution &SE, const SCEV *S, const Loop *L) const;
+  bool isLoopInvariant(Value *V, const Loop *L);
+  bool isLoopInvariant(ScalarEvolution &SE, const SCEV *S, const Loop *L);
 
 private:
-  bool isLoopInvariant(const SCEV *S, const Loop *L) const;
+  bool isLoopInvariant(const SCEV *S, const Loop *L);
+  bool isLoadLoopInvariant(const LoadInst *LI, const Loop *L);
+  SmallVectorImpl<MemoryLocation> &getStoresInLoopLazily(const Loop *L);
 
   bool UBSanExists;
   const DominatorTree &DT;
+  AAResults &AA;
+  DenseMap<const Loop *, SmallVector<MemoryLocation, 8>> StoresInLoop;
 };
 
 enum class LoopOptLeval {
@@ -147,6 +153,8 @@ private:
   /// TODO: for ASan, such restrictions can be relaxed.
   /// TODO: if the MOP is ahead of all exiting, multiple exitings
   ///       do not affect the loop optimization.
+  /// TOOD: migrate to LLVM16+, which introduced attribute `memory(...)`
+  ///       and implemented more precise memory description.
   bool isSimpleLoop(const Loop *L);
 
   /// Filter out those obvious duplicate MOPs in the same BB,
@@ -176,6 +184,7 @@ private:
   FunctionAnalysisManager &FAM;
   LoopInfo &LI;
   MemorySSAUpdater MSSAU;
+  AAResults &AA;
   DominatorTree &DT;
   PostDominatorTree &PDT;
   const DataLayout &DL;
@@ -194,7 +203,7 @@ private:
   FunctionCallee XsanPeriodWrite[kNumberOfAccessSizes];
   FunctionCallee XsanRead[kNumberOfAccessSizes];
   FunctionCallee XsanWrite[kNumberOfAccessSizes];
-  const LoopInvariantChecker LIC;
+  LoopInvariantChecker LIC;
 };
 
 } // namespace __xsan
