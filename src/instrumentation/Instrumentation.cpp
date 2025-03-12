@@ -947,6 +947,8 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     /// If Step is negative
     /// [Beg', End') = [End + |Step|, Beg + |Step|)
     std::swap(Beg, End);
+    /// If Step is constant, we garantuee that it is a positive value at last.
+    StepVal = IRB.CreateNeg(StepVal);
   }
 
   return true;
