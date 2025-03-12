@@ -813,6 +813,7 @@ static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
 /// Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation
 /// i.e., target = (u64)(src >= (targ_ty::max + 1) ? targ_ty::max + 1 : src)
 static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
+                                          IntegerType *PtrIntTy,
                                           InstrumentationIRBuilder &IRB) {
   auto *SrcTy = dyn_cast<IntegerType>(SrcVal->getType());
   if (!SrcTy)
@@ -821,8 +822,8 @@ static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
   Value *Counter =
       (SrcTy == TargetTy) ? SrcVal : saturationTruncate(SrcVal, TargetTy, IRB);
   assert(SrcTy->getBitWidth() <= 64 && "Unsupported counter type");
-  if (SrcTy->getBitWidth() < 64) {
-    Counter = IRB.CreateZExt(Counter, IRB.getInt64Ty());
+  if (SrcTy->getBitWidth() < PtrIntTy->getBitWidth()) {
+    Counter = IRB.CreateZExt(Counter, PtrIntTy);
   }
 
   return Counter;
@@ -877,9 +878,14 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     Start = SE.getAddExpr(Start, PosStep);
   }
 
+  IntegerType *PtrIntTy = getIntTy(Start->getType(), SE.getDataLayout());
+  if (!PtrIntTy) {
+    llvm_unreachable("Invalid pointer type");
+  }
+
   /// TODO: figure out if it is Okay to insert code in Predecessor block
   Beg = Expander.expandCodeFor(Start, IRB.getInt8PtrTy(), InsertPt);
-  StepVal = Expander.expandCodeFor(Step, IRB.getInt64Ty(), InsertPt);
+  StepVal = Expander.expandCodeFor(Step, PtrIntTy, InsertPt);
 
   /// Does not consider step -1, which should be used as factor of term,
   /// negating the sign of offset.
@@ -899,13 +905,19 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     // work.
     IntegerType *OrigCounterTy =
         cast<IntegerType>(BackedgeTakenCount->getType());
+    // CountTy --> PointerIntTy
+    BackedgeTakenCount =
+        SE.getTruncateOrZeroExtend(BackedgeTakenCount, PtrIntTy);
     const auto *IterCounter =
-        BeforeExiting
-            ? SE.getAddExpr(BackedgeTakenCount, SE.getConstant(IRB.getInt64(1)))
-            : BackedgeTakenCount;
+        BeforeExiting ? SE.getAddExpr(BackedgeTakenCount, SE.getOne(PtrIntTy))
+                      : BackedgeTakenCount;
 
+    // If counter type is smaller than the original counter type, we need to
+    // truncate the counter to the smaller type.
     if (OrigCounterTy->getBitWidth() > CounterTy->getBitWidth()) {
-      APInt MaxIntPlusOne(OrigCounterTy->getBitWidth(),
+      assert(PtrIntTy.getBitWidth() >= OrigCounterTy->getBitWidth() &&
+             "Invalid truncate");
+      APInt MaxIntPlusOne(PtrIntTy->getBitWidth(),
                           (uint64_t(1) << CounterTy->getBitWidth()), false);
       IterCounter = SE.getUMinExpr(IterCounter, SE.getConstant(MaxIntPlusOne));
     }
@@ -924,7 +936,7 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
       return false;
     }
     // Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation.
-    Counter = getCounterBoundedByTargetTy(Counter, CounterTy, IRB);
+    Counter = getCounterBoundedByTargetTy(Counter, CounterTy, PtrIntTy, IRB);
 
     /// If Step is negative, Beg = End + |Step| = Start + Step * (LoopCount - 1)
     Value *Offset = StepIsOne ? Counter : IRB.CreateMul(Counter, StepVal);
