@@ -113,15 +113,18 @@ void __xsan_write_range(const void *beg, const void *end) {
       return;                                                                 \
     DCHECK(Abs(step) >= (size) && "Invalid arguments");                       \
     uptr L = (uptr)beg, R = (uptr)end;                                        \
-    if (UNLIKELY(Abs(step) == (size))) {                                      \
-      if (step < 0) {                                                         \
-        /* [Beg', End') = [End + |Step|, Beg + |Step|) */                     \
-        Swap(L, R);                                                           \
-        L -= step;                                                            \
-        R -= step;                                                            \
-      }                                                                       \
-      __xsan_read_range((const void *)L, (const void *)R);                    \
+    if (UNLIKELY((step) < 0)) {                                               \
+      Swap(L, R);                                                             \
+      L -= step;                                                              \
+      R -= step;                                                              \
+      __xsan_period_read##size((const void *)L, (const void *)R, -(step));    \
+      return;                                                                 \
     }                                                                         \
+    if (UNLIKELY(step == (size))) {                                           \
+      __xsan_read_range((const void *)L, (const void *)R);                    \
+      return;                                                                 \
+    }                                                                         \
+    DCHECK(beg <= end && "Invalid arguments");                                \
     for (uptr offset = L; offset < R; offset += step) {                       \
       __tsan_read##size((void *)offset);                                      \
       __asan_load##size(offset);                                              \
@@ -135,15 +138,18 @@ void __xsan_write_range(const void *beg, const void *end) {
       return;                                                                  \
     DCHECK(Abs(step) >= (size) && "Invalid arguments");                        \
     uptr L = (uptr)beg, R = (uptr)end;                                         \
-    if (UNLIKELY(Abs(step) == (size))) {                                       \
-      if (step < 0) {                                                          \
-        /* [Beg', End') = [End + |Step|, Beg + |Step|) */                      \
-        Swap(L, R);                                                            \
-        L -= step;                                                             \
-        R -= step;                                                             \
-      }                                                                        \
-      __xsan_write_range((const void *)L, (const void *)R);                    \
+    if (UNLIKELY((step) < 0)) {                                                \
+      Swap(L, R);                                                              \
+      L -= step;                                                               \
+      R -= step;                                                               \
+      __xsan_period_write##size((const void *)L, (const void *)R, -(step));    \
+      return;                                                                  \
     }                                                                          \
+    if (UNLIKELY(step == (size))) {                                            \
+      __xsan_write_range((const void *)L, (const void *)R);                    \
+      return;                                                                  \
+    }                                                                          \
+    DCHECK(beg <= end && "Invalid arguments");                                 \
     for (uptr offset = L; offset < R; offset += step) {                        \
       __tsan_write##size((void *)offset);                                      \
       __asan_store##size(offset);                                              \
