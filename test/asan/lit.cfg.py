@@ -105,6 +105,9 @@ if platform.system() == "Windows":
         win_runtime_feature = "win32-static-asan"
     config.available_features.add(win_runtime_feature)
 
+# WSL Linux kernel 5 may not run out of memory when mmap 1TB memory.
+if config.host_os == "Linux" and bool(re.match(r"5\.[0-9\.]+-microsoft-standard-WSL2$", config.target_triple)):
+    config.available_features.add("wsl5")
 
 def build_invocation(compile_flags, with_lto=False):
     lto_flags = []
