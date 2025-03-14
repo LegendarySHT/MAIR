@@ -811,7 +811,7 @@ static Value *saturationTruncate(Value *SrcVal, IntegerType *TargetTy,
 }
 
 /// Transfer to u64 counter, if SrcTy > TargetTy, do saturation truncation
-/// i.e., target = (u64)(src >= (targ_ty::max + 1) ? targ_ty::max + 1 : src)
+/// i.e., target = (u64)min(targ_ty::max + 1 : src)
 static Value *getCounterBoundedByTargetTy(Value *SrcVal, IntegerType *TargetTy,
                                           IntegerType *PtrIntTy,
                                           InstrumentationIRBuilder &IRB) {
@@ -1274,6 +1274,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
           continue;
         }
         /// TODO: support cyclic access.
+        /// TODO: support resolve of NoWrapFlags.
         // We can assume that the GEP does not overflow.
       }
       CounterTy = NewCounterTy;
@@ -1404,7 +1405,10 @@ static Instruction *instrumentIndicator(Instruction *Inst,
   InstrumentationIRBuilder IRB(&*Entry.getFirstInsertionPt());
   auto *IndicatorAlloc =
       IRB.CreateAlloca(IRB.getInt1Ty(), nullptr, "indicator");
+  /// Default to false, indicating that MOP is not executed.
+  IRB.CreateStore(IRB.getFalse(), IndicatorAlloc);
 
+  /// Set the indicator to true just before the MOP.
   IRB.SetInsertPoint(Inst);
   IRB.CreateStore(IRB.getTrue(), IndicatorAlloc);
 
