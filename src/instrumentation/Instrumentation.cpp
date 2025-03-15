@@ -1055,6 +1055,9 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
     for (Instruction &Inst : BB) {
       if (ShouldSkip(Inst))
         continue;
+      // Does not consider volatile/atomic/dbginfo instructions
+      if (Inst.isVolatile() || Inst.isAtomic() || isa<DbgInfoIntrinsic>(Inst))
+        continue;
       /* 1. Filter out non-memory instructions */
       Value *Addr = nullptr;
       size_t MopSize = 0;
@@ -1068,7 +1071,9 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
         Addr = LI->getPointerOperand();
         MopSize = DL.getTypeStoreSizeInBits(LI->getType());
         IsWrite = false;
-      } else if (isa<CallBase>(Inst)) {
+      } else if (isa<CallBase>(Inst) &&
+                 /* TODO: use more precise memory model */
+                 Inst.mayWriteToMemory()) {
         filterAndAddMops(LoopMops);
         LoopMops.clear();
         continue;
@@ -1184,6 +1189,8 @@ bool LoopMopInstrumenter::isSimpleLoop(const Loop *Loop) {
       if (ShouldSkip(I))
         continue;
       if (!I.mayWriteToMemory())
+        continue;
+      if (isa<DbgInfoIntrinsic>(I))
         continue;
       /// TODO: should consider Atomic for ASan ?
       if (I.isAtomic() || isa<CallBase>(&I)) {
