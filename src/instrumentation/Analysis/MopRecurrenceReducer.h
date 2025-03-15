@@ -67,7 +67,7 @@ public:
                 2. Travese from any vertex in dominating set.
   */
   SmallVector<const Instruction *, 16>
-  distillRecurringChecks(const SmallVectorImpl<const Instruction *> &Insts,
+  distillRecurringChecks(ArrayRef<const Instruction *> Insts,
                          bool IsTsan, bool IgnoreCalls = false);
 
 private:

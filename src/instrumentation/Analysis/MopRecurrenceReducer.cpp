@@ -1,6 +1,7 @@
 #include "MopRecurrenceReducer.h"
 #include "../Utils/Logging.h"
 #include "../Utils/Options.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -517,7 +518,7 @@ This is the dominating set problem in directed graph.
 */
 SmallVector<const Instruction *, 16>
 MopRecurrenceReducer::distillRecurringChecks(
-    const SmallVectorImpl<const Instruction *> &Insts, bool IsTsan,
+    ArrayRef<const Instruction *> Insts, bool IsTsan,
     bool IgnoreCalls) {
   if (Insts.size() < 2) {
     return SmallVector<const Instruction *, 16>(Insts.begin(), Insts.end());
