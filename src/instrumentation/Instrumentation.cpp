@@ -319,14 +319,15 @@ public:
 
 /// Compared with `llvm::SplitEdge`, this function merges identical edges
 static BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
-                                          DominatorTree *DT, LoopInfo *LI,
+                                          DominatorTree *DT,
+                                          PostDominatorTree *PDT, LoopInfo *LI,
                                           MemorySSAUpdater *MSSAU,
                                           const Twine &BBName) {
   unsigned SuccNum = GetSuccessorNumber(From, To);
   Instruction *LatchTerm = From->getTerminator();
 
   CriticalEdgeSplittingOptions Options =
-      CriticalEdgeSplittingOptions(DT, LI, MSSAU)
+      CriticalEdgeSplittingOptions(DT, LI, MSSAU, PDT)
           .setMergeIdenticalEdges()
           .setPreserveLCSSA();
   BasicBlock *SplitBB =
@@ -1338,8 +1339,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
       // a critical edge, which requires |succ(pred)| > 1 or |pred(succ)| > 1.
 
       // Update ExitBlock
-      ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, &LI, &MSSAU,
-                                         "xsan.loop.exit");
+      ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, &PDT, &LI,
+                                         &MSSAU, "xsan.loop.exit");
       LoopChanged = true;
     }
 
@@ -1479,8 +1480,10 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
         // a critical edge, which requires |succ(pred)| > 1 or |pred(succ)| > 1.
 
         // Update ExitBlock
-        ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, &LI, &MSSAU,
-                                           "xsan.loop.exit");
+        // This optimization splits block without update PDT, causing PDT cannot be updated correctly
+        // in the following splitKnownCriticalEdge. Hence, we set PDT to nullptr here.
+        ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, nullptr, &LI,
+                                           &MSSAU, "xsan.loop.exit");
 
         LoopChanged = true;
       }
