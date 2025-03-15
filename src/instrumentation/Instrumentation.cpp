@@ -19,6 +19,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Triple.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -45,6 +46,7 @@
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
+#include "llvm/ProfileData/InstrProf.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -1034,6 +1036,40 @@ LoopMopInstrumenter::getLoopMopCandidates() {
   return LoopMopCandidates;
 }
 
+// Do not instrument known MOPs that come from compiler
+// instrumentatin. The user has no way of suppressing them.
+// This function comes from TSan's ThreadSanitizer.cpp
+static bool shouldInstrumentReadWriteFromAddress(const Module *M, Value *Addr) {
+  // Peel off GEPs and BitCasts.
+  Addr = Addr->stripInBoundsOffsets();
+
+  if (GlobalVariable *GV = dyn_cast<GlobalVariable>(Addr)) {
+    if (GV->hasSection()) {
+      StringRef SectionName = GV->getSection();
+      // Check if the global is in the PGO counters section.
+      auto OF = Triple(M->getTargetTriple()).getObjectFormat();
+      if (SectionName.endswith(
+              getInstrProfSectionName(IPSK_cnts, OF, /*AddSegmentInfo=*/false)))
+        return false;
+    }
+
+    // Check if the global is private gcov data.
+    if (GV->getName().startswith("__llvm_gcov") ||
+        GV->getName().startswith("__llvm_gcda"))
+      return false;
+  }
+
+  // Do not instrument acesses from different address spaces; we cannot deal
+  // with them.
+  if (Addr) {
+    Type *PtrTy = cast<PointerType>(Addr->getType()->getScalarType());
+    if (PtrTy->getPointerAddressSpace() != 0)
+      return false;
+  }
+
+  return true;
+}
+
 void LoopMopInstrumenter::collectLoopMopCandidates() {
   auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
@@ -1079,7 +1115,8 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
         continue;
       }
 
-      if (!Addr)
+      if (!Addr ||
+          !shouldInstrumentReadWriteFromAddress(Inst.getModule(), Addr))
         continue;
 
       /* 2. Filter out non-regular memory instructions */
