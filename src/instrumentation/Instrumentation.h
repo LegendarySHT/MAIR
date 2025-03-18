@@ -72,14 +72,6 @@ struct InstrumentationIRBuilder : public IRBuilder<> {
   }
 };
 
-/// Mark an instruction as delegated to XSan.
-void MarkAsDelegatedToXsan(Instruction &I);
-
-/// Check if an instruction is delegated to XSan.
-bool IsDelegatedToXsan(const Instruction &I);
-
-bool ShouldSkip(const Instruction &I);
-
 /// Utils class to check if a value is loop invariant.
 /// Note that this class should be used at those simple loops.
 class LoopInvariantChecker {

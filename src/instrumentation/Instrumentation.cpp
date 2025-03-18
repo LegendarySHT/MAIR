@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Instrumentation.h"
+#include "Utils/InstUtils.h"
 #include "Utils/Logging.h"
 #include "Utils/Options.h"
 #include "llvm/ADT/APInt.h"
@@ -616,30 +617,6 @@ bool checkIfAlreadyInstrumented(Module &M, StringRef Flag) {
   return true;
 }
 
-constexpr char kDelegateMDKind[] = "xsan.delegate";
-
-static unsigned DelegateMDKindID = 0;
-
-void MarkAsDelegatedToXsan(Instruction &I) {
-  if (IsDelegatedToXsan(I))
-    return;
-  auto &Ctx = I.getContext();
-  if (!DelegateMDKindID)
-    DelegateMDKindID = Ctx.getMDKindID(kDelegateMDKind);
-  MDNode *N = MDNode::get(Ctx, None);
-  I.setMetadata(DelegateMDKindID, N);
-}
-
-bool IsDelegatedToXsan(const Instruction &I) {
-  if (!DelegateMDKindID)
-    return false;
-  return I.hasMetadata(DelegateMDKindID);
-}
-
-bool ShouldSkip(const Instruction &I) {
-  return I.hasMetadata(LLVMContext::MD_nosanitize) || IsDelegatedToXsan(I);
-}
-
 /*
 The following pattern is considered as a loop counting pattern.
 
@@ -1089,7 +1066,7 @@ void LoopMopInstrumenter::collectLoopMopCandidates() {
     }
 
     for (Instruction &Inst : BB) {
-      if (ShouldSkip(Inst))
+      if (shouldSkip(Inst))
         continue;
       // Does not consider volatile/atomic/dbginfo instructions
       if (Inst.isVolatile() || Inst.isAtomic() || isa<DbgInfoIntrinsic>(Inst))
@@ -1223,7 +1200,7 @@ bool LoopMopInstrumenter::isSimpleLoop(const Loop *Loop) {
   // memory is also considered as a simple loop.
   for (const BasicBlock *BB : Loop->getBlocks()) {
     for (const Instruction &I : *BB) {
-      if (ShouldSkip(I))
+      if (shouldSkip(I))
         continue;
       if (!I.mayWriteToMemory())
         continue;
@@ -1578,9 +1555,9 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 unsigned LoopMopInstrumenter::tagMopAsDelegated(LoopMop &Mop) {
   Instruction *Inst = Mop.Mop;
   auto &Dup = Mop.DupTo;
-  MarkAsDelegatedToXsan(*Inst);
+  markAsDelegatedToXsan(*Inst);
   for (Instruction *DupInst : Dup) {
-    MarkAsDelegatedToXsan(*DupInst);
+    markAsDelegatedToXsan(*DupInst);
   }
   return Dup.size();
 }

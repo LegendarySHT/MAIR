@@ -18,6 +18,7 @@ set(XSAN_PASS_COMMON
   PassRegistry.cpp
   Analysis/ActiveMopAnalysis.cpp
   Analysis/MopRecurrenceReducer.cpp
+  Utils/InstUtils.cpp
   Utils/Logging.cpp
   Utils/Options.cpp
 )

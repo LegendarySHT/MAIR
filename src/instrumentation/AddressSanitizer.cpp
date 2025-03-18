@@ -92,6 +92,7 @@
 #include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
+#include "Utils/InstUtils.h"
 #include "Utils/Options.h"
 
 using namespace llvm;
@@ -3606,7 +3607,7 @@ public:
         auto RngFilter = make_filter_range(
             Targets.OperandsToInstrument, [&](InterestingMemoryOperand &Op) {
               Instruction &Insn = *Op.getInsn();
-              if (IsDelegatedToXsan(Insn))
+              if (isDelegatedToXsan(Insn))
                 return false;
               bool IsInterestingMop = isInterestingMop(Insn);
               if (!IsInterestingMop) {

@@ -54,6 +54,7 @@
 #include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
+#include "Utils/InstUtils.h"
 #include "Utils/Options.h"
 
 using namespace llvm;
@@ -973,7 +974,7 @@ bool XsanThreadSanitizer::collectTargetsToIntrument(
       // Skip instructions inserted by another instrumentation.
       if (Inst.hasMetadata(LLVMContext::MD_nosanitize))
         continue;
-      if (__xsan::IsDelegatedToXsan(Inst))
+      if (__xsan::isDelegatedToXsan(Inst))
         continue;
       if (isTsanAtomic(&Inst))
         AtomicAccesses.push_back(&Inst);
