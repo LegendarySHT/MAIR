@@ -895,7 +895,7 @@ static bool expandBegAndEnd(Loop *Loop, ScalarEvolution &SE,
     // If counter type is smaller than the original counter type, we need to
     // truncate the counter to the smaller type.
     if (OrigCounterTy->getBitWidth() > CounterTy->getBitWidth()) {
-      assert(PtrIntTy.getBitWidth() >= OrigCounterTy->getBitWidth() &&
+      assert(PtrIntTy->getBitWidth() >= OrigCounterTy->getBitWidth() &&
              "Invalid truncate");
       APInt MaxIntPlusOne(PtrIntTy->getBitWidth(),
                           (uint64_t(1) << CounterTy->getBitWidth()), false);
