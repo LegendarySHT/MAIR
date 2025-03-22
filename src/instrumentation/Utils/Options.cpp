@@ -18,6 +18,16 @@ const cl::opt<bool>
                      cl::desc("Reduce recurring checks for TSan"), cl::Hidden,
                      cl::init(true));
 
+/// TODO: The current analysis is still wrong, and we should not optimize the
+/// inspection of Data Race based on the assumption that Data Race does not
+/// exist.
+/// Maybe we could optimize the tail checking based on the assumption of 
+/// Use-After-Return does not exist.
+const cl::opt<bool>
+    ClTsanOptStackObj("xsan-tsan-opt-stack-obj",
+                      cl::desc("Optimize stack object for TSan"), cl::Hidden,
+                      cl::init(false));
+
 const cl::opt<LoopOptLeval> ClLoopOpt(
     "xsan-loop-opt", cl::desc("Loop optimization level for XSan"),
     cl::values(

@@ -17,6 +17,8 @@ extern const cl::opt<bool> ClReccReduce;
 extern const cl::opt<bool> ClReccReduceAsan;
 /// Whether to reduce the recurring checks for TSan.
 extern const cl::opt<bool> ClReccReduceTsan;
+/// Whether to optimize the instrumentation of stack objects for TSan.
+extern const cl::opt<bool> ClTsanOptStackObj;
 
 /// The level of loop optimization designated for XSan.
 /// - no: No loop optimization.
@@ -37,6 +39,8 @@ inline bool enableReccReductionAsan() {
 inline bool enableReccReductionTsan() {
   return enableReccReduction() && ClReccReduceTsan;
 }
+
+inline bool enableTsanOptStackObj() { return ClOpt && ClTsanOptStackObj; }
 
 inline bool enablePostOpt() { return ClOpt && ClPostOpt; }
 

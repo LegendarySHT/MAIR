@@ -52,6 +52,7 @@
 #include "llvm/Transforms/Utils/ModuleUtils.h"
 
 #include "Analysis/MopRecurrenceReducer.h"
+#include "Analysis/TsanMopAnalysis.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
 #include "Utils/InstUtils.h"
@@ -893,18 +894,32 @@ public:
       return Targets;
     }
 
+    auto RngMap = map_range(Targets.AllLoadsAndStores,
+                            [](const auto &II) { return II.Inst; });
+    SmallVector<const Instruction *, 16> NewLdSt(RngMap);
+    bool Changed = false;
+    if (__xsan::options::opt::enableTsanOptStackObj()) {
+      const StackObjRaceResult &SOR = FAM.getResult<__xsan::StackObjRaceAnalysis>(F);
+      auto RngFilter = make_filter_range(NewLdSt, [&](const auto *Inst) -> bool{ 
+        return SOR.mightRace(Inst);
+      });
+      NewLdSt.assign(RngFilter.begin(), RngFilter.end());
+      Changed = true;
+    }
+
     // Reduce recurrence of load/store instructions.
     if (__xsan::options::opt::enableReccReductionTsan()) {
       MopRecurrenceReducer MRC(F, FAM);
-
-      auto RngMap = map_range(Targets.AllLoadsAndStores,
-                              [](const auto &II) { return II.Inst; });
-      const SmallVector<const Instruction *, 16> TmpInsts(RngMap);
       /// FIXME: we don't handle CompoundRW yet, as it is also not supported by
       /// TSan as well.
       SmallVector<const Instruction *, 16> DistilledLoadStores =
-          MRC.distillRecurringChecks(TmpInsts, true);
-      auto RngMapBack = map_range(DistilledLoadStores, [](const auto *Inst) {
+          MRC.distillRecurringChecks(NewLdSt, true);
+      NewLdSt.swap(DistilledLoadStores);
+      Changed = true;
+    }
+
+    if (Changed) {
+      auto RngMapBack = map_range(NewLdSt, [](const auto *Inst) {
         return TsanToInstrument::InstructionInfo(
             const_cast<Instruction *>(Inst));
       });
