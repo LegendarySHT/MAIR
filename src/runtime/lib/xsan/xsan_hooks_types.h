@@ -9,13 +9,23 @@ enum class XsanHooksSanitizer {
 };
 
 template <XsanHooksSanitizer san>
-struct XsanHooksSanitizerTraits;
+struct XsanHooksSanitizerUnImpl;
 
-__attribute__((always_inline)) inline bool Or(bool a, bool b) { return a || b; }
+template <XsanHooksSanitizer san>
+struct XsanHooksSanitizerImpl {
+  // Hooks should implement like DefaultHooks in `xsan_hooks_default.h:25`.
+  // You can simply inherit from it to use most of the default hooks.
+  // If you see this error, you need to specialize this struct to register the
+  // hooks for your sanitizer.
+  using Hooks = XsanHooksSanitizerUnImpl<san>;
+};
+
+static inline bool Or(bool a, bool b) { return a || b; }
 
 #define XSAN_HOOKS_EXEC_OR(RES, FUNC, ...) \
   XSAN_HOOKS_EXEC_REDUCE(RES, Or, FUNC, __VA_ARGS__)
 
+// `Max` is implemented in sanitizer_common
 #define XSAN_HOOKS_EXEC_MAX(RES, FUNC, ...) \
   XSAN_HOOKS_EXEC_REDUCE(RES, Max, FUNC, __VA_ARGS__)
 

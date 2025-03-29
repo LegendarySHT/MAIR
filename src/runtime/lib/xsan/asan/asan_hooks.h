@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../xsan_hooks_default.h"
+#include "../xsan_hooks_types.h"
 
 namespace __asan {
 
@@ -21,7 +22,8 @@ struct AsanHooks : ::__xsan::DefaultHooks<XSAN_HOOKS_DEFAULT_CONTEXT_T> {
 namespace __xsan {
 
 template <>
-struct XsanHooksSanitizerTraits<XsanHooksSanitizer::Asan> : __asan::AsanHooks {
+struct XsanHooksSanitizerImpl<XsanHooksSanitizer::Asan> {
+  using Hooks = __asan::AsanHooks;
 };
 
 }  // namespace __xsan
