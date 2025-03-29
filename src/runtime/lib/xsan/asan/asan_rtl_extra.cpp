@@ -1,17 +1,8 @@
 #include "../xsan_common_defs.h"
 #include "../xsan_hooks.h"
-#include "asan_thread.h"
 #include "orig/asan_fake_stack.h"
 #include "sanitizer_common/sanitizer_symbolizer.h"
 namespace __asan {
-
-void OnPthreadCreate() {
-  EnsureMainThreadIDIsCorrect();
-
-  // Strict init-order checking is thread-hostile.
-  if (__asan::flags()->strict_init_order)
-    __asan::StopInitOrderChecking();
-}
 
 /// Util function to get the real size of a global variable by address
 /// Returns 0 if the global is not found or if mu_for_globals is locked.

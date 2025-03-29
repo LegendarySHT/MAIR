@@ -18,11 +18,11 @@ void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
 void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg);
 }  // namespace __tsan
 
-#define TSAN_THR ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan_ctx_.thr_
-#define TSAN_PC ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan_ctx_.pc_
+#define TSAN_THR ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan.thr_
+#define TSAN_PC ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan.pc_
 
 #define COMMON_INTERCEPTOR_BLOCK_REAL(name) \
-  (__tsan::BlockingCall(xsan_ctx.tsan_ctx_.thr_), REAL(name))
+  (__tsan::BlockingCall(xsan_ctx.tsan.thr_), REAL(name))
 
 #define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path)            \
   if (path) {                                                    \

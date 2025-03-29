@@ -22,70 +22,11 @@
 
 using namespace __xsan;
 // ---------------------- State/Ignoration Management Hooks --------------------
-/*
- Manage and notify the following states:
-  - if XSan is in internal
-  - if XSan is in symbolizer
-  - if XSan should ignore interceptors
-  - the exit code of XSan
-*/
-
-namespace __tsan {
-void EnterSymbolizer();
-void ExitSymbolizer();
-
-/*
- The sub-sanitizers implement the following ignore predicates to ignore
-  - Interceptors
-  - Allocation/Free Hooks
- which are shared by all sub-sanitizers.
- */
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool ShouldIgnoreInterceptors(ThreadState *thr) { return false; }
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool ShouldIgnoreInterceptors() { return false; }
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-bool ShouldIgnoreAllocFreeHook() { return false; }
-}  // namespace __tsan
-
 namespace __xsan {
+
 THREADLOCAL int xsan_in_intenal = 0;
-
-bool IsInXsanInternal() { return xsan_in_intenal != 0; }
-
-ScopedXsanInternal::ScopedXsanInternal() { xsan_in_intenal++; }
-
-ScopedXsanInternal::~ScopedXsanInternal() { xsan_in_intenal--; }
-
+THREADLOCAL int xsan_in_calloc = 0;
 THREADLOCAL int is_in_symbolizer;
-void EnterSymbolizer() {
-  ++is_in_symbolizer;
-  __tsan::EnterSymbolizer();
-}
-
-void ExitSymbolizer() {
-  --is_in_symbolizer;
-  __tsan::ExitSymbolizer();
-}
-
-bool ShouldSanitzerIgnoreInterceptors(const XsanContext &xsan_ctx) {
-  /// Avoid sanity checks in XSan internal.
-  if (IsInXsanInternal()) {
-    return true;
-  }
-
-  bool should_ignore = false;
-
-  /// TODO: to support libignore, we plan to migrate it to Xsan.
-  /// xsan_suppressions.cpp is required accordingly.
-  should_ignore = __tsan::ShouldIgnoreInterceptors(xsan_ctx.tsan_ctx_.thr_);
-
-  return should_ignore;
-}
-
-bool ShouldSanitzerIgnoreAllocFreeHook() {
-  return __tsan::ShouldIgnoreAllocFreeHook();
-}
 
 int get_exit_code(const void *ctx) {
   int exit_code = 0;
@@ -97,7 +38,7 @@ int get_exit_code(const void *ctx) {
   auto *tsan_thr =
       ctx == nullptr
           ? __tsan::cur_thread()
-          : ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan_ctx_.thr_;
+          : ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan.thr_;
   exit_code = __tsan::Finalize(tsan_thr);
   return exit_code;
 }
@@ -109,26 +50,10 @@ int get_exit_code(const void *ctx) {
 // ---------------------- Memory Management Hooks -------------------
 /// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
 /// need to invoke ASan's hooks here.
-namespace __tsan {
-
-void OnAllocatorUnmap(uptr p, uptr size);
-
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {}
-
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-void OnXsanFreeHook(uptr ptr, bool write, uptr pc) {}
-
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-void OnXsanAllocFreeTailHook(uptr pc) {}
-
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
-void OnFakeStackDestory(uptr addr, uptr size) {}
-}  // namespace __tsan
 
 namespace __asan {
 
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
+SANITIZER_WEAK_ATTRIBUTE
 bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr,
                              bool set_stack_trace_id) {
   return false;
@@ -137,27 +62,6 @@ bool GetASanMellocStackTrace(u32 &stack_trace_id, uptr addr,
 }  // namespace __asan
 
 namespace __xsan {
-
-void OnAllocatorMap(uptr p, uptr size) {}
-
-void OnAllocatorMapSecondary(uptr p, uptr size, uptr user_begin,
-                             uptr user_size) {}
-
-void OnAllocatorUnmap(uptr p, uptr size) { __tsan::OnAllocatorUnmap(p, size); }
-
-void XsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
-  __tsan::OnXsanAllocHook(ptr, size, write, pc);
-}
-
-void XsanFreeHook(uptr ptr, bool write, uptr pc) {
-  __tsan::OnXsanFreeHook(ptr, write, pc);
-}
-
-void XsanAllocFreeTailHook(uptr pc) { __tsan::OnXsanAllocFreeTailHook(pc); }
-
-void OnFakeStackDestory(uptr addr, uptr size) {
-  __tsan::OnFakeStackDestory(addr, size);
-}
 
 bool IsInFakeStack(const XsanThread *thr, uptr addr) {
   __asan::FakeStack *fake_stack = thr->asan_thread_->get_fake_stack();
@@ -176,81 +80,6 @@ bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr,
 }  // namespace __xsan
 
 // ---------- End of Memory Management Hooks -------------------
-
-// ---------------------- pthread-related hooks -----------------
-/* pthread_create, pthread_join, pthread_detach, pthread_tryjoin_np, ... */
-
-namespace __tsan {
-/// TSan may spawn a background thread to recycle resource in pthread_create.
-/// What's more, TSan does not support starting new threads after multi-threaded
-/// fork.
-void OnPthreadCreate();
-Tid ThreadConsumeTid(ThreadState *thr, uptr pc, uptr uid);
-ScopedPthreadJoin::ScopedPthreadJoin(const int &res,
-                                     const XsanContext &xsan_ctx,
-                                     const void *th)
-    : res_(res), tsan_ctx_(xsan_ctx.tsan_ctx_) {
-  auto [thr, pc] = tsan_ctx_;
-  tid_ = ThreadConsumeTid(thr, pc, (uptr)th);
-  ThreadIgnoreBegin(thr, pc);
-}
-
-ScopedPthreadJoin::~ScopedPthreadJoin() {
-  auto [thr, pc] = tsan_ctx_;
-  ThreadIgnoreEnd(thr);
-  if (res_ == 0) {
-    ThreadJoin(thr, pc, tid_);
-  }
-}
-
-ScopedPthreadDetach::ScopedPthreadDetach(const int &res,
-                                         const XsanContext &xsan_ctx,
-                                         const void *th)
-    : res_(res), tsan_ctx_(xsan_ctx.tsan_ctx_) {
-  auto [thr, pc] = tsan_ctx_;
-  tid_ = ThreadConsumeTid(thr, pc, (uptr)th);
-}
-
-ScopedPthreadDetach::~ScopedPthreadDetach() {
-  if (res_ != 0) return;
-  auto [thr, pc] = tsan_ctx_;
-  ThreadDetach(thr, pc, tid_);
-}
-
-ScopedPthreadTryJoin::ScopedPthreadTryJoin(const int &res,
-                                           const XsanContext &xsan_ctx,
-                                           const void *th)
-    : th_((uptr)th), res_(res), tsan_ctx_(xsan_ctx.tsan_ctx_) {
-  auto [thr, pc] = tsan_ctx_;
-  tid_ = ThreadConsumeTid(thr, pc, th_);
-  ThreadIgnoreBegin(thr, pc);
-}
-
-ScopedPthreadTryJoin::~ScopedPthreadTryJoin() {
-  auto [thr, pc] = tsan_ctx_;
-  ThreadIgnoreEnd(thr);
-  if (res_ == 0) {
-    ThreadJoin(thr, pc, tid_);
-  } else {
-    ThreadNotJoined(thr, pc, tid_, th_);
-  }
-}
-}
-
-namespace __asan {
-/// ASan 1) checks the correctness of main thread ID, 2) checks the init orders.
-void OnPthreadCreate();
-}
-
-namespace __xsan {
-void OnPthreadCreate() {
-  __asan::OnPthreadCreate();
-  __tsan::OnPthreadCreate();
-}
-}
-
-// ---------------- End of pthread-related hooks -----------------
-
 
 // ---------------------- Special Function Hooks -----------------
 extern "C" {
@@ -400,9 +229,9 @@ void OnLibraryLoaded(const char *filename, void *handle) {
   __tsan::libignore()->OnLibraryLoaded(filename);
 }
 
-void OnLibraryUnloaded() { 
+void OnLibraryUnloaded() {
   __xsan::ScopedIgnoreInterceptors ignore;
-  __tsan::libignore()->OnLibraryUnloaded(); 
+  __tsan::libignore()->OnLibraryUnloaded();
 }
 
 void OnLongjmp(void *env, const char *fn_name, uptr pc) {
@@ -455,15 +284,15 @@ void ValidateSanitizerFlags() {
 
 // ---------- Thread-Related Hooks --------------------------
 namespace __asan {
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
+SANITIZER_WEAK_ATTRIBUTE
 void SetAsanThreadName(const char *name) {}
 void SetAsanThreadNameByUserId(uptr uid, const char *name) {}
 }  // namespace __asan
 
 namespace __tsan {
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
+SANITIZER_WEAK_ATTRIBUTE
 void SetTsanThreadName(const char *name) {}
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
+SANITIZER_WEAK_ATTRIBUTE
 void SetTsanThreadNameByUserId(uptr uid, const char *name) {}
 }  // namespace __tsan
 namespace __xsan {
@@ -496,7 +325,7 @@ The following events happen in order while `pthread_create` is executed:
       - [child-thread] : start_routine_
       - [child-thread] : (**HOOK**) XsanThread::AfterThreadStart
 
-- [child-thread] : TSD destroy / Active destroy 
+- [child-thread] : TSD destroy / Active destroy
   - [child-thread] : XsanThread::Destroy
     - [child-thread] : (**HOOK**) XsanThread::OnThreadDestroy
 */
@@ -572,7 +401,7 @@ void OnSetCurrentThread(XsanThread *t) {
 extern "C" int fileno_unlocked(void *stream);
 
 namespace __tsan {
-SANITIZER_WEAK_CXX_DEFAULT_IMPL
+SANITIZER_WEAK_ATTRIBUTE
 uptr Dir2addr(const char *path);
 uptr File2addr(const char *path);
 void Acquire(ThreadState *thr, uptr pc, uptr addr);
@@ -588,14 +417,15 @@ void MemoryRangeImitateWriteOrResetRange(ThreadState *thr, uptr pc, uptr addr,
                                          uptr size);
 
 void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg);
-void AfterMmap(const XsanInterceptorContext &ctx, void *res, uptr size, int fd)  {
-  auto [thr, pc] = ctx.xsan_ctx.tsan_ctx_;
+void AfterMmap(const XsanInterceptorContext &ctx, void *res, uptr size,
+               int fd) {
+  auto [thr, pc] = ctx.xsan_ctx.tsan;
   if (fd > 0)
     __tsan::FdAccess(thr, pc, fd);
   __tsan::MemoryRangeImitateWriteOrResetRange(thr, pc, (uptr)res, size);
 }
 void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr, uptr size) {
-  auto [thr, pc] = ctx.xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx.xsan_ctx.tsan;
   UnmapShadow(thr, (uptr)addr, size);
 }
 }  // namespace __tsan
@@ -604,7 +434,7 @@ namespace __asan {
 
 void PoisonShadow(uptr addr, uptr size, u8 value);
 
-void AfterMmap(void *res, uptr size, int fd)  {
+void AfterMmap(void *res, uptr size, int fd) {
   if (!size || res == (void *)-1) {
     return;
   }
@@ -623,16 +453,17 @@ void BeforeMunmap(void *addr, uptr size) {
   if (size && IsAligned(beg, GetPageSize())) {
     SIZE_T rounded_length = RoundUpTo(size, GetPageSize());
     // Protect from unmapping the shadow.
-    if (__asan::AddrIsInMem(beg) && __asan::AddrIsInMem(beg + rounded_length - 1))
+    if (__asan::AddrIsInMem(beg) &&
+        __asan::AddrIsInMem(beg + rounded_length - 1))
       __asan::PoisonShadow(beg, rounded_length, 0);
   }
 }
-}
+}  // namespace __asan
 
 namespace __xsan {
 void OnAcquire(const void *ctx, uptr addr) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::Acquire(thr, pc, addr);
 }
 
@@ -642,37 +473,37 @@ void OnDirAcquire(const void *ctx, const char *path) {
 
 void OnRelease(const void *ctx, uptr addr) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::Release(thr, pc, addr);
 }
 
 void OnFdAcquire(const void *ctx, int fd) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::FdAcquire(thr, pc, fd);
 }
 
 void OnFdRelease(const void *ctx, int fd) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::FdRelease(thr, pc, fd);
 }
 
 void OnFdAccess(const void *ctx, int fd) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::FdAccess(thr, pc, fd);
 }
 
 void OnFdSocketAccept(const void *ctx, int fd, int newfd) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::FdSocketAccept(thr, pc, fd, newfd);
 }
 
 void OnFileOpen(const void *ctx, void *file, const char *path) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   if (path) {
     __tsan::Acquire(thr, pc, __tsan::File2addr(path));
   }
@@ -688,7 +519,7 @@ void OnFileClose(const void *ctx, void *file) {
   if (file) {
     int fd = fileno_unlocked(file);
     const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-    auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+    auto [thr, pc] = ctx_->xsan_ctx.tsan;
     __tsan::FdClose(thr, pc, fd);
   }
 }
@@ -696,12 +527,13 @@ void OnFileClose(const void *ctx, void *file) {
 #if !SANITIZER_APPLE
 void OnHandleRecvmsg(const void *ctx, __sanitizer_msghdr *msg) {
   const XsanInterceptorContext *ctx_ = (const XsanInterceptorContext *)ctx;
-  auto [thr, pc] = ctx_->xsan_ctx.tsan_ctx_;
+  auto [thr, pc] = ctx_->xsan_ctx.tsan;
   __tsan::HandleRecvmsg(thr, pc, msg);
 }
 #endif
 
-void AfterMmap(const XsanInterceptorContext& ctx, void *res, uptr size, int fd) {
+void AfterMmap(const XsanInterceptorContext &ctx, void *res, uptr size,
+               int fd) {
   __tsan::AfterMmap(ctx, res, size, fd);
   __asan::AfterMmap(res, size, fd);
 }

@@ -12,6 +12,7 @@
 #include "tsan_mman.h"
 
 #include "../xsan_allocator.h"
+#include "tsan_hooks.h"
 #include "sanitizer_common/sanitizer_allocator_checks.h"
 #include "sanitizer_common/sanitizer_allocator_interface.h"
 #include "sanitizer_common/sanitizer_allocator_report.h"
@@ -426,34 +427,34 @@ void FreeImpl(void *p) {
 }
 
 // ---------------------- Hook for other Sanitizers -------------------
-void OnAllocatorUnmap(uptr p, uptr size) {
+void TsanHooks::OnAllocatorUnmap(uptr p, uptr size) {
   MapUnmapCallback cb;
   cb.OnUnmap(p, size);
 }
 
-void OnXsanAllocHook(uptr ptr, uptr size, bool write, uptr pc) {
+void TsanHooks::OnXsanAllocHook(uptr ptr, uptr size, BufferedStackTrace *stack) {
   if (__tsan::is_tsan_initialized()) {
     /// TODO: remove code related to tsan's uaf checking
-    __tsan::OnUserAlloc(__tsan::cur_thread(), pc, ptr, size, write);
+    __tsan::OnUserAlloc(__tsan::cur_thread(), stack->trace[0], ptr, size, true);
   }
 }
 
-void OnXsanFreeHook(uptr ptr, bool write, uptr pc) {
+void TsanHooks::OnXsanFreeHook(uptr ptr, uptr size, BufferedStackTrace *stack) {
   /// XSanThread is set as nullptr in TSD destructor.
   /// pthread_deattach makes TSD destructor run before free.
   /// Hence, we need to add a fallback, just like ASan's `if(!t)` or TSan's
   /// `ScopedGlobalProcessor`
   if (__tsan::is_tsan_initialized()) {
     /// TODO: remove code related to tsan's uaf checking
-    __tsan::OnUserFree(__tsan::cur_thread(), pc, ptr, write);
+    __tsan::OnUserFree(__tsan::cur_thread(), stack->trace[0], ptr, true);
   }
 }
 
-void OnXsanAllocFreeTailHook(uptr pc) {
+void TsanHooks::OnXsanAllocFreeTailHook(uptr pc) {
   __tsan::SignalUnsafeCall(__tsan::cur_thread(), pc);
 }
 
-void OnFakeStackDestory(uptr addr, uptr size) {
+void TsanHooks::OnFakeStackDestory(uptr addr, uptr size) {
   /// The 1st and 2nd arguments are ignored in MemoryResetRange.
   MemoryResetRange(cur_thread(), 0, addr, size);
 }

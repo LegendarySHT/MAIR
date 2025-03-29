@@ -617,7 +617,7 @@ struct Allocator {
 
     void *res = reinterpret_cast<void *>(user_beg);
 
-    __xsan::XsanAllocHook(user_beg, size, true, stack->trace[0]);
+    __xsan::XsanAllocHook(user_beg, size, stack);
     /// Internal allocations do not occur during signal processing
     /// Refer to tsan_fd.cpp
     // __xsan::XsanAllocFreeTailHook();
@@ -654,7 +654,7 @@ struct Allocator {
 
     if (!__xsan::ShouldSanitzerIgnoreAllocFreeHook())
       RunFreeHooks(ptr);
-    __xsan::XsanFreeHook(p, true, stack->trace[0]);
+    __xsan::XsanFreeHook(p, true, stack);
 
     AsanThread *t = GetCurrentThread();
     if (t) {
@@ -821,7 +821,7 @@ struct Allocator {
       reinterpret_cast<LargeChunkHeader *>(alloc_beg)->Set(m);
     }
     /// TODO: figure out should we transfer user_ptr or real_ptr?
-    __xsan::XsanAllocHook(user_beg, size, true, stack->trace[0]);
+    __xsan::XsanAllocHook(user_beg, size, stack);
     __xsan::XsanAllocFreeTailHook(stack->trace[0]);
     RunMallocHooks(res, size);
     return res;
@@ -920,7 +920,7 @@ struct Allocator {
       }
     }
 
-    __xsan::XsanFreeHook(p, true, stack->trace[0]);
+    __xsan::XsanFreeHook(p, m->UsedSize(), stack);
     
     AsanStats &thread_stats = GetCurrentThreadStats();
     thread_stats.frees++;
@@ -1489,10 +1489,10 @@ int __asan_update_allocation_context(void* addr) {
 
 // -------------------- Implement XsanAllocator's methods here! -------------
 namespace __xsan {
+
 void XsanAllocator::ForceLock() { instance.ForceLock(); }
 
 void XsanAllocator::ForceUnlock() { instance.ForceUnlock(); }
-
 
 /// ASan's embedded metadata should not be exposed
 bool XsanAllocator::PointerIsMine(const void *p) {
@@ -1515,4 +1515,5 @@ void XsanAllocator::DeallocateInternal(void *ptr, BufferedStackTrace *stack) {
 void XsanAllocator::PrintStats() {
   __asan::PrintInternalAllocatorStats();
 }
+
 }  // namespace __xsan

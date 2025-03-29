@@ -99,38 +99,6 @@ ScopedIgnoreTsan::~ScopedIgnoreTsan() {
 #endif
 }
 
-bool ShouldIgnoreInterceptors(ThreadState *thr) {
-  return !thr->is_inited || thr->ignore_interceptors || thr->in_ignored_lib;
-}
-
-bool ShouldIgnoreInterceptors() {
-  return ShouldIgnoreInterceptors(cur_thread());
-}
-
-bool ShouldIgnoreAllocFreeHook() {
-  ThreadState *thr = cur_thread();
-  return (ctx == 0 || !ctx->initialized || thr->ignore_interceptors);
-}
-
-void OnPthreadCreate() {
-  MaybeSpawnBackgroundThread();
-
-  if (ctx->after_multithreaded_fork) {
-    if (flags()->die_after_fork) {
-      Report(
-          "ThreadSanitizer: starting new threads after multi-threaded "
-          "fork is not supported. Dying (set die_after_fork=0 to override)\n");
-      Die();
-    } else {
-      VPrintf(1,
-              "ThreadSanitizer: starting new threads after multi-threaded "
-              "fork is not supported (pid %lu). Continuing because of "
-              "die_after_fork=0, but you are on your own\n",
-              internal_getpid());
-    }
-  }
-}
-
 THREADLOCAL bool disabled_tsan = false;
 
 /// See the following comment in tsan_interceptors_posix.cpp:vfork for details.

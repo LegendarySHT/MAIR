@@ -96,7 +96,7 @@ ScopedIgnoreChecks::~ScopedIgnoreChecks() {
 
 ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
                                      const char *func, uptr caller_pc)
-    : tsan_si(xsan_ctx.tsan_ctx_.thr_, func, caller_pc) {}
+    : tsan_si(xsan_ctx.tsan.thr_, func, caller_pc) {}
 
 bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
   if (xsan_ignore_interceptors || !XsanInited()) {
@@ -378,7 +378,7 @@ static int munmap_interceptor(void *ctx, Munmap real_munmap, void *addr,
  */
 
 // #    define COMMON_INTERCEPTOR_BLOCK_REAL(name) \
-//       (__tsan::BlockingCall(xsan_ctx.tsan_ctx_.thr_), REAL(name))
+//       (__tsan::BlockingCall(xsan_ctx.tsan.thr_), REAL(name))
 // #    define COMMON_INTERCEPTOR_FILE_OPEN(ctx, file, path) \
 //       __xsan::OnFileOpen(ctx, file, path)
 // #    define COMMON_INTERCEPTOR_FILE_CLOSE(ctx, file) \

@@ -51,6 +51,7 @@ set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
   asan/asan_flags.cpp
   asan/asan_globals.cpp
+  asan/asan_hooks.cpp
   asan/asan_poisoning.cpp
   asan/asan_report.cpp
   asan/asan_rtl.cpp
@@ -158,6 +159,7 @@ endif()
 set(XSAN_TSAN_SOURCES
   tsan/tsan_fd.cpp
   tsan/tsan_flags.cpp
+  tsan/tsan_hooks.cpp
   tsan/tsan_init.cpp
   tsan/tsan_interceptors.cpp
   tsan/tsan_mman.cpp
@@ -243,9 +245,11 @@ set(ASAN_HEADERS
   asan/orig/asan_stats.h
   asan/orig/asan_suppressions.h
   # asan/orig/asan_thread.h
-  )
+)
+
 set(XSAN_ASAN_HEADERS
   asan/asan_allocator.h
+  asan/asan_hooks.h
   asan/asan_init.h
   asan/asan_mapping.h
   asan/asan_thread.h
@@ -279,9 +283,10 @@ set(TSAN_HEADERS
   tsan/orig/tsan_sync.h
   tsan/orig/tsan_trace.h
   tsan/orig/tsan_vector_clock.h
-  )
+)
 
 set(XSAN_TSAN_HEADERS
+  tsan/tsan_hooks.h
   tsan/tsan_init.h
   tsan/tsan_interceptors.h
   tsan/tsan_interface.inc
@@ -296,6 +301,9 @@ SET(XSAN_HEADERS
   xsan_allocator.h
   xsan_flags.h
   xsan_hooks.h
+  xsan_hooks_default.h
+  xsan_hooks_todo.h
+  xsan_hooks_types.h
   xsan_interceptors.h
   xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h
