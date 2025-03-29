@@ -1,3 +1,5 @@
+#pragma once
+
 namespace __xsan {
 
 /// TODO: This enum should be unified
