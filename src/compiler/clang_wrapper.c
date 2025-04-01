@@ -1271,9 +1271,48 @@ static void print_cmdline(int argc) {
   }
   printf("\n");
 }
+
+static void print_help(){
+   puts(
+    "Sanitizer Options:\n"
+    "  -tsan              Use our ThreadSanitizer (TSan).\n"
+    "                     Uses the clang frontend and our midend. \n"
+    "                     Cannot be used with -asan.\n"
+    "  -asan              Use our AddressSanitizer (ASan). \n"
+    "                     Uses the clang frontend and our midend. \n"
+    "                     Cannot be used with -tsan.\n"
+    "  -ubsan             Use our UndefinedBehaviorSanitizer (UBSan). \n"
+    "                     Uses the clang frontend (no midend required).\n"
+    "  -xsan              Use our eXtended Sanitizer (XSAN).\n"
+    "                     Integrates ASan, TSan, and UBSan. \n"
+    "\nOriginal Sanitizers, for example:\n"
+    "  -fsanitize=address   Use LLVM's original AddressSanitizer.\n"
+    "  -fsanitize=thread    Use LLVM's original ThreadSanitizer.\n"
+    "  -fsanitize=undefined Use LLVM's original UndefinedBehaviorSanitizer.\n"
+    "These parameters use the original middle-end plugin.\n"
+    "Cannot combine two different sanitizers.\n"
+    "\nDisable Sanitizers(works for both XSan and original ones), for example:\n"
+    "  -fno-sanitize=address\n"
+    "                     Disable AddressSanitizer.\n"
+    "  -fno-sanitize=thread\n"
+    "                     Disable ThreadSanitizer.\n"
+    "  -fno-sanitize=undefined\n"
+    "                     Disable UndefinedBehaviorSanitizer.\n"
+    "\nNotes:\n"
+    "  - Use -fsanitize=<sanitizer> for LLVM's original sanitizers.\n"
+    "  - Use -fno-sanitize=<sanitizer> to disable specific sanitizers.\n"
+    "  - These options are conflicting: -tsan, -asan, -xsan\n"
+);
+}
+
 /* Main entry point */
 
 int main(int argc, const char** argv) {
+
+  if (argc == 2 && strcmp(argv[1], "-h") == 0) {
+    print_help();
+    return 0;
+  }
 
   if (isatty(2) && !getenv("AFL_QUIET")) {
 
