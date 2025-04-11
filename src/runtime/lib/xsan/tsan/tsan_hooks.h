@@ -15,14 +15,16 @@ void ExitSymbolizer();
 
 namespace __tsan {
 
-struct TsanHooks : ::__xsan::DefaultHooks< ::__xsan::XsanHooksSanitizer::Tsan> {
-  struct Context {
-    __tsan::ThreadState *thr_;
-    uptr pc_;
+struct TsanContext {
+  __tsan::ThreadState *thr_;
+  uptr pc_;
 
-    Context() : thr_(nullptr), pc_(0) {}
-    Context(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
-  };
+  TsanContext() : thr_(nullptr), pc_(0) {}
+  TsanContext(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
+};
+
+struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
+  using Context = TsanContext;
 
   static void EnterSymbolizer() { __tsan::EnterSymbolizer(); }
   static void ExitSymbolizer() { __tsan::ExitSymbolizer(); }

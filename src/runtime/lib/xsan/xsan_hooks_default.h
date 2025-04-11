@@ -14,29 +14,22 @@
 
 namespace __xsan {
 
-#define XSAN_HOOKS_DEFINE_DEFAULT_CONTEXT     \
-  struct DefaultContext {                     \
-    ALWAYS_INLINE DefaultContext() {};        \
-    ALWAYS_INLINE DefaultContext(uptr pc) {}; \
-  }
-
-#define XSAN_HOOKS_DEFAULT_CONTEXT_T DefaultContext
-
 // The use of templates here ensures that the `Context` class for sanitizers
 // using the default context is not the same class. This is necessary because
 // implicit type conversion rules need to be defined in bulk. Without templates,
 // the `Context` for sanitizers using the default context would be the same
 // class, which would lead to duplicate definitions of conversion rules.
 template <XsanHooksSanitizer san>
+struct DefaultContext {
+  ALWAYS_INLINE DefaultContext() {};
+  ALWAYS_INLINE DefaultContext(uptr pc) {};
+};
+
+template <typename Context>
 struct DefaultHooks {
   using BufferedStackTrace = ::__sanitizer::BufferedStackTrace;
   using u32 = ::__sanitizer::u32;
   using uptr = ::__sanitizer::uptr;
-
-  struct Context {
-    ALWAYS_INLINE Context() {}
-    ALWAYS_INLINE Context(uptr pc) {}
-  };
 
   // ----------- State/Ignoration Management Hooks -----------
   /*

@@ -13,7 +13,11 @@ void InitializeFlags();
 
 namespace __asan {
 
-struct AsanHooks : ::__xsan::DefaultHooks< ::__xsan::XsanHooksSanitizer::Asan> {
+using AsanContext = ::__xsan::DefaultContext<__xsan::XsanHooksSanitizer::Asan>;
+
+struct AsanHooks : ::__xsan::DefaultHooks<AsanContext> {
+  using Context = AsanContext;
+
   /// ASan 1) checks the correctness of main thread ID, 2) checks the init
   /// orders.
   static void OnPthreadCreate();
