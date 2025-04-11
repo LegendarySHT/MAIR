@@ -19,3 +19,4 @@ pythonenv*
 
 TODO.md
 compile_commands.json
+Xsan_config.cmake

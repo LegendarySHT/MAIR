@@ -8,10 +8,11 @@
 #pragma once
 
 #include <sanitizer_common/sanitizer_common.h>
+#include <sanitizer_common/sanitizer_internal_defs.h>
 #include <sanitizer_common/sanitizer_platform_limits_posix.h>
 
-#include "xsan_hooks_default.h"
 #include "xsan_hooks_todo.h"
+#include "xsan_hooks_types.h"
 #include "xsan_interface_internal.h"
 #include "xsan_thread.h"
 
@@ -21,7 +22,6 @@ struct CommonFlags;
 
 namespace __xsan {
 
-struct XsanInterceptorContext;
 XsanThread *GetCurrentThread();
 
 // These structs is to hold the context of sub-sanitizers.
@@ -33,6 +33,12 @@ struct XsanContext {
 
   XsanContext() : XSAN_HOOKS_INIT_VAR() {}
   XsanContext(uptr pc) : XSAN_HOOKS_INIT_VAR(pc) {}
+};
+
+struct XsanInterceptorContext {
+  const char *interceptor_name;
+  /// TODO: should use pointer or reference?
+  XsanContext xsan_ctx;
 };
 
 // ---------------------- Hook for other Sanitizers -------------------
@@ -157,52 +163,81 @@ class ScopedPthreadTryJoin {
   XSAN_HOOKS_DEFINE_VAR(ScopedPthreadTryJoin)
 };
 
+// ---------------------- Special Function Hooks -----------------
+
+class ScopedAtExitWrapper {
+ public:
+  ScopedAtExitWrapper(uptr pc, const void *ctx)
+      : XSAN_HOOKS_INIT_VAR(pc, ctx) {}
+  ~ScopedAtExitWrapper() {}
+
+ private:
+  XSAN_HOOKS_DEFINE_VAR(ScopedAtExitWrapper)
+};
+class ScopedAtExitHandler {
+ public:
+  ScopedAtExitHandler(uptr pc, const void *ctx)
+      : XSAN_HOOKS_INIT_VAR(pc, ctx) {}
+  ~ScopedAtExitHandler() {}
+
+ private:
+  XSAN_HOOKS_DEFINE_VAR(ScopedAtExitHandler)
+};
+
 ALWAYS_INLINE void OnPthreadCreate() { XSAN_HOOKS_EXEC(OnPthreadCreate); }
 
-void InitializeSanitizerFlags();
-void SetSanitizerCommonFlags(CommonFlags &cf);
-void ValidateSanitizerFlags();
+ALWAYS_INLINE void InitializeSanitizerFlags() {
+  XSAN_HOOKS_EXEC(InitializeFlags);
+}
+ALWAYS_INLINE void SetSanitizerCommonFlags(CommonFlags &cf) {
+  XSAN_HOOKS_EXEC(SetCommonFlags, cf);
+}
+ALWAYS_INLINE void ValidateSanitizerFlags() { XSAN_HOOKS_EXEC(ValidateFlags); }
 
-void SetSanitizerThreadName(const char *name);
-void SetSanitizerThreadNameByUserId(uptr uid, const char *name);
+ALWAYS_INLINE void SetSanitizerThreadName(const char *name) {
+  XSAN_HOOKS_EXEC(SetThreadName, name);
+}
+ALWAYS_INLINE void SetSanitizerThreadNameByUserId(uptr uid, const char *name) {
+  /// Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
+  /// But asan does not remember UserId's for threads (pthread_t);
+  /// and remembers all ever existed threads, so the linear search by UserId
+  /// can be slow.
+  // __asan::SetAsanThreadNameByUserId(uid, name);
+  XSAN_HOOKS_EXEC(SetThreadNameByUserId, uid, name);
+}
 
 bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr,
                          bool set_stack_trace_id);
 
-void OnAcquire(const void *ctx, uptr addr);
-void OnDirAcquire(const void *ctx, const char *path);
-void OnDirRelease(const void *ctx, const char *path);
-void OnRelease(const void *ctx, uptr addr);
-void OnFdAcquire(const void *ctx, int fd);
-void OnFdRelease(const void *ctx, int fd);
-void OnFdAccess(const void *ctx, int fd);
-void OnFdSocketAccept(const void *ctx, int fd, int newfd);
-void OnFileOpen(const void *ctx, void *file, const char *path);
-void OnFileClose(const void *ctx, void *file);
-void OnHandleRecvmsg(const void *ctx, __sanitizer_msghdr *msg);
 /// Used in the Atexit registration.
-class ScopedAtExitWrapper {
- public:
-  ScopedAtExitWrapper(uptr pc, const void *ctx);
-  ~ScopedAtExitWrapper();
-};
-class ScopedAtExitHandler {
- public:
-  ScopedAtExitHandler(uptr pc, const void *ctx);
-  ~ScopedAtExitHandler();
-};
-void AfterMmap(const XsanInterceptorContext &ctx, void *res, uptr size, int fd);
-void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr, uptr size);
+ALWAYS_INLINE void AfterMmap(const XsanInterceptorContext &ctx, void *res,
+                             uptr size, int fd) {
+  XSAN_HOOKS_EXEC(AfterMmap, ctx.xsan_ctx, res, size, fd);
+}
+ALWAYS_INLINE void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr,
+                                uptr size) {
+  /// Size too big can cause problems with the shadow memory.
+  /// unmap on NULL is not allowed.
+  if ((sptr)size < 0 || addr == nullptr)
+    return;
+  XSAN_HOOKS_EXEC(BeforeMunmap, ctx.xsan_ctx, addr, size);
+}
 /// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
 /// Notably, this function is called TWICE at the attitude per process.
 extern "C" void *__xsan_vfork_before_and_after();
 /// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
 extern "C" void __xsan_vfork_parent_after(void *sp);
-void OnForkBefore();
-void OnForkAfter(bool is_child);
+/// Used to lock before fork
+ALWAYS_INLINE void OnForkBefore() { XSAN_HOOKS_EXEC(OnForkBefore); }
+/// Used to unlock after fork
+ALWAYS_INLINE void OnForkAfter(bool is_child) {
+  XSAN_HOOKS_EXEC(OnForkAfter, is_child);
+}
 void OnLibraryLoaded(const char *filename, void *handle);
 void OnLibraryUnloaded();
-void OnLongjmp(void *env, const char *fn_name, uptr pc);
+ALWAYS_INLINE void OnLongjmp(void *env, const char *fn_name, uptr pc) {
+  XSAN_HOOKS_EXEC(OnLongjmp, env, fn_name, pc);
+}
 
 class ScopedUnwinding {
  public:

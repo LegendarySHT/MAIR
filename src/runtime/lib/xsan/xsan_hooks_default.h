@@ -9,6 +9,8 @@
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
+#include "sanitizer_common/sanitizer_platform_limits_posix.h"
+#include "xsan_hooks_types.h"
 
 namespace __xsan {
 
@@ -20,11 +22,21 @@ namespace __xsan {
 
 #define XSAN_HOOKS_DEFAULT_CONTEXT_T DefaultContext
 
-template <typename Context>
+// The use of templates here ensures that the `Context` class for sanitizers
+// using the default context is not the same class. This is necessary because
+// implicit type conversion rules need to be defined in bulk. Without templates,
+// the `Context` for sanitizers using the default context would be the same
+// class, which would lead to duplicate definitions of conversion rules.
+template <XsanHooksSanitizer san>
 struct DefaultHooks {
   using BufferedStackTrace = ::__sanitizer::BufferedStackTrace;
   using u32 = ::__sanitizer::u32;
   using uptr = ::__sanitizer::uptr;
+
+  struct Context {
+    ALWAYS_INLINE Context() {}
+    ALWAYS_INLINE Context(uptr pc) {}
+  };
 
   // ----------- State/Ignoration Management Hooks -----------
   /*
@@ -102,6 +114,28 @@ struct DefaultHooks {
 
   // ---------------- End of pthread-related hooks -----------------
 
+  // ---------------------- Special Function Hooks -----------------
+  class ScopedAtExitWrapper {
+   public:
+    ALWAYS_INLINE ScopedAtExitWrapper(uptr pc, const void *ctx) {}
+    ALWAYS_INLINE ~ScopedAtExitWrapper() {}
+  };
+  class ScopedAtExitHandler {
+   public:
+    ALWAYS_INLINE ScopedAtExitHandler(uptr pc, const void *ctx) {}
+    ALWAYS_INLINE ~ScopedAtExitHandler() {}
+  };
+  ALWAYS_INLINE static void *vfork_before_and_after() { return nullptr; }
+  ALWAYS_INLINE static void vfork_parent_after(void *sp) {}
+  ALWAYS_INLINE static void OnForkBefore() {}
+  ALWAYS_INLINE static void OnForkAfter(bool is_child) {}
+  ALWAYS_INLINE static void OnLibraryLoaded(const char *filename,
+                                            void *handle) {}
+  ALWAYS_INLINE static void OnLibraryUnloaded() {}
+  ALWAYS_INLINE static void OnLongjmp(void *env, const char *fn_name, uptr pc) {
+  }
+  // --------- End of Special Function Hooks ---------
+
   // ---------- Unwind-related Hooks ----------------
 
   ALWAYS_INLINE static void OnEnterUnwind() {}
@@ -110,11 +144,41 @@ struct DefaultHooks {
   // ---------- End of Unwind-related Hooks ----------------
 
   // ---------- Require Stack Trace Hooks ----------------
-
   ALWAYS_INLINE static bool RequireStackTraces() { return false; }
   ALWAYS_INLINE static int RequireStackTracesSize() { return -1; }
-
   // ---------- End of Require Stack Trace Hooks ----------------
+
+  // ---------------------- Flags Registration Hooks ---------------
+  ALWAYS_INLINE static void InitializeFlags() {}
+  ALWAYS_INLINE static void InitializeSanitizerFlags() {}
+  ALWAYS_INLINE static void SetCommonFlags(CommonFlags &cf) {}
+  ALWAYS_INLINE static void ValidateFlags() {}
+  // ----------End of Flags Registration Hooks ---------------
+
+  // ---------- Thread-Related Hooks --------------------------
+  ALWAYS_INLINE static void SetThreadName(const char *name) {}
+  ALWAYS_INLINE static void SetAsanThreadNameByUserId(uptr uid,
+                                                      const char *name) {}
+  ALWAYS_INLINE static void SetSanitizerThreadNameByUserId(uptr uid,
+                                                           const char *name) {}
+  // ALWAYS_INLINE static void OnSetCurrentThread(XsanThread *t) {}
+  // ALWAYS_INLINE static void OnThreadCreate(XsanThread *xsan_thread,
+  //                                          const void *start_data,
+  //                                          uptr data_size, u32 parent_tid,
+  //                                          StackTrace *stack, bool detached)
+  //                                          {}
+  // ALWAYS_INLINE static void OnThreadDestroy(XsanThread *xsan_thread) {}
+  // ALWAYS_INLINE static void BeforeThreadStart(XsanThread *xsan_thread,
+  //                                             tid_t os_id) {}
+  // ALWAYS_INLINE static void AfterThreadStart(XsanThread *xsan_thread) {}
+  // ---------- End of Thread-Related Hooks --------------------------
+
+  // ---------- Synchronization and File-Related Hooks ------------------------
+  ALWAYS_INLINE static void AfterMmap(const Context &ctx, void *res, uptr size,
+                                      int fd) {}
+  ALWAYS_INLINE static void BeforeMunmap(const Context &ctx, void *addr,
+                                         uptr size) {}
+  // ---------- End of Synchronization and File-Related Hooks ----------------
 };
 
 }  // namespace __xsan

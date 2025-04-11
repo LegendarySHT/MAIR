@@ -25,11 +25,11 @@ struct ThreadState;
 
 namespace __xsan {
 
-struct XsanInterceptorContext {
-  const char *interceptor_name;
-  /// TODO: should use pointer or reference?
-  XsanContext xsan_ctx;
-};
+// struct XsanInterceptorContext {
+//   const char *interceptor_name;
+//   /// TODO: should use pointer or reference?
+//   XsanContext xsan_ctx;
+// };
 
 #define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2)      \
   do {                                                                        \

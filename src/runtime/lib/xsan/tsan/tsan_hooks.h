@@ -2,6 +2,7 @@
 
 #include "../xsan_hooks_default.h"
 #include "../xsan_hooks_types.h"
+#include "../xsan_internal.h"
 
 namespace __tsan {
 
@@ -14,16 +15,14 @@ void ExitSymbolizer();
 
 namespace __tsan {
 
-struct TsanContext {
-  __tsan::ThreadState *thr_;
-  uptr pc_;
+struct TsanHooks : ::__xsan::DefaultHooks< ::__xsan::XsanHooksSanitizer::Tsan> {
+  struct Context {
+    __tsan::ThreadState *thr_;
+    uptr pc_;
 
-  TsanContext() : thr_(nullptr), pc_(0) {}
-  TsanContext(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
-};
-
-struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
-  using Context = TsanContext;
+    Context() : thr_(nullptr), pc_(0) {}
+    Context(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
+  };
 
   static void EnterSymbolizer() { __tsan::EnterSymbolizer(); }
   static void ExitSymbolizer() { __tsan::ExitSymbolizer(); }
@@ -35,7 +34,34 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
   static void OnXsanFreeHook(uptr ptr, uptr size, BufferedStackTrace *stack);
   static void OnXsanAllocFreeTailHook(uptr pc);
   static void OnFakeStackDestory(uptr addr, uptr size);
+  // ---------------------- Flags Registration Hooks ---------------
+  static void InitializeFlags();
+  static void InitializeSanitizerFlags() {
+    {
+      __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
+      InitializeFlags();
+    }
+  }
+  static void SetCommonFlags(CommonFlags &cf);
+  static void ValidateFlags();
+  // ---------- Thread-Related Hooks --------------------------
+  static void SetThreadName(const char *name);
+  static void SetThreadNameByUserId(uptr uid, const char *name);
+  // static void OnSetCurrentThread(
+  //     __xsan::XsanThread
+  //         *t);  /// TODO: The arguement `__xsan::XsanThread` right?
+  // static void OnThreadCreate(const void *start_data, uptr data_size,
+  //                            u32 parent_tid, StackTrace *stack, bool
+  //                            detached);
+  // static void OnThreadDestroy(ThreadState *thr) {
+  //   thr->DestroyThreadState();
+  // }
+  // static void BeforeThreadStart(__xsan::XsanThread *xsan_thread, tid_t
+  // os_id);
 
+  // ---------- Synchronization and File-Related Hooks ------------------------
+  static void AfterMmap(const Context &ctx, void *res, uptr size, int fd);
+  static void BeforeMunmap(const Context &ctx, void *addr, uptr size);
   /// TSan may spawn a background thread to recycle resource in pthread_create.
   /// What's more, TSan does not support starting new threads after
   /// multi-threaded fork.
@@ -76,6 +102,24 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
   };
 
   static void OnPthreadCreate();
+  // ---------------------- Special Function Hooks -----------------
+  class ScopedAtExitWrapper {
+   public:
+    ScopedAtExitWrapper(uptr pc, const void *ctx);
+    ~ScopedAtExitWrapper();
+  };
+  class ScopedAtExitHandler {
+   public:
+    ScopedAtExitHandler(uptr pc, const void *ctx);
+    ~ScopedAtExitHandler();
+  };
+  static void *vfork_before_and_after();
+  static void vfork_parent_after(void *sp);
+  static void OnForkBefore();
+  static void OnForkAfter(bool is_child);
+  static void OnLibraryLoaded(const char *filename, void *handle);
+  static void OnLibraryUnloaded();
+  static void OnLongjmp(void *env, const char *fn_name, uptr pc);
 };
 
 }  // namespace __tsan
