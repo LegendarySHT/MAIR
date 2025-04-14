@@ -58,18 +58,6 @@ void AsanOnDeadlySignal(int, void *siginfo, void *context);
 // functions from the instrumented user code in a profile.
 namespace __xsan {
 
-class ScopedSanitizerToolName {
- public:
-  explicit ScopedSanitizerToolName(const char *new_tool_name)
-      : old_tool_name_(SanitizerToolName) {
-    SanitizerToolName = new_tool_name;
-  }
-  ~ScopedSanitizerToolName() { SanitizerToolName = old_tool_name_; }
-
- private:
-  const char *const old_tool_name_;
-};
-
 class XsanThread;
 using __sanitizer::StackTrace;
 class XsanAllocator;

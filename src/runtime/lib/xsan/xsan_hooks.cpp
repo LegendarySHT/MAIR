@@ -15,7 +15,7 @@
 #include "asan/orig/asan_internal.h"
 #include "lsan/lsan_common.h"
 #include "tsan/tsan_rtl.h"
-#include "xsan_hooks_todo.h"
+#include "xsan_hooks_dispatch.h"
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"

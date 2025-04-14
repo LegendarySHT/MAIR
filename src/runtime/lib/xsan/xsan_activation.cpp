@@ -17,7 +17,7 @@
 #include <sanitizer_common/sanitizer_flags.h>
 
 #include "asan/orig/asan_activation.h"
-#include "xsan_internal.h"
+#include "xsan_hooks_types.h"
 
 namespace __xsan {
 

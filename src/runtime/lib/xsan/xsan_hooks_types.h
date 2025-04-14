@@ -1,5 +1,9 @@
 #pragma once
 
+namespace __sanitizer {
+extern const char *SanitizerToolName;  // Can be changed by the tool.
+}
+
 namespace __xsan {
 
 /// TODO: This enum should be unified
@@ -20,21 +24,18 @@ struct XsanHooksSanitizerImpl {
   using Hooks = XsanHooksSanitizerUnImpl<san>;
 };
 
-static inline bool Or(bool a, bool b) { return a || b; }
+class ScopedSanitizerToolName {
+ public:
+  explicit ScopedSanitizerToolName(const char *new_tool_name)
+      : old_tool_name_(__sanitizer::SanitizerToolName) {
+    __sanitizer::SanitizerToolName = new_tool_name;
+  }
+  ~ScopedSanitizerToolName() {
+    __sanitizer::SanitizerToolName = old_tool_name_;
+  }
 
-template <auto val, typename T>
-static inline T Neq(T a, T b) {
-  return a != val ? a : b;
-}
-
-#define XSAN_HOOKS_EXEC_OR(RES, FUNC, ...) \
-  XSAN_HOOKS_EXEC_REDUCE(RES, Or, FUNC, __VA_ARGS__)
-
-// `Max` is implemented in sanitizer_common
-#define XSAN_HOOKS_EXEC_MAX(RES, FUNC, ...) \
-  XSAN_HOOKS_EXEC_REDUCE(RES, Max, FUNC, __VA_ARGS__)
-
-#define XSAN_HOOKS_EXEC_NEQ(RES, VAL, FUNC, ...) \
-  XSAN_HOOKS_EXEC_REDUCE(RES, Neq<VAL>, FUNC, __VA_ARGS__)
+ private:
+  const char *const old_tool_name_;
+};
 
 }  // namespace __xsan

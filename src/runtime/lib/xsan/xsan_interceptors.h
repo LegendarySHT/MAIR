@@ -210,7 +210,8 @@ bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
   __xsan::ScopedInterceptor xsi(xsan_ctx, #func, caller_pc);
 
 #define SCOPED_XSAN_INTERCEPTOR_MALLOC(func, ...) \
-  GET_STACK_TRACE_MALLOC;                         \
+  UNINITIALIZED BufferedStackTrace stack;         \
+  GetStackTraceMalloc(stack);                     \
   SCOPED_XSAN_INTERCEPTOR_INTERNAL(func, stack.trace[1], stack.trace[0]);
 
 #define SCOPED_XSAN_INTERCEPTOR_RAW(func, ...) \

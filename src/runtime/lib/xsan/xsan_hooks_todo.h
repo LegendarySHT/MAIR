@@ -25,8 +25,14 @@
   XSAN_HOOKS_TYPE(Asan)::VAR asan; \
   XSAN_HOOKS_TYPE(Tsan)::VAR tsan;
 
-#define XSAN_HOOKS_DEFINE_VAR_CVT(VAR)                                \
-  operator const XSAN_HOOKS_TYPE(Asan)::VAR&() const { return asan; } \
-  operator const XSAN_HOOKS_TYPE(Tsan)::VAR&() const { return tsan; }
+#define XSAN_HOOKS_DEFINE_VAR_CVT(VAR)                                        \
+  __attribute__((always_inline)) operator const XSAN_HOOKS_TYPE(Asan)::VAR&() \
+      const {                                                                 \
+    return asan;                                                              \
+  }                                                                           \
+  __attribute__((always_inline)) operator const XSAN_HOOKS_TYPE(Tsan)::VAR&() \
+      const {                                                                 \
+    return tsan;                                                              \
+  }
 
 #define XSAN_HOOKS_INIT_VAR(...) asan(__VA_ARGS__), tsan(__VA_ARGS__)

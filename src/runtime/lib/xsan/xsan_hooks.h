@@ -11,8 +11,8 @@
 #include <sanitizer_common/sanitizer_internal_defs.h>
 #include <sanitizer_common/sanitizer_platform_limits_posix.h>
 
-#include "xsan_hooks_todo.h"
-#include "xsan_hooks_types.h"
+#include "xsan_attribute.h"
+#include "xsan_hooks_dispatch.h"
 #include "xsan_interface_internal.h"
 #include "xsan_thread.h"
 
@@ -276,6 +276,27 @@ ALWAYS_INLINE int RequireStackTracesSize() {
   int size = -1;
   XSAN_HOOKS_EXEC_MAX(size, RequireStackTracesSize);
   return size;
+}
+
+PSEUDO_MACRO void ReadRange(void *_ctx, const void *offset, uptr size) {
+  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(ReadRange, ctx->xsan_ctx, offset, size,
+                  ctx->interceptor_name);
+}
+PSEUDO_MACRO void WriteRange(void *_ctx, const void *offset, uptr size) {
+  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(WriteRange, ctx->xsan_ctx, offset, size,
+                  ctx->interceptor_name);
+}
+PSEUDO_MACRO void CommonReadRange(void *_ctx, const void *offset, uptr size) {
+  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(CommonReadRange, ctx->xsan_ctx, offset, size,
+                  ctx->interceptor_name);
+}
+PSEUDO_MACRO void CommonWriteRange(void *_ctx, const void *offset, uptr size) {
+  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(CommonWriteRange, ctx->xsan_ctx, offset, size,
+                  ctx->interceptor_name);
 }
 
 }  // namespace __xsan

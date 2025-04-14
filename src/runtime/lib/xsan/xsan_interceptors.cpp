@@ -230,9 +230,9 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
     XSAN_INTERCEPT_FUNC_VER_UNVERSIONED_FALLBACK(name, ver)
 #  define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size) \
-    XSAN_WRITE_RANGE(ctx, ptr, size)
+    XSAN_COMMON_WRITE_RANGE(ctx, ptr, size)
 #  define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
-    XSAN_READ_RANGE(ctx, ptr, size)
+    XSAN_COMMON_READ_RANGE(ctx, ptr, size)
 #  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)  \
     XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__); \
     do {                                            \
@@ -444,7 +444,7 @@ struct ScopedSyscall {
 [[gnu::always_inline]] static void syscall_access_range(uptr pc, uptr offset,
                                                         uptr size, bool write) {
   XSAN_SYSCALL();
-  ASAN_ACCESS_MEMORY_RANGE(nullptr, offset, size, write);
+  __asan::AccessMemoryRange(nullptr, offset, size, write, nullptr);
   __tsan::MemoryAccessRange(__tsan::cur_thread(), pc, offset, size, write);
 }
 
@@ -528,7 +528,8 @@ static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
 
 INTERCEPTOR(int, pthread_create, void *thread, void *attr,
             void *(*start_routine)(void *), void *arg) {
-  GET_STACK_TRACE_THREAD;
+  UNINITIALIZED BufferedStackTrace stack;
+  GetStackTraceThread(stack);
 
   const uptr pc = stack.trace_buffer[0];
   XsanContext xsan_ctx(pc);
@@ -942,7 +943,8 @@ INTERCEPTOR(char *, strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  GET_STACK_TRACE_MALLOC;
+  UNINITIALIZED BufferedStackTrace stack;
+  GetStackTraceMalloc(stack);
   void *new_mem = xsan_malloc(length + 1, &stack);
   if (new_mem) {
     REAL(memcpy)(new_mem, s, length + 1);
@@ -960,7 +962,8 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
   }
-  GET_STACK_TRACE_MALLOC;
+  UNINITIALIZED BufferedStackTrace stack;
+  GetStackTraceMalloc(stack);
   void *new_mem = xsan_malloc(length + 1, &stack);
   if (new_mem) {
     REAL(memcpy)(new_mem, s, length + 1);

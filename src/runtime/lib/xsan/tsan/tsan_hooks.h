@@ -1,17 +1,10 @@
 #pragma once
 
+#include "../xsan_attribute.h"
 #include "../xsan_hooks_default.h"
 #include "../xsan_hooks_types.h"
-#include "../xsan_internal.h"
-
-namespace __tsan {
-
-struct ThreadState;
-ThreadState *cur_thread();
-void EnterSymbolizer();
-void ExitSymbolizer();
-
-}  // namespace __tsan
+#include "sanitizer_common/sanitizer_stacktrace.h"
+#include "tsan_interface_xsan.h"
 
 namespace __tsan {
 
@@ -22,6 +15,20 @@ struct TsanContext {
   TsanContext() : thr_(nullptr), pc_(0) {}
   TsanContext(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
 };
+
+template <bool is_read>
+PSEUDO_MACRO void AccessMemoryRange(const TsanContext *ctx, const void *_offset,
+                                    uptr size, const char *func_name) {
+  uptr offset = (uptr)_offset;
+  if (size == 0)
+    return;
+  if (ctx) {
+    __tsan::MemoryAccessRangeT<is_read>(ctx->thr_, ctx->pc_, offset, size);
+  } else {
+    __tsan::MemoryAccessRangeT<is_read>(__tsan::cur_thread_init(),
+                                        GET_CURRENT_PC(), offset, size);
+  }
+}
 
 struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
   using Context = TsanContext;
@@ -122,6 +129,25 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
   static void OnLibraryLoaded(const char *filename, void *handle);
   static void OnLibraryUnloaded();
   static void OnLongjmp(void *env, const char *fn_name, uptr pc);
+  // ---------- Generic Hooks in Interceptors ----------------
+  PSEUDO_MACRO static void ReadRange(const Context &ctx, const void *offset,
+                                     uptr size, const char *func_name) {
+    AccessMemoryRange<true>(&ctx, offset, size, func_name);
+  }
+  PSEUDO_MACRO static void WriteRange(const Context &ctx, const void *offset,
+                                      uptr size, const char *func_name) {
+    AccessMemoryRange<false>(&ctx, offset, size, func_name);
+  }
+  PSEUDO_MACRO static void CommonReadRange(const Context &ctx,
+                                           const void *offset, uptr size,
+                                           const char *func_name) {
+    ReadRange(ctx, offset, size, func_name);
+  }
+  PSEUDO_MACRO static void CommonWriteRange(const Context &ctx,
+                                            const void *offset, uptr size,
+                                            const char *func_name) {
+    WriteRange(ctx, offset, size, func_name);
+  }
 };
 
 }  // namespace __tsan

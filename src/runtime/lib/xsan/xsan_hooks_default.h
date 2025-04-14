@@ -10,6 +10,7 @@
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_platform_limits_posix.h"
+#include "xsan_attribute.h"
 #include "xsan_hooks_types.h"
 
 namespace __xsan {
@@ -150,8 +151,7 @@ struct DefaultHooks {
 
   // ---------- Thread-Related Hooks --------------------------
   ALWAYS_INLINE static void SetThreadName(const char *name) {}
-  ALWAYS_INLINE static void SetAsanThreadNameByUserId(uptr uid,
-                                                      const char *name) {}
+  ALWAYS_INLINE static void SetThreadNameByUserId(uptr uid, const char *name) {}
   ALWAYS_INLINE static void SetSanitizerThreadNameByUserId(uptr uid,
                                                            const char *name) {}
   // ALWAYS_INLINE static void OnSetCurrentThread(XsanThread *t) {}
@@ -172,6 +172,19 @@ struct DefaultHooks {
   ALWAYS_INLINE static void BeforeMunmap(const Context &ctx, void *addr,
                                          uptr size) {}
   // ---------- End of Synchronization and File-Related Hooks ----------------
+
+  // ---------- Generic Hooks in Interceptors ----------------
+  ALWAYS_INLINE static void ReadRange(const Context &ctx, const void *offset,
+                                      uptr size, const char *func_name) {}
+  ALWAYS_INLINE static void WriteRange(const Context &ctx, const void *offset,
+                                       uptr size, const char *func_name) {}
+  ALWAYS_INLINE static void CommonReadRange(const Context &ctx,
+                                            const void *offset, uptr size,
+                                            const char *func_name) {}
+  ALWAYS_INLINE static void CommonWriteRange(const Context &ctx,
+                                             const void *offset, uptr size,
+                                             const char *func_name) {}
+  // ---------- End of Generic Hooks in Interceptors ----------------
 };
 
 }  // namespace __xsan

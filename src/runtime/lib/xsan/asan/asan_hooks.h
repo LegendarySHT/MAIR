@@ -2,18 +2,39 @@
 
 #include "../xsan_hooks_default.h"
 #include "../xsan_hooks_types.h"
-#include "../xsan_internal.h"
-
-extern "C" {
-void *__asan_extra_spill_area();
-void __asan_handle_vfork(void *sp);
-void __asan_handle_no_return();
-void InitializeFlags();
-}
+#include "../xsan_stack_interface.h"
+#include "asan_interface_xsan.h"
 
 namespace __asan {
 
 using AsanContext = ::__xsan::DefaultContext<__xsan::XsanHooksSanitizer::Asan>;
+
+PSEUDO_MACRO void AccessMemoryRange(const AsanContext *ctx, const uptr offset,
+                                    uptr size, bool isWrite,
+                                    const char *func_name) {
+  uptr bad = 0;
+  if (UNLIKELY(offset > offset + size)) {
+    UNINITIALIZED BufferedStackTrace stack;
+    __xsan::GetStackTraceFatalHere(stack);
+    ReportStringFunctionSizeOverflow(offset, size, &stack);
+  }
+  if (UNLIKELY(!__asan::AsanQuickCheckForUnpoisonedRegion_(offset, size)) &&
+      (bad = __asan_region_is_poisoned(offset, size))) {
+    bool suppressed = false;
+    if (func_name) {
+      suppressed = __asan::IsInterceptorSuppressed(func_name);
+      if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {
+        UNINITIALIZED BufferedStackTrace stack;
+        __xsan::GetStackTraceFatalHere(stack);
+        suppressed = __asan::IsStackTraceSuppressed(&stack);
+      }
+    }
+    if (!suppressed) {
+      GET_CURRENT_PC_BP_SP;
+      __asan::ReportGenericError(pc, bp, sp, bad, isWrite, size, 0, false);
+    }
+  }
+}
 
 struct AsanHooks : ::__xsan::DefaultHooks<AsanContext> {
   using Context = AsanContext;
@@ -48,7 +69,6 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext> {
   static void ValidateFlags();
   // ---------- Thread-Related Hooks --------------------------
   static void SetThreadName(const char *name);
-  static void SetThreadNameByUserId(uptr uid, const char *name) {}
   // static void OnSetCurrentThread(
   //     __xsan::XsanThread
   //         *t);  /// TODO: The arguement `__xsan::XsanThread` right?
@@ -69,6 +89,25 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext> {
   // ---------- Synchronization and File-Related Hooks ------------------------
   static void AfterMmap(const Context &ctx, void *res, uptr size, int fd);
   static void BeforeMunmap(const Context &ctx, void *addr, uptr size);
+  // ---------- Generic Hooks in Interceptors ----------------
+  PSEUDO_MACRO static void ReadRange(const Context &ctx, const void *offset,
+                                     uptr size, const char *func_name) {
+    AccessMemoryRange(&ctx, (uptr)offset, size, false, func_name);
+  }
+  PSEUDO_MACRO static void WriteRange(const Context &ctx, const void *offset,
+                                      uptr size, const char *func_name) {
+    AccessMemoryRange(&ctx, (uptr)offset, size, true, func_name);
+  }
+  PSEUDO_MACRO static void CommonReadRange(const Context &ctx,
+                                           const void *offset, uptr size,
+                                           const char *func_name) {
+    ReadRange(ctx, offset, size, func_name);
+  }
+  PSEUDO_MACRO static void CommonWriteRange(const Context &ctx,
+                                            const void *offset, uptr size,
+                                            const char *func_name) {
+    WriteRange(ctx, offset, size, func_name);
+  }
 };
 
 }  // namespace __asan

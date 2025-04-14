@@ -251,6 +251,7 @@ set(XSAN_ASAN_HEADERS
   asan/asan_allocator.h
   asan/asan_hooks.h
   asan/asan_init.h
+  asan/asan_interface_xsan.h
   asan/asan_mapping.h
   asan/asan_thread.h
   ${ASAN_HEADERS}
@@ -289,6 +290,7 @@ set(XSAN_TSAN_HEADERS
   tsan/tsan_hooks.h
   tsan/tsan_init.h
   tsan/tsan_interceptors.h
+  tsan/tsan_interface_xsan.h
   tsan/tsan_interface.inc
   tsan/tsan_platform.h
   tsan/tsan_rtl.h
@@ -299,15 +301,19 @@ set(XSAN_TSAN_HEADERS
 SET(XSAN_HEADERS
   xsan_activation.h
   xsan_allocator.h
+  xsan_attribute.h
   xsan_flags.h
   xsan_hooks.h
   xsan_hooks_default.h
+  xsan_hooks_dispatch.h
   xsan_hooks_todo.h
   xsan_hooks_types.h
   xsan_interceptors.h
   xsan_interceptors_memintrinsics.h
   xsan_interface_internal.h
   xsan_internal.h
+  xsan_stack.h
+  xsan_stack_interface.h
   xsan_thread.h
   ${XSAN_ASAN_HEADERS}
   ${XSAN_TSAN_HEADERS}

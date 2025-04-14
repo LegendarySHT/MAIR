@@ -49,7 +49,8 @@ bool XsanInited() {
 static void CheckUnwind() {
   __xsan::ScopedIgnoreInterceptors sii(true);
 
-  GET_STACK_TRACE(kStackTraceMax, common_flags()->fast_unwind_on_check);
+  UNINITIALIZED BufferedStackTrace stack;
+  GetStackTrace(stack, kStackTraceMax, common_flags()->fast_unwind_on_check);
   stack.Print();
 }
 
