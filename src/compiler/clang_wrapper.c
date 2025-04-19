@@ -11,6 +11,7 @@
 #include "include/debug.h"
 #include "include/alloc-inl.h"
 #include "xsan_common.h"
+#include "config_build_dir.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -18,7 +19,7 @@
 #include <string.h>
 #include <limits.h>
 
-
+static u8 support_dso_inject = 0;   /* Support for DSO injection         */
 static u8*  obj_path;               /* Path to runtime libraries         */
 static const u8 **cc_params;        /* Parameters passed to the real CC  */
 static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
@@ -575,7 +576,31 @@ static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
   return 0;
 }
 
+static u8 whether_to_support_dso_injection(const char *arg) {
+  // Construct command string, and transmit the argument to the scripyt
+  const char *command =
+      alloc_printf("%s/" XSAN_SUPPORT_DSO_CHECKER " %s", obj_path, arg);
+
+  // Execute the command
+  int status = system(command);
+  if (status == -1) {
+    PFATAL("Cannot execute script to check whether to support DSO "
+           "injection:\n\t%s",
+           command);
+  }
+
+  // Check the return status
+  if (WIFEXITED(status)) {
+    ck_free(command);
+    int exit_code = WEXITSTATUS(status);
+    return exit_code == 0;
+  } else {
+    PFATAL("Command %s terminated abnormally", command);
+  }
+}
+
 static void init_sanitizer_setting(enum SanitizerType sanTy) {
+  u8 *str_options;
   switch (sanTy) {
   case ASan:
   case TSan:
@@ -584,7 +609,9 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     /// TODO: support unmodified clang
     // Use env var to control clang only perform frontend 
     // transformation for sanitizers.
-    setenv("XSAN_ONLY_FRONTEND", "1", 1);
+    str_options = alloc_printf("%llu", xsan_options.mask);
+    setenv("XSAN_ONLY_FRONTEND", str_options, 1);
+
     // Reuse the frontend code relevant to sanitizer
     if (has(&xsan_options, ASan)) {
       cc_params[cc_par_cnt++] = "-fsanitize=address";
@@ -629,6 +656,17 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
         /// detects null pointer dereferences.
         cc_params[cc_par_cnt++] = "-fno-sanitize=null";
       }
+    }
+
+    support_dso_inject = whether_to_support_dso_injection(cc_params[0]);
+    if (support_dso_inject) {
+      const char *ld_preload = getenv("LD_PRELOAD");
+      const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
+      const char *new_ld_preload =
+          (ld_preload != NULL) ? alloc_printf("%s:%s", ld_preload, dso_path)
+                               : dso_path;
+      setenv("LD_PRELOAD", new_ld_preload, 1);
+      setenv("XSAN_BASE_DIR", obj_path, 1);
     }
     break;
   case SanNone:
@@ -764,7 +802,7 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
 }
 
 static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
-  if (sanTy != XSan)
+  if (sanTy != XSan || support_dso_inject)
     return;
 
   /// TODO: only add this link arguments while TSan is enabled togother with LSan.
@@ -912,7 +950,13 @@ static u8 handle_x_option(const u8* const* arg) {
 
 /* Copy argv to cc_params, making the necessary edits. */
 static void edit_params(u32 argc, const char** argv) {
-
+  /// TODO:
+  /*
+  How to resolve the arg via libclang?
+  See clang-tool-extra,
+  findInputFile(const CommandLineArguments &CLArgs),
+  getDriverOptTable().ParseArgs(
+  */
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
      preprocessor_only = 0, have_unroll = 0, have_o = 0, have_pic = 0,
      have_c = 0, partial_linking = 0;
@@ -1051,7 +1095,7 @@ static void edit_params(u32 argc, const char** argv) {
   if (!only_lib)
     regist_pass_plugin(xsanTy);
   // *.c/cpp -o *.o, don't link sanitizer runtime library.
-  if (!have_c) {
+  if (!have_c && !support_dso_inject) {
     add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
   }
 
