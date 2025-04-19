@@ -1,3 +1,5 @@
+################# For clang_wrapper.c #################
+
 add_executable(xclang clang_wrapper.c)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -18,3 +20,10 @@ set_target_properties(xclang
 add_custom_command(TARGET xclang POST_BUILD
     COMMAND ln -sf "xclang" "${XSAN_BIN_DIR}/xclang++")
 
+
+    
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+configure_file(config_build_dir.h.in config_build_dir.h)
+    
+################# For HotPatch #################
+add_subdirectory(patch_dso)
