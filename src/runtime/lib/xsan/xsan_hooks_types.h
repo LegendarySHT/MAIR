@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sanitizer_common/sanitizer_type_traits.h"
+
 namespace __sanitizer {
 extern const char *SanitizerToolName;  // Can be changed by the tool.
 }
@@ -45,5 +47,52 @@ class ScopedSanitizerToolName {
  private:
   const char *const old_tool_name_;
 };
+
+// -------------------------- Hooks Checks --------------------------
+
+// If T is a valid type, `using void_t = void` will be exported
+template <typename... T>
+using void_t = void;
+
+template <bool, typename = void>
+struct enable_if {};
+
+template <typename T>
+struct enable_if<true, T> {
+  using type = T;
+};
+
+template <bool v, typename T = void>
+using enable_if_t = typename enable_if<v, T>::type;
+
+template <XsanHooksSanitizer san>
+inline constexpr bool xsan_hooks_has_impl_v =
+    !__sanitizer::is_same<typename XsanHooksSanitizerImpl<san>::Hooks,
+                          XsanHooksSanitizerUnImpl>::value;
+
+template <XsanHooksSanitizer san, typename = void>
+inline constexpr bool xsan_hooks_has_context_v = false;
+
+template <XsanHooksSanitizer san>
+inline constexpr bool xsan_hooks_has_context_v<
+    san, void_t<typename XsanHooksSanitizerImpl<san>::Hooks::Context>> = true;
+
+template <XsanHooksSanitizer san, typename = void>
+inline constexpr bool xsan_hooks_has_thread_v = false;
+
+template <XsanHooksSanitizer san>
+inline constexpr bool xsan_hooks_has_thread_v<
+    san, void_t<typename XsanHooksSanitizerImpl<san>::Hooks::Thread>> = true;
+
+#define XSAN_HOOKS_CHECK_IMPL(san)                                           \
+  static_assert(                                                             \
+      ::__xsan::xsan_hooks_has_impl_v<::__xsan::XsanHooksSanitizer::san>,    \
+      #san " hooks not registered.");                                        \
+  static_assert(                                                             \
+      ::__xsan::xsan_hooks_has_context_v<::__xsan::XsanHooksSanitizer::san>, \
+      #san " Hooks::Context not exists.");                                   \
+  static_assert(                                                             \
+      ::__xsan::xsan_hooks_has_thread_v<::__xsan::XsanHooksSanitizer::san>,  \
+      #san " Hooks::Thread not exists.");
 
 }  // namespace __xsan

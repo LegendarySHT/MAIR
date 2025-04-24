@@ -57,3 +57,6 @@
 #define XSAN_HOOKS_ASSIGN_VAR(FUNC, ...)           \
   asan = XSAN_HOOKS_TYPE(Asan)::FUNC(__VA_ARGS__); \
   tsan = XSAN_HOOKS_TYPE(Tsan)::FUNC(__VA_ARGS__);
+
+XSAN_HOOKS_CHECK_IMPL(Asan)
+XSAN_HOOKS_CHECK_IMPL(Tsan)
