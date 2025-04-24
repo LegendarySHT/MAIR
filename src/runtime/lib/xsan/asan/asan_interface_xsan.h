@@ -85,6 +85,8 @@ static inline bool AsanRangesOverlap_(const char *offset1, uptr length1,
 
 #endif  // ASAN_MAPPING_H
 
+void PoisonShadow(uptr addr, uptr size, u8 value);
+
 bool IsInterceptorSuppressed(const char *interceptor_name);
 bool HaveStackTraceBasedSuppressions();
 bool IsStackTraceSuppressed(const StackTrace *stack);
@@ -92,5 +94,10 @@ void ReportGenericError(uptr pc, uptr bp, uptr sp, uptr addr, bool is_write,
                         uptr access_size, u32 exp, bool fatal);
 void ReportStringFunctionSizeOverflow(uptr offset, uptr size,
                                       BufferedStackTrace *stack);
+
+void InitializeFlags();
+void ValidateFlags();
+void SetCommonFlags(CommonFlags &cf);
+void SetAsanThreadName(const char *name);
 
 }  // namespace __asan

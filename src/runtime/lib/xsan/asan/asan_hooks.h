@@ -7,7 +7,12 @@
 
 namespace __asan {
 
+class AsanThread;
+
 using AsanContext = ::__xsan::DefaultContext<__xsan::XsanHooksSanitizer::Asan>;
+struct AsanHooksThread {
+  AsanThread *asan_thread = nullptr;
+};
 
 PSEUDO_MACRO void AccessMemoryRange(const AsanContext *ctx, const uptr offset,
                                     uptr size, bool isWrite,
@@ -36,9 +41,11 @@ PSEUDO_MACRO void AccessMemoryRange(const AsanContext *ctx, const uptr offset,
   }
 }
 
-struct AsanHooks : ::__xsan::DefaultHooks<AsanContext> {
+struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
   using Context = AsanContext;
+  using Thread = AsanHooksThread;
 
+  // ---------------------- pthread-related hooks -----------------
   /// ASan 1) checks the correctness of main thread ID, 2) checks the init
   /// orders.
   static void OnPthreadCreate();
@@ -56,56 +63,54 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext> {
     __asan_handle_no_return();
   }
   // ---------------------- Flags Registration Hooks ---------------
-  static void InitializeFlags();
-  static void InitializeSanitizerFlags() {
-    {
-      __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
-      // Initialize flags. This must be done early, because most of the
-      // initialization steps look at flags().
-      InitializeFlags();
-    }
+  ALWAYS_INLINE static void InitializeFlags() { __asan::InitializeFlags(); }
+  ALWAYS_INLINE static void InitializeSanitizerFlags() {
+    __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
+    // Initialize flags. This must be done early, because most of the
+    // initialization steps look at flags().
+    InitializeFlags();
   }
-  static void SetCommonFlags(CommonFlags &cf);
-  static void ValidateFlags();
+  ALWAYS_INLINE static void SetCommonFlags(CommonFlags &cf) {
+    __asan::SetCommonFlags(cf);
+  }
+  ALWAYS_INLINE static void ValidateFlags() { __asan::ValidateFlags(); }
   // ---------- Thread-Related Hooks --------------------------
-  static void SetThreadName(const char *name);
-  // static void OnSetCurrentThread(
-  //     __xsan::XsanThread
-  //         *t);  /// TODO: The arguement `__xsan::XsanThread` right?
-  // static void OnThreadCreate(__xsan::XsanThread *xsan_thread,
-  //                            const void *start_data, uptr data_size,
-  //                            u32 parent_tid, StackTrace *stack, bool
-  //                            detached);
-  // static void OnThreadDestroy(AsanThread *asan_thread) {
-  //   asan_thread->Destroy();
-  // }
-  // static void BeforeThreadStart(__xsan::XsanThread *xsan_thread, tid_t os_id)
-  // {
-  //   xsan_thread->asan_thread_->BeforeThreadStart(os_id);
-  // }
-  // static void AfterThreadStart(__xsan::XsanThread *xsan_thread) {
-  //   xsan_thread->asan_thread_->AfterThreadStart();
-  // }
+  ALWAYS_INLINE static void SetThreadName(const char *name) {
+    __asan::SetAsanThreadName(name);
+  }
+  /// Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
+  /// But asan does not remember UserId's for threads (pthread_t);
+  /// and remembers all ever existed threads, so the linear search by UserId
+  /// can be slow.
+  // static void SetThreadNameByUserId(uptr uid, const char *name) {}
+  static Thread CreateMainThread();
+  static Thread CreateThread(u32 parent_tid, uptr child_uid, StackTrace *stack,
+                             const void *data, uptr data_size, bool detached);
+  static void ChildThreadInit(Thread &thread, tid_t os_id);
+  static void ChildThreadStart(Thread &thread, tid_t os_id);
+  // Since XSan use ASan's resource, ASan should be manually destroyed by XSan
+  // in the last. So `DestroyThread` is left empty and provide
+  // `DestroyThreadReal` for XSan to call
+  // static void DestroyThread(Thread &thread);
+  static void DestroyThreadReal(Thread &thread);
   // ---------- Synchronization and File-Related Hooks ------------------------
   static void AfterMmap(const Context &ctx, void *res, uptr size, int fd);
   static void BeforeMunmap(const Context &ctx, void *addr, uptr size);
   // ---------- Generic Hooks in Interceptors ----------------
-  PSEUDO_MACRO static void ReadRange(const Context &ctx, const void *offset,
+  PSEUDO_MACRO static void ReadRange(Context *ctx, const void *offset,
                                      uptr size, const char *func_name) {
-    AccessMemoryRange(&ctx, (uptr)offset, size, false, func_name);
+    AccessMemoryRange(ctx, (uptr)offset, size, false, func_name);
   }
-  PSEUDO_MACRO static void WriteRange(const Context &ctx, const void *offset,
+  PSEUDO_MACRO static void WriteRange(Context *ctx, const void *offset,
                                       uptr size, const char *func_name) {
-    AccessMemoryRange(&ctx, (uptr)offset, size, true, func_name);
+    AccessMemoryRange(ctx, (uptr)offset, size, true, func_name);
   }
-  PSEUDO_MACRO static void CommonReadRange(const Context &ctx,
-                                           const void *offset, uptr size,
-                                           const char *func_name) {
+  PSEUDO_MACRO static void CommonReadRange(Context *ctx, const void *offset,
+                                           uptr size, const char *func_name) {
     ReadRange(ctx, offset, size, func_name);
   }
-  PSEUDO_MACRO static void CommonWriteRange(const Context &ctx,
-                                            const void *offset, uptr size,
-                                            const char *func_name) {
+  PSEUDO_MACRO static void CommonWriteRange(Context *ctx, const void *offset,
+                                            uptr size, const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
 };

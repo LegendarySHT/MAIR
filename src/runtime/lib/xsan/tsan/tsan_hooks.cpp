@@ -151,10 +151,12 @@ void TsanHooks::OnLibraryUnloaded() {
 void TsanHooks::OnLongjmp(void *env, const char *fn_name, uptr pc) {
   __tsan::handle_longjmp(env, fn_name, pc);
 }
+
 // ---------------------- Flags Registration Hooks ---------------
 void TsanHooks::InitializeFlags() { __tsan::InitializeFlags(); }
 void TsanHooks::SetCommonFlags(CommonFlags &cf) { __tsan::SetCommonFlags(cf); }
 void TsanHooks::ValidateFlags() { __tsan::ValidateFlags(); }
+
 // ---------- Thread-Related Hooks --------------------------
 void TsanHooks::SetThreadName(const char *name) {
   __tsan::SetTsanThreadName(name);
@@ -162,16 +164,47 @@ void TsanHooks::SetThreadName(const char *name) {
 void TsanHooks::SetThreadNameByUserId(uptr uid, const char *name) {
   __tsan::SetTsanThreadNameByUserId(uid, name);
 }
-// void TsanHooks::OnSetCurrentThread(__xsan::XsanThread *t) {
-//   auto *tsan_thread = __tsan::SetCurrentThread();
-//   t->tsan_thread_ = tsan_thread;
-//   tsan_thread->xsan_thread = t;
-// }
-// void TsanHooks::OnThreadCreate(const void *start_data, uptr data_size,
-//                                u32 parent_tid, StackTrace *stack,
-//                                bool detached) {}
-// void TsanHooks::BeforeThreadStart(__xsan::XsanThread *xsan_thread,
-//                                   tid_t os_id) {}
+
+auto TsanHooks::CreateMainThread() -> Thread {
+  Thread thread;
+  // __tsan::ThreadCreate calls internal malloc, which needs proc to be
+  // initialized.
+  thread.tsan_thread = __tsan::cur_thread_init();
+  __tsan::Processor *proc = __tsan::ProcCreate();
+  __tsan::ProcWire(proc, thread.tsan_thread);
+  thread.tid = __tsan::ThreadCreate(nullptr, 0, 0, true);
+  return thread;
+}
+
+auto TsanHooks::CreateThread(u32 parent_tid, uptr child_uid, StackTrace *stack,
+                             const void *data, uptr data_size, bool detached)
+    -> Thread {
+  Thread thread;
+  thread.tid = __tsan::ThreadCreate(__tsan::cur_thread_init(), stack->trace[0],
+                                    child_uid, detached);
+  CHECK_NE(thread.tid, kMainTid);
+  return thread;
+}
+
+void TsanHooks::ChildThreadInit(Thread &thread, tid_t os_id) {
+  if (LIKELY(!__xsan::XsanThread::isMainThread())) {
+    thread.tsan_thread = __tsan::SetCurrentThread();
+    Processor *proc = __tsan::ProcCreate();
+    ProcWire(proc, thread.tsan_thread);
+  }
+}
+
+void TsanHooks::ChildThreadStartReal(Thread &thread, tid_t os_id) {
+  // ThreadStart will call ThreadState's constructor, which will overwrite
+  // the query key. So initialize the query key at the last.
+  ThreadStart(thread.tsan_thread, thread.tid, os_id, ThreadType::Regular);
+  __xsan::XsanThread::SetQueryKey(thread.tsan_thread->xsan_key);
+}
+
+void TsanHooks::DestroyThread(Thread &thread) {
+  thread.tsan_thread->DestroyThreadState();
+}
+
 // ---------- Synchronization and File-Related Hooks ------------------------
 void TsanHooks::AfterMmap(const Context &ctx, void *res, uptr size, int fd) {
   if (fd > 0)

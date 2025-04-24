@@ -26,6 +26,7 @@
 #define TSAN_RTL_H
 
 #include "../xsan_allocator.h"
+#include "../xsan_hooks_types.h"
 #include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_allocator_internal.h"
 #include "sanitizer_common/sanitizer_asm.h"
@@ -181,7 +182,7 @@ struct alignas(SANITIZER_CACHE_LINE_SIZE) ThreadState {
   // Technically `current` should be a separate THREADLOCAL variable;
   // but it is placed here in order to share cache line with previous fields.
   ThreadState* current;
-  __xsan::XsanThread *xsan_thread;
+  __xsan::XsanThreadQueryKey xsan_key;
 
   atomic_sint32_t pending_signals;
 

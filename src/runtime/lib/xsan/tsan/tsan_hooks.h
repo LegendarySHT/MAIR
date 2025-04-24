@@ -16,6 +16,11 @@ struct TsanContext {
   TsanContext(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
 };
 
+struct TsanThread {
+  __tsan::ThreadState *tsan_thread = nullptr;
+  uptr tid = 0;
+};
+
 template <bool is_read>
 PSEUDO_MACRO void AccessMemoryRange(const TsanContext *ctx, const void *_offset,
                                     uptr size, const char *func_name) {
@@ -30,8 +35,9 @@ PSEUDO_MACRO void AccessMemoryRange(const TsanContext *ctx, const void *_offset,
   }
 }
 
-struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
+struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   using Context = TsanContext;
+  using Thread = TsanThread;
 
   static void EnterSymbolizer() { __tsan::EnterSymbolizer(); }
   static void ExitSymbolizer() { __tsan::ExitSymbolizer(); }
@@ -56,18 +62,18 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
   // ---------- Thread-Related Hooks --------------------------
   static void SetThreadName(const char *name);
   static void SetThreadNameByUserId(uptr uid, const char *name);
-  // static void OnSetCurrentThread(
-  //     __xsan::XsanThread
-  //         *t);  /// TODO: The arguement `__xsan::XsanThread` right?
-  // static void OnThreadCreate(const void *start_data, uptr data_size,
-  //                            u32 parent_tid, StackTrace *stack, bool
-  //                            detached);
-  // static void OnThreadDestroy(ThreadState *thr) {
-  //   thr->DestroyThreadState();
-  // }
-  // static void BeforeThreadStart(__xsan::XsanThread *xsan_thread, tid_t
-  // os_id);
-
+  static Thread CreateMainThread();
+  static Thread CreateThread(u32 parent_tid, uptr child_uid, StackTrace *stack,
+                             const void *data, uptr data_size, bool detached);
+  static void ChildThreadInit(Thread &thread, tid_t os_id);
+  // Tsan should be ready to process any possible thread-related events even
+  // happened when other sub-sanitizers are starting, such as ASan calls
+  // `pthread_getattr_np` -> `realloc` -> `__sanitizer_malloc_hook`, where
+  // user may trigger thread-related events. So we need to make TSan start
+  // first.
+  // static void ChildThreadStart(Thread &thread, tid_t os_id);
+  static void ChildThreadStartReal(Thread &thread, tid_t os_id);
+  static void DestroyThread(Thread &thread);
   // ---------- Synchronization and File-Related Hooks ------------------------
   static void AfterMmap(const Context &ctx, void *res, uptr size, int fd);
   static void BeforeMunmap(const Context &ctx, void *addr, uptr size);
@@ -130,22 +136,20 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext> {
   static void OnLibraryUnloaded();
   static void OnLongjmp(void *env, const char *fn_name, uptr pc);
   // ---------- Generic Hooks in Interceptors ----------------
-  PSEUDO_MACRO static void ReadRange(const Context &ctx, const void *offset,
+  PSEUDO_MACRO static void ReadRange(Context *ctx, const void *offset,
                                      uptr size, const char *func_name) {
-    AccessMemoryRange<true>(&ctx, offset, size, func_name);
+    AccessMemoryRange<true>(ctx, offset, size, func_name);
   }
-  PSEUDO_MACRO static void WriteRange(const Context &ctx, const void *offset,
+  PSEUDO_MACRO static void WriteRange(Context *ctx, const void *offset,
                                       uptr size, const char *func_name) {
-    AccessMemoryRange<false>(&ctx, offset, size, func_name);
+    AccessMemoryRange<false>(ctx, offset, size, func_name);
   }
-  PSEUDO_MACRO static void CommonReadRange(const Context &ctx,
-                                           const void *offset, uptr size,
-                                           const char *func_name) {
+  PSEUDO_MACRO static void CommonReadRange(Context *ctx, const void *offset,
+                                           uptr size, const char *func_name) {
     ReadRange(ctx, offset, size, func_name);
   }
-  PSEUDO_MACRO static void CommonWriteRange(const Context &ctx,
-                                            const void *offset, uptr size,
-                                            const char *func_name) {
+  PSEUDO_MACRO static void CommonWriteRange(Context *ctx, const void *offset,
+                                            uptr size, const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
 };

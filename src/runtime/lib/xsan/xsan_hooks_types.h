@@ -12,7 +12,6 @@ enum class XsanHooksSanitizer {
   Tsan,
 };
 
-template <XsanHooksSanitizer san>
 struct XsanHooksSanitizerUnImpl;
 
 template <XsanHooksSanitizer san>
@@ -21,7 +20,16 @@ struct XsanHooksSanitizerImpl {
   // You can simply inherit from it to use most of the default hooks.
   // If you see this error, you need to specialize this struct to register the
   // hooks for your sanitizer.
-  using Hooks = XsanHooksSanitizerUnImpl<san>;
+  using Hooks = XsanHooksSanitizerUnImpl;
+};
+
+class XsanThread;
+
+struct XsanThreadQueryKey {
+  friend class XsanThread;
+
+ private:
+  XsanThread *xsan_thread_ = nullptr;
 };
 
 class ScopedSanitizerToolName {

@@ -1,14 +1,7 @@
 #include "asan_hooks.h"
 
-#include "asan_poisoning.h"
 #include "asan_thread.h"
 #include "lsan/lsan_common.h"
-
-namespace __asan {
-void SetCommonFlags(CommonFlags &cf);
-void ValidateFlags();
-void SetAsanThreadName(const char *name);
-}  // namespace __asan
 
 namespace __asan {
 
@@ -67,28 +60,38 @@ AsanHooks::ScopedAtExitHandler::ScopedAtExitHandler(uptr pc, const void *ctx) {
 AsanHooks::ScopedAtExitHandler::~ScopedAtExitHandler() {}
 void AsanHooks::OnForkBefore() { __asan::OnForkBefore(); }
 void AsanHooks::OnForkAfter(bool is_child) { __asan::OnForkAfter(); }
-// ---------------------- Flags Registration Hooks ---------------
-void AsanHooks::SetCommonFlags(CommonFlags &cf) { __asan::SetCommonFlags(cf); }
-void AsanHooks::ValidateFlags() { __asan::ValidateFlags(); }
-void AsanHooks::InitializeFlags() { __asan::InitializeFlags(); }
+
 // ---------- Thread-Related Hooks --------------------------
-void AsanHooks::SetThreadName(const char *name) {
-  __asan::SetAsanThreadName(name);
+auto AsanHooks::CreateMainThread() -> Thread {
+  Thread thread;
+  thread.asan_thread = AsanThread::Create(
+      /* start_data */ nullptr, /* data_size */ 0,
+      /* parent_tid */ kMainTid, /* stack */ nullptr, /* detached */ true);
+  return thread;
 }
-// void AsanHooks::OnSetCurrentThread(__xsan::XsanThread *t) {
-//   __asan::SetCurrentThread(t->asan_thread_);
-// }
-// void AsanHooks::OnThreadCreate(__xsan::XsanThread *xsan_thread,
-//                                const void *start_data, uptr data_size,
-//                                u32 parent_tid, StackTrace *stack,
-//                                bool detached) {
-//   // auto *asan_thread = __asan::AsanThread::Create(
-//   //     /* start_data */ start_data, /* data_size */ data_size,
-//   //     /* parent_tid */ parent_tid, /* stack */ stack, /* detached */
-//   detached);
-//   // xsan_thread->asan_thread_ = asan_thread;
-//   // xsan_thread->tid_ = asan_thread->tid();
-//                                }
+
+auto AsanHooks::CreateThread(u32 parent_tid, uptr child_uid, StackTrace *stack,
+                             const void *data, uptr data_size, bool detached)
+    -> Thread {
+  Thread thread;
+  thread.asan_thread = AsanThread::Create(
+      /* start_data */ data, /* data_size */ data_size,
+      /* parent_tid */ parent_tid, /* stack */ stack, /* detached */ detached);
+  return thread;
+}
+
+void AsanHooks::ChildThreadInit(Thread &thread, tid_t os_id) {
+  SetCurrentThread(thread.asan_thread);
+}
+
+void AsanHooks::ChildThreadStart(Thread &thread, tid_t os_id) {
+  thread.asan_thread->BeforeThreadStart(os_id);
+}
+
+void AsanHooks::DestroyThreadReal(Thread &thread) {
+  thread.asan_thread->Destroy();
+}
+
 // ---------- Synchronization and File-Related Hooks ------------------------
 void AsanHooks::AfterMmap(const Context &ctx, void *res, uptr size, int fd) {
   if (!size || res == (void *)-1) {

@@ -68,9 +68,7 @@ COMPILER_CHECK(sizeof(AsanThreadContext) <= 256);
 // AsanThread are stored in TSD and destroyed when the thread dies.
 class AsanThread {
  public:
-  // To let XsanThread can access the private AsanThread::Create
-  friend class __xsan::XsanThread;
-
+  friend struct AsanHooks;
   template <typename T>
   static AsanThread *Create(const T &data, u32 parent_tid, StackTrace *stack,
                             bool detached) {
@@ -90,7 +88,6 @@ class AsanThread {
   void ThreadStart(tid_t os_id);
   thread_return_t RunThread();
   /// Part of ThreadStart, exposed for xsan.
-  void AfterThreadStart();
 
   uptr stack_top();
   uptr stack_bottom();

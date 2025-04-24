@@ -436,7 +436,7 @@ struct ScopedSyscall {
 
   ~ScopedSyscall() {
     /// FIXME: migrate handling of pending signals to XSan
-    __tsan::ProcessPendingSignals(thr->tsan_thread_);
+    __tsan::ProcessPendingSignals(thr->tsan.tsan_thread);
   }
 };
 
@@ -494,21 +494,22 @@ struct ScopedSyscall {
 #  if XSAN_INTERCEPT_PTHREAD_CREATE
 
 struct ThreadParam {
-  XsanThread *t;
+  XsanThread **thread_ptr;
   Semaphore created;
   Semaphore started;
 };
 
 static thread_return_t THREAD_CALLING_CONV xsan_thread_start(void *arg) {
   ThreadParam *p = (ThreadParam *)arg;
-  auto &[t, created, started] = *p;
-  SetCurrentThread(t);
+  auto &[thread_ptr, created, started] = *p;
   auto self = GetThreadSelf();
   auto args = xsanThreadArgRetval().GetArgs(self);
 
   /// Semaphore: comes from TSan, controlling the thread create event.
   created.Wait();
-  t->ThreadStart(GetTid());
+  auto t = *thread_ptr;
+  t->ThreadInit(GetTid());
+  t->ThreadStart();
 
 #    if SANITIZER_FREEBSD || SANITIZER_LINUX || SANITIZER_NETBSD || \
         SANITIZER_SOLARIS
@@ -561,11 +562,10 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   /// Note that sub_thread's recycle is delegated to sub thread.
   /// Hence, we could not use it after pthread_create in the parent thread.
-  XsanThread *sub_thread =
-      XsanThread::Create(sigset, current_tid, &stack, detached);
+  XsanThread *sub_thread;
 
   ThreadParam p;
-  p.t = sub_thread;
+  p.thread_ptr = &sub_thread;
 
   int result;
   {
@@ -588,7 +588,8 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   if (result == 0) {
     // sub_thread must live, as sub_thread waits for `created_.Post()`
-    sub_thread->PostNonMainThreadCreate(pc, *(uptr *)thread);
+    sub_thread = XsanThread::Create(sigset, current_tid, *(uptr *)thread,
+                                    &stack, detached);
     // Synchronization on p.tid serves two purposes:
     // 1. ThreadCreate must finish before the new thread starts.
     //    Otherwise the new thread can call pthread_detach, but the pthread_t
@@ -599,11 +600,6 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     p.created.Post();
     // Wait for ThreadParam *p to be free.
     p.started.Wait();
-  } else {
-    // If the thread didn't start delete the AsanThread to avoid leaking it.
-    // Note AsanThreadContexts never get destroyed so the AsanThreadContext
-    // that was just created for the AsanThread is wasted.
-    sub_thread->Destroy();
   }
   if (attr == &myattr)
     pthread_attr_destroy(&myattr);

@@ -264,16 +264,10 @@ static bool IsInStackOrTls(ThreadContextBase *tctx_base, void *arg) {
     return false;
   ThreadState *thr = tctx->thr;
   CHECK(thr);
-  __xsan::XsanThread *xsan_thr = thr->xsan_thread;
-  /// For __tsan::ThreadState obtained from fiber create,
-  /// we don't have XsanThread, so we can't check it.
-  /// What's more, these fiber-created 'thr' doesn't have
-  /// any meaningful stack/TLS space, so we can just return false.
-  if (!xsan_thr)
-    return false;
   /// Due to ASan's fake stack, delegates this check to
   /// XsanThread::AddrIsInStack and XsanThread::AddrIsInTls
-  return (xsan_thr->AddrIsInStack(addr) || xsan_thr->AddrIsInTls(addr));
+  return (__xsan::XsanThread::AddrIsInStack(thr->xsan_key, addr) ||
+          __xsan::XsanThread::AddrIsInTls(thr->xsan_key, addr));
 }
 
 ThreadContext *IsThreadStackOrTls(uptr addr, bool *is_stack) {
@@ -285,11 +279,9 @@ ThreadContext *IsThreadStackOrTls(uptr addr, bool *is_stack) {
     return 0;
   ThreadState *thr = tctx->thr;
   CHECK(thr);
-  __xsan::XsanThread *xsan_thr = thr->xsan_thread;
-  CHECK(xsan_thr);
   /// Due to ASan's fake stack, delegates this check to
   /// XsanThread::AddrIsInStack
-  *is_stack = xsan_thr->AddrIsInStack(addr);
+  *is_stack = __xsan::XsanThread::AddrIsInStack(thr->xsan_key, addr);
   return tctx;
 }
 #endif

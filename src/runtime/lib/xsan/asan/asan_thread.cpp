@@ -291,10 +291,6 @@ void AsanThread::BeforeThreadStart(tid_t os_id) {
   if (common_flags()->use_sigaltstack) SetAlternateSignalStack();
 }
 
-
-void AsanThread::AfterThreadStart() { }
-
-
 void AsanThread::ThreadStart(tid_t os_id) {
   Init();
   asanThreadRegistry().StartThread(tid(), os_id, ThreadType::Regular, nullptr);

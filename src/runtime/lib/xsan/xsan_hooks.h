@@ -22,14 +22,13 @@ struct CommonFlags;
 
 namespace __xsan {
 
-XsanThread *GetCurrentThread();
-
 // These structs is to hold the context of sub-sanitizers.
 // - TSan requires a thread state and a pc everywhere.
 // - ASan needs a BufferedStackTrace everywhere.
 struct XsanContext {
   XSAN_HOOKS_DEFINE_VAR(Context)
   XSAN_HOOKS_DEFINE_VAR_CVT(Context)
+  XSAN_HOOKS_DEFINE_PTR_VAR(XsanContext, Context)
 
   XsanContext() : XSAN_HOOKS_INIT_VAR() {}
   XsanContext(uptr pc) : XSAN_HOOKS_INIT_VAR(pc) {}
@@ -198,11 +197,6 @@ ALWAYS_INLINE void SetSanitizerThreadName(const char *name) {
   XSAN_HOOKS_EXEC(SetThreadName, name);
 }
 ALWAYS_INLINE void SetSanitizerThreadNameByUserId(uptr uid, const char *name) {
-  /// Should be asanThreadRegistry().SetThreadNameByUserId(thread, name)
-  /// But asan does not remember UserId's for threads (pthread_t);
-  /// and remembers all ever existed threads, so the linear search by UserId
-  /// can be slow.
-  // __asan::SetAsanThreadNameByUserId(uid, name);
   XSAN_HOOKS_EXEC(SetThreadNameByUserId, uid, name);
 }
 
@@ -279,24 +273,26 @@ ALWAYS_INLINE int RequireStackTracesSize() {
 }
 
 PSEUDO_MACRO void ReadRange(void *_ctx, const void *offset, uptr size) {
-  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
-  XSAN_HOOKS_EXEC(ReadRange, ctx->xsan_ctx, offset, size,
-                  ctx->interceptor_name);
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(ReadRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
+                  offset, size, (ctx ? ctx->interceptor_name : nullptr));
 }
 PSEUDO_MACRO void WriteRange(void *_ctx, const void *offset, uptr size) {
-  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
-  XSAN_HOOKS_EXEC(WriteRange, ctx->xsan_ctx, offset, size,
-                  ctx->interceptor_name);
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(WriteRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
+                  offset, size, (ctx ? ctx->interceptor_name : nullptr));
 }
 PSEUDO_MACRO void CommonReadRange(void *_ctx, const void *offset, uptr size) {
-  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
-  XSAN_HOOKS_EXEC(CommonReadRange, ctx->xsan_ctx, offset, size,
-                  ctx->interceptor_name);
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(CommonReadRange,
+                  XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr}, offset,
+                  size, (ctx ? ctx->interceptor_name : nullptr));
 }
 PSEUDO_MACRO void CommonWriteRange(void *_ctx, const void *offset, uptr size) {
-  const XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
-  XSAN_HOOKS_EXEC(CommonWriteRange, ctx->xsan_ctx, offset, size,
-                  ctx->interceptor_name);
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(CommonWriteRange,
+                  XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr}, offset,
+                  size, (ctx ? ctx->interceptor_name : nullptr));
 }
 
 }  // namespace __xsan

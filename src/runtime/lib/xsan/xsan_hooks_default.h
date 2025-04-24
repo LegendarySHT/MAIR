@@ -9,7 +9,6 @@
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
-#include "sanitizer_common/sanitizer_platform_limits_posix.h"
 #include "xsan_attribute.h"
 #include "xsan_hooks_types.h"
 
@@ -26,7 +25,9 @@ struct DefaultContext {
   ALWAYS_INLINE DefaultContext(uptr pc) {};
 };
 
-template <typename Context>
+struct DefaultThread {};
+
+template <typename Context, typename Thread>
 struct DefaultHooks {
   using BufferedStackTrace = ::__sanitizer::BufferedStackTrace;
   using u32 = ::__sanitizer::u32;
@@ -152,18 +153,33 @@ struct DefaultHooks {
   // ---------- Thread-Related Hooks --------------------------
   ALWAYS_INLINE static void SetThreadName(const char *name) {}
   ALWAYS_INLINE static void SetThreadNameByUserId(uptr uid, const char *name) {}
-  ALWAYS_INLINE static void SetSanitizerThreadNameByUserId(uptr uid,
-                                                           const char *name) {}
-  // ALWAYS_INLINE static void OnSetCurrentThread(XsanThread *t) {}
-  // ALWAYS_INLINE static void OnThreadCreate(XsanThread *xsan_thread,
-  //                                          const void *start_data,
-  //                                          uptr data_size, u32 parent_tid,
-  //                                          StackTrace *stack, bool detached)
-  //                                          {}
-  // ALWAYS_INLINE static void OnThreadDestroy(XsanThread *xsan_thread) {}
-  // ALWAYS_INLINE static void BeforeThreadStart(XsanThread *xsan_thread,
-  //                                             tid_t os_id) {}
-  // ALWAYS_INLINE static void AfterThreadStart(XsanThread *xsan_thread) {}
+  /*
+  The following events happen in order while `pthread_create` is executed:
+
+  - [parent-thread] : pthread_create
+    - [parent-thread] : XsanThread::Create
+      - [parent-thread] : (**HOOK**) XsanThread::CreateThread
+    - [child-thread] : xsan_thread_start
+      - [child-thread] : XsanThread::ThreadInit
+        - [child-thread] : (**HOOK**) XsanThread::ChildThreadInit
+      - [child-thread] : XsanThread::ThreadStart (with scoper)
+        - [child-thread] : (**HOOK**) XsanThread::ChildThreadStart
+        - [child-thread] : start_routine_
+
+  - [child-thread] : TSD destroy / Active destroy
+    - [child-thread] : XsanThread::Destroy
+      - [child-thread] : (**HOOK**) XsanThread::DestroyThread
+  */
+  ALWAYS_INLINE static Thread CreateMainThread() { return Thread{}; }
+  /// TODO: figure out data
+  ALWAYS_INLINE static Thread CreateThread(u32 parent_tid, uptr child_uid,
+                                           StackTrace *stack, const void *data,
+                                           uptr data_size, bool detached) {
+    return Thread{};
+  }
+  ALWAYS_INLINE static void ChildThreadInit(Thread &thread, tid_t os_id) {}
+  ALWAYS_INLINE static void ChildThreadStart(Thread &thread, tid_t os_id) {}
+  ALWAYS_INLINE static void DestroyThread(Thread &thread) {}
   // ---------- End of Thread-Related Hooks --------------------------
 
   // ---------- Synchronization and File-Related Hooks ------------------------
@@ -174,16 +190,16 @@ struct DefaultHooks {
   // ---------- End of Synchronization and File-Related Hooks ----------------
 
   // ---------- Generic Hooks in Interceptors ----------------
-  ALWAYS_INLINE static void ReadRange(const Context &ctx, const void *offset,
+  PSEUDO_MACRO static void ReadRange(const Context *ctx, const void *offset,
+                                     uptr size, const char *func_name) {}
+  PSEUDO_MACRO static void WriteRange(const Context *ctx, const void *offset,
                                       uptr size, const char *func_name) {}
-  ALWAYS_INLINE static void WriteRange(const Context &ctx, const void *offset,
-                                       uptr size, const char *func_name) {}
-  ALWAYS_INLINE static void CommonReadRange(const Context &ctx,
+  PSEUDO_MACRO static void CommonReadRange(const Context *ctx,
+                                           const void *offset, uptr size,
+                                           const char *func_name) {}
+  PSEUDO_MACRO static void CommonWriteRange(const Context *ctx,
                                             const void *offset, uptr size,
                                             const char *func_name) {}
-  ALWAYS_INLINE static void CommonWriteRange(const Context &ctx,
-                                             const void *offset, uptr size,
-                                             const char *func_name) {}
   // ---------- End of Generic Hooks in Interceptors ----------------
 };
 

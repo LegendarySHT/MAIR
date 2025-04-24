@@ -98,8 +98,6 @@ bool PlatformUnpoisonStacks();
 // The warning contains the type string to identify the stack type.
 void UnpoisonStack(uptr bottom, uptr top, const char *type);
 
-// xsan_thread.cpp
-XsanThread *CreateMainThread();
 // Initialize the main thread.
 void InitializeMainThread();
 
