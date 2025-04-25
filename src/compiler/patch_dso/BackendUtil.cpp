@@ -22,8 +22,7 @@ void clang::EmitBackendOutput(DiagnosticsEngine &Diags,
                               std::unique_ptr<raw_pwrite_stream> OS) {
   static auto RealFunc = getRealFuncAddr(&clang::EmitBackendOutput);
   static SanitizerMask HackedSanitizers =
-      SanitizerKind::Memory | SanitizerKind::Address | SanitizerKind::Thread |
-      SanitizerKind::DataFlow;
+      SanitizerKind::Memory | SanitizerKind::Address | SanitizerKind::Thread;
   LangOptions NewLangOpts = LOpts;
   if (::XsanEnabled) {
     NewLangOpts.Sanitize.clear(HackedSanitizers);

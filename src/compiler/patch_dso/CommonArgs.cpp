@@ -119,6 +119,7 @@ private:
 
   /// Eat one arg, return false if the next arg should be skipped.
   bool eatOneArg(const char *arg) const {
+    // [orig] xxx/libclang_rt.<san>.a --> [new XSan's] xxx/libclang_rt.<san>.a
     auto NewRt = replaceSanitizerRt(arg);
     // If NewRt is empty, that arg need not to be replaced.
     if (!NewRt.has_value()) {
@@ -128,12 +129,13 @@ private:
     auto It = SeenRts.insert(NewRt.value());
     if (It.second) {
       // Record whether we have handled xxx_static.a. 
-      if (StringRef(arg).contains("_static")) {
+      StringRef argref = arg;
+      if (argref.contains("_static")) {
         shouldHasStaticRt = false;
       }
       // Handle --dynamic-list=
-      if (NewCmdArgs.back() != PRE_LD) {
-        NewRt = "--dynamic-list=" + NewRt.value();
+      if (NewCmdArgs.back() != PreRt && argref.startswith(DynList)) {
+        NewRt = DynList.data() + NewRt.value();
       }
       // Extend the lifetime of NewRt
       saved_args.push_back(std::move(NewRt.value()));
@@ -143,7 +145,7 @@ private:
     } else {
       // The relevant replaced argument was added, skip to avoid 
       // duplicated appending.
-      if (NewCmdArgs.back() == PRE_LD) {
+      if (NewCmdArgs.back() == PreRt) {
         NewCmdArgs.pop_back();
         return false;
       }
@@ -155,7 +157,7 @@ private:
     bool skip_next = false;
     for (const auto Arg : Args) {
       if (skip_next) {
-        if (Arg == POST_LD) {
+        if (Arg == PostRt) {
           skip_next = false;
         }
         continue;
@@ -168,9 +170,9 @@ private:
     if (shouldHasStaticRt) {
       shouldHasStaticRt = false;
       saved_args.push_back(replaced_prefix + "_static-x86_64.a");
-      NewCmdArgs.push_back(PRE_LD.data());
+      NewCmdArgs.push_back(PreRt.data());
       NewCmdArgs.push_back(saved_args.back().c_str());
-      NewCmdArgs.push_back(POST_LD.data());
+      NewCmdArgs.push_back(PostRt.data());
     }
   }
 
@@ -178,8 +180,8 @@ private:
 
   static bool hasStaticRuntime(StringRef arg);
   static constexpr StringRef CompilerRt = "libclang_rt.";
-  static constexpr StringRef PRE_LD = "--whole-archive";
-  static constexpr StringRef POST_LD = "--no-whole-archive";
+  static constexpr StringRef PreRt = "--whole-archive";
+  static constexpr StringRef PostRt = "--no-whole-archive";
   static constexpr StringRef DynList = "--dynamic-list=";
 
   bool replace;

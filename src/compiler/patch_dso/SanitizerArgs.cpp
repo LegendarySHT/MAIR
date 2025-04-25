@@ -447,7 +447,7 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
                          ? SanitizerMask()
                          : SanitizerKind::Thread | SanitizerKind::Memory),
       std::make_pair(SanitizerKind::Thread,
-                     XsanEnabled ? SanitizerMask() : SanitizerKind::Memory),
+                     ::XsanEnabled ? SanitizerMask() : SanitizerKind::Memory),
       std::make_pair(SanitizerKind::Leak,
                      SanitizerKind::Thread | SanitizerKind::Memory),
       std::make_pair(SanitizerKind::KernelAddress,
