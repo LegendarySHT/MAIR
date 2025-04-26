@@ -67,7 +67,7 @@ list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
 )
 
-include(Message) # introduce message_green()... function
+include(XSanUtils) # introduce message_green()... function
 include(AllSupportedArchDefs)
 
 # Notify user to specify the LLVM_PATH, otherwise we cannot
@@ -92,11 +92,12 @@ set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_PATCH_DIR "${CMAKE_BINARY_DIR}/patch")
 set(XSAN_RESOURCE_DIR "${CMAKE_BINARY_DIR}/share")
 set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
-file(RELATIVE_PATH XSAN_REL_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_BIN_DIR}")
-file(RELATIVE_PATH XSAN_REL_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_LIB_DIR}")
-file(RELATIVE_PATH XSAN_REL_PATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PATCH_DIR}")
-file(RELATIVE_PATH XSAN_REL_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_RESOURCE_DIR}")
-file(RELATIVE_PATH XSAN_REL_PASS_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PASS_DIR}")
+# If relative path is "", it will be set to "."
+safe_relative_path(XSAN_REL_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_BIN_DIR}")
+safe_relative_path(XSAN_REL_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_LIB_DIR}")
+safe_relative_path(XSAN_REL_PATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PATCH_DIR}")
+safe_relative_path(XSAN_REL_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_RESOURCE_DIR}")
+safe_relative_path(XSAN_REL_PASS_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PASS_DIR}")
 # TODO: de-hardcode this
 set(XSAN_COMMON_LIT_CONFIGURE_PATH
   ${CMAKE_BINARY_DIR}/test/lit.common.configured)

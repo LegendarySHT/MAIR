@@ -1,0 +1,16 @@
+function(message_green)
+  string(ASCII 27 ESC)
+  set(GREEN "${ESC}[32m")
+  set(RESET "${ESC}[0m")
+  message(STATUS "${GREEN}${ARGV}${RESET}")
+endfunction()
+
+
+function(safe_relative_path out_var base_dir target_dir)
+  file(RELATIVE_PATH _rel_path "${base_dir}" "${target_dir}")
+  if (_rel_path STREQUAL "")
+      set(${out_var} "." PARENT_SCOPE)
+  else()
+      set(${out_var} "${_rel_path}" PARENT_SCOPE)
+  endif()
+endfunction()

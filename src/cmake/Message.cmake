@@ -1,6 +1,0 @@
-function(message_green)
-  string(ASCII 27 ESC)
-  set(GREEN "${ESC}[32m")
-  set(RESET "${ESC}[0m")
-  message(STATUS "${GREEN}${ARGV}${RESET}")
-endfunction()
