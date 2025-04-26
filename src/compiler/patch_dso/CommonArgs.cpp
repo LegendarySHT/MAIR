@@ -199,7 +199,8 @@ static void add_wrap_link_option(ArgStringList &CmdArgs) {
     return;
   }
   static const std::string WrapSymbolLinkOpt =
-      "@" + getXsanAbsPath(XSAN_SHARE_DIR "/xsan_wrapped_symbols.txt");
+      "@" + getXsanAbsPath(XSAN_SHARE_DIR "/xsan_wrapped_symbols.txt")
+                .generic_string();
   CmdArgs.push_back(WrapSymbolLinkOpt.c_str());
 }
 

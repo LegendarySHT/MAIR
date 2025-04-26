@@ -1,8 +1,13 @@
+#include <cstdio>
 #include <dlfcn.h>
+#include <filesystem>
 #include <llvm/Support/Process.h>
+#include <string_view>
 
 #include "PatchHelper.h"
 #include "xsan_common.h"
+
+namespace fs = std::filesystem;
 
 /// TODO: do not use env var to transmit base dir, but parse the DSO link path.
 static const llvm::Optional<std::string> xsan_base_dir =
@@ -43,16 +48,43 @@ constexpr SanitizerType gen_sanitizer_type() {
 
 const SanitizerType sanTy = gen_sanitizer_type();
 
-std::string getXsanAbsPath(llvm::StringRef rel_path) {
-  if (!xsan_base_dir.has_value()) {
-    std::fputs("Cannot parse the xsan base directory."
-          "Please set it in environment varibale XSAN_BASE_DIR.",
-          stderr);
-    return "";
+fs::path getThisPatchDsoPath() {
+  fs::path path;
+  Dl_info info;
+  // Pass the address of the current function to dladdr
+  if (dladdr((void *)&getThisPatchDsoPath, &info) != 0 && info.dli_fname) {
+    /// Canonicalize the path to remove any symbolic links.
+    return fs::canonical(info.dli_fname);
   }
-  std::string absPath = xsan_base_dir.getValue() + "/";
-  absPath += rel_path;
-  return absPath;
+  return "";
+}
+
+fs::path getXsanAbsPath(std::string_view rel_path) {
+  // <base_dir>/patch/libclang-patch.so -> <base_dir>/
+  static const fs::path PatchBaseDir =
+      getThisPatchDsoPath().parent_path().parent_path();
+  static const bool ExistEnvVarBaseDir =
+      xsan_base_dir.has_value() && fs::exists(xsan_base_dir.getValue());
+  static const fs::path EnvVarBaseDir =
+      ExistEnvVarBaseDir ? fs::canonical(xsan_base_dir.getValue()) : fs::path();
+
+  fs::path abs_path;
+  if (!xsan_base_dir.has_value()) {
+    abs_path = PatchBaseDir / rel_path;
+  } else if (EnvVarBaseDir.empty()) {
+    // xsan_base_dir has value, but EnvVarBaseDir is empty.
+    std::fprintf(stderr,
+                 "Warning: The path provided by the environment variable "
+                 "XSAN_BASE_DIR (\"%s\") is invalid. Using auto-detected base "
+                 "path: %s\n",
+                 xsan_base_dir.getValue().c_str(), PatchBaseDir.c_str());
+    abs_path = PatchBaseDir / rel_path;
+  } else {
+    abs_path = EnvVarBaseDir / rel_path;
+  }
+
+  // xsan_base_dir has value, and EnvVarBaseDir is not empty.
+  return abs_path;
 }
 
 void *getRealFuncAddr(void *InterceptorFunc) {
