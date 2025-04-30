@@ -960,7 +960,7 @@ static void edit_params(u32 argc, const char** argv) {
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
      preprocessor_only = 0, have_unroll = 0, have_o = 0, have_pic = 0,
      have_c = 0, partial_linking = 0;
-  u8 only_lib = 0;
+  u8 only_lib = 0, is_shared_libsan = 0;
   const u8 *name;
   enum SanitizerType xsanTy = SanNone;
   u8 is_cxx = 0;
@@ -1026,6 +1026,17 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strncmp(cur, "-O", 2)) have_o = 1;
     else if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
     else {
+      OPT_EQ_AND_THEN(cur, "-shared-libsan", {
+        if (xsanTy == XSan) {
+          PFATAL(
+              "XSan does not support the shared runtime temporarily, as MSan "
+              "does not support it either. "
+              "TODO: support the shared runtime for XSan@(ASan + TSan)");
+        }
+        is_shared_libsan = 1;
+        continue;
+      })
+
       OPT_EQ_AND_THEN(cur, "-lib-only", {
         only_lib = 1;
         continue;

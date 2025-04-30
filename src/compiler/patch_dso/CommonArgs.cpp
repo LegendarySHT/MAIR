@@ -12,6 +12,7 @@
 #include <optional>
 
 #include "config_build_dir.h"
+#include "debug.h"
 #include "utils/PatchHelper.h"
 #include "xsan_common.h"
 
@@ -101,6 +102,13 @@ private:
     //  2. *libclang_rt.asan.a.syms -> .a.syms
     StringRef suffix = arg.substr(pos);
     pos = suffix.rfind(".a");
+    if (suffix.endswith(".so")) {
+      if (sanTy == XSan) {
+        PFATAL("XSan does not support the shared runtime temporarily, as MSan "
+               "does not support it either. "
+               "TODO: support the shared runtime for XSan@(ASan + TSan)");
+      }
+    }
     if (pos == StringRef::npos)
       return std::nullopt;
     //  1. *libclang_rt.asan-static.a -> -static.a -> -static
