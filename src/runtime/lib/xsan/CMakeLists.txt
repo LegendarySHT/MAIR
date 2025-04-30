@@ -329,12 +329,6 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/tsan/orig
 )
 
-
-# Set the 
-
-
-
-
 ############### Set the CFLAGS for the XSan runtime library ##########
 
 set(ASAN_CFLAGS)
@@ -375,8 +369,6 @@ endif()
 
 set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${ASAN_CFLAGS} ${TSAN_RTL_CFLAGS})
 
-set(XSAN_COMMON_DEFINITIONS "")
-
 append_rtti_flag(OFF XSAN_RTL_CFLAGS)
 
 # Silence warnings in system headers with MSVC.
@@ -387,8 +379,38 @@ endif()
 # Too many existing bugs, needs cleanup.
 append_list_if(COMPILER_RT_HAS_WNO_FORMAT -Wno-format XSAN_RTL_CFLAGS)
 
+# Dynamic CFLAGS
+set(ASAN_DYNAMIC_CFLAGS ${ASAN_CFLAGS})
+append_list_if(COMPILER_RT_HAS_FTLS_MODEL_INITIAL_EXEC
+  -ftls-model=initial-exec ASAN_DYNAMIC_CFLAGS)
+
+set(TSAN_RTL_DYNAMIC_CFLAGS ${TSAN_RTL_CFLAGS})
+list(REMOVE_ITEM TSAN_RTL_DYNAMIC_CFLAGS -fPIE)
+
+set(XSAN_DYNAMIC_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${ASAN_DYNAMIC_CFLAGS} ${TSAN_RTL_DYNAMIC_CFLAGS})
+list(REMOVE_ITEM XSAN_DYNAMIC_CFLAGS -fPIE)
+
+############### Set the DEFINITIONS for the XSan runtime library ##########
+
+set(ASAN_COMMON_DEFINITIONS "")
+set(ASAN_DYNAMIC_DEFINITIONS
+  ${ASAN_COMMON_DEFINITIONS} ASAN_DYNAMIC=1)
+append_list_if(WIN32 INTERCEPTION_DYNAMIC_CRT ASAN_DYNAMIC_DEFINITIONS)
+
+set(TSAN_DYNAMIC_DEFINITIONS SANITIZER_SHARED)
+
+set(XSAN_COMMON_DEFINITIONS ${ASAN_COMMON_DEFINITIONS} XSAN_DYNAMIC=1)
+set(XSAN_DYNAMIC_DEFINITIONS ${ASAN_DYNAMIC_DEFINITIONS} ${TSAN_DYNAMIC_DEFINITIONS})
 
 ################## Compilation setting from source files to object files ###############
+
+add_compiler_rt_object_libraries(RTXsan_dynamic
+  OS ${SANITIZER_COMMON_SUPPORTED_OS}
+  ARCHS ${XSAN_SUPPORTED_ARCH}
+  SOURCES ${XSAN_SOURCES} ${XSAN_CXX_SOURCES}
+  ADDITIONAL_HEADERS ${XSAN_HEADERS}
+  CFLAGS ${XSAN_DYNAMIC_CFLAGS}
+  DEFS ${XSAN_DYNAMIC_DEFINITIONS})
 
 if(NOT APPLE)
   add_compiler_rt_object_libraries(RTXsan
@@ -416,12 +438,12 @@ if(NOT APPLE)
     CFLAGS ${XSAN_RTL_CFLAGS}
     DEFS ${XSAN_COMMON_DEFINITIONS})
 
-  # file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
-  # add_compiler_rt_object_libraries(RTXsan_dynamic_version_script_dummy
-  #   ARCHS ${XSAN_SUPPORTED_ARCH}
-  #   SOURCES ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp
-  #   CFLAGS ${XSAN_DYNAMIC_CFLAGS}
-  #   DEFS ${XSAN_DYNAMIC_DEFINITIONS})
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp "")
+  add_compiler_rt_object_libraries(RTXsan_dynamic_version_script_dummy
+    ARCHS ${XSAN_SUPPORTED_ARCH}
+    SOURCES ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp
+    CFLAGS ${XSAN_DYNAMIC_CFLAGS}
+    DEFS ${XSAN_DYNAMIC_DEFINITIONS})
 endif()
 
 ################### Set the LDFLAGS for the XSan runtime library ##########
@@ -446,6 +468,47 @@ create_wrap_symbols_target(
 set(XSAN_COMMON_DEPS generate_wrap_symbols)
 
 set(XSAN_LINK_FLAGS "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt")
+
+
+set(XSAN_DYNAMIC_LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS})
+if(ANDROID)
+  # Put most Sanitizer shared libraries in the global group. For more details, see
+  # android-changes-for-ndk-developers.md#changes-to-library-search-order
+  if (COMPILER_RT_HAS_Z_GLOBAL)
+    list(APPEND XSAN_DYNAMIC_LINK_FLAGS -Wl,-z,global)
+  endif()
+endif()
+# LLVM turns /OPT:ICF back on when LLVM_ENABLE_PDBs is set
+# we _REALLY_ need to turn it back off for ASAN, because the way
+# asan emulates weak functions from DLLs requires NOICF
+append_list_if(MSVC "LINKER:/DEBUG;LINKER:/OPT:NOICF" XSAN_DYNAMIC_LINK_FLAGS)
+
+################### Set the LINK LIBS for the XSan shared runtime library ##########
+set(TSAN_DYNAMIC_LINK_LIBS
+  ${COMPILER_RT_UNWINDER_LINK_LIBS}
+  ${SANITIZER_CXX_ABI_LIBRARIES}
+  ${SANITIZER_COMMON_LINK_LIBS})
+
+# append_list_if(COMPILER_RT_HAS_LIBDL dl TSAN_DYNAMIC_LINK_LIBS)
+# append_list_if(COMPILER_RT_HAS_LIBM m TSAN_DYNAMIC_LINK_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread TSAN_DYNAMIC_LINK_LIBS)
+
+set(ASAN_DYNAMIC_LIBS
+  ${COMPILER_RT_UNWINDER_LINK_LIBS}
+  ${SANITIZER_CXX_ABI_LIBRARIES}
+  ${SANITIZER_COMMON_LINK_LIBS})
+
+# append_list_if(COMPILER_RT_HAS_LIBDL dl ASAN_DYNAMIC_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBRT rt ASAN_DYNAMIC_LIBS)
+# append_list_if(COMPILER_RT_HAS_LIBM m ASAN_DYNAMIC_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBPTHREAD pthread ASAN_DYNAMIC_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBLOG log ASAN_DYNAMIC_LIBS)
+append_list_if(MINGW "${MINGW_LIBRARIES}" ASAN_DYNAMIC_LIBS)
+
+
+set(XSAN_DYNAMIC_LINK_LIBS ${ASAN_DYNAMIC_LIBS} ${TSAN_DYNAMIC_LINK_LIBS})
+append_list_if(COMPILER_RT_HAS_LIBDL dl XSAN_DYNAMIC_LINK_LIBS)
+append_list_if(COMPILER_RT_HAS_LIBM m XSAN_DYNAMIC_LINK_LIBS)
 
 
 ################## Set the runtime library for the XSan runtime library ##########
@@ -519,8 +582,53 @@ if(NOT APPLE)
         PARENT_TARGET xsan)
   endif()
 
+  ################ Compile dynamic libraries ##################################
   ################ Dump the extern symbols in dynamic libraries ###############
   foreach(arch ${XSAN_SUPPORTED_ARCH})
+    if (COMPILER_RT_HAS_VERSION_SCRIPT)
+      if(WIN32)
+        set(SANITIZER_RT_VERSION_LIST_LIBS clang_rt.xsan-${arch})
+      else()
+        set(SANITIZER_RT_VERSION_LIST_LIBS clang_rt.xsan-${arch} clang_rt.xsan_cxx-${arch})
+      endif()
+      add_sanitizer_rt_version_list(clang_rt.xsan-dynamic-${arch}
+                                    LIBS ${SANITIZER_RT_VERSION_LIST_LIBS}
+                                    EXTRA xsan.syms.extra)
+      set(VERSION_SCRIPT_FLAG
+           -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/clang_rt.xsan-dynamic-${arch}.vers)
+      # The Solaris 11.4 linker supports a subset of GNU ld version scripts,
+      # but requires a special option to enable it.
+      if (COMPILER_RT_HAS_GNU_VERSION_SCRIPT_COMPAT)
+          list(APPEND VERSION_SCRIPT_FLAG -Wl,-z,gnu-version-script-compat)
+      endif()
+      set_property(SOURCE
+        ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp
+        APPEND PROPERTY
+        OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/clang_rt.xsan-dynamic-${arch}.vers)
+    else()
+      set(VERSION_SCRIPT_FLAG)
+    endif()
+
+    add_compiler_rt_runtime(clang_rt.xsan
+      SHARED
+      ARCHS ${arch}
+      OBJECT_LIBS ${XSAN_COMMON_RUNTIME_OBJECT_LIBS}
+              RTXsan_dynamic
+              # The only purpose of RTAsan_dynamic_version_script_dummy is to
+              # carry a dependency of the shared runtime on the version script.
+              # Replacing it with a straightforward
+              # add_dependencies(clang_rt.asan-dynamic-${arch} clang_rt.asan-dynamic-${arch}-version-list)
+              # generates an order-only dependency in ninja.
+              RTXsan_dynamic_version_script_dummy
+              RTUbsan_cxx
+      ADDITIONAL_HEADERS ${XSAN_HEADERS}
+      CFLAGS ${XSAN_DYNAMIC_CFLAGS}
+      LINK_FLAGS ${XSAN_DYNAMIC_LINK_FLAGS}
+                ${VERSION_SCRIPT_FLAG}
+      LINK_LIBS ${XSAN_DYNAMIC_LINK_LIBS}
+      DEFS ${XSAN_DYNAMIC_DEFINITIONS}
+      PARENT_TARGET xsan)
+
     if (SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
       add_sanitizer_rt_symbols(clang_rt.xsan_cxx
         ARCHS ${arch}
