@@ -1,6 +1,6 @@
 #pragma once
 
-enum SanitizerType { SanNone, ASan, TSan, UBSan, XSan };
+enum SanitizerType { SanNone, ASan, TSan, MSan, UBSan, XSan };
 
 enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };
 

@@ -108,14 +108,15 @@ private:
     //  1. *libclang_rt.asan-static.a -> -static.a
     //  2. *libclang_rt.asan.a.syms -> .a.syms
     StringRef suffix = arg.substr(pos);
-    pos = suffix.rfind(".a");
     if (suffix.endswith(".so")) {
-      if (sanTy == XSan) {
-        PFATAL("XSan does not support the shared runtime temporarily, as MSan "
-               "does not support it either. "
-               "TODO: support the shared runtime for XSan@(ASan + TSan)");
+      if (sanTy == XSan && xsan_mask.test(MSan)) {
+        PFATAL("XSan with MSan does not support the shared runtime "
+               "temporarily, as MSan does not support it either. Consider "
+               "disable MSan from XSan if you want to use the shared runtime.");
       }
       pos = suffix.size() - 3;
+    } else {
+      pos = suffix.rfind(".a");
     }
     if (pos == StringRef::npos)
       return std::nullopt;

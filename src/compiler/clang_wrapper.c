@@ -1035,11 +1035,11 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
     else {
       OPT_EQ_AND_THEN(cur, "-shared-libsan", {
-        if (xsanTy == XSan) {
+        if (xsanTy == XSan && has(&xsan_options, MSan)) {
           PFATAL(
-              "XSan does not support the shared runtime temporarily, as MSan "
-              "does not support it either. "
-              "TODO: support the shared runtime for XSan@(ASan + TSan)");
+              "XSan with MSan does not support the shared runtime "
+              "temporarily, as MSan does not support it either. Consider "
+              "disable MSan from XSan if you want to use the shared runtime.");
         }
         needs_shared_rt = 1;
         continue;
