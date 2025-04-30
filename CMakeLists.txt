@@ -59,6 +59,18 @@ find_package(LLVM REQUIRED CONFIG)
 #include_directories(${LLVM_INCLUDE_DIRS})
 #link_directories(${LLVM_LIBRARY_DIRS})
 
+find_program(LLD_PATH lld)
+# Preferring lld linker over system linker
+if (LLD_PATH)
+  message(STATUS "Found lld and use it as linker: ${LLD_PATH}")
+  # Fix dynsym corruption issue in libclang_rt.tsan.so
+  set(CMAKE_LINKER ${LLD_PATH} CACHE STRING "Linker" FORCE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld")
+else()
+  message(WARNING "lld not found, use system default linker (ld).")
+endif()
+
 # To find *.cmake
 list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake"
