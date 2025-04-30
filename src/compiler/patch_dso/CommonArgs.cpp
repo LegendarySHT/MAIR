@@ -108,6 +108,7 @@ private:
                "does not support it either. "
                "TODO: support the shared runtime for XSan@(ASan + TSan)");
       }
+      pos = suffix.size() - 3;
     }
     if (pos == StringRef::npos)
       return std::nullopt;

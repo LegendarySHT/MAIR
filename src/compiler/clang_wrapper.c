@@ -810,7 +810,8 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   cc_params[cc_par_cnt++] = alloc_printf("-Wl,@%s/share/xsan_wrapped_symbols.txt", obj_path);
 }
 
-static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso) {
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
+                                  u8 is_dso, u8 needs_shared_rt) {
 
   /**
    * Need to enable corresponding llvm optimization level, 
@@ -836,6 +837,11 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
 
   add_wrap_link_option(sanTy, is_cxx);
 
+  if (needs_shared_rt && (sanTy == ASan || sanTy == TSan || sanTy == UBSan)) {
+    cc_params[cc_par_cnt++] =
+        alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.so", obj_path, san);
+  }
+
   /**
     // Always link the static runtime regardless of DSO or executable.
     if (SanArgs.needsAsanRt())
@@ -859,6 +865,10 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
   }
 
   if (is_dso) {
+    return;
+  }
+
+  if (needs_shared_rt) {
     return;
   }
 
@@ -891,10 +901,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
    */
   // cc_params[cc_par_cnt++] = "-mllvm";
   // cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
-
 }
-
-
 
 static void afl_runtime() {
   cc_params[cc_par_cnt++] = "-lrt";
@@ -960,7 +967,7 @@ static void edit_params(u32 argc, const char** argv) {
   u8 fortify_set = 0, asan_set = 0, x_set = 0, bit_mode = 0, shared_linking = 0,
      preprocessor_only = 0, have_unroll = 0, have_o = 0, have_pic = 0,
      have_c = 0, partial_linking = 0;
-  u8 only_lib = 0, is_shared_libsan = 0;
+  u8 only_lib = 0, needs_shared_rt = 0;
   const u8 *name;
   enum SanitizerType xsanTy = SanNone;
   u8 is_cxx = 0;
@@ -1033,7 +1040,7 @@ static void edit_params(u32 argc, const char** argv) {
               "does not support it either. "
               "TODO: support the shared runtime for XSan@(ASan + TSan)");
         }
-        is_shared_libsan = 1;
+        needs_shared_rt = 1;
         continue;
       })
 
@@ -1107,7 +1114,7 @@ static void edit_params(u32 argc, const char** argv) {
     regist_pass_plugin(xsanTy);
   // *.c/cpp -o *.o, don't link sanitizer runtime library.
   if (!have_c && !support_dso_inject) {
-    add_sanitizer_runtime(xsanTy, is_cxx, shared_linking);
+    add_sanitizer_runtime(xsanTy, is_cxx, shared_linking, needs_shared_rt);
   }
 
   while (--argc) {
