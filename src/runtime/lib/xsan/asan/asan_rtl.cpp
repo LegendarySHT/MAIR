@@ -665,7 +665,8 @@ void AsanInitFromXsan() {
   // __interception::DoesNotSupportStaticLinking();
   
   AsanCheckIncompatibleRT();
-  AsanCheckDynamicRTPrereqs();
+  // Moved to XSan
+  // AsanCheckDynamicRTPrereqs();
   // AvoidCVE_2016_2143();
 
   SetCanPoisonMemory(flags()->poison_heap);

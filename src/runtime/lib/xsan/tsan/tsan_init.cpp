@@ -8,6 +8,13 @@
 #include "tsan_rtl.h"
 
 extern volatile int __tsan_resumed;
+
+#define INIT_ONCE           \
+  static bool done = false; \
+  if (done)                 \
+    return;                 \
+  done = true;
+
 namespace __tsan {
 
 /// TODO: Reuse this in tsan_rtl.cpp
@@ -44,17 +51,16 @@ static bool InitializeMemoryProfiler() {
 #endif
 
 void TsanInitFromXsanVeryEarly() {
+  INIT_ONCE
+  is_initialized = true;
   ctx = new (ctx_placeholder) Context;
   cur_thread_init();
 }
 
 void TsanInitFromXsan() {
   // Thread safe because done before all threads exist.
-  if (is_initialized)
-    return;
-
+  INIT_ONCE
   cur_thread_init();
-  is_initialized = true;
   // We are not ready to handle interceptors yet.
   ScopedIgnoreInterceptors ignore;
   /// Moved this to XSan
@@ -139,6 +145,7 @@ void TsanInitFromXsan() {
 }
 
 void TsanInitFromXsanLate() {
+  INIT_ONCE
   OnInitialize();
 }
 

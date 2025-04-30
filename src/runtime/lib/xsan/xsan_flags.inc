@@ -15,3 +15,7 @@ XSAN_FLAG(bool, replace_intrin, true,
 
 XSAN_FLAG(bool, tsan_ignore_single_thread, true,
           "If set, disable TSan on single-threaded scenarios as possible.")
+
+XSAN_FLAG(bool, verify_xsan_link_order, true,
+          "Check position of XSan runtime in library list (needs to be disabled"
+          " when other library has to be preloaded system-wide)")

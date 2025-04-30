@@ -140,8 +140,8 @@ static void ReportIncompatibleRT() {
 }
 
 void XsanCheckDynamicRTPrereqs() {
-  //   if (!XSAN_DYNAMIC || !flags()->verify_xsan_link_order)
-  //     return;
+  if (!XSAN_DYNAMIC || !flags()->verify_xsan_link_order)
+    return;
 
   // Ensure that dynamic RT is the first DSO in the list
   const char *first_dso_name = nullptr;

@@ -16,6 +16,12 @@
 #include "xsan_platform.h"
 #include "xsan_stack.h"
 
+#define INIT_ONCE           \
+  static bool done = false; \
+  if (done)                 \
+    return;                 \
+  done = true;
+
 namespace __xsan {
 
 // With the zero shadow base we can not actually map pages starting from 0.
@@ -140,16 +146,19 @@ void CheckAndProtect() {
 /// Before any other initialization.
 /// Used to initialize state of sub-santizers, e.g., Context of TSan.
 static void XsanInitVeryEarly() {
+  INIT_ONCE
   __tsan::TsanInitFromXsanVeryEarly();
 }
 
 /// After flags initialization, before any other initialization.
 static void XsanInitEarly() {
+  INIT_ONCE
   __tsan::InitializePlatformEarly();
 }
 
 /// Almost after all is done, e.g., flags, memory, allocator, threads, etc.
 static void XsanInitLate() {
+  INIT_ONCE
   {
     ScopedSanitizerToolName tool_name("AddressSanitizer");
     __asan::AsanInitFromXsanLate();
@@ -167,6 +176,7 @@ static bool XsanInitInternal() {
   ScopedSanitizerToolName tool_name("XSan");
   xsan_in_init = true;
 
+  XsanCheckDynamicRTPrereqs();
   XsanInitVeryEarly();
   /// note that place this after cur_thread_init()
   __xsan::ScopedIgnoreInterceptors ignore;
