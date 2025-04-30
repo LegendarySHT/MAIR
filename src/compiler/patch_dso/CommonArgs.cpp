@@ -47,6 +47,13 @@ static constexpr auto hacked_san_names = gen_hacked_san_names();
 static llvm::SmallVector<std::string, 8> saved_args;
 
 namespace {
+
+static void add_rpath(ArgStringList &CmdArgs) {
+  static const std::string rPathOpt =
+      "-rpath=" + getXsanAbsPath(XSAN_LINUX_LIB_DIR).generic_string();
+  CmdArgs.push_back(rPathOpt.c_str());
+}
+
 class HackedSanitizersRtRewriter {
   using StringRef = llvm::StringRef;
 
@@ -146,6 +153,12 @@ private:
       if (NewCmdArgs.back() != PreRt && argref.startswith(DynList)) {
         NewRt = DynList.data() + NewRt.value();
       }
+
+      // If so is replaced, we need to add rpath to the new runtime.
+      if (argref.endswith(".so")) {
+        add_rpath(NewCmdArgs);
+      }
+
       // Extend the lifetime of NewRt
       saved_args.push_back(std::move(NewRt.value()));
       // Replace the link argument related to our hacked sanitizers
@@ -204,7 +217,7 @@ private:
 };
 
 static void add_wrap_link_option(ArgStringList &CmdArgs) {
-  if (!::XsanEnabled) {
+  if (!::XsanEnabled || sanTy != XSan) {
     return;
   }
   static const std::string WrapSymbolLinkOpt =

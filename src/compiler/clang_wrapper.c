@@ -838,6 +838,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
   add_wrap_link_option(sanTy, is_cxx);
 
   if (needs_shared_rt && (sanTy == ASan || sanTy == TSan || sanTy == UBSan)) {
+    cc_params[cc_par_cnt++] = alloc_printf("-Wl,-rpath,%s/lib/linux", obj_path);
     cc_params[cc_par_cnt++] =
         alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.so", obj_path, san);
   }
