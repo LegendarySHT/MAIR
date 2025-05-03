@@ -1,5 +1,5 @@
 #include "TsanMopAnalysis.h"
-#include "../Utils/InstUtils.h"
+#include "../Utils/ValueUtils.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"

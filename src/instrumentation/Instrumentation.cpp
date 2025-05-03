@@ -12,9 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "Instrumentation.h"
-#include "Utils/InstUtils.h"
 #include "Utils/Logging.h"
 #include "Utils/Options.h"
+#include "Utils/ValueUtils.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -54,6 +54,7 @@
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 #include <cstdint>
 #include <optional>
+
 
 using namespace llvm;
 
@@ -963,21 +964,26 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
   XsanRangeWrite = M.getOrInsertFunction("__xsan_write_range", Attr,
                                          IRB.getVoidTy(), IRB.getInt8PtrTy(),
                                          IRB.getInt8PtrTy(), IRB.getInt64Ty());
+
   for (size_t i = 0; i < kNumberOfAccessSizes; i++) {
     const unsigned ByteSize = 1U << i;
     std::string ByteSizeStr = utostr(ByteSize);
 
     XsanPeriodRead[i] = M.getOrInsertFunction(
         "__xsan_period_read" + ByteSizeStr, Attr, IRB.getVoidTy(),
-        IRB.getInt8PtrTy(), IRB.getInt8PtrTy(), IRB.getInt64Ty());
+        IRB.getInt8PtrTy(), IRB.getInt8PtrTy(), IRB.getInt64Ty(),
+        IRB.getInt64Ty());
     XsanPeriodWrite[i] = M.getOrInsertFunction(
         "__xsan_period_write" + ByteSizeStr, Attr, IRB.getVoidTy(),
-        IRB.getInt8PtrTy(), IRB.getInt8PtrTy(), IRB.getInt64Ty());
+        IRB.getInt8PtrTy(), IRB.getInt8PtrTy(), IRB.getInt64Ty(),
+        IRB.getInt64Ty());
 
     XsanRead[i] = M.getOrInsertFunction("__xsan_read" + ByteSizeStr, Attr,
-                                        IRB.getVoidTy(), IRB.getInt8PtrTy());
+                                        IRB.getVoidTy(), IRB.getInt8PtrTy(),
+                                        IRB.getInt64Ty());
     XsanWrite[i] = M.getOrInsertFunction("__xsan_write" + ByteSizeStr, Attr,
-                                         IRB.getVoidTy(), IRB.getInt8PtrTy());
+                                         IRB.getVoidTy(), IRB.getInt8PtrTy(),
+                                         IRB.getInt64Ty());
   }
 }
 
@@ -1383,13 +1389,14 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
     if (IsRangeAccess) {
       // void __xsan_read_range(const void *beg, const void *end) {
       // void __xsan_write_range(const void *beg, const void *end) {
-      IRB.CreateCall(IsWrite ? XsanRangeWrite : XsanRangeRead, {Beg, End});
+      IRB.CreateCall(IsWrite ? XsanRangeWrite : XsanRangeRead,
+                     {Beg, End, PcValue});
     } else {
       size_t Idx = countTrailingZeros(MopSize);
       // __xsan_period_readX(const void *beg, const void *end, size_t step)
       // __xsan_period_writeX(const void *beg, const void *end, size_t step)
       IRB.CreateCall(IsWrite ? XsanPeriodWrite[Idx] : XsanPeriodRead[Idx],
-                     {Beg, End, StepVal});
+                     {Beg, End, StepVal, PcValue});
     }
 
     NumPeriodChecksCombinedDup += tagMopAsDelegated(Mop);
@@ -1547,7 +1554,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 
     // __xsan_readX(const void *beg)
     // __xsan_writeX(const void *beg)
-    IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});
+    IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr, PcValue});
     NumInvChecksRelocatedDup += tagMopAsDelegated(Mop);
     NumInvChecksRelocated++;
 

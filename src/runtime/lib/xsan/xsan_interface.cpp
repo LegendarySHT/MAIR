@@ -84,7 +84,7 @@ void __sanitizer_unaligned_store64(uu64 *addr, u64 v) {
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
-void __xsan_read_range(const void *beg, const void *end) {
+void __xsan_read_range(const void *beg, const void *end, uptr pc = 0) {
   if (UNLIKELY(beg == end))
     return;
   /// The caller of __xsan_read_range should ensure that beg <= end
@@ -96,7 +96,7 @@ void __xsan_read_range(const void *beg, const void *end) {
 }
 
 SANITIZER_INTERFACE_ATTRIBUTE
-void __xsan_write_range(const void *beg, const void *end) {
+void __xsan_write_range(const void *beg, const void *end, uptr pc = 0) {
   if (UNLIKELY(beg == end))
     return;
   /// The caller of __xsan_write_range should ensure that beg <= end
@@ -108,7 +108,7 @@ void __xsan_write_range(const void *beg, const void *end) {
 /// TODO: use SIMD to perform the check.
 #define XSAN_PERIODICAL_READ_CALLBACK(size)                                   \
   SANITIZER_INTERFACE_ATTRIBUTE                                               \
-  void __xsan_period_read##size(const void *beg, const void *end, s64 step) { \
+  void __xsan_period_read##size(const void *beg, const void *end, s64 step, uptr pc = 0) { \
     if (UNLIKELY(beg == end))                                                 \
       return;                                                                 \
     DCHECK(Abs(step) >= (size) && "Invalid arguments");                       \
@@ -133,7 +133,7 @@ void __xsan_write_range(const void *beg, const void *end) {
 
 #define XSAN_PERIODICAL_WRITE_CALLBACK(size)                                   \
   SANITIZER_INTERFACE_ATTRIBUTE                                                \
-  void __xsan_period_write##size(const void *beg, const void *end, s64 step) { \
+  void __xsan_period_write##size(const void *beg, const void *end, s64 step, uptr pc = 0) { \
     if (UNLIKELY(beg == end))                                                  \
       return;                                                                  \
     DCHECK(Abs(step) >= (size) && "Invalid arguments");                        \
@@ -170,14 +170,14 @@ XSAN_PERIODICAL_WRITE_CALLBACK(16)
 /// TODO: use a macro to perform the ASan check for better performance?
 #define XSAN_READ(size)                   \
   SANITIZER_INTERFACE_ATTRIBUTE           \
-  void __xsan_read##size(const void *p) { \
+  void __xsan_read##size(const void *p, uptr pc = 0) { \
     __asan_load##size((uptr)p);           \
     __tsan_read##size((void *)p);         \
   }
 
 #define XSAN_WRITE(size)                   \
   SANITIZER_INTERFACE_ATTRIBUTE            \
-  void __xsan_write##size(const void *p) { \
+  void __xsan_write##size(const void *p, uptr pc = 0) { \
     __asan_store##size((uptr)p);           \
     __tsan_write##size((void *)p);         \
   }
