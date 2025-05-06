@@ -399,8 +399,8 @@ append_list_if(WIN32 INTERCEPTION_DYNAMIC_CRT ASAN_DYNAMIC_DEFINITIONS)
 
 set(TSAN_DYNAMIC_DEFINITIONS SANITIZER_SHARED)
 
-set(XSAN_COMMON_DEFINITIONS ${ASAN_COMMON_DEFINITIONS} XSAN_DYNAMIC=1)
-set(XSAN_DYNAMIC_DEFINITIONS ${ASAN_DYNAMIC_DEFINITIONS} ${TSAN_DYNAMIC_DEFINITIONS})
+set(XSAN_COMMON_DEFINITIONS ${ASAN_COMMON_DEFINITIONS})
+set(XSAN_DYNAMIC_DEFINITIONS XSAN_DYNAMIC=1 ${ASAN_DYNAMIC_DEFINITIONS} ${TSAN_DYNAMIC_DEFINITIONS})
 
 ################## Compilation setting from source files to object files ###############
 
@@ -482,6 +482,11 @@ endif()
 # we _REALLY_ need to turn it back off for ASAN, because the way
 # asan emulates weak functions from DLLs requires NOICF
 append_list_if(MSVC "LINKER:/DEBUG;LINKER:/OPT:NOICF" XSAN_DYNAMIC_LINK_FLAGS)
+
+
+set(XSAN_TEST_LIST)
+append_list_if(True XSAN_ASAN_SOURCES XSAN_TEST_LIST)
+message_green("XSAN_TEST_LIST: ${XSAN_TEST_LIST}")
 
 ################### Set the LINK LIBS for the XSan shared runtime library ##########
 set(TSAN_DYNAMIC_LINK_LIBS
