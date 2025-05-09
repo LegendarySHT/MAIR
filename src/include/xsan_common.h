@@ -4,14 +4,5 @@ enum SanitizerType { SanNone, ASan, TSan, MSan, UBSan, XSan };
 
 enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };
 
-#ifndef XSAN_UBSAN
-#define XSAN_UBSAN 1
-#endif
-
-#ifndef XSAN_TSAN
-#define XSAN_TSAN 1
-#endif
-
-#ifndef XSAN_ASAN
-#define XSAN_ASAN 1
-#endif
+// We have already defined and assigned values to the XSAN_CONTAINS_XXX macros in CMakeLists.txt
+// we use these macros in clang_wrapper.c

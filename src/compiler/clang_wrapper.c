@@ -199,13 +199,13 @@ XsanOption xsan_options;
 XsanOption xsan_recover_options;
 
 void init(XsanOption *opt) {
-#if XSAN_UBSAN
+#if XSAN_CONTAINS_UBSAN
   opt->mask |= (u64)1 << UBSan;
 #endif
-#if XSAN_TSAN
+#if XSAN_CONTAINS_TSAN
   opt->mask |= (u64)1 << TSan;
 #endif
-#if XSAN_ASAN
+#if XSAN_CONTAINS_ASAN
   opt->mask |= (u64)1 << ASan;
 #endif
   opt->mask |= (u64)1 << XSan;
@@ -260,6 +260,9 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   for (u32 i = 1; i < argc; i++) {
     const char* cur = argv[i];
     OPT_EQ_AND_THEN(cur, "-tsan", {
+      /// We should check xsan firstly because xsan can include asan, tsan...
+      if(has(&xsan_options, XSan))
+        FATAL("'-tsan' could not be used with '-xsan'");
       if (has(&xsan_options, ASan))
         FATAL("'-tsan' could not be used with '-asan'");
       xsanTy = TSan;
@@ -268,6 +271,8 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
     })
 
     OPT_EQ_AND_THEN(cur, "-asan", {
+      if(has(&xsan_options, XSan))
+        FATAL("'-asan' could not be used with '-xsan'");
       if (has(&xsan_options, TSan))
         FATAL("'-asan' could not be used with '-tsan'");
       xsanTy = ASan;
@@ -285,6 +290,10 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
     })
 
     OPT_EQ_AND_THEN(cur, "-xsan", {
+      if(has(&xsan_options, ASan))
+        FATAL("'-xsan' could not be used with '-asan'");
+      if (has(&xsan_options, TSan))
+        FATAL("'-xsan' could not be used with '-tsan'");
       xsanTy = XSan;
       init(&xsan_options);
       continue;
@@ -614,10 +623,16 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
 
     // Reuse the frontend code relevant to sanitizer
     if (has(&xsan_options, ASan)) {
-      cc_params[cc_par_cnt++] = "-fsanitize=address";
+        if (sanTy == XSan && !XSAN_CONTAINS_ASAN) {
+            FATAL("xsan did not contain asan, '-xsan' could not be used with '-fsanitize=address'");
+        }
+        cc_params[cc_par_cnt++] = "-fsanitize=address";
     }
     if (has(&xsan_options, TSan)) {
-      cc_params[cc_par_cnt++] = "-fsanitize=thread";
+        if (sanTy == XSan && !XSAN_CONTAINS_TSAN) {
+            FATAL("xsan did not contain tsan, '-xsan' could not be used with '-fsanitize=thread'");
+        }
+        cc_params[cc_par_cnt++] = "-fsanitize=thread";
     }
     if (has(&xsan_options, UBSan)) {
       cc_params[cc_par_cnt++] = "-fsanitize=undefined";
