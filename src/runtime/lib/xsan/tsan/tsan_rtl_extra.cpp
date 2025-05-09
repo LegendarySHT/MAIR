@@ -30,12 +30,12 @@ void RestoreTsanState(ThreadState *thr) {
   thr->ignore_sync = main_thread_state.ignore_sync;
 }
 
-static void DisableTsan(ThreadState *thr) {
+void DisableTsan(ThreadState *thr) {
   ThreadIgnoreSyncBegin(thr, 0);
   ThreadIgnoreBegin(thr, 0);
 }
 
-static void EnableTsan(ThreadState *thr) {
+void EnableTsan(ThreadState *thr) {
   ThreadIgnoreEnd(thr);
   ThreadIgnoreSyncEnd(thr);
 }

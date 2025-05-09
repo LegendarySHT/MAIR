@@ -75,7 +75,10 @@ static void ReportIgnoresEnabled(ThreadContext *tctx, IgnoreSet *set) {
 }
 
 static void ThreadCheckIgnore(ThreadState *thr) {
-  if (ctx->after_multithreaded_fork)
+  // If we deactivate TSan during runtime,
+  // we should not let the thread terminate abnormally here, as deactivation is
+  // what we expect and not an exceptional situation.
+  if (ctx->after_multithreaded_fork || __xsan::flags()->tsan_ignore_runtime)
     return;
   if (thr->ignore_reads_and_writes)
     ReportIgnoresEnabled(thr->tctx, &thr->mop_ignore_set);
@@ -87,7 +90,9 @@ static void ThreadCheckIgnore(ThreadState *thr) {}
 #endif
 
 void ThreadFinalize(ThreadState *thr) {
-  if (support_single_thread_optimization(thr)) {
+  // if tsan_ignore_runtime is true, we disable main thread TSan for all time.
+  if (support_single_thread_optimization(thr) &&
+      !__xsan::flags()->tsan_ignore_runtime) {
     EnableMainThreadTsan(thr);
   }
   ThreadCheckIgnore(thr);
@@ -127,7 +132,9 @@ Tid ThreadCreate(ThreadState *thr, uptr pc, uptr uid, bool detached) {
     atomic_fetch_add(&ctx->num_alive_threads, 1, memory_order_relaxed);
     atomic_fetch_add(&ctx->num_unjoined_threads, 1, memory_order_relaxed);
     /* Sub-Threads Creation */
-    if (support_single_thread_optimization(thr)) {
+    // if tsan_ignore_runtime is true, we disable main thread TSan for all time.
+    if (support_single_thread_optimization(thr) &&
+        !__xsan::flags()->tsan_ignore_runtime) {
       EnableMainThreadTsan(thr);
     }
     parent = thr->tid;
@@ -244,8 +251,11 @@ void ThreadStart(ThreadState *thr, Tid tid, tid_t os_id,
 #endif
 
   /// Disable TSan if only main thread is alive.
+  /// Disable TSan if tsan_ignore_runtime is true.
   if (support_single_thread_optimization(thr)) {
     DisableMainThreadTsan(cur_thread());
+  } else if (__xsan::flags()->tsan_ignore_runtime) {
+    DisableTsan(thr);
   }
 }
 

@@ -27,6 +27,9 @@ class ScopedIgnoreTsan {
 
 void DisableMainThreadTsan(ThreadState *thr);
 void EnableMainThreadTsan(ThreadState *thr);
+/// We use these methods to ignore Tsan in other threads
+void DisableTsan(ThreadState *thr);
+void EnableTsan(ThreadState *thr);
 /// Used for longjmp in signal handlers
 /// 1. CallUserSignalHandler set and recover state before and after the signal
 ///    handler

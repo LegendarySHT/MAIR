@@ -556,8 +556,12 @@ static void LongJmp(ThreadState *thr, uptr *env) {
       if (sctx) {
         sctx->int_signal_send = buf->int_signal_send;
       }
-
-      if (atomic_load_relaxed(&thr->in_signal_handler) && support_single_thread_optimization(thr)) {
+      // if tsan_ignore_runtime is true, TSan state of the main thread has been
+      // determined by creating main thread. So we do not need to restore it in
+      // signal handler.
+      if (atomic_load_relaxed(&thr->in_signal_handler) &&
+          support_single_thread_optimization(thr) &&
+          !__xsan::flags()->tsan_ignore_runtime) {
         RestoreTsanState(thr);
       }
       atomic_store(&thr->in_blocking_func, buf->in_blocking_func,
