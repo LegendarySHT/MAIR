@@ -258,7 +258,7 @@ static bool XsanInitInternal() {
 
   InstallAtForkHandler();
 
-#if TSAN_CONTAINS_UBSAN
+#if CAN_SANITIZE_UB && !SANITIZER_GO
   __ubsan::InitAsPlugin();
 #endif
 
