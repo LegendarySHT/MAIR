@@ -9,22 +9,14 @@
 #include "sanitizer_common/sanitizer_platform_limits_netbsd.h"
 #include "sanitizer_common/sanitizer_platform_limits_posix.h"
 
-#ifndef XSAN_CONTAINS_UBSAN
-#  if CAN_SANITIZE_UB && !SANITIZER_GO
-#    define XSAN_CONTAINS_UBSAN 1
-#  else
-#    define XSAN_CONTAINS_UBSAN 0
-#  endif
+// We have already defined and assigned values to the XSAN_CONTAINS_XXX macros in
+// CMakeLists.txt, here we are just dealing with special cases.
+#if !CAN_SANITIZE_UB || SANITIZER_GO
+#  define XSAN_CONTAINS_UBSAN 0
 #endif
 
-#ifndef XSAN_CONTAINS_TSAN
-#  if !SANITIZER_GO
-#    define XSAN_CONTAINS_TSAN 1
-#  endif
-#endif
-
-#ifndef XSAN_CONTAINS_ASAN
-#  define XSAN_CONTAINS_ASAN 1
+#if SANITIZER_GO
+#  define XSAN_CONTAINS_TSAN 0
 #endif
 
 #define XSAN_REAL(f) __real_##f

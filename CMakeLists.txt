@@ -7,6 +7,47 @@ enable_language(C CXX ASM)
 # export compile_commands.json for clangd
 set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
+# Decide whether to enable TSan by reading the configuration file. 
+set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/xsan_config.cmake")
+
+if(EXISTS ${CONFIG_FILE_PATH})
+  include(${CONFIG_FILE_PATH})
+else()
+  message(STATUS "Configuration file not found, using default settings.")
+  # If the config file does not exist, define the list here with defaults
+  # This ensures the loop runs even without the config file
+  set(XSAN_SANITIZERS TSAN ASAN UBSAN)
+endif()
+
+# Now, define options and add definitions in a loop for each sanitizer
+# The option() command will respect values loaded from the included config file,
+# or use the default OFF value if not set in the config file.
+foreach(san IN LISTS XSAN_SANITIZERS)
+
+  # Construct the variable name for the option (e.g., XSAN_CONTAINS_TSAN)
+  set(SANITIZER_OPTION_VAR "XSAN_CONTAINS_${san}")
+
+  # Define the CMake option for this sanitizer.
+  # The option() command will use the value from xsan_config.cmake if set,
+  # otherwise it will use the default (OFF) and create a cache variable.
+  if(NOT DEFINED ${SANITIZER_OPTION_VAR})
+    option(${SANITIZER_OPTION_VAR} "Enable ${san} globally in XSan" ON)
+  endif()
+  # Print the status of the option
+  message(STATUS "${SANITIZER_OPTION_VAR} is set to ${${SANITIZER_OPTION_VAR}}")
+
+  # Check if the option is enabled and add the corresponding definition
+  if (${${SANITIZER_OPTION_VAR}}) # Note the double ${} for the condition check
+    set(MACRO_VALUE 1)
+    message(STATUS "Defining preprocessor macro -D${SANITIZER_OPTION_VAR}=1") 
+  else()
+    set(MACRO_VALUE 0)
+    message(STATUS "Defining preprocessor macro -D${SANITIZER_OPTION_VAR}=0")
+  endif()
+
+  add_definitions(-D${SANITIZER_OPTION_VAR}=${MACRO_VALUE})
+endforeach()
+
 
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(FATAL_ERROR "

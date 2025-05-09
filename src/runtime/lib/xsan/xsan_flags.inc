@@ -22,3 +22,4 @@ XSAN_FLAG(bool, tsan_ignore_runtime, false,
 XSAN_FLAG(bool, verify_xsan_link_order, true,
           "Check position of XSan runtime in library list (needs to be disabled"
           " when other library has to be preloaded system-wide)")
+

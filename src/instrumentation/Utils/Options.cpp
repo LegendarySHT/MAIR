@@ -50,7 +50,8 @@ const cl::opt<bool> ClPostOpt(
 
 } // namespace opt
 
-const cl::opt<bool> ClDisableTsan("xsan-disable-tsan", cl::init(false),
+const cl::opt<bool> ClDisableTsan("xsan-disable-tsan",
+                                  cl::init(!XSAN_CONTAINS_TSAN),
                                   cl::desc("Disable TSan instrumentation"),
                                   cl::Hidden);
 

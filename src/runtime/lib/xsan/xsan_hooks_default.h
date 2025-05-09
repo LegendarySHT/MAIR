@@ -201,6 +201,28 @@ struct DefaultHooks {
                                             const void *offset, uptr size,
                                             const char *func_name) {}
   // ---------- End of Generic Hooks in Interceptors ----------------
+
+  // ---------- xsan_initialization-Related Hooks ----------------
+  ALWAYS_INLINE static void InitFromXsanVeryEarly() {}
+  ALWAYS_INLINE static void InitFromXsanLate() {}
+  ALWAYS_INLINE static void InitializePlatformEarly() {}
+  ALWAYS_INLINE static void InitializeInterceptors() {}
+  ALWAYS_INLINE static void InitFromXsan() {}
+  // ---------- End of xsan_initialization-Related Hooks ----------------
+
+  // ---------- xsan_interface-Related Hooks ----------------
+  template <s32 ReadSize>
+  ALWAYS_INLINE static void __xsan_unaligned_read(uptr p) {}
+
+  template <s32 WriteSize>
+  ALWAYS_INLINE static void __xsan_unaligned_write(uptr p) {}
+
+  template <s32 ReadSize>
+  ALWAYS_INLINE static void __xsan_read(uptr p) {}
+
+  template <s32 WriteSize>
+  ALWAYS_INLINE static void __xsan_write(uptr p) {}
+  // ---------- End of xsan_interface-Related Hooks ----------------
 };
 
 }  // namespace __xsan

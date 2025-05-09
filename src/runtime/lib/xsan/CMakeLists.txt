@@ -1,6 +1,7 @@
 ########## Set the sources for the XSan runtime library ##########
 
 # Build for the XSan runtime support library.
+# If TSan is not used, TSan-related files will not be included in the build.
 set(ASAN_SOURCES
   # asan/orig/asan_allocator.cpp
   asan/orig/asan_activation.cpp
@@ -172,6 +173,14 @@ set(XSAN_TSAN_SOURCES
   ${TSAN_ASM_SOURCES}
 )
 
+# we now cannot support disable ASan, we can raise a cmake warning when detecting XSAN_CONTAINS_ASAN is OFF, and then set it to ON.
+if(DEFINED XSAN_CONTAINS_ASAN AND NOT XSAN_CONTAINS_ASAN)
+  message(WARNING
+    "XSAN_CONTAINS_ASAN is OFF, but disabling ASan is currently not supported.\n"
+    "ASan will be forcibly enabled. Support for disabling it may be added in the future."
+  )
+  set(XSAN_CONTAINS_ASAN ON CACHE BOOL "Enable AddressSanitizer (ASan) globally" FORCE)
+endif()
 
 set(XSAN_SOURCES
   xsan_activation.cpp
@@ -187,11 +196,10 @@ set(XSAN_SOURCES
   xsan_posix.cpp
   xsan_rtl.cpp
   xsan_thread.cpp
-  ${XSAN_ASAN_SOURCES}
-  ${XSAN_TSAN_SOURCES}
   )
 
-
+extend_list_if(XSAN_CONTAINS_ASAN XSAN_ASAN_SOURCES XSAN_SOURCES)
+extend_list_if(XSAN_CONTAINS_TSAN XSAN_TSAN_SOURCES XSAN_SOURCES)
 
 if (NOT WIN32 AND NOT APPLE)
   list(APPEND XSAN_SOURCES
@@ -315,19 +323,24 @@ SET(XSAN_HEADERS
   xsan_stack.h
   xsan_stack_interface.h
   xsan_thread.h
-  ${XSAN_ASAN_HEADERS}
-  ${XSAN_TSAN_HEADERS}
   )
 
+extend_list_if(XSAN_CONTAINS_ASAN XSAN_ASAN_HEADERS XSAN_HEADERS)
+extend_list_if(XSAN_CONTAINS_TSAN XSAN_TSAN_HEADERS XSAN_HEADERS)
+
 # include_directories(..)
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/asan
-    ${CMAKE_CURRENT_SOURCE_DIR}/tsan
+set(INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../
-    ${CMAKE_CURRENT_SOURCE_DIR}/asan/orig
-    ${CMAKE_CURRENT_SOURCE_DIR}/tsan/orig
 )
+
+# Conditionally append paths 
+append_list_if(XSAN_CONTAINS_ASAN ${CMAKE_CURRENT_SOURCE_DIR}/asan INCLUDE_DIRS)
+append_list_if(XSAN_CONTAINS_ASAN ${CMAKE_CURRENT_SOURCE_DIR}/asan/orig INCLUDE_DIRS)
+append_list_if(XSAN_CONTAINS_TSAN ${CMAKE_CURRENT_SOURCE_DIR}/tsan INCLUDE_DIRS)
+append_list_if(XSAN_CONTAINS_TSAN ${CMAKE_CURRENT_SOURCE_DIR}/tsan/orig INCLUDE_DIRS)
+
+include_directories(${INCLUDE_DIRS})
 
 ############### Set the CFLAGS for the XSan runtime library ##########
 
@@ -452,7 +465,7 @@ set (WRAPPED_SYMBOLS ${CMAKE_CURRENT_SOURCE_DIR}/xsan_wrapped_symbols.txt.in)
 # TODO: only add this file when ASan is activated.
 append_list_if(True ${CMAKE_CURRENT_SOURCE_DIR}/asan/asan_wrapped_symbols.txt.in WRAPPED_SYMBOLS)
 # TODO: only add this file when TSan is activated.
-append_list_if(True ${CMAKE_CURRENT_SOURCE_DIR}/tsan/tsan_wrapped_symbols.txt.in WRAPPED_SYMBOLS)
+append_list_if(XSAN_CONTAINS_TSAN ${CMAKE_CURRENT_SOURCE_DIR}/tsan/tsan_wrapped_symbols.txt.in WRAPPED_SYMBOLS)
 
 # Located in src/cmake/AddWrapSyms.cmake
 include(AddWrapSyms)
@@ -646,4 +659,14 @@ if(NOT APPLE)
     endif()
 
   endforeach()
+endif()
+
+
+# generate xsan_hooks_todo.h automatically
+set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/src/runtime/lib/xsan/xsan_hooks_todo_generate.cmake")
+
+if(EXISTS ${CONFIG_FILE_PATH})
+  include(${CONFIG_FILE_PATH})
+else()
+  message(STATUS "Configuration file not found, can not auto-generate the xsan_hooks_todo.h file.")
 endif()

@@ -14,12 +14,15 @@
 #include "asan/asan_thread.h"
 #include "asan/orig/asan_internal.h"
 #include "lsan/lsan_common.h"
-#include "tsan/tsan_rtl.h"
 #include "xsan_hooks_dispatch.h"
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
 #include "xsan_thread.h"
+
+#if XSAN_CONTAINS_TSAN
+#include "tsan/tsan_rtl.h"
+#endif
 
 using namespace __xsan;
 // ---------------------- State/Ignoration Management Hooks --------------------
@@ -35,12 +38,13 @@ int get_exit_code(const void *ctx) {
       __lsan::HasReportedLeaks()) {
     return common_flags()->exitcode;
   }
-
+#if XSAN_CONTAINS_TSAN
   auto *tsan_thr =
       ctx == nullptr
           ? __tsan::cur_thread()
           : ((const XsanInterceptorContext *)ctx)->xsan_ctx.tsan.thr_;
   exit_code = __tsan::Finalize(tsan_thr);
+#endif
   return exit_code;
 }
 

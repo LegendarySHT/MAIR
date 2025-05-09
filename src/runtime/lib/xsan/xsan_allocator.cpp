@@ -11,13 +11,14 @@
 #include <sanitizer_common/sanitizer_quarantine.h>
 #include <sanitizer_common/sanitizer_stackdepot.h>
 
+#if XSAN_CONTAINS_TSAN
 namespace __tsan {
 struct ScopedGlobalProcessor {
   ScopedGlobalProcessor();
   ~ScopedGlobalProcessor();
 };
-}
-
+}  // namespace __tsan
+#endif
 namespace __xsan {
 
 void xsan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
@@ -37,7 +38,9 @@ void xsan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type) {
           allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     }
   */
+#if XSAN_CONTAINS_TSAN
   __tsan::ScopedGlobalProcessor sgp;
+#endif
   __asan::asan_free(ptr, stack, alloc_type);
 }
 
@@ -59,7 +62,9 @@ void xsan_delete(void *ptr, uptr size, uptr alignment,
           allocator.Allocate(cache, needed_size, __xsan::kDefaultAlignment);
     }
   */
+#if XSAN_CONTAINS_TSAN
   __tsan::ScopedGlobalProcessor sgp;
+#endif
   __asan::asan_delete(ptr, size, alignment, stack, alloc_type);
 }
 

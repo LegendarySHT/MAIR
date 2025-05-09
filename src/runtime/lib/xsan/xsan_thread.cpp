@@ -156,8 +156,10 @@ ALWAYS_INLINE void XsanThread::ChildThreadStart() {
   // `pthread_getattr_np` -> `realloc` -> `__sanitizer_malloc_hook`, where
   // user may trigger thread-related events. So we need to make TSan start
   // first.
+#if XSAN_CONTAINS_TSAN
   XsanHooksSanitizerImpl<XsanHooksSanitizer::Tsan>::Hooks::ChildThreadStartReal(
       *this, os_id_);
+#endif
   XSAN_HOOKS_EXEC(ChildThreadStart, *this, os_id_);
 }
 
@@ -294,9 +296,11 @@ void XsanTSDDtor(void *tsd) {
 XsanThread *GetCurrentThread() {
   /// As the current tsan_thread_ might change as the fiber switch, we need to
   /// get the current thread from the current fiber.
+#if XSAN_CONTAINS_TSAN
   if (xsan_current_thread) {
     xsan_current_thread->tsan.tsan_thread = __tsan::cur_thread();
   }
+#endif
   return xsan_current_thread;
 }
 

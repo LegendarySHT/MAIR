@@ -152,6 +152,24 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
                                             uptr size, const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
+  // ---------- xsan_initialization-Related Hooks ----------------
+  static void InitFromXsanVeryEarly();
+  static void InitFromXsanLate();
+  static void InitializePlatformEarly();
+  static void InitializeInterceptors();
+  static void InitFromXsan();
+  // ---------- xsan_interface-Related Hooks ----------------
+  template <s32 ReadSize>
+  static void __xsan_unaligned_read(uptr p);
+
+  template <s32 WriteSize>
+  static void __xsan_unaligned_write(uptr p);
+
+  template <s32 ReadSize>
+  static void __xsan_read(uptr p);
+
+  template <s32 WriteSize>
+  static void __xsan_write(uptr p);
 };
 
 }  // namespace __tsan

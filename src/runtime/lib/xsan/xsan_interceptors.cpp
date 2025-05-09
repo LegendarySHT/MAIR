@@ -6,20 +6,23 @@
 #include "asan/orig/asan_report.h"
 #include "asan/orig/asan_suppressions.h"
 #include "lsan/lsan_common.h"
-#include "tsan/tsan_interceptors.h"
-#include "tsan/tsan_rtl.h"
-
-#include "xsan_hooks.h"
-#include "xsan_interceptors_memintrinsics.h"
-#include "xsan_internal.h"
-#include "xsan_stack.h"
-#include "xsan_thread.h"
 
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_libc.h"
+#include "xsan_allocator.h"
+#include "xsan_hooks.h"
+#include "xsan_hooks_todo.h"
+#include "xsan_interceptors_memintrinsics.h"
+#include "xsan_internal.h"
+#include "xsan_stack.h"
+#include "xsan_thread.h"
 
+#if XSAN_CONTAINS_TSAN
+#  include "tsan/tsan_interceptors.h"
+#  include "tsan/tsan_rtl.h"
+#endif
 
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
@@ -76,7 +79,11 @@ namespace __xsan {
 THREADLOCAL uptr xsan_ignore_interceptors = 0;
 
 ScopedIgnoreInterceptors::ScopedIgnoreInterceptors(bool in_report)
-    : tsan_sii(), sit(in_report) {
+#  if XSAN_CONTAINS_TSAN
+    : tsan_sii(),
+      sit(in_report)
+#  endif
+{
   xsan_ignore_interceptors++;
 }
 
@@ -87,16 +94,24 @@ ScopedIgnoreInterceptors::~ScopedIgnoreInterceptors() {
 ScopedIgnoreChecks::ScopedIgnoreChecks() : ScopedIgnoreChecks(GET_CALLER_PC()) {}
 
 ScopedIgnoreChecks::ScopedIgnoreChecks(uptr pc) {
+#  if XSAN_CONTAINS_TSAN
   __tsan::ThreadIgnoreBegin(__tsan::cur_thread(), pc);
+#  endif
 }
 
 ScopedIgnoreChecks::~ScopedIgnoreChecks() {
+#  if XSAN_CONTAINS_TSAN
   __tsan::ThreadIgnoreEnd(__tsan::cur_thread());
+#  endif
 }
 
 ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
                                      const char *func, uptr caller_pc)
-    : tsan_si(xsan_ctx.tsan.thr_, func, caller_pc) {}
+#  if XSAN_CONTAINS_TSAN
+    : tsan_si(xsan_ctx.tsan.thr_, func, caller_pc)
+#  endif
+{
+}
 
 bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
   if (xsan_ignore_interceptors || !XsanInited()) {
@@ -419,6 +434,10 @@ static int munmap_interceptor(void *ctx, Munmap real_munmap, void *addr,
 
 #  include <sanitizer_common/sanitizer_common_interceptors.inc>
 #  if !XSAN_CONTAINS_TSAN
+#    define SIGNAL_INTERCEPTOR_ENTER() \
+      do {                             \
+        __xsan::XsanInitFromRtl();     \
+      } while (false)
 #    include <sanitizer_common/sanitizer_signal_interceptors.inc>
 #  endif
 
@@ -436,7 +455,9 @@ struct ScopedSyscall {
 
   ~ScopedSyscall() {
     /// FIXME: migrate handling of pending signals to XSan
+#  if XSAN_CONTAINS_TSAN
     __tsan::ProcessPendingSignals(thr->tsan.tsan_thread);
+#  endif
   }
 };
 
@@ -445,7 +466,9 @@ struct ScopedSyscall {
                                                         uptr size, bool write) {
   XSAN_SYSCALL();
   __asan::AccessMemoryRange(nullptr, offset, size, write, nullptr);
+#    if XSAN_CONTAINS_TSAN
   __tsan::MemoryAccessRange(__tsan::cur_thread(), pc, offset, size, write);
+#    endif
 }
 
 #  endif
@@ -1392,7 +1415,7 @@ void InitializeXsanInterceptors() {
     Die();
   }
 
-  __tsan::InitializeInterceptors();
+  XSAN_HOOKS_EXEC(InitializeInterceptors);
 
   VReport(1, "AddressSanitizer: libc interceptors initialized\n");
 }

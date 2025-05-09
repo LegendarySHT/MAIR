@@ -41,6 +41,13 @@ typedef __m128i m128;
 # define TSAN_NO_HISTORY 0
 #endif
 
+#ifndef TSAN_CONTAINS_UBSAN
+#  if CAN_SANITIZE_UB && !SANITIZER_GO
+#    define TSAN_CONTAINS_UBSAN 1
+#  else
+#    define TSAN_CONTAINS_UBSAN 0
+#  endif
+#endif
 
 namespace __tsan {
 

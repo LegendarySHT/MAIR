@@ -13,9 +13,9 @@
 
 #include "asan/asan_mapping.h"
 #include "asan_interface_internal.h"
-#include "tsan/orig/tsan_interface.h"
 #include "xsan_interceptors.h"
 #include "xsan_internal.h"
+#include "xsan_hooks_todo.h"
 
 using namespace __xsan;
 
@@ -41,47 +41,32 @@ using namespace __xsan;
 
 extern "C" {
 
-SANITIZER_INTERFACE_ATTRIBUTE
-u16 __sanitizer_unaligned_load16(const uu16 *addr) {
-  CHECK_SMALL_REGION(addr, sizeof(*addr), false);
-  __tsan_unaligned_read2(addr);
-  return *addr;
-}
+#define UNALIGNED_LOAD(size)                                       \
+  SANITIZER_INTERFACE_ATTRIBUTE                                    \
+  u##size __sanitizer_unaligned_load##size(const uu##size *addr) { \
+    CHECK_SMALL_REGION(addr, sizeof(*addr), false);                \
+    XSAN_HOOKS_EXEC(__xsan_unaligned_read<size/8>, (uptr)addr);      \
+    return *addr;                                                  \
+  }
 
-SANITIZER_INTERFACE_ATTRIBUTE
-u32 __sanitizer_unaligned_load32(const uu32 *addr) {
-  CHECK_SMALL_REGION(addr, sizeof(*addr), false);
-  __tsan_unaligned_read4(addr);
-  return *addr;
-}
+UNALIGNED_LOAD(16)
+UNALIGNED_LOAD(32)
+UNALIGNED_LOAD(64)
 
-SANITIZER_INTERFACE_ATTRIBUTE
-u64 __sanitizer_unaligned_load64(const uu64 *addr) {
-  CHECK_SMALL_REGION(addr, sizeof(*addr), false);
-  __tsan_unaligned_read8(addr);
-  return *addr;
-}
+#define UNALIGNED_STORE(size)                                         \
+  SANITIZER_INTERFACE_ATTRIBUTE                                       \
+  void __sanitizer_unaligned_store##size(uu##size *addr, u##size v) { \
+    CHECK_SMALL_REGION(addr, sizeof(*addr), true);                    \
+    *addr = v;                                                        \
+    XSAN_HOOKS_EXEC(__xsan_unaligned_write<size/8>, (uptr)addr);        \
+  }
 
-SANITIZER_INTERFACE_ATTRIBUTE
-void __sanitizer_unaligned_store16(uu16 *addr, u16 v) {
-  CHECK_SMALL_REGION(addr, sizeof(*addr), true);
-  *addr = v;
-  __tsan_unaligned_write2(addr);
-}
+UNALIGNED_STORE(16)
+UNALIGNED_STORE(32)
+UNALIGNED_STORE(64)
 
-SANITIZER_INTERFACE_ATTRIBUTE
-void __sanitizer_unaligned_store32(uu32 *addr, u32 v) {
-  CHECK_SMALL_REGION(addr, sizeof(*addr), true);
-  *addr = v;
-  __tsan_unaligned_write4(addr);
-}
-
-SANITIZER_INTERFACE_ATTRIBUTE
-void __sanitizer_unaligned_store64(uu64 *addr, u64 v) {
-  CHECK_SMALL_REGION(addr, sizeof(*addr), true);
-  *addr = v;
-  __tsan_unaligned_write8(addr);
-}
+#undef UNALIGNED_LOAD
+#undef UNALIGNED_STORE
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void __xsan_read_range(const void *beg, const void *end, uptr pc = 0) {
@@ -106,55 +91,37 @@ void __xsan_write_range(const void *beg, const void *end, uptr pc = 0) {
 }
 
 /// TODO: use SIMD to perform the check.
-#define XSAN_PERIODICAL_READ_CALLBACK(size)                                   \
-  SANITIZER_INTERFACE_ATTRIBUTE                                               \
-  void __xsan_period_read##size(const void *beg, const void *end, s64 step, uptr pc = 0) { \
-    if (UNLIKELY(beg == end))                                                 \
-      return;                                                                 \
-    DCHECK(Abs(step) >= (size) && "Invalid arguments");                       \
-    uptr L = (uptr)beg, R = (uptr)end;                                        \
-    if (UNLIKELY((step) < 0)) {                                               \
-      Swap(L, R);                                                             \
-      L -= step;                                                              \
-      R -= step;                                                              \
-      __xsan_period_read##size((const void *)L, (const void *)R, -(step));    \
-      return;                                                                 \
-    }                                                                         \
-    if (UNLIKELY(step == (size))) {                                           \
-      __xsan_read_range((const void *)L, (const void *)R);                    \
-      return;                                                                 \
-    }                                                                         \
-    DCHECK(beg <= end && "Invalid arguments");                                \
-    for (uptr offset = L; offset < R; offset += step) {                       \
-      __tsan_read##size((void *)offset);                                      \
-      __asan_load##size(offset);                                              \
-    }                                                                         \
-  }
-
-#define XSAN_PERIODICAL_WRITE_CALLBACK(size)                                   \
+#define XSAN_PERIODICAL_OPERATION_CALLBACK_IMPL(operation, size_param)         \
   SANITIZER_INTERFACE_ATTRIBUTE                                                \
-  void __xsan_period_write##size(const void *beg, const void *end, s64 step, uptr pc = 0) { \
+  void __xsan_period_##operation##size_param(const void *beg, const void *end, \
+                                             s64 step, uptr pc = 0) {          \
     if (UNLIKELY(beg == end))                                                  \
       return;                                                                  \
-    DCHECK(Abs(step) >= (size) && "Invalid arguments");                        \
+    DCHECK(Abs(step) >= (size_param) && "Invalid arguments");                  \
     uptr L = (uptr)beg, R = (uptr)end;                                         \
     if (UNLIKELY((step) < 0)) {                                                \
       Swap(L, R);                                                              \
       L -= step;                                                               \
       R -= step;                                                               \
-      __xsan_period_write##size((const void *)L, (const void *)R, -(step));    \
+      __xsan_period_##operation##size_param((const void *)L, (const void *)R,  \
+                                            -(step), pc);                      \
       return;                                                                  \
     }                                                                          \
-    if (UNLIKELY(step == (size))) {                                            \
-      __xsan_write_range((const void *)L, (const void *)R);                    \
+    if (UNLIKELY(step == (size_param))) {                                      \
+      __xsan_##operation##_range((const void *)L, (const void *)R, pc);        \
       return;                                                                  \
     }                                                                          \
-    DCHECK(beg <= end && "Invalid arguments");                                 \
+    DCHECK(L <= R && "Invalid arguments");                                     \
     for (uptr offset = L; offset < R; offset += step) {                        \
-      __tsan_write##size((void *)offset);                                      \
-      __asan_store##size(offset);                                              \
+      XSAN_HOOKS_EXEC(__xsan_##operation<size_param>, offset);                 \
     }                                                                          \
   }
+
+#define XSAN_PERIODICAL_READ_CALLBACK(size) \
+  XSAN_PERIODICAL_OPERATION_CALLBACK_IMPL(read, size)
+
+#define XSAN_PERIODICAL_WRITE_CALLBACK(size) \
+  XSAN_PERIODICAL_OPERATION_CALLBACK_IMPL(write, size)
 
 XSAN_PERIODICAL_READ_CALLBACK(1)
 XSAN_PERIODICAL_READ_CALLBACK(2)
@@ -168,18 +135,16 @@ XSAN_PERIODICAL_WRITE_CALLBACK(8)
 XSAN_PERIODICAL_WRITE_CALLBACK(16)
 
 /// TODO: use a macro to perform the ASan check for better performance?
-#define XSAN_READ(size)                   \
-  SANITIZER_INTERFACE_ATTRIBUTE           \
+#define XSAN_READ(size)                                \
+  SANITIZER_INTERFACE_ATTRIBUTE                        \
   void __xsan_read##size(const void *p, uptr pc = 0) { \
-    __asan_load##size((uptr)p);           \
-    __tsan_read##size((void *)p);         \
+    XSAN_HOOKS_EXEC(__xsan_read<size>, (uptr)p);       \
   }
 
-#define XSAN_WRITE(size)                   \
-  SANITIZER_INTERFACE_ATTRIBUTE            \
+#define XSAN_WRITE(size)                                \
+  SANITIZER_INTERFACE_ATTRIBUTE                         \
   void __xsan_write##size(const void *p, uptr pc = 0) { \
-    __asan_store##size((uptr)p);           \
-    __tsan_write##size((void *)p);         \
+    XSAN_HOOKS_EXEC(__xsan_write<size>, (uptr)p);       \
   }
 
 XSAN_READ(1)

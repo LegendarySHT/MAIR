@@ -1,8 +1,11 @@
 #include "tsan_hooks.h"
 
 #include "tsan_fd.h"
+#include "tsan_hooks.h"
+#include "tsan_init.h"
 #include "tsan_interceptors.h"
 #include "tsan_interceptors_common.inc"
+#include "tsan_interface.h"
 #include "tsan_rtl.h"
 #include "xsan_internal.h"
 #include "xsan_thread.h"
@@ -214,5 +217,52 @@ void TsanHooks::AfterMmap(const Context &ctx, void *res, uptr size, int fd) {
 void TsanHooks::BeforeMunmap(const Context &ctx, void *addr, uptr size) {
   UnmapShadow(ctx.thr_, (uptr)addr, size);
 }
+
+// ---------- xsan_initialization-Related Hooks ----------------
+void TsanHooks::InitFromXsanVeryEarly() { TsanInitFromXsanVeryEarly(); }
+
+void TsanHooks::InitFromXsanLate() {
+  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
+  TsanInitFromXsanLate();
+}
+
+void TsanHooks::InitializePlatformEarly() { __tsan::InitializePlatformEarly(); }
+void TsanHooks::InitializeInterceptors() { __tsan::InitializeInterceptors(); }
+
+void TsanHooks::InitFromXsan() {
+  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
+  TsanInitFromXsan();
+}
+
+// ---------- xsan_interface-Related Hooks ----------------
+#define TSAN_INTERFACE_HOOK(operation_type, size)         \
+  template <>                                             \
+  void TsanHooks::__xsan_##operation_type<size>(uptr p) { \
+    __tsan_##operation_type##size((void *)p);             \
+  }
+
+// Define unaligned read hooks
+TSAN_INTERFACE_HOOK(unaligned_read, 2)
+TSAN_INTERFACE_HOOK(unaligned_read, 4)
+TSAN_INTERFACE_HOOK(unaligned_read, 8)
+
+// Define unaligned write hooks
+TSAN_INTERFACE_HOOK(unaligned_write, 2)
+TSAN_INTERFACE_HOOK(unaligned_write, 4)
+TSAN_INTERFACE_HOOK(unaligned_write, 8)
+
+// Define aligned read hooks
+TSAN_INTERFACE_HOOK(read, 1)
+TSAN_INTERFACE_HOOK(read, 2)
+TSAN_INTERFACE_HOOK(read, 4)
+TSAN_INTERFACE_HOOK(read, 8)
+TSAN_INTERFACE_HOOK(read, 16)
+
+// Define aligned write hooks
+TSAN_INTERFACE_HOOK(write, 1)
+TSAN_INTERFACE_HOOK(write, 2)
+TSAN_INTERFACE_HOOK(write, 4)
+TSAN_INTERFACE_HOOK(write, 8)
+TSAN_INTERFACE_HOOK(write, 16)
 
 }  // namespace __tsan

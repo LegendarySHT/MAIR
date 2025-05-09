@@ -113,6 +113,16 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
                                             uptr size, const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
+  // ---------- xsan_initialization-Related Hooks ----------------
+  static void InitFromXsanLate();
+  static void InitFromXsan();
+
+  // ---------- xsan_interface-Related Hooks ----------------
+  template <s32 ReadSize>
+  static void __xsan_read(uptr p);
+
+  template <s32 WriteSize>
+  static void __xsan_write(uptr p);
 };
 
 }  // namespace __asan

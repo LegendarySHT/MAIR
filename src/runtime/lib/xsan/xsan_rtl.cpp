@@ -7,14 +7,19 @@
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_mutex.h"
-#include "tsan/tsan_init.h"
 #include "xsan_activation.h"
+#include "xsan_hooks.h"
 #include "xsan_hooks.h"
 #include "xsan_interceptors.h"
 #include "xsan_interface_internal.h"
 #include "xsan_internal.h"
 #include "xsan_platform.h"
 #include "xsan_stack.h"
+#include "xsan_allocator.h"
+
+#if XSAN_CONTAINS_TSAN
+#  include "tsan/tsan_init.h"
+#endif
 
 #define INIT_ONCE           \
   static bool done = false; \
@@ -147,26 +152,19 @@ void CheckAndProtect() {
 /// Used to initialize state of sub-santizers, e.g., Context of TSan.
 static void XsanInitVeryEarly() {
   INIT_ONCE
-  __tsan::TsanInitFromXsanVeryEarly();
+  XSAN_HOOKS_EXEC(InitFromXsanVeryEarly);
 }
 
 /// After flags initialization, before any other initialization.
 static void XsanInitEarly() {
   INIT_ONCE
-  __tsan::InitializePlatformEarly();
+  XSAN_HOOKS_EXEC(InitializePlatformEarly);
 }
 
 /// Almost after all is done, e.g., flags, memory, allocator, threads, etc.
 static void XsanInitLate() {
   INIT_ONCE
-  {
-    ScopedSanitizerToolName tool_name("AddressSanitizer");
-    __asan::AsanInitFromXsanLate();
-  }
-  {
-    ScopedSanitizerToolName tool_name("ThreadSanitizer");
-    __tsan::TsanInitFromXsanLate();
-  }
+  XSAN_HOOKS_EXEC(InitFromXsanLate);
 }
 
 static bool XsanInitInternal() {
@@ -223,16 +221,8 @@ static bool XsanInitInternal() {
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   CheckAndProtect();
-  {
-    ScopedSanitizerToolName tool_name("AddressSanitizer");
-    __asan::AsanInitFromXsan();
-  }
-  {
-    ScopedSanitizerToolName tool_name("ThreadSanitizer");
-    __tsan::TsanInitFromXsan();
-  }
 
- 
+  XSAN_HOOKS_EXEC(InitFromXsan);
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);

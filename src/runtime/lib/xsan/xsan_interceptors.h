@@ -1,11 +1,14 @@
 #pragma once
 
+#if XSAN_CONTAINS_TSAN
+#  include "tsan/tsan_interceptors.h"
+#  include "tsan/tsan_rtl_extra.h"
+#endif
+
 #include <sanitizer_common/sanitizer_platform.h>
 #include <sanitizer_common/sanitizer_platform_interceptors.h>
 
 #include "interception/interception.h"
-#include "tsan/tsan_interceptors.h"
-#include "tsan/tsan_rtl_extra.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
 namespace __xsan {
@@ -171,8 +174,10 @@ class ScopedIgnoreInterceptors {
   ~ScopedIgnoreInterceptors();
 
  private:
+#if XSAN_CONTAINS_TSAN
   __tsan::ScopedIgnoreInterceptors tsan_sii;
   __tsan::ScopedIgnoreTsan sit;
+#endif
 };
 
 /// Ignore checks in the scope
@@ -191,14 +196,15 @@ class ScopedInterceptor {
  public:
   ScopedInterceptor(const XsanContext &xsan_ctx, const char *func, uptr caller_pc);
   ~ScopedInterceptor() {}
-  void DisableIgnores() {
-    tsan_si.DisableIgnores();
-  }
-  void EnableIgnores() {
-    tsan_si.EnableIgnores();
-  }
+#if XSAN_CONTAINS_TSAN
+  void DisableIgnores() { tsan_si.DisableIgnores(); }
+  void EnableIgnores() { tsan_si.EnableIgnores(); }
+#endif
+
  private:
+#if XSAN_CONTAINS_TSAN
   __tsan::ScopedInterceptor tsan_si;
+#endif
 };
 
 bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
