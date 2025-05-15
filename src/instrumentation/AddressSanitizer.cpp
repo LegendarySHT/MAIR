@@ -92,7 +92,7 @@
 #include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
-#include "Utils/InstUtils.h"
+#include "Utils/ValueUtils.h"
 #include "Utils/Options.h"
 
 using namespace llvm;

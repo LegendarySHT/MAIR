@@ -957,12 +957,12 @@ LoopMopInstrumenter::LoopMopInstrumenter(Function &F,
 
   AttributeList Attr;
   Attr = Attr.addFnAttribute(Ctx, Attribute::NoUnwind);
-  XsanRangeRead =
-      M.getOrInsertFunction("__xsan_read_range", Attr, IRB.getVoidTy(),
-                            IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
-  XsanRangeWrite =
-      M.getOrInsertFunction("__xsan_write_range", Attr, IRB.getVoidTy(),
-                            IRB.getInt8PtrTy(), IRB.getInt8PtrTy());
+  XsanRangeRead = M.getOrInsertFunction("__xsan_read_range", Attr,
+                                        IRB.getVoidTy(), IRB.getInt8PtrTy(),
+                                        IRB.getInt8PtrTy(), IRB.getInt64Ty());
+  XsanRangeWrite = M.getOrInsertFunction("__xsan_write_range", Attr,
+                                         IRB.getVoidTy(), IRB.getInt8PtrTy(),
+                                         IRB.getInt8PtrTy(), IRB.getInt64Ty());
   for (size_t i = 0; i < kNumberOfAccessSizes; i++) {
     const unsigned ByteSize = 1U << i;
     std::string ByteSizeStr = utostr(ByteSize);
@@ -1375,6 +1375,11 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
       continue;
     }
 
+    // instrument the Mop
+    Constant *BlockAddr =
+        getBlockAddressOfInstruction(*Mop.Mop, &DT, &LI, &MSSAU);
+    Value *PcValue = IRB.CreatePtrToInt(BlockAddr, IRB.getInt64Ty());
+
     if (IsRangeAccess) {
       // void __xsan_read_range(const void *beg, const void *end) {
       // void __xsan_write_range(const void *beg, const void *end) {
@@ -1532,7 +1537,14 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 
     size_t Idx = countTrailingZeros(MopSize);
 
+
     InstrumentationIRBuilder IRB(InsertPt);
+
+    // instrument the Mop
+    Constant *BlockAddr =
+        getBlockAddressOfInstruction(*Mop.Mop, &DT, &LI, &MSSAU);
+    Value *PcValue = IRB.CreatePtrToInt(BlockAddr, IRB.getInt64Ty());
+
     // __xsan_readX(const void *beg)
     // __xsan_writeX(const void *beg)
     IRB.CreateCall(IsWrite ? XsanWrite[Idx] : XsanRead[Idx], {Addr});

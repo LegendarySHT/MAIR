@@ -55,7 +55,7 @@
 #include "Analysis/TsanMopAnalysis.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
-#include "Utils/InstUtils.h"
+#include "Utils/ValueUtils.h"
 #include "Utils/Options.h"
 
 using namespace llvm;

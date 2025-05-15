@@ -19,7 +19,7 @@ set(XSAN_PASS_COMMON
   Analysis/ActiveMopAnalysis.cpp
   Analysis/MopRecurrenceReducer.cpp
   Analysis/TsanMopAnalysis.cpp
-  Utils/InstUtils.cpp
+  Utils/ValueUtils.cpp
   Utils/Logging.cpp
   Utils/Options.cpp
 )

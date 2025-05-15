@@ -1,0 +1,196 @@
+#include "ValueUtils.h"
+
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/CaptureTracking.h"
+#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+
+using namespace __xsan;
+using namespace llvm;
+
+namespace __xsan {
+constexpr char kDelegateMDKind[] = "xsan.delegate";
+
+static unsigned DelegateMDKindID = 0;
+
+void markAsDelegatedToXsan(Instruction &I) {
+  if (isDelegatedToXsan(I))
+    return;
+  auto &Ctx = I.getContext();
+  if (!DelegateMDKindID)
+    DelegateMDKindID = Ctx.getMDKindID(kDelegateMDKind);
+  MDNode *N = MDNode::get(Ctx, None);
+  I.setMetadata(DelegateMDKindID, N);
+}
+
+bool isDelegatedToXsan(const Instruction &I) {
+  if (!DelegateMDKindID)
+    return false;
+  return I.hasMetadata(DelegateMDKindID);
+}
+
+bool shouldSkip(const Instruction &I) {
+  return isNoSanitize(I) || isDelegatedToXsan(I);
+}
+
+const llvm::Value *extractAddrFromLoadStoreInst(const llvm::Instruction &I) {
+  if (auto *LI = dyn_cast<LoadInst>(&I)) {
+    return LI->getPointerOperand();
+  }
+  if (auto *SI = dyn_cast<StoreInst>(&I)) {
+    return SI->getPointerOperand();
+  }
+  return nullptr;
+}
+
+const Value *getUnderlyingObjectAggressive(const Value *V) {
+  const unsigned MaxVisited = 8;
+
+  SmallPtrSet<const Value *, 8> Visited;
+  SmallVector<const Value *, 8> Worklist;
+  Worklist.push_back(V);
+  const Value *Object = nullptr;
+  // Used as fallback if we can't find a common underlying object through
+  // recursion.
+  bool First = true;
+  const Value *FirstObject = getUnderlyingObject(V);
+  do {
+    const Value *P = Worklist.pop_back_val();
+    P = First ? FirstObject : getUnderlyingObject(P);
+    First = false;
+
+    if (!Visited.insert(P).second)
+      continue;
+
+    if (Visited.size() == MaxVisited)
+      return FirstObject;
+
+    if (auto *SI = dyn_cast<SelectInst>(P)) {
+      Worklist.push_back(SI->getTrueValue());
+      Worklist.push_back(SI->getFalseValue());
+      continue;
+    }
+
+    if (auto *PN = dyn_cast<PHINode>(P)) {
+      append_range(Worklist, PN->incoming_values());
+      continue;
+    }
+
+    if (!Object)
+      Object = P;
+    else if (Object != P)
+      return FirstObject;
+  } while (!Worklist.empty());
+
+  return Object ? Object : FirstObject;
+}
+
+static bool isVtableAccess(const Instruction &I) {
+  if (MDNode *Tag = I.getMetadata(LLVMContext::MD_tbaa))
+    return Tag->isTBAAVtableAccess();
+  return false;
+}
+
+static bool isInReadOnlySection(const GlobalVariable &GV) {
+  StringRef Section = GV.getSection();
+  return Section.equals(".rodata") || Section.equals(".text") /* 其他只读段 */;
+}
+
+/// TODO: ensure this point: any direct/indirect reference to vtable is
+/// unwritable.
+// In most of the implementations of vtable, any direct/indirect reference of
+// vtable is unwritable. However, the standard indeed permits a vtable pointer 
+// pointing to a writable region. Hence, this optimization is aggressive and depends
+// on the implementation of vtable.
+//
+// The content of vtable is unwritable, including
+//  - (direct) vptr->func_ptr
+//  - (direct) vptr->type_info
+//  - (indirect) vptr->type_info->name
+//  - (indirect) vptr->type_info->name[0]
+static bool belongToVtableAggresive(const Value *V) {
+  static constexpr uint8_t MaxVtableDepth = 3;
+  for (uint8_t Depth = 0; V && Depth < MaxVtableDepth; ++Depth) {
+    V = __xsan::getUnderlyingObjectAggressive(V);
+    if (const LoadInst *L = dyn_cast<LoadInst>(V)) {
+      if (isVtableAccess(*L)) {
+        return true;
+      }
+      V = L->getPointerOperand();
+    } else {
+      return false;
+    }
+  }
+  return false;
+}
+
+bool addrPointsToConstantDataAggressive(const Value *Addr) {
+  /// TODO: use more aggressive one, like `getUnderlyingObjectAggressive` in
+  ///       LLVM 20
+  Addr = __xsan::getUnderlyingObjectAggressive(Addr);
+  // Check globals
+  if (const GlobalVariable *GV = dyn_cast<GlobalVariable>(Addr)) {
+    if (GV->isConstant() || isInReadOnlySection(*GV)) {
+      // Reads from constant globals can not race with any writes.
+      return true;
+    }
+  }
+  // Check loads
+  else if (const LoadInst *L = dyn_cast<LoadInst>(Addr)) {
+    if (belongToVtableAggresive(L)) {
+      // Reads from a vtable pointer can not race with any writes.
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool isByValArgument(const Value *V) {
+  if (const Argument *A = dyn_cast<Argument>(V))
+    return A->hasByValAttr();
+  return false;
+}
+
+/// `alloc` is handled in other place, this function is for other cases.
+/// 1. `byval` pointer argument
+/// 2. `noalias` call return value
+/// 3. `alloc` stack object
+/// Note that `noalias` argument should have been a function local, but because
+/// it belongs to capture by return in the context of TSan, it is not included.
+bool isUncapturedFuncLocal(const Value &Addr) {
+  const Value *Underlying = getUnderlyingObjectAggressive(&Addr);
+  bool IsFuncLocal = isa<AllocaInst>(Underlying) || isNoAliasCall(Underlying) ||
+                     isByValArgument(Underlying);
+  if (!IsFuncLocal)
+    return false;
+  return !PointerMayBeCaptured(Underlying, true, true);
+}
+
+// Check whether the Instruction is on the top of the BB (ignore debug/phi
+// instruction). If so, just return its parent BB address. Otherwise, split the
+// BB on the location of this instruction, and return the new split BB address.
+// Using llvm::SplitBlock to hot-updates some analysis results.
+BlockAddress *getBlockAddressOfInstruction(Instruction &I, DominatorTree *DT,
+                                           LoopInfo *LI,
+                                           MemorySSAUpdater *MSSAU) {
+  BasicBlock *OriginalBb = I.getParent();
+
+  auto *FirstRealInstruction = OriginalBb->getFirstNonPHIOrDbgOrLifetime();
+
+  // If the current instruction is the first valid instruction
+  if (FirstRealInstruction == &I) {
+    return BlockAddress::get(OriginalBb->getParent(), OriginalBb);
+  }
+
+  // or split the block
+  BasicBlock *NewBb =
+      llvm::SplitBlock(OriginalBb, &I, DT, LI, MSSAU, "mop.address", false);
+  return BlockAddress::get(NewBb->getParent(), NewBb);
+}
+
+} // namespace __xsan
