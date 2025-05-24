@@ -315,7 +315,7 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
     OPT_GET_VAL_AND_THEN(cur, "sanitize", {
       enum SanitizerType sanTy = SanNone;
       // split value by ',' : -fsanitize=address,undefined
-      char *val_str = ck_strdup(val);
+      char *val_str = ck_strdup((void *)val);
       char *val_ptr = val_str;
       while (1) {
         char *comma = strchr(val_ptr, ',');
@@ -578,6 +578,7 @@ static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
   case XSan:
     return handle_asan_options(arg, is_mllvm_arg, is_neg) |
            handle_tsan_options(arg, is_mllvm_arg, is_neg) | handle_ubsan_options(arg);
+  case MSan:
   case SanNone:
     break;
   }
@@ -600,7 +601,7 @@ static u8 whether_to_support_dso_injection(const char *arg) {
 
   // Check the return status
   if (WIFEXITED(status)) {
-    ck_free(command);
+    ck_free((void *)command);
     int exit_code = WEXITSTATUS(status);
     return exit_code == 0;
   } else {
@@ -678,12 +679,14 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
       const char *ld_preload = getenv("LD_PRELOAD");
       const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
       const char *new_ld_preload =
-          (ld_preload != NULL) ? alloc_printf("%s:%s", ld_preload, dso_path)
-                               : dso_path;
+          (ld_preload != NULL)
+              ? (char *)alloc_printf("%s:%s", ld_preload, dso_path)
+              : dso_path;
       setenv("LD_PRELOAD", new_ld_preload, 1);
       setenv("XSAN_BASE_DIR", obj_path, 1);
     }
     break;
+  case MSan:
   case SanNone:
     return;
   }
@@ -769,6 +772,7 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
     cc_params[cc_par_cnt++] = "-D__SANITIZE_ADDRESS__";
     break;
   case UBSan:
+  case MSan:
   case SanNone:
     return;
   }
@@ -846,6 +850,7 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
   case XSan:
     san = "xsan";
     break;
+  case MSan:  
   case SanNone:
     return;
   }
@@ -952,7 +957,7 @@ static void sync_hook_id(char *dst, char *src) {
 }
 
 static u8 handle_x_option(const u8* const* arg) {
-  u8 *cur = arg[0];
+  const u8 *cur = arg[0];
   // Check prefix "-x"
   if (cur[0] != '-' || cur[1] != 'x') {
     return 0;
@@ -1033,7 +1038,7 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strcmp(cur, "-m32")) bit_mode = 32;
     else if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
     else if (!strcmp(cur, "-m64")) bit_mode = 64;
-    else if (handle_x_option(&argv[i])) x_set = 1;
+    else if (handle_x_option((const u8 **)&argv[i])) x_set = 1;
     else if (!strcmp(cur, "-fsanitize=address") ||
              !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
     else if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;

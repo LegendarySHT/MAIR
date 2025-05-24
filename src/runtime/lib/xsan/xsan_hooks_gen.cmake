@@ -120,15 +120,15 @@ extend_string_if(TRUE "${XSAN_HOOKS_EXEC_REDUCE_MACRO_DEFINITION}" XSAN_HOOKS_CO
 # generate XSAN_HOOKS_DEFINE_VAR macro
 set(CURRENT_XSAN_HOOKS_DEFINE_VAR_MACRO_OUTPUT [=[
 // Placeholder has no effect, it is only used to facilitate the writing of macros.
-#define XSAN_HOOKS_DEFINE_VAR(VAR) \\
-  struct {                         \\
-  } placeholder;                   ]=])
+#define XSAN_HOOKS_DEFINE_VAR(VAR)       \\
+  struct {                               \\
+  } placeholder __attribute__((unused)); ]=])
 set(SANITIZER_LIST_FOR_DEFINE_VAR ${XSAN_DELEGATED_SANITIZERS})
 foreach(SanitizerName ${SANITIZER_LIST_FOR_DEFINE_VAR})
     string(TOUPPER ${SanitizerName} SanitizerNameUpper)
     extend_string_if(TRUE [=[\\\\\
  ]=] CURRENT_XSAN_HOOKS_DEFINE_VAR_MACRO_OUTPUT)    
-    extend_string_if(TRUE [=[ XSAN_HOOKS_DEFINE_VAR_${SanitizerNameUpper}(VAR)  ]=] CURRENT_XSAN_HOOKS_DEFINE_VAR_MACRO_OUTPUT)
+    extend_string_if(TRUE [=[ XSAN_HOOKS_DEFINE_VAR_${SanitizerNameUpper}(VAR)        ]=] CURRENT_XSAN_HOOKS_DEFINE_VAR_MACRO_OUTPUT)
 endforeach()
 extend_string_if(TRUE [=[
 

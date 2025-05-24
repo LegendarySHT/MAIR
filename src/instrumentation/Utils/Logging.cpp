@@ -108,6 +108,8 @@ void BufferedLogger::displayLogs(StringRef Title) {
       case LogDataType::TwoInt:
         printTwoIntLog(Data.Value.TwoInt);
         break;
+      default:
+        break;
       }
     }
   }
