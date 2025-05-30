@@ -1,6 +1,6 @@
 #pragma once
 
-#include "xsan_hooks_todo.h"
+#include "xsan_hooks_gen.h"
 
 static inline bool Or(bool a, bool b) { return a || b; }
 

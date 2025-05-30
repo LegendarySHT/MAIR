@@ -13,7 +13,6 @@
 #include "sanitizer_common/sanitizer_libc.h"
 #include "xsan_allocator.h"
 #include "xsan_hooks.h"
-#include "xsan_hooks_todo.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
 #include "xsan_stack.h"

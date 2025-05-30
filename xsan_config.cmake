@@ -19,6 +19,6 @@ option(XSAN_CONTAINS_ASAN "Enable AddressSanitizer (ASan) globally" ON)
 # This option is used to enable or disable UndefinedBehaviorSanitizer (UBSan) globally.
 option(XSAN_CONTAINS_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan) globally" ON)
 
-# Because we use this to generate the xsan_hooks_todo.h,in the xsan_hooks_todo.h,
+# Because we use this to generate the xsan_hooks_gen.h,in the xsan_hooks_gen.h,
 # We use Xxxx such as Asan, Tsan to represent the enum that contains the hooks for the macro
 set(XSAN_DELEGATED_SANITIZERS Asan Tsan)

@@ -314,7 +314,7 @@ SET(XSAN_HEADERS
   xsan_hooks.h
   xsan_hooks_default.h
   xsan_hooks_dispatch.h
-  xsan_hooks_todo.h
+  xsan_hooks_gen.h
   xsan_hooks_types.h
   xsan_interceptors.h
   xsan_interceptors_memintrinsics.h
@@ -662,11 +662,11 @@ if(NOT APPLE)
 endif()
 
 
-# generate xsan_hooks_todo.h automatically
-set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/src/runtime/lib/xsan/xsan_hooks_todo_generate.cmake")
+# generate xsan_hooks_gen.h automatically
+set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/src/runtime/lib/xsan/xsan_hooks_gen.cmake")
 
 if(EXISTS ${CONFIG_FILE_PATH})
   include(${CONFIG_FILE_PATH})
 else()
-  message(STATUS "Configuration file not found, can not auto-generate the xsan_hooks_todo.h file.")
+  message(STATUS "Configuration file not found, can not auto-generate the xsan_hooks_gen.h file.")
 endif()
