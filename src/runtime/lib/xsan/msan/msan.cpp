@@ -157,19 +157,19 @@ static void RegisterMsanFlags(FlagParser *parser, Flags *f) {
                           "deprecated, use halt_on_error");
 }
 
-static void InitializeFlags() {
-  SetCommonFlagsDefaults();
-  {
-    CommonFlags cf;
-    cf.CopyFrom(*common_flags());
-    cf.external_symbolizer_path = GetEnv("MSAN_SYMBOLIZER_PATH");
-    cf.malloc_context_size = 20;
-    cf.handle_ioctl = true;
-    // FIXME: test and enable.
-    cf.check_printf = false;
-    cf.intercept_tls_get_addr = true;
-    OverrideCommonFlags(cf);
-  }
+void InitializeFlags() {
+  // SetCommonFlagsDefaults();
+  // {
+  //   CommonFlags cf;
+  //   cf.CopyFrom(*common_flags());
+  //   cf.external_symbolizer_path = GetEnv("MSAN_SYMBOLIZER_PATH");
+  //   cf.malloc_context_size = 20;
+  //   cf.handle_ioctl = true;
+  //   // FIXME: test and enable.
+  //   cf.check_printf = false;
+  //   cf.intercept_tls_get_addr = true;
+  //   OverrideCommonFlags(cf);
+  // }
 
   Flags *f = flags();
   f->SetDefaults();
@@ -178,28 +178,28 @@ static void InitializeFlags() {
   RegisterMsanFlags(&parser, f);
   RegisterCommonFlags(&parser);
 
-#if MSAN_CONTAINS_UBSAN
-  __ubsan::Flags *uf = __ubsan::flags();
-  uf->SetDefaults();
+// #if MSAN_CONTAINS_UBSAN
+//   __ubsan::Flags *uf = __ubsan::flags();
+//   uf->SetDefaults();
 
-  FlagParser ubsan_parser;
-  __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
-  RegisterCommonFlags(&ubsan_parser);
-#endif
+//   FlagParser ubsan_parser;
+//   __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
+//   RegisterCommonFlags(&ubsan_parser);
+// #endif
 
   // Override from user-specified string.
   parser.ParseString(__msan_default_options());
-#if MSAN_CONTAINS_UBSAN
-  const char *ubsan_default_options = __ubsan_default_options();
-  ubsan_parser.ParseString(ubsan_default_options);
-#endif
+// #if MSAN_CONTAINS_UBSAN
+//   const char *ubsan_default_options = __ubsan_default_options();
+//   ubsan_parser.ParseString(ubsan_default_options);
+// #endif
 
   parser.ParseStringFromEnv("MSAN_OPTIONS");
-#if MSAN_CONTAINS_UBSAN
-  ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
-#endif
+// #if MSAN_CONTAINS_UBSAN
+//   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
+// #endif
 
-  InitializeCommonFlags();
+  // InitializeCommonFlags();
 
   if (Verbosity()) ReportUnrecognizedFlags();
 
@@ -430,89 +430,89 @@ void __msan_warning_with_origin_noreturn(u32 origin) {
   Die();
 }
 
-static void OnStackUnwind(const SignalContext &sig, const void *,
-                          BufferedStackTrace *stack) {
-  stack->Unwind(StackTrace::GetNextInstructionPc(sig.pc), sig.bp, sig.context,
-                common_flags()->fast_unwind_on_fatal);
-}
+// static void OnStackUnwind(const SignalContext &sig, const void *,
+//                           BufferedStackTrace *stack) {
+//   stack->Unwind(StackTrace::GetNextInstructionPc(sig.pc), sig.bp, sig.context,
+//                 common_flags()->fast_unwind_on_fatal);
+// }
 
-static void MsanOnDeadlySignal(int signo, void *siginfo, void *context) {
-  HandleDeadlySignal(siginfo, context, GetTid(), &OnStackUnwind, nullptr);
-}
+// static void MsanOnDeadlySignal(int signo, void *siginfo, void *context) {
+//   HandleDeadlySignal(siginfo, context, GetTid(), &OnStackUnwind, nullptr);
+// }
 
-static void CheckUnwind() {
-  GET_FATAL_STACK_TRACE_PC_BP(StackTrace::GetCurrentPc(), GET_CURRENT_FRAME());
-  stack.Print();
-}
+// static void CheckUnwind() {
+//   GET_FATAL_STACK_TRACE_PC_BP(StackTrace::GetCurrentPc(), GET_CURRENT_FRAME());
+//   stack.Print();
+// }
 
-void __msan_init() {
-  CHECK(!msan_init_is_running);
-  if (msan_inited) return;
-  msan_init_is_running = 1;
-  SanitizerToolName = "MemorySanitizer";
+// void __msan_init() {
+//   CHECK(!msan_init_is_running);
+//   if (msan_inited) return;
+//   msan_init_is_running = 1;
+//   SanitizerToolName = "MemorySanitizer";
 
-  AvoidCVE_2016_2143();
+//   AvoidCVE_2016_2143();
 
-  CacheBinaryName();
-  InitializeFlags();
+//   CacheBinaryName();
+//   InitializeFlags();
 
-  // Install tool-specific callbacks in sanitizer_common.
-  SetCheckUnwindCallback(CheckUnwind);
+//   // Install tool-specific callbacks in sanitizer_common.
+//   SetCheckUnwindCallback(CheckUnwind);
 
-  __sanitizer_set_report_path(common_flags()->log_path);
+//   __sanitizer_set_report_path(common_flags()->log_path);
 
-  InitializePlatformEarly();
+//   InitializePlatformEarly();
 
-  InitializeInterceptors();
-  InstallAtForkHandler();
-  CheckASLR();
-  InstallDeadlySignalHandlers(MsanOnDeadlySignal);
-  InstallAtExitHandler(); // Needs __cxa_atexit interceptor.
+//   InitializeInterceptors();
+//   InstallAtForkHandler();
+//   CheckASLR();
+//   InstallDeadlySignalHandlers(MsanOnDeadlySignal);
+//   InstallAtExitHandler(); // Needs __cxa_atexit interceptor.
 
-  DisableCoreDumperIfNecessary();
-  if (StackSizeIsUnlimited()) {
-    VPrintf(1, "Unlimited stack, doing reexec\n");
-    // A reasonably large stack size. It is bigger than the usual 8Mb, because,
-    // well, the program could have been run with unlimited stack for a reason.
-    SetStackSizeLimitInBytes(32 * 1024 * 1024);
-    ReExec();
-  }
+//   DisableCoreDumperIfNecessary();
+//   if (StackSizeIsUnlimited()) {
+//     VPrintf(1, "Unlimited stack, doing reexec\n");
+//     // A reasonably large stack size. It is bigger than the usual 8Mb, because,
+//     // well, the program could have been run with unlimited stack for a reason.
+//     SetStackSizeLimitInBytes(32 * 1024 * 1024);
+//     ReExec();
+//   }
 
-  __msan_clear_on_return();
-  if (__msan_get_track_origins())
-    VPrintf(1, "msan_track_origins\n");
-  if (!InitShadowWithReExec(__msan_get_track_origins())) {
-    Printf("FATAL: MemorySanitizer can not mmap the shadow memory.\n");
-    Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
-    Printf("FATAL: Disabling ASLR is known to cause this error.\n");
-    Printf("FATAL: If running under GDB, try "
-           "'set disable-randomization off'.\n");
-    DumpProcessMap();
-    Die();
-  }
+//   __msan_clear_on_return();
+//   if (__msan_get_track_origins())
+//     VPrintf(1, "msan_track_origins\n");
+//   if (!InitShadowWithReExec(__msan_get_track_origins())) {
+//     Printf("FATAL: MemorySanitizer can not mmap the shadow memory.\n");
+//     Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
+//     Printf("FATAL: Disabling ASLR is known to cause this error.\n");
+//     Printf("FATAL: If running under GDB, try "
+//            "'set disable-randomization off'.\n");
+//     DumpProcessMap();
+//     Die();
+//   }
 
-  Symbolizer::GetOrInit()->AddHooks(EnterSymbolizerOrUnwider,
-                                    ExitSymbolizerOrUnwider);
+//   Symbolizer::GetOrInit()->AddHooks(EnterSymbolizerOrUnwider,
+//                                     ExitSymbolizerOrUnwider);
 
-  InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
+//   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
-  MsanTSDInit(MsanTSDDtor);
+//   MsanTSDInit(MsanTSDDtor);
 
-  MsanAllocatorInit();
+//   MsanAllocatorInit();
 
-  MsanThread *main_thread = MsanThread::Create(nullptr, nullptr);
-  SetCurrentThread(main_thread);
-  main_thread->Init();
+//   MsanThread *main_thread = MsanThread::Create(nullptr, nullptr);
+//   SetCurrentThread(main_thread);
+//   main_thread->Init();
 
-#if MSAN_CONTAINS_UBSAN
-  __ubsan::InitAsPlugin();
-#endif
+// #if MSAN_CONTAINS_UBSAN
+//   __ubsan::InitAsPlugin();
+// #endif
 
-  VPrintf(1, "MemorySanitizer init done\n");
+//   VPrintf(1, "MemorySanitizer init done\n");
 
-  msan_init_is_running = 0;
-  msan_inited = 1;
-}
+//   msan_init_is_running = 0;
+//   msan_inited = 1;
+// }
 
 void __msan_set_keep_going(int keep_going) {
   flags()->halt_on_error = !keep_going;
@@ -653,6 +653,55 @@ u32 __msan_get_umr_origin() {
   return __msan_origin_tls;
 }
 
+// u16 __sanitizer_unaligned_load16(const uu16 *p) {
+//   internal_memcpy(&__msan_retval_tls[0], (void *)MEM_TO_SHADOW((uptr)p),
+//                   sizeof(uu16));
+//   if (__msan_get_track_origins())
+//     __msan_retval_origin_tls = GetOriginIfPoisoned((uptr)p, sizeof(*p));
+//   return *p;
+// }
+// u32 __sanitizer_unaligned_load32(const uu32 *p) {
+//   internal_memcpy(&__msan_retval_tls[0], (void *)MEM_TO_SHADOW((uptr)p),
+//                   sizeof(uu32));
+//   if (__msan_get_track_origins())
+//     __msan_retval_origin_tls = GetOriginIfPoisoned((uptr)p, sizeof(*p));
+//   return *p;
+// }
+// u64 __sanitizer_unaligned_load64(const uu64 *p) {
+//   internal_memcpy(&__msan_retval_tls[0], (void *)MEM_TO_SHADOW((uptr)p),
+//                   sizeof(uu64));
+//   if (__msan_get_track_origins())
+//     __msan_retval_origin_tls = GetOriginIfPoisoned((uptr)p, sizeof(*p));
+//   return *p;
+// }
+// void __sanitizer_unaligned_store16(uu16 *p, u16 x) {
+//   static_assert(sizeof(uu16) == sizeof(u16), "incompatible types");
+//   u16 s;
+//   internal_memcpy(&s, &__msan_param_tls[1], sizeof(uu16));
+//   internal_memcpy((void *)MEM_TO_SHADOW((uptr)p), &s, sizeof(uu16));
+//   if (s && __msan_get_track_origins())
+//     if (uu32 o = __msan_param_origin_tls[2])
+//       SetOriginIfPoisoned((uptr)p, (uptr)&s, sizeof(s), o);
+//   *p = x;
+// }
+// void __sanitizer_unaligned_store32(uu32 *p, u32 x) {
+//   static_assert(sizeof(uu32) == sizeof(u32), "incompatible types");
+//   u32 s;
+//   internal_memcpy(&s, &__msan_param_tls[1], sizeof(uu32));
+//   internal_memcpy((void *)MEM_TO_SHADOW((uptr)p), &s, sizeof(uu32));
+//   if (s && __msan_get_track_origins())
+//     if (uu32 o = __msan_param_origin_tls[2])
+//       SetOriginIfPoisoned((uptr)p, (uptr)&s, sizeof(s), o);
+//   *p = x;
+// }
+// void __sanitizer_unaligned_store64(uu64 *p, u64 x) {
+//   u64 s = __msan_param_tls[1];
+//   *(uu64 *)MEM_TO_SHADOW((uptr)p) = s;
+//   if (s && __msan_get_track_origins())
+//     if (uu32 o = __msan_param_origin_tls[2])
+//       SetOriginIfPoisoned((uptr)p, (uptr)&s, sizeof(s), o);
+//   *p = x;
+// }
 
 #define MSAN_UNALIGNED_LOAD_STORE(size, type)                               \
   void __msan_unaligned_load##size(uptr p) {                                \

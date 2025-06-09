@@ -32,3 +32,6 @@ MSAN_FLAG(bool, halt_on_error, !&__msan_keep_going, "")
 MSAN_FLAG(bool, atexit, false, "")
 MSAN_FLAG(int, store_context_size, 20,
           "Like malloc_context_size, but for uninit stores.")
+MSAN_FLAG(bool, exit_code_unchanged, false,
+          "If true, exit code is not changed by MSan. "
+          "Useful for testing purposes.")

@@ -121,6 +121,9 @@ static void InitializeDefaultFlags() {
   DisplayHelpMessages(&xsan_parser);
 
   CHECK_LE((uptr)common_flags()->malloc_context_size, kStackTraceMax);
+
+  if (f->store_context_size < 0)
+    f->store_context_size = RequireStackTracesSize<XsanStackTraceType::copy>();
 }
 
 

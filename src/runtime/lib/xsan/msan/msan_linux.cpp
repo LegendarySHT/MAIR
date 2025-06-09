@@ -201,12 +201,12 @@ bool InitShadowWithReExec(bool init_origins) {
   return success && InitShadow(init_origins, false);
 }
 
-static void MsanAtExit(void) {
+void MsanAtExit(void) {
   if (flags()->print_stats && (flags()->atexit || msan_report_count > 0))
     ReportStats();
   if (msan_report_count > 0) {
     ReportAtExitStatistics();
-    if (common_flags()->exitcode)
+    if (!flags()->exit_code_unchanged && common_flags()->exitcode)
       internal__exit(common_flags()->exitcode);
   }
 }

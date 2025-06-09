@@ -23,3 +23,6 @@ XSAN_FLAG(bool, verify_xsan_link_order, true,
           "Check position of XSan runtime in library list (needs to be disabled"
           " when other library has to be preloaded system-wide)")
 
+XSAN_FLAG(int, store_context_size, -1,
+          "If set, use it as the size of the stack trace when store. Else, "
+          "use the size required by enabled sanitizers.")

@@ -376,10 +376,12 @@ void InitializePlatformEarly() {
 #    endif
 #  endif
 
-#  if !SANITIZER_GO
-  // Heap has not been allocated yet
-  ReExecIfNeeded(false);
-#  endif
+// Remove this to InitializePlatform to avoid call getlim before
+// interceptors are initialized.
+// #  if !SANITIZER_GO
+//   // Heap has not been allocated yet
+//   ReExecIfNeeded(false);
+// #  endif
 }
 
 void InitializePlatform() {
