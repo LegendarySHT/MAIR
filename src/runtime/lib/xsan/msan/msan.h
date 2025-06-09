@@ -21,6 +21,8 @@
 #include "msan_flags.h"
 #include "ubsan/ubsan_platform.h"
 
+#include "msan_interface_xsan.h"
+
 #ifndef MSAN_REPLACE_OPERATORS_NEW_AND_DELETE
 # define MSAN_REPLACE_OPERATORS_NEW_AND_DELETE 1
 #endif
@@ -29,18 +31,7 @@
 # define MSAN_CONTAINS_UBSAN CAN_SANITIZE_UB
 #endif
 
-struct MappingDesc {
-  uptr start;
-  uptr end;
-  enum Type {
-    INVALID = 1,
-    ALLOCATOR = 2,
-    APP = 4,
-    SHADOW = 8,
-    ORIGIN = 16,
-  } type;
-  const char *name;
-};
+namespace __msan {
 
 // Note: MappingDesc::ALLOCATOR entries are only used to check for memory
 // layout compatibility. The actual allocation settings are in
@@ -257,7 +248,6 @@ addr_is_type(uptr addr, int mapping_types) {
 const int kMsanParamTlsSize = 800;
 const int kMsanRetvalTlsSize = 800;
 
-namespace __msan {
 extern int msan_inited;
 extern bool msan_init_is_running;
 extern int msan_report_count;
@@ -287,7 +277,7 @@ void InstallAtExitHandler();
 
 const char *GetStackOriginDescr(u32 id, uptr *pc);
 
-bool IsInSymbolizerOrUnwider();
+// bool IsInSymbolizerOrUnwider();
 
 void PrintWarning(uptr pc, uptr bp);
 void PrintWarningWithOrigin(uptr pc, uptr bp, u32 origin);
@@ -346,15 +336,15 @@ const int STACK_TRACE_TAG_VPTR = STACK_TRACE_TAG_FIELDS + 1;
                     common_flags()->fast_unwind_on_fatal);                    \
   }
 
-class ScopedThreadLocalStateBackup {
- public:
-  ScopedThreadLocalStateBackup() { Backup(); }
-  ~ScopedThreadLocalStateBackup() { Restore(); }
-  void Backup();
-  void Restore();
- private:
-  u64 va_arg_overflow_size_tls;
-};
+// class ScopedThreadLocalStateBackup {
+//  public:
+//   ScopedThreadLocalStateBackup() { Backup(); }
+//   ~ScopedThreadLocalStateBackup() { Restore(); }
+//   void Backup();
+//   void Restore();
+//  private:
+//   u64 va_arg_overflow_size_tls;
+// };
 
 void MsanTSDInit(void (*destructor)(void *tsd));
 void *MsanTSDGet();

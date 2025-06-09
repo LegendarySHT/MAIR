@@ -25,6 +25,10 @@
 #  include "tsan/orig/tsan_fd.h"
 #endif
 
+#if XSAN_CONTAINS_MSAN
+#  include "msan/msan_interface_xsan.h"
+#endif
+
 // There is no general interception at all on Fuchsia.
 // Only the functions in xsan_interceptors_memintrinsics.cpp are
 // really defined to replace libc functions.
