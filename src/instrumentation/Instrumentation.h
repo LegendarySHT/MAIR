@@ -40,16 +40,22 @@ struct InstrumentationIRBuilder : public IRBuilder<> {
       IRB.SetCurrentDebugLocation(DILocation::get(SP->getContext(), 0, 0, SP));
   }
 
-  void ensureNoSanitize() {
+  static void ensureDebugInfo(IRBuilder<> &IRB, const Instruction &I) {
+    if (IRB.getCurrentDebugLocation())
+      return;
+    IRB.SetCurrentDebugLocation(I.getDebugLoc());
+  }
+
+  static void ensureNoSanitize(IRBuilder<> &IRB) {
     // Because `AddOrRemoveMetadataToCopy` is private, we can only use it by the
     // delegation of `CollectMetadataToCopy`.
     // Therefore, we create a temporary instruction with the desired !nosanitize
     // metadata.
-    llvm::ReturnInst *I = llvm::ReturnInst::Create(getContext());
+    llvm::ReturnInst *I = llvm::ReturnInst::Create(IRB.getContext());
     I->setMetadata(LLVMContext::MD_nosanitize,
                    MDNode::get(I->getContext(), None));
     // Every instructions created by this IRBuilder will have this metadata.
-    this->CollectMetadataToCopy(I, {LLVMContext::MD_nosanitize});
+    IRB.CollectMetadataToCopy(I, {LLVMContext::MD_nosanitize});
     // this->AddOrRemoveMetadataToCopy(LLVMContext::MD_nosanitize,MDNode::get(Context,
     // None));
 
@@ -58,18 +64,61 @@ struct InstrumentationIRBuilder : public IRBuilder<> {
   }
 
   explicit InstrumentationIRBuilder(LLVMContext &C) : IRBuilder<>(C) {
-    ensureNoSanitize();
+    ensureNoSanitize(*this);
   }
+
   explicit InstrumentationIRBuilder(Instruction *IP) : IRBuilder<>(IP) {
-    ensureDebugInfo(*this, *IP->getFunction());
-    ensureNoSanitize();
+    ensureDebugInfo(*this, *IP);
+    ensureNoSanitize(*this);
   }
 
   InstrumentationIRBuilder(BasicBlock *TheBB, BasicBlock::iterator IP)
       : IRBuilder<>(TheBB, IP) {
     ensureDebugInfo(*this, *TheBB->getParent());
-    ensureNoSanitize();
+    ensureNoSanitize(*this);
   }
+};
+
+struct NoUnwindModuleWrapper {
+  Module &M;
+  const AttributeList Attr;
+  NoUnwindModuleWrapper(Module &M)
+      : M(M),
+        Attr(AttributeList::get(M.getContext(), AttributeList::FunctionIndex,
+                                Attribute::NoUnwind)) {}
+
+  operator Module &() { return M; }
+
+  FunctionCallee getOrInsertFunction(StringRef Name, FunctionType *T,
+                                     AttributeList AttributeList) {
+    const auto Attr =
+        AttributeList::get(M.getContext(), {AttributeList, this->Attr});
+    return M.getOrInsertFunction(Name, T, Attr);
+  }
+
+  FunctionCallee getOrInsertFunction(StringRef Name, FunctionType *T) {
+    return M.getOrInsertFunction(Name, T, Attr);
+  }
+
+  template <typename... ArgsTy>
+  FunctionCallee getOrInsertFunction(StringRef Name,
+                                     AttributeList AttributeList, Type *RetTy,
+                                     ArgsTy... Args) {
+    const auto Attr =
+        AttributeList::get(M.getContext(), {AttributeList, this->Attr});
+    return M.getOrInsertFunction(Name, Attr, RetTy, Args...);
+  }
+
+  template <typename... ArgsTy>
+  FunctionCallee getOrInsertFunction(StringRef Name, Type *RetTy,
+                                     ArgsTy... Args) {
+    return M.getOrInsertFunction(Name, Attr, RetTy, Args...);
+  }
+
+  template <typename... ArgsTy>
+  FunctionCallee
+  getOrInsertFunction(StringRef Name, AttributeList AttributeList,
+                      FunctionType *Invalid, ArgsTy... Args) = delete;
 };
 
 /// Utils class to check if a value is loop invariant.

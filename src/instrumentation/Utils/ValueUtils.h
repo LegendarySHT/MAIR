@@ -1,15 +1,12 @@
+#pragma once
+
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instruction.h"
+#include "llvm/IR/Value.h"
 
 namespace __xsan {
-
-/// Mark an instruction as delegated to XSan.
-void markAsDelegatedToXsan(llvm::Instruction &I);
-
-/// Check if an instruction is delegated to XSan.
-bool isDelegatedToXsan(const llvm::Instruction &I);
 
 inline bool isNoSanitize(const llvm::Instruction &I) {
   return I.hasMetadata(llvm::LLVMContext::MD_nosanitize);
@@ -40,5 +37,10 @@ llvm::BlockAddress *getBlockAddressOfInstruction(llvm::Instruction &I,
                                                  llvm::DominatorTree *DT,
                                                  llvm::LoopInfo *LI,
                                                  llvm::MemorySSAUpdater *MSSAU);
+
+/// Returns unique alloca or replaced alloca where the value comes from, or
+/// nullptr. If OffsetZero is true check that V points to the begining of the
+/// alloca.
+llvm::Instruction *findAllocaForValue(llvm::Value *V, bool OffsetZero = false);
 
 } // namespace __xsan

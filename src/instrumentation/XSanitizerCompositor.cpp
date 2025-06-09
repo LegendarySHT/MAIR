@@ -41,6 +41,9 @@ void registerAnalysisForXsan(PassBuilder &PB) {
   if (!options::ClDisableTsan) {
     registerAnalysisForTsan(PB);
   }
+  if (!options::ClDisableMsan) {
+    registerAnalysisForMsan(PB);
+  }
 }
 
 void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {

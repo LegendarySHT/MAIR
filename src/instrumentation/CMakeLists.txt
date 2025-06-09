@@ -22,6 +22,7 @@ set(XSAN_PASS_COMMON
   Analysis/TsanMopAnalysis.cpp
   Utils/ValueUtils.cpp
   Utils/Logging.cpp
+  Utils/MetaDataUtils.cpp
   Utils/Options.cpp
   Utils/UbsanUtils.cpp
 )

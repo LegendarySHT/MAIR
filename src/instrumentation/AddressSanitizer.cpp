@@ -92,7 +92,7 @@
 #include "Analysis/MopRecurrenceReducer.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
-#include "Utils/ValueUtils.h"
+#include "Utils/MetaDataUtils.h"
 #include "Utils/Options.h"
 
 using namespace llvm;
@@ -1958,8 +1958,9 @@ StringRef ModuleAddressSanitizer::getGlobalMetadataSection() const {
   llvm_unreachable("unsupported object format");
 }
 
-void ModuleAddressSanitizer::initializeCallbacks(Module &M) {
+void ModuleAddressSanitizer::initializeCallbacks(Module &_M) {
   __xsan::InstrumentationIRBuilder IRB(*C);
+  __xsan::NoUnwindModuleWrapper M(_M);
 
   // Declare our poisoning and unpoisoning functions.
   AsanPoisonGlobals =
@@ -2524,8 +2525,9 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
   return true;
 }
 
-void AddressSanitizer::initializeCallbacks(Module &M) {
+void AddressSanitizer::initializeCallbacks(Module &_M) {
   __xsan::InstrumentationIRBuilder IRB(*C);
+  __xsan::NoUnwindModuleWrapper M(_M);
   // Create __asan_report* callbacks.
   // IsWrite, TypeSize and Exp are encoded in the function name.
   for (int Exp = 0; Exp < 2; Exp++) {
@@ -2587,8 +2589,8 @@ void AddressSanitizer::initializeCallbacks(Module &M) {
   AsanPtrSubFunction =
       M.getOrInsertFunction(kAsanPtrSub, IRB.getVoidTy(), IntptrTy, IntptrTy);
   if (Mapping.InGlobal)
-    AsanShadowGlobal = M.getOrInsertGlobal("__asan_shadow",
-                                           ArrayType::get(IRB.getInt8Ty(), 0));
+    AsanShadowGlobal = _M.getOrInsertGlobal("__asan_shadow",
+                                            ArrayType::get(IRB.getInt8Ty(), 0));
 
   AMDGPUAddressShared = M.getOrInsertFunction(
       kAMDGPUAddressSharedName, IRB.getInt1Ty(), IRB.getInt8PtrTy());
@@ -2832,8 +2834,9 @@ bool AddressSanitizer::LooksLikeCodeInBug11395(Instruction *I) {
   return true;
 }
 
-void FunctionStackPoisoner::initializeCallbacks(Module &M) {
+void FunctionStackPoisoner::initializeCallbacks(Module &_M) {
   __xsan::InstrumentationIRBuilder IRB(*C);
+  __xsan::NoUnwindModuleWrapper M(_M);
   if (ASan.UseAfterReturn == AsanDetectStackUseAfterReturnMode::Always ||
       ASan.UseAfterReturn == AsanDetectStackUseAfterReturnMode::Runtime) {
     const char *MallocNameTemplate =
@@ -2993,7 +2996,11 @@ void FunctionStackPoisoner::copyArgsPassedByValToAllocas() {
       Arg.replaceAllUsesWith(AI);
 
       uint64_t AllocSize = DL.getTypeAllocSize(Ty);
-      IRB.CreateMemCpy(AI, Alignment, &Arg, Alignment, AllocSize);
+      MemCpyInst *MC = cast<MemCpyInst>(
+          IRB.CreateMemCpy(AI, Alignment, &Arg, Alignment, AllocSize));
+
+      __xsan::CopyArgs::set(*MC);
+      __xsan::ReplacedAlloca::set(*AI, {AllocSize, Alignment, &Arg});
     }
   }
 }
@@ -3293,6 +3300,13 @@ void FunctionStackPoisoner::processStaticAllocas() {
         IRB.CreateAdd(LocalStackBase, ConstantInt::get(IntptrTy, Desc.Offset)),
         AI->getType());
     AI->replaceAllUsesWith(NewAllocaPtr);
+    NewAllocaPtr->takeName(AI);
+    if (MDNode *MD = __xsan::ReplacedAlloca::getMD(*AI)) {
+      __xsan::ReplacedAlloca::setMD(*cast<Instruction>(NewAllocaPtr), MD);
+    } else {
+      __xsan::ReplacedAlloca::set(*cast<Instruction>(NewAllocaPtr),
+                                  {Desc.Size, Align(Desc.Alignment), nullptr});
+    }
   }
 
   // The left-most redzone has enough space for at least 4 pointers.
@@ -3607,7 +3621,7 @@ public:
         auto RngFilter = make_filter_range(
             Targets.OperandsToInstrument, [&](InterestingMemoryOperand &Op) {
               Instruction &Insn = *Op.getInsn();
-              if (isDelegatedToXsan(Insn))
+              if (__xsan::DelegateToXSan::is(Insn))
                 return false;
               bool IsInterestingMop = isInterestingMop(Insn);
               if (!IsInterestingMop) {

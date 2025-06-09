@@ -13,6 +13,7 @@
 
 #include "Instrumentation.h"
 #include "Utils/Logging.h"
+#include "Utils/MetaDataUtils.h"
 #include "Utils/Options.h"
 #include "Utils/ValueUtils.h"
 #include "llvm/ADT/APInt.h"
@@ -1574,9 +1575,9 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
 unsigned LoopMopInstrumenter::tagMopAsDelegated(LoopMop &Mop) {
   Instruction *Inst = Mop.Mop;
   auto &Dup = Mop.DupTo;
-  markAsDelegatedToXsan(*Inst);
+  DelegateToXSan::set(*Inst);
   for (Instruction *DupInst : Dup) {
-    markAsDelegatedToXsan(*DupInst);
+    DelegateToXSan::set(*DupInst);
   }
   return Dup.size();
 }

@@ -8,34 +8,17 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
 
+#include "ValueUtils.h"
+#include "MetaDataUtils.h"
+
 using namespace llvm;
 
 namespace {
 constexpr const char *UbsanInterfacePrefix = "__ubsan_";
 constexpr const char *UbsanReportPrefix = "__ubsan_handle_";
-constexpr char kUbsanMD[] = "xsan.ubsan";
-static unsigned UbsanMDKindID = 0;
 } // namespace
 
 namespace __xsan {
-
-void markAsUbsanInst(llvm::Instruction &I) {
-  if (isUbsanInst(I)) {
-    return;
-  }
-  auto &Ctx = I.getContext();
-  if (!UbsanMDKindID) {
-    UbsanMDKindID = Ctx.getMDKindID(kUbsanMD);
-  }
-  MDNode *N = MDNode::get(Ctx, None);
-  I.setMetadata(UbsanMDKindID, N);
-}
-
-bool isUbsanInst(const llvm::Instruction &I) {
-  if (!UbsanMDKindID)
-    return false;
-  return I.hasMetadata(UbsanMDKindID);
-}
 
 // E.g., __ubsan_handle_add_overflow
 bool isUbsanInterfaceCall(const Instruction &I) {
@@ -104,7 +87,7 @@ bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &I) {
     return false;
   }
 
-  return isUbsanInst(I);
+  return UBSanInst::is(I);
 }
 
 bool isUbsanFallbackBlock(const llvm::BasicBlock &BB) {

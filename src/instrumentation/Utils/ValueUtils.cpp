@@ -1,4 +1,5 @@
 #include "ValueUtils.h"
+#include "MetaDataUtils.h"
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/AliasAnalysis.h"
@@ -13,28 +14,9 @@ using namespace __xsan;
 using namespace llvm;
 
 namespace __xsan {
-constexpr char kDelegateMDKind[] = "xsan.delegate";
-
-static unsigned DelegateMDKindID = 0;
-
-void markAsDelegatedToXsan(Instruction &I) {
-  if (isDelegatedToXsan(I))
-    return;
-  auto &Ctx = I.getContext();
-  if (!DelegateMDKindID)
-    DelegateMDKindID = Ctx.getMDKindID(kDelegateMDKind);
-  MDNode *N = MDNode::get(Ctx, None);
-  I.setMetadata(DelegateMDKindID, N);
-}
-
-bool isDelegatedToXsan(const Instruction &I) {
-  if (!DelegateMDKindID)
-    return false;
-  return I.hasMetadata(DelegateMDKindID);
-}
 
 bool shouldSkip(const Instruction &I) {
-  return isNoSanitize(I) || isDelegatedToXsan(I);
+  return isNoSanitize(I) || DelegateToXSan::is(I);
 }
 
 const llvm::Value *extractAddrFromLoadStoreInst(const llvm::Instruction &I) {
@@ -191,6 +173,54 @@ BlockAddress *getBlockAddressOfInstruction(Instruction &I, DominatorTree *DT,
   BasicBlock *NewBb =
       llvm::SplitBlock(OriginalBb, &I, DT, LI, MSSAU, "mop.address", false);
   return BlockAddress::get(NewBb->getParent(), NewBb);
+}
+
+// ref: llvm/lib/Analysis/ValueTracking.cpp
+Instruction *findAllocaForValue(Value *V, bool OffsetZero) {
+  Instruction *Result = nullptr;
+  SmallPtrSet<Value *, 4> Visited;
+  SmallVector<Value *, 4> Worklist;
+
+  auto AddWork = [&](Value *V) {
+    if (Visited.insert(V).second)
+      Worklist.push_back(V);
+  };
+
+  AddWork(V);
+  do {
+    V = Worklist.pop_back_val();
+    assert(Visited.count(V));
+
+    if (Instruction * AI;
+        (AI = dyn_cast<AllocaInst>(V)) ||
+        ((AI = dyn_cast<Instruction>(V)) && ReplacedAlloca::is(*AI))) {
+      if (Result && Result != AI)
+        return nullptr;
+      Result = AI;
+    } else if (CastInst *CI = dyn_cast<CastInst>(V)) {
+      AddWork(CI->getOperand(0));
+    } else if (PHINode *PN = dyn_cast<PHINode>(V)) {
+      for (Value *IncValue : PN->incoming_values())
+        AddWork(IncValue);
+    } else if (auto *SI = dyn_cast<SelectInst>(V)) {
+      AddWork(SI->getTrueValue());
+      AddWork(SI->getFalseValue());
+    } else if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(V)) {
+      if (OffsetZero && !GEP->hasAllZeroIndices())
+        return nullptr;
+      AddWork(GEP->getPointerOperand());
+    } else if (CallBase *CB = dyn_cast<CallBase>(V)) {
+      Value *Returned = CB->getReturnedArgOperand();
+      if (Returned)
+        AddWork(Returned);
+      else
+        return nullptr;
+    } else {
+      return nullptr;
+    }
+  } while (!Worklist.empty());
+
+  return Result;
 }
 
 } // namespace __xsan

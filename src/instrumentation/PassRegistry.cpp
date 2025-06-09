@@ -236,6 +236,9 @@ SubSanitizers SubSanitizers::loadSubSanitizers(llvm::OptimizationLevel Level) {
   if (!options::ClDisableTsan) {
     addTsanRequireAnalysisPass(Sanitizers, FPM);
   }
+  if (!options::ClDisableMsan) {
+    addMsanRequireAnalysisPass(Sanitizers, FPM);
+  }
   Sanitizers.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
   // ------------ Then instrument ----------------------------------
@@ -367,7 +370,7 @@ void registerMsanForClangAndOpt(PassBuilder &PB) {
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "msan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::MSan));
-          addMsanToMPM(MPM, OptimizationLevel::O2);
+          addMsanToMPM(MPM, OptimizationLevel::O0);
           return true;
         }
         return false;

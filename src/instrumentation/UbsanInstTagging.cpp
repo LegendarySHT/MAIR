@@ -1,5 +1,7 @@
 #include "UbsanInstTagging.hpp"
+#include "Utils/MetaDataUtils.h"
 #include "Utils/UbsanUtils.h"
+#include "Utils/ValueUtils.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
@@ -102,7 +104,7 @@ PreservedAnalyses UbsanInstTaggingPass::run(Module &M,
     if (!__xsan::isNoSanitize(I)) {
       return false;
     }
-    __xsan::markAsUbsanInst(I);
+    __xsan::UBSanInst::set(I);
     return true;
   };
 
@@ -112,7 +114,7 @@ PreservedAnalyses UbsanInstTaggingPass::run(Module &M,
         continue;
       }
       for (auto &I : BB) {
-        __xsan::markAsUbsanInst(I);
+        __xsan::UBSanInst::set(I);
       }
       auto *Pred = BB.getSinglePredecessor();
       assert(Pred && "UBSan fallback block should have only one predecessor");

@@ -54,7 +54,7 @@
 #include "Analysis/TsanMopAnalysis.h"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
-#include "Utils/ValueUtils.h"
+#include "Utils/MetaDataUtils.h"
 #include "Utils/Options.h"
 
 using namespace llvm;
@@ -768,7 +768,11 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
                      createOrdering(&IRB, LI->getOrdering())};
     Value *C = IRB.CreateCall(TsanAtomicLoad[Idx], Args);
     Value *Cast = IRB.CreateBitOrPointerCast(C, OrigTy);
+    ::__xsan::ReplacedAtomic::set(*cast<Instruction>(Cast),
+                                  {::__xsan::ReplacedAtomic::Extra::Load, Addr,
+                                   nullptr, LI->getAlign()});
     I->replaceAllUsesWith(Cast);
+    I->eraseFromParent();
   } else if (StoreInst *SI = dyn_cast<StoreInst>(I)) {
     Value *Addr = SI->getPointerOperand();
     int Idx =
@@ -782,7 +786,10 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     Value *Args[] = {IRB.CreatePointerCast(Addr, PtrTy),
                      IRB.CreateBitOrPointerCast(SI->getValueOperand(), Ty),
                      createOrdering(&IRB, SI->getOrdering())};
-    IRB.CreateCall(TsanAtomicStore[Idx], Args);
+    CallInst *C = IRB.CreateCall(TsanAtomicStore[Idx], Args);
+    ::__xsan::ReplacedAtomic::set(*cast<Instruction>(C),
+                                  {::__xsan::ReplacedAtomic::Extra::Store, Addr,
+                                   SI->getValueOperand(), SI->getAlign()});
     SI->eraseFromParent();
   } else if (AtomicRMWInst *RMWI = dyn_cast<AtomicRMWInst>(I)) {
     Value *Addr = RMWI->getPointerOperand();
@@ -800,8 +807,12 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     Value *Val = RMWI->getValOperand();
     Value *Args[] = {Addr, IRB.CreateBitOrPointerCast(Val, Ty),
                      createOrdering(&IRB, RMWI->getOrdering())};
-    Value *C = IRB.CreateCall(F, Args);
-    I->replaceAllUsesWith(IRB.CreateBitOrPointerCast(C, Val->getType()));
+    Value *C =
+        IRB.CreateBitOrPointerCast(IRB.CreateCall(F, Args), Val->getType());
+    ::__xsan::ReplacedAtomic::set(*cast<Instruction>(C),
+                                  {::__xsan::ReplacedAtomic::Extra::RMW, Addr,
+                                   RMWI->getValOperand(), None});
+    I->replaceAllUsesWith(C);
     I->eraseFromParent();
   } else if (AtomicCmpXchgInst *CASI = dyn_cast<AtomicCmpXchgInst>(I)) {
     Value *Addr = CASI->getPointerOperand();
@@ -834,6 +845,9 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
       IRB.CreateInsertValue(UndefValue::get(CASI->getType()), OldVal, 0);
     Res = IRB.CreateInsertValue(Res, Success, 1);
 
+    ::__xsan::ReplacedAtomic::set(*cast<Instruction>(Res),
+                                  {::__xsan::ReplacedAtomic::Extra::CAS, Addr,
+                                   CASI->getCompareOperand(), None});
     I->replaceAllUsesWith(Res);
     I->eraseFromParent();
   } else if (FenceInst *FI = dyn_cast<FenceInst>(I)) {
@@ -989,7 +1003,7 @@ bool XsanThreadSanitizer::collectTargetsToIntrument(
       // Skip instructions inserted by another instrumentation.
       if (Inst.hasMetadata(LLVMContext::MD_nosanitize))
         continue;
-      if (__xsan::isDelegatedToXsan(Inst))
+      if (__xsan::DelegateToXSan::is(Inst))
         continue;
       if (isTsanAtomic(&Inst))
         AtomicAccesses.push_back(&Inst);

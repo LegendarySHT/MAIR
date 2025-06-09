@@ -1,16 +1,13 @@
 #pragma once
 
-#include "ValueUtils.h"
-
 // Provide some utilities for UBSan's instrumentation.
 namespace llvm {
 class Instruction;
-}
+class BasicBlock;
+class Function;
+} // namespace llvm
 
 namespace __xsan {
-
-void markAsUbsanInst(llvm::Instruction &I);
-bool isUbsanInst(const llvm::Instruction &I);
 
 /// E.g., __ubsan_handle_XXXXX
 bool isUbsanInterfaceCall(const llvm::Instruction &CB);
