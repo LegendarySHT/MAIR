@@ -483,7 +483,11 @@ set(XSAN_COMMON_DEPS generate_wrap_symbols)
 set(XSAN_LINK_FLAGS "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt")
 
 
-set(XSAN_DYNAMIC_LINK_FLAGS ${SANITIZER_COMMON_LINK_FLAGS})
+set(XSAN_DYNAMIC_LINK_FLAGS 
+  ${SANITIZER_COMMON_LINK_FLAGS} 
+  "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt"
+   )
+
 if(ANDROID)
   # Put most Sanitizer shared libraries in the global group. For more details, see
   # android-changes-for-ndk-developers.md#changes-to-library-search-order
