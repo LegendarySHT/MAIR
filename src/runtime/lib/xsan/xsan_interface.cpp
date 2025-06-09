@@ -11,10 +11,7 @@
 #include <sanitizer_common/sanitizer_libc.h>
 #include <sanitizer_common/sanitizer_ptrauth.h>
 
-#include "asan/asan_mapping.h"
-#include "asan_interface_internal.h"
 #include "xsan_interceptors.h"
-#include "xsan_internal.h"
 
 using namespace __xsan;
 
@@ -26,25 +23,12 @@ using namespace __xsan;
 ///   - OnMemoryAccess:
 ///     ....
 
-#define CHECK_SMALL_REGION(p, size, isWrite)                      \
-  do {                                                            \
-    uptr __p = reinterpret_cast<uptr>(p);                         \
-    uptr __size = size;                                           \
-    if (UNLIKELY(__asan::AddressIsPoisoned(__p) ||                \
-                 __asan::AddressIsPoisoned(__p + __size - 1))) {  \
-      GET_CURRENT_PC_BP_SP;                                       \
-      uptr __bad = __asan_region_is_poisoned(__p, __size);        \
-      __asan_report_error(pc, bp, sp, __bad, isWrite, __size, 0); \
-    }                                                             \
-  } while (false)
-
 extern "C" {
 
 #define UNALIGNED_LOAD(size)                                       \
   SANITIZER_INTERFACE_ATTRIBUTE                                    \
   u##size __sanitizer_unaligned_load##size(const uu##size *addr) { \
-    CHECK_SMALL_REGION(addr, sizeof(*addr), false);                \
-    XSAN_HOOKS_EXEC(__xsan_unaligned_read<size/8>, (uptr)addr);      \
+    XSAN_HOOKS_EXEC(__xsan_unaligned_read<size / 8>, (uptr)addr);  \
     return *addr;                                                  \
   }
 
@@ -55,9 +39,8 @@ UNALIGNED_LOAD(64)
 #define UNALIGNED_STORE(size)                                         \
   SANITIZER_INTERFACE_ATTRIBUTE                                       \
   void __sanitizer_unaligned_store##size(uu##size *addr, u##size v) { \
-    CHECK_SMALL_REGION(addr, sizeof(*addr), true);                    \
+    XSAN_HOOKS_EXEC(__xsan_unaligned_write<size / 8>, (uptr)addr);    \
     *addr = v;                                                        \
-    XSAN_HOOKS_EXEC(__xsan_unaligned_write<size/8>, (uptr)addr);        \
   }
 
 UNALIGNED_STORE(16)

@@ -2,26 +2,12 @@
 
 #include "tsan_fd.h"
 #include "tsan_hooks.h"
-#include "tsan_init.h"
 #include "tsan_interceptors.h"
 #include "tsan_interceptors_common.inc"
 #include "tsan_interface.h"
 #include "tsan_rtl.h"
 #include "xsan_internal.h"
 #include "xsan_thread.h"
-
-namespace __tsan {
-void SetCommonFlags(CommonFlags &cf);
-void ValidateFlags();
-void SetTsanThreadName(const char *name);
-void SetTsanThreadNameByUserId(uptr uid, const char *name);
-void InitializeFlags();
-void DisableTsanForVfork();
-void RecoverTsanAfterVforkParent();
-void atfork_prepare();
-void atfork_parent();
-void atfork_child();
-}  // namespace __tsan
 
 namespace __tsan {
 
@@ -156,7 +142,6 @@ void TsanHooks::OnLongjmp(void *env, const char *fn_name, uptr pc) {
 }
 
 // ---------------------- Flags Registration Hooks ---------------
-void TsanHooks::InitializeFlags() { __tsan::InitializeFlags(); }
 void TsanHooks::SetCommonFlags(CommonFlags &cf) { __tsan::SetCommonFlags(cf); }
 void TsanHooks::ValidateFlags() { __tsan::ValidateFlags(); }
 
@@ -218,22 +203,6 @@ void TsanHooks::BeforeMunmap(const Context &ctx, void *addr, uptr size) {
   UnmapShadow(ctx.thr_, (uptr)addr, size);
 }
 
-// ---------- xsan_initialization-Related Hooks ----------------
-void TsanHooks::InitFromXsanVeryEarly() { TsanInitFromXsanVeryEarly(); }
-
-void TsanHooks::InitFromXsanLate() {
-  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
-  TsanInitFromXsanLate();
-}
-
-void TsanHooks::InitializePlatformEarly() { __tsan::InitializePlatformEarly(); }
-void TsanHooks::InitializeInterceptors() { __tsan::InitializeInterceptors(); }
-
-void TsanHooks::InitFromXsan() {
-  __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
-  TsanInitFromXsan();
-}
-
 // ---------- xsan_interface-Related Hooks ----------------
 #define TSAN_INTERFACE_HOOK(operation_type, size)         \
   template <>                                             \
@@ -245,11 +214,13 @@ void TsanHooks::InitFromXsan() {
 TSAN_INTERFACE_HOOK(unaligned_read, 2)
 TSAN_INTERFACE_HOOK(unaligned_read, 4)
 TSAN_INTERFACE_HOOK(unaligned_read, 8)
+TSAN_INTERFACE_HOOK(unaligned_read, 16)
 
 // Define unaligned write hooks
 TSAN_INTERFACE_HOOK(unaligned_write, 2)
 TSAN_INTERFACE_HOOK(unaligned_write, 4)
 TSAN_INTERFACE_HOOK(unaligned_write, 8)
+TSAN_INTERFACE_HOOK(unaligned_write, 16)
 
 // Define aligned read hooks
 TSAN_INTERFACE_HOOK(read, 1)
@@ -264,5 +235,7 @@ TSAN_INTERFACE_HOOK(write, 2)
 TSAN_INTERFACE_HOOK(write, 4)
 TSAN_INTERFACE_HOOK(write, 8)
 TSAN_INTERFACE_HOOK(write, 16)
+
+#undef TSAN_INTERFACE_HOOK
 
 }  // namespace __tsan

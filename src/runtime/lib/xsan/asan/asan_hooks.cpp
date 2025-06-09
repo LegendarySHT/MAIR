@@ -1,6 +1,5 @@
 #include "asan_hooks.h"
 
-#include "asan_init.h"
 #include "asan_interface_internal.h"
 #include "asan_thread.h"
 #include "lsan/lsan_common.h"
@@ -119,22 +118,20 @@ void AsanHooks::BeforeMunmap(const Context &ctx, void *addr, uptr size) {
       __asan::PoisonShadow(beg, rounded_length, 0);
   }
 }
-// ---------- xsan_initialization-Related Hooks ----------------
-void AsanHooks::InitFromXsanLate() {
-  __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
-  AsanInitFromXsanLate();
-}
 
-void AsanHooks::InitFromXsan() {
-  __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
-  AsanInitFromXsan();
-}
-// ---------- xsan_interface-Related Hooks ----------------
 #define ASAN_INTERFACE_HOOK(size, operation, asan_operation) \
   template <>                                                \
   void AsanHooks::__xsan_##operation<size>(uptr p) {         \
     __asan_##asan_operation##size(p);                        \
   }
+
+ASAN_INTERFACE_HOOK(2, unaligned_read, unaligned_load)
+ASAN_INTERFACE_HOOK(4, unaligned_read, unaligned_load)
+ASAN_INTERFACE_HOOK(8, unaligned_read, unaligned_load)
+
+ASAN_INTERFACE_HOOK(2, unaligned_write, unaligned_store)
+ASAN_INTERFACE_HOOK(4, unaligned_write, unaligned_store)
+ASAN_INTERFACE_HOOK(8, unaligned_write, unaligned_store)
 
 ASAN_INTERFACE_HOOK(1, read, load)
 ASAN_INTERFACE_HOOK(2, read, load)
@@ -142,10 +139,15 @@ ASAN_INTERFACE_HOOK(4, read, load)
 ASAN_INTERFACE_HOOK(8, read, load)
 ASAN_INTERFACE_HOOK(16, read, load)
 
-ASAN_INTERFACE_HOOK(1, write, store)
+template <>
+void AsanHooks ::__xsan_write<1>(uptr p) {
+  __asan_store1(p);
+}
 ASAN_INTERFACE_HOOK(2, write, store)
 ASAN_INTERFACE_HOOK(4, write, store)
 ASAN_INTERFACE_HOOK(8, write, store)
 ASAN_INTERFACE_HOOK(16, write, store)
+
+#undef ASAN_INTERFACE_HOOK
 
 }  // namespace __asan

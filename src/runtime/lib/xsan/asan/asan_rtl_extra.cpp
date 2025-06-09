@@ -10,18 +10,6 @@ uptr GetRealGlobalSizeByAddr(uptr addr);
 
 }  // namespace __asan
 
-// __asan::FakeStack::Destroy()
-// XSan needs to intercept FakeStack::Destroy() to register the hook
-// `OnFakeStackDestory()` for notifying other sanitizers that the fake stack is
-// destroyed.
-XSAN_WRAPPER(void, _ZN6__asan9FakeStack7DestroyEi,
-             __asan::FakeStack *fake_stack, int tid) {
-  __xsan::OnFakeStackDestory(
-      reinterpret_cast<uptr>(fake_stack),
-      fake_stack->RequiredSize(fake_stack->stack_size_log()));
-  XSAN_REAL(_ZN6__asan9FakeStack7DestroyEi)(fake_stack, tid);
-}
-
 // __asan::PlatformUnpoisonStacks()
 // Some internal XSan code, e.g., __asan_handle_no_return, performed sanity
 // checks before, leading to FP.

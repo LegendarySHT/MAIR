@@ -26,57 +26,57 @@ u32 GetMallocContextSize() {
   return atomic_load(&malloc_context_size, memory_order_acquire);
 }
 
-namespace {
+// namespace {
 
-// ScopedUnwinding is a scope for stacktracing member of a context
-class ScopedUnwinding {
- public:
-  explicit ScopedUnwinding(AsanThread *t) : thread(t) {
-    if (thread) {
-      can_unwind = !thread->isUnwinding();
-      thread->setUnwinding(true);
-    }
-  }
-  ~ScopedUnwinding() {
-    if (thread)
-      thread->setUnwinding(false);
-  }
+// // ScopedUnwinding is a scope for stacktracing member of a context
+// class ScopedUnwinding {
+//  public:
+//   explicit ScopedUnwinding(AsanThread *t) : thread(t) {
+//     if (thread) {
+//       can_unwind = !thread->isUnwinding();
+//       thread->setUnwinding(true);
+//     }
+//   }
+//   ~ScopedUnwinding() {
+//     if (thread)
+//       thread->setUnwinding(false);
+//   }
 
-  bool CanUnwind() const { return can_unwind; }
+//   bool CanUnwind() const { return can_unwind; }
 
- private:
-  AsanThread *thread = nullptr;
-  bool can_unwind = true;
-};
+//  private:
+//   AsanThread *thread = nullptr;
+//   bool can_unwind = true;
+// };
 
-}  // namespace
+// }  // namespace
 
 }  // namespace __asan
 
-void __sanitizer::BufferedStackTrace::UnwindImpl(
-    uptr pc, uptr bp, void *context, bool request_fast, u32 max_depth) {
-  using namespace __asan;
-  size = 0;
-  if (UNLIKELY(!AsanInited()))
-    return;
-  request_fast = StackTrace::WillUseFastUnwind(request_fast);
-  AsanThread *t = GetCurrentThread();
-  ScopedUnwinding unwind_scope(t);
-  if (!unwind_scope.CanUnwind())
-    return;
-  if (request_fast) {
-    if (t) {
-      Unwind(max_depth, pc, bp, nullptr, t->stack_top(), t->stack_bottom(),
-             true);
-    }
-    return;
-  }
-  if (SANITIZER_MIPS && t &&
-      !IsValidFrame(bp, t->stack_top(), t->stack_bottom()))
-    return;
-  Unwind(max_depth, pc, bp, context, t ? t->stack_top() : 0,
-         t ? t->stack_bottom() : 0, false);
-}
+// void __sanitizer::BufferedStackTrace::UnwindImpl(
+//     uptr pc, uptr bp, void *context, bool request_fast, u32 max_depth) {
+//   using namespace __asan;
+//   size = 0;
+//   if (UNLIKELY(!AsanInited()))
+//     return;
+//   request_fast = StackTrace::WillUseFastUnwind(request_fast);
+//   AsanThread *t = GetCurrentThread();
+//   ScopedUnwinding unwind_scope(t);
+//   if (!unwind_scope.CanUnwind())
+//     return;
+//   if (request_fast) {
+//     if (t) {
+//       Unwind(max_depth, pc, bp, nullptr, t->stack_top(), t->stack_bottom(),
+//              true);
+//     }
+//     return;
+//   }
+//   if (SANITIZER_MIPS && t &&
+//       !IsValidFrame(bp, t->stack_top(), t->stack_bottom()))
+//     return;
+//   Unwind(max_depth, pc, bp, context, t ? t->stack_top() : 0,
+//          t ? t->stack_bottom() : 0, false);
+// }
 
 // ------------------ Interface -------------- {{{1
 

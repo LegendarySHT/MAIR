@@ -8,7 +8,7 @@ set(ASAN_SOURCES
   asan/orig/asan_debugging.cpp
   asan/orig/asan_descriptions.cpp
   asan/orig/asan_errors.cpp
-  asan/orig/asan_fake_stack.cpp
+  # asan/orig/asan_fake_stack.cpp
   # asan/orig/asan_flags.cpp
   asan/orig/asan_fuchsia.cpp
   # asan/orig/asan_globals.cpp
@@ -27,7 +27,7 @@ set(ASAN_SOURCES
   #asan/orig/asan_report.cpp
   # asan/orig/asan_rtl.cpp
   asan/orig/asan_shadow_setup.cpp
-  asan/orig/asan_stack.cpp
+  # asan/orig/asan_stack.cpp
   asan/orig/asan_stats.cpp
   asan/orig/asan_suppressions.cpp
   # asan/orig/asan_thread.cpp
@@ -50,6 +50,7 @@ endif()
 
 set(XSAN_ASAN_SOURCES
   asan/asan_allocator.cpp
+  asan/asan_fake_stack.cpp
   asan/asan_flags.cpp
   asan/asan_globals.cpp
   asan/asan_hooks.cpp
@@ -57,6 +58,7 @@ set(XSAN_ASAN_SOURCES
   asan/asan_report.cpp
   asan/asan_rtl.cpp
   asan/asan_rtl_extra.cpp
+  asan/asan_stack.cpp
   asan/asan_thread.cpp
   ${ASAN_SOURCES}
 )
@@ -258,7 +260,6 @@ set(ASAN_HEADERS
 set(XSAN_ASAN_HEADERS
   asan/asan_allocator.h
   asan/asan_hooks.h
-  asan/asan_init.h
   asan/asan_interface_xsan.h
   asan/asan_mapping.h
   asan/asan_thread.h
@@ -296,7 +297,6 @@ set(TSAN_HEADERS
 
 set(XSAN_TSAN_HEADERS
   tsan/tsan_hooks.h
-  tsan/tsan_init.h
   tsan/tsan_interceptors.h
   tsan/tsan_interface_xsan.h
   tsan/tsan_interface.inc

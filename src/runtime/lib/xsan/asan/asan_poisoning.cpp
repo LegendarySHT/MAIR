@@ -250,6 +250,20 @@ uptr __asan_region_is_poisoned(uptr beg, uptr size) {
 //   *p = x;
 // }
 
+#define ASAN_UNALIGNED_LOAD_STORE(size)                  \
+  extern "C" void __asan_unaligned_load##size(uptr p) {  \
+    CHECK_SMALL_REGION(p, size, false);                  \
+  }                                                      \
+  extern "C" void __asan_unaligned_store##size(uptr p) { \
+    CHECK_SMALL_REGION(p, size, true);                   \
+  }
+
+ASAN_UNALIGNED_LOAD_STORE(2)
+ASAN_UNALIGNED_LOAD_STORE(4)
+ASAN_UNALIGNED_LOAD_STORE(8)
+
+#undef ASAN_UNALIGNED_LOAD_STORE
+
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
 void __asan_poison_cxx_array_cookie(uptr p) {
   if (SANITIZER_WORDSIZE != 64) return;

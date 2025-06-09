@@ -82,7 +82,7 @@ void XsanThread::GetStartData(void *out, uptr out_size) const {
   internal_memcpy(out, start_data_, out_size);
 }
 
-inline XsanThread::StackBounds XsanThread::GetStackBounds() const {
+XsanThread::Bounds XsanThread::GetStackBounds() const {
   if (!atomic_load(&stack_switching_, memory_order_acquire)) {
     // Make sure the stack bounds are fully initialized.
     if (stack_bottom_ >= stack_top_)
@@ -203,10 +203,7 @@ void XsanThread::ThreadStart() {
   {
     // Thread-local state is not initialized yet.
     __xsan::ScopedIgnoreInterceptors ignore;
-
-    /// Initialize sub-sanitizers' thread data in new thread and before the real
-    /// callback execution.
-    this->ChildThreadStart();
+    __xsan::ScopedXsanInternal internal;
 
     next_stack_top_ = next_stack_bottom_ = 0;
     atomic_store(&stack_switching_, false, memory_order_release);
@@ -217,6 +214,10 @@ void XsanThread::ThreadStart() {
     VReport(1, "T%d: stack [%p,%p) size 0x%zx; local=%p\n", tid(),
             (void *)stack_bottom_, (void *)stack_top_,
             stack_top_ - stack_bottom_, (void *)&local);
+
+    /// Initialize sub-sanitizers' thread data in new thread and before the real
+    /// callback execution.
+    this->ChildThreadStart();
 
     /// Now only ASan uses this, so let's consider it as ASan's exclusive
     /// resource.
@@ -287,6 +288,7 @@ void XsanTSDDtor(void *tsd) {
     CHECK_EQ(0, pthread_setspecific(tsd_key, tsd));
     return;
   }
+  ScopedBlockSignals block(nullptr);
   xsan_current_thread = nullptr;
   // Make sure that signal handler can not see a stale current thread pointer.
   atomic_signal_fence(memory_order_seq_cst);

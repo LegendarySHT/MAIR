@@ -11,6 +11,7 @@
 #include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_libc.h"
+#include "sanitizer_common/sanitizer_platform_interceptors.h"
 #include "xsan_allocator.h"
 #include "xsan_hooks.h"
 #include "xsan_interceptors_memintrinsics.h"
@@ -21,6 +22,7 @@
 #if XSAN_CONTAINS_TSAN
 #  include "tsan/tsan_interceptors.h"
 #  include "tsan/tsan_rtl.h"
+#  include "tsan/orig/tsan_fd.h"
 #endif
 
 // There is no general interception at all on Fuchsia.
@@ -172,13 +174,6 @@ InterceptorContext *interceptor_ctx() {
 //   libignore()->OnLibraryLoaded(0);
 // }
 
-#  define XSAN_READ_STRING_OF_LEN(ctx, s, len, n) \
-    XSAN_READ_RANGE((ctx), (s),                   \
-                    common_flags()->strict_string_checks ? (len) + 1 : (n))
-
-#  define XSAN_READ_STRING(ctx, s, n) \
-    XSAN_READ_STRING_OF_LEN((ctx), (s), internal_strlen(s), (n))
-
 static inline uptr MaybeRealStrnlen(const char *s, uptr maxlen) {
 #  if SANITIZER_INTERCEPT_STRNLEN
   if (REAL(strnlen)) {
@@ -216,19 +211,10 @@ static void finalize(void *arg) {
   int exit_code = get_exit_code();
   // Make sure the output is not lost.
   FlushStreams();
+  AtExit();
   if (exit_code)
     Die();
 }
-
-#  if XSAN_CONTAINS_TSAN
-#    include "sanitizer_common/sanitizer_platform_interceptors.h"
-// Causes interceptor recursion (getaddrinfo() and fopen())
-/// TSan needs to ignore memory accesses in getaddrinfo()
-#    undef SANITIZER_INTERCEPT_GETADDRINFO
-// We define our own.
-#    undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-#    define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
-#  endif
 
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, usize)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
@@ -238,7 +224,8 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     if (__asan::flags()->strict_init_order)  \
       __asan::StopInitOrderChecking();
 
-
+#  define COMMON_INTERCEPTOR_UNPOISON_PARAM(count) \
+    XSAN_COMMON_UNPOISON_PARAM(count)
 #  define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
     XSAN_INTERCEPT_FUNC_VER(name, ver)
 #  define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
@@ -247,21 +234,30 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     XSAN_COMMON_WRITE_RANGE(ctx, ptr, size)
 #  define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
     XSAN_COMMON_READ_RANGE(ctx, ptr, size)
-#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)  \
-    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__); \
-    do {                                            \
-      if constexpr (SANITIZER_APPLE) {              \
-        if (UNLIKELY(!XsanInited()))                \
-          return REAL(func)(__VA_ARGS__);           \
-      } else {                                      \
-        if (!TryXsanInitFromRtl())                  \
-          return REAL(func)(__VA_ARGS__);           \
-      }                                             \
+#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)                \
+    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__);               \
+    __xsan::XsanFuncScope<__xsan::ScopedFunc::common> func_scope; \
+    do {                                                          \
+      if constexpr (SANITIZER_APPLE) {                            \
+        if (UNLIKELY(!XsanInited()))                              \
+          return REAL(func)(__VA_ARGS__);                         \
+      } else {                                                    \
+        if (!TryXsanInitFromRtl())                                \
+          return REAL(func)(__VA_ARGS__);                         \
+      }                                                           \
     } while (false)
-#  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)   \
-    XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__); \
+#  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)       \
+    XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__);     \
+    __xsan::XsanFuncScope<__xsan::ScopedFunc::common> func_scope; \
+    do {                                                          \
+      XsanInitFromRtl();                                          \
+    } while (false)
+#  define COMMON_INTERCEPTOR_INITIALIZE_RANGE(ptr, size) \
+    XSAN_INIT_RANGE(nullptr, ptr, size)
+#  define COMMON_INTERCEPTOR_COPY_STRING(ctx, to, from, size) \
     do {                                                      \
-      XsanInitFromRtl();                                   \
+      XSAN_COPY_RANGE(ctx, to, from, size);                   \
+      XSAN_INIT_RANGE(ctx, (to) + (size), 1);                 \
     } while (false)
 
 #  define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
@@ -431,6 +427,16 @@ static int munmap_interceptor(void *ctx, Munmap real_munmap, void *addr,
       } while (false)
 #  endif
 
+// Causes interceptor recursion (getaddrinfo() and fopen())
+/// TSan needs to ignore memory accesses in getaddrinfo()
+#  undef SANITIZER_INTERCEPT_GETADDRINFO
+// We define our own.
+#  if SANITIZER_INTERCEPT_TLS_GET_ADDR
+#    define XSAN_NEED_TLS_GET_ADDR
+#  endif
+#  undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+#  define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+
 #  include <sanitizer_common/sanitizer_common_interceptors.inc>
 #  if !XSAN_CONTAINS_TSAN
 #    define SIGNAL_INTERCEPTOR_ENTER() \
@@ -441,10 +447,13 @@ static int munmap_interceptor(void *ctx, Munmap real_munmap, void *addr,
 #  endif
 
 /// Following the logic of TSan, treat syscall in a special way.
-#  define XSAN_SYSCALL()                                       \
-    __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread(); \
-    if (xsan_ignore_interceptors)                              \
-      return;                                                  \
+#  define XSAN_SYSCALL()                                        \
+    __xsan::XsanContext xsan_ctx(GET_CALLER_PC());              \
+    __xsan::XsanInterceptorContext _ctx = {__func__, xsan_ctx}; \
+    (void)_ctx;                                                 \
+    __xsan::XsanThread *xsan_thr = __xsan::GetCurrentThread();  \
+    if (xsan_ignore_interceptors)                               \
+      return;                                                   \
     ScopedSyscall scoped_syscall(xsan_thr)
 
 struct ScopedSyscall {
@@ -460,36 +469,30 @@ struct ScopedSyscall {
   }
 };
 
-#  if !SANITIZER_FREEBSD && !SANITIZER_APPLE
-[[gnu::always_inline]] static void syscall_access_range(uptr pc, uptr offset,
-                                                        uptr size, bool write) {
-  XSAN_SYSCALL();
-  __asan::AccessMemoryRange(nullptr, offset, size, write, nullptr);
-#    if XSAN_CONTAINS_TSAN
-  __tsan::MemoryAccessRange(__tsan::cur_thread(), pc, offset, size, write);
-#    endif
-}
-
-#  endif
-
 // Syscall interceptors don't have contexts, we don't support suppressions
 // for them.
-#  define COMMON_SYSCALL_PRE_READ_RANGE(p, s) \
-    syscall_access_range(GET_CALLER_PC(), (uptr)(p), (uptr)(s), false)
-
-#  define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) \
-    syscall_access_range(GET_CALLER_PC(), (uptr)(p), (uptr)(s), true)
-
-#  define COMMON_SYSCALL_POST_READ_RANGE(p, s) \
-    do {                                       \
-      (void)(p);                               \
-      (void)(s);                               \
+#  define COMMON_SYSCALL_PRE_READ_RANGE(p, s)          \
+    do {                                               \
+      XSAN_SYSCALL();                                  \
+      ::__xsan::CommonSyscallPreReadRange(_ctx, p, s); \
     } while (false)
 
-#  define COMMON_SYSCALL_POST_WRITE_RANGE(p, s) \
-    do {                                        \
-      (void)(p);                                \
-      (void)(s);                                \
+#  define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s)          \
+    do {                                                \
+      XSAN_SYSCALL();                                   \
+      ::__xsan::CommonSyscallPreWriteRange(_ctx, p, s); \
+    } while (false)
+
+#  define COMMON_SYSCALL_POST_READ_RANGE(p, s)          \
+    do {                                                \
+      XSAN_SYSCALL();                                   \
+      ::__xsan::CommonSyscallPostReadRange(_ctx, p, s); \
+    } while (false)
+
+#  define COMMON_SYSCALL_POST_WRITE_RANGE(p, s)          \
+    do {                                                 \
+      XSAN_SYSCALL();                                    \
+      ::__xsan::CommonSyscallPostWriteRange(_ctx, p, s); \
     } while (false)
 
 #  if XSAN_CONTAINS_TSAN
@@ -1414,7 +1417,7 @@ void InitializeXsanInterceptors() {
     Die();
   }
 
-  XSAN_HOOKS_EXEC(InitializeInterceptors);
+  InitializeInterceptors();
 
   VReport(1, "AddressSanitizer: libc interceptors initialized\n");
 }

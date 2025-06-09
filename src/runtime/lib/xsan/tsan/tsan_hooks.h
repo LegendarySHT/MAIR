@@ -13,7 +13,7 @@ struct TsanContext {
   uptr pc_;
 
   TsanContext() : thr_(nullptr), pc_(0) {}
-  TsanContext(uptr pc) : thr_(__tsan::cur_thread()), pc_(pc) {}
+  TsanContext(uptr pc) : thr_(__tsan::cur_thread_init()), pc_(pc) {}
 };
 
 struct TsanThread {
@@ -23,7 +23,7 @@ struct TsanThread {
 
 template <bool is_read>
 PSEUDO_MACRO void AccessMemoryRange(const TsanContext *ctx, const void *_offset,
-                                    uptr size, const char *func_name) {
+                                    uptr size) {
   uptr offset = (uptr)_offset;
   if (size == 0)
     return;
@@ -39,6 +39,20 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   using Context = TsanContext;
   using Thread = TsanThread;
 
+  // ------------------ Xsan-Initialization-Related Hooks ----------------
+  static constexpr char name[] = "ThreadSanitizer";
+
+  static void InitFromXsanVeryEarly() { __tsan::TsanInitFromXsanVeryEarly(); }
+  static void InitFromXsanEarly() { __tsan::InitializePlatformEarly(); }
+  static void InitFromXsan() {
+    __xsan::ScopedSanitizerToolName tool_name(name);
+    __tsan::TsanInitFromXsan();
+  }
+  static void InitFromXsanLate() {
+    __xsan::ScopedSanitizerToolName tool_name(name);
+    __tsan::TsanInitFromXsanLate();
+  }
+
   static void EnterSymbolizer() { __tsan::EnterSymbolizer(); }
   static void ExitSymbolizer() { __tsan::ExitSymbolizer(); }
   static bool ShouldIgnoreInterceptors(const Context &ctx);
@@ -49,13 +63,11 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   static void OnXsanFreeHook(uptr ptr, uptr size, BufferedStackTrace *stack);
   static void OnXsanAllocFreeTailHook(uptr pc);
   static void OnFakeStackDestory(uptr addr, uptr size);
+  static void OnDtlsAlloc(uptr addr, uptr size);
   // ---------------------- Flags Registration Hooks ---------------
-  static void InitializeFlags();
-  static void InitializeSanitizerFlags() {
-    {
-      __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
-      InitializeFlags();
-    }
+  ALWAYS_INLINE static void InitializeFlags() {
+    __xsan::ScopedSanitizerToolName tool_name("ThreadSanitizer");
+    __tsan::InitializeFlags();
   }
   static void SetCommonFlags(CommonFlags &cf);
   static void ValidateFlags();
@@ -136,13 +148,16 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   static void OnLibraryUnloaded();
   static void OnLongjmp(void *env, const char *fn_name, uptr pc);
   // ---------- Generic Hooks in Interceptors ----------------
+  ALWAYS_INLINE static void InitializeInterceptors() {
+    __tsan::InitializeInterceptors();
+  }
   PSEUDO_MACRO static void ReadRange(Context *ctx, const void *offset,
                                      uptr size, const char *func_name) {
-    AccessMemoryRange<true>(ctx, offset, size, func_name);
+    AccessMemoryRange<true>(ctx, offset, size);
   }
   PSEUDO_MACRO static void WriteRange(Context *ctx, const void *offset,
                                       uptr size, const char *func_name) {
-    AccessMemoryRange<false>(ctx, offset, size, func_name);
+    AccessMemoryRange<false>(ctx, offset, size);
   }
   PSEUDO_MACRO static void CommonReadRange(Context *ctx, const void *offset,
                                            uptr size, const char *func_name) {
@@ -152,24 +167,42 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
                                             uptr size, const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
-  // ---------- xsan_initialization-Related Hooks ----------------
-  static void InitFromXsanVeryEarly();
-  static void InitFromXsanLate();
-  static void InitializePlatformEarly();
-  static void InitializeInterceptors();
-  static void InitFromXsan();
-  // ---------- xsan_interface-Related Hooks ----------------
+  PSEUDO_MACRO static void CommonSyscallPreReadRange(const Context &ctx,
+                                                     const void *offset,
+                                                     uptr size,
+                                                     const char *func_name) {
+    AccessMemoryRange<true>(&ctx, offset, size);
+  }
+  PSEUDO_MACRO static void CommonSyscallPreWriteRange(const Context &ctx,
+                                                      const void *offset,
+                                                      uptr size,
+                                                      const char *func_name) {
+    AccessMemoryRange<false>(&ctx, offset, size);
+  }
+  // ---------- Xsan-Interface-Related Hooks ----------------
   template <s32 ReadSize>
   static void __xsan_unaligned_read(uptr p);
-
   template <s32 WriteSize>
   static void __xsan_unaligned_write(uptr p);
-
   template <s32 ReadSize>
   static void __xsan_read(uptr p);
-
   template <s32 WriteSize>
   static void __xsan_write(uptr p);
+  // ---------- Func to use special scope ------------------------
+  template <__xsan::ScopedFunc func>
+  struct FuncScope {};
+
+  // We miss atomic synchronization in getaddrinfo,
+  // and can report false race between malloc and free
+  // inside of getaddrinfo. So ignore memory accesses.
+  template <>
+  struct FuncScope<__xsan::ScopedFunc::getaddrinfo> {
+    const Context ctx_;
+    FuncScope() : ctx_(GET_CURRENT_PC()) {
+      ThreadIgnoreBegin(ctx_.thr_, ctx_.pc_);
+    }
+    ~FuncScope() { ThreadIgnoreEnd(ctx_.thr_); }
+  };
 };
 
 }  // namespace __tsan

@@ -3,7 +3,6 @@
 #include <sanitizer_common/sanitizer_interface_internal.h>
 #include <ubsan/ubsan_init.h>
 
-#include "asan/asan_init.h"
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_mutex.h"
@@ -16,10 +15,6 @@
 #include "xsan_platform.h"
 #include "xsan_stack.h"
 #include "xsan_allocator.h"
-
-#if XSAN_CONTAINS_TSAN
-#  include "tsan/tsan_init.h"
-#endif
 
 #define INIT_ONCE           \
   static bool done = false; \
@@ -148,25 +143,6 @@ void CheckAndProtect() {
   10. The final common initializations/
 */
 
-/// Before any other initialization.
-/// Used to initialize state of sub-santizers, e.g., Context of TSan.
-static void XsanInitVeryEarly() {
-  INIT_ONCE
-  XSAN_HOOKS_EXEC(InitFromXsanVeryEarly);
-}
-
-/// After flags initialization, before any other initialization.
-static void XsanInitEarly() {
-  INIT_ONCE
-  XSAN_HOOKS_EXEC(InitializePlatformEarly);
-}
-
-/// Almost after all is done, e.g., flags, memory, allocator, threads, etc.
-static void XsanInitLate() {
-  INIT_ONCE
-  XSAN_HOOKS_EXEC(InitFromXsanLate);
-}
-
 static bool XsanInitInternal() {
   if (LIKELY(XsanInited()))
     return true;
@@ -175,7 +151,7 @@ static bool XsanInitInternal() {
   xsan_in_init = true;
 
   XsanCheckDynamicRTPrereqs();
-  XsanInitVeryEarly();
+  InitFromXsanVeryEarly();
   /// note that place this after cur_thread_init()
   __xsan::ScopedIgnoreInterceptors ignore;
 
@@ -189,7 +165,7 @@ static bool XsanInitInternal() {
   InitializeFlags();
 
   __sanitizer::InitializePlatformEarly();
-  XsanInitEarly();
+  InitFromXsanEarly();
 
   // Stop performing init at this point if we are being loaded via
   // dlopen() and the platform supports it.
@@ -212,17 +188,16 @@ static bool XsanInitInternal() {
   ReplaceSystemMalloc();
 #endif
 
-  DisableCoreDumperIfNecessary();
-
   InitializeXsanInterceptors();
+
+  DisableCoreDumperIfNecessary();
 
   XsanTSDInit(XsanTSDDtor);
 
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
   CheckAndProtect();
-
-  XSAN_HOOKS_EXEC(InitFromXsan);
+  InitFromXsan();
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
@@ -242,7 +217,7 @@ static bool XsanInitInternal() {
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-  XsanInitLate();
+  InitFromXsanLate();
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 

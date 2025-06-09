@@ -6,6 +6,12 @@
 
 extern "C" {
 void *__asan_extra_spill_area();
+void __asan_unaligned_load2(uptr p);
+void __asan_unaligned_load4(uptr p);
+void __asan_unaligned_load8(uptr p);
+void __asan_unaligned_store2(uptr p);
+void __asan_unaligned_store4(uptr p);
+void __asan_unaligned_store8(uptr p);
 }
 
 namespace __asan {
@@ -99,5 +105,10 @@ void InitializeFlags();
 void ValidateFlags();
 void SetCommonFlags(CommonFlags &cf);
 void SetAsanThreadName(const char *name);
+
+// Initialization before xsan_is_running = false;
+void AsanInitFromXsan();
+// Initialization after xsan_is_running = false;
+void AsanInitFromXsanLate();
 
 }  // namespace __asan

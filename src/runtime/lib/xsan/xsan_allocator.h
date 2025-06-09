@@ -18,6 +18,7 @@ public:
 
 public:
   bool PointerIsMine(const void*p);
+  bool FromPrimary(const void *p);
   void *GetBlockBegin(const void*p);
   void *AllocateInternel(uptr size, BufferedStackTrace *stack);
   void DeallocateInternal(void *ptr, BufferedStackTrace *stack);

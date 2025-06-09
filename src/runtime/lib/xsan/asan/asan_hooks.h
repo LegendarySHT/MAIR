@@ -45,6 +45,20 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
   using Context = AsanContext;
   using Thread = AsanHooksThread;
 
+  // ------------------ Xsan-Initialization-Related Hooks ----------------
+  static constexpr char name[] = "AddressSanitizer";
+
+  static void InitFromXsan() {
+    __xsan::ScopedSanitizerToolName tool_name(name);
+    __asan::AsanInitFromXsan();
+  }
+  static void InitFromXsanLate() {
+    __xsan::ScopedSanitizerToolName tool_name(name);
+    __asan::AsanInitFromXsanLate();
+  }
+  // ---------------------- Memory Management Hooks -------------------
+  /// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
+  /// need to invoke ASan's hooks here.
   // ---------------------- pthread-related hooks -----------------
   /// ASan 1) checks the correctness of main thread ID, 2) checks the init
   /// orders.
@@ -63,12 +77,9 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
     __asan_handle_no_return();
   }
   // ---------------------- Flags Registration Hooks ---------------
-  ALWAYS_INLINE static void InitializeFlags() { __asan::InitializeFlags(); }
-  ALWAYS_INLINE static void InitializeSanitizerFlags() {
+  ALWAYS_INLINE static void InitializeFlags() {
     __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");
-    // Initialize flags. This must be done early, because most of the
-    // initialization steps look at flags().
-    InitializeFlags();
+    __asan::InitializeFlags();
   }
   ALWAYS_INLINE static void SetCommonFlags(CommonFlags &cf) {
     __asan::SetCommonFlags(cf);
@@ -113,14 +124,25 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
                                             uptr size, const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
-  // ---------- xsan_initialization-Related Hooks ----------------
-  static void InitFromXsanLate();
-  static void InitFromXsan();
-
+  PSEUDO_MACRO static void CommonSyscallPreReadRange(const Context &ctx,
+                                                     const void *offset,
+                                                     uptr size,
+                                                     const char *func_name) {
+    AccessMemoryRange(&ctx, (uptr)offset, size, false, func_name);
+  }
+  PSEUDO_MACRO static void CommonSyscallPreWriteRange(const Context &ctx,
+                                                      const void *offset,
+                                                      uptr size,
+                                                      const char *func_name) {
+    AccessMemoryRange(&ctx, (uptr)offset, size, false, func_name);
+  }
   // ---------- xsan_interface-Related Hooks ----------------
   template <s32 ReadSize>
+  static void __xsan_unaligned_read(uptr p);
+  template <s32 WriteSize>
+  static void __xsan_unaligned_write(uptr p);
+  template <s32 ReadSize>
   static void __xsan_read(uptr p);
-
   template <s32 WriteSize>
   static void __xsan_write(uptr p);
 };

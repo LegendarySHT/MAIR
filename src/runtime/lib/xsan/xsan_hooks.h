@@ -14,7 +14,6 @@
 #include "xsan_attribute.h"
 #include "xsan_hooks_dispatch.h"
 #include "xsan_interface_internal.h"
-#include "xsan_thread.h"
 
 namespace __sanitizer {
 struct CommonFlags;
@@ -37,10 +36,15 @@ struct XsanContext {
 struct XsanInterceptorContext {
   const char *interceptor_name;
   /// TODO: should use pointer or reference?
-  XsanContext xsan_ctx;
+  XsanContext &xsan_ctx;
 };
 
 // ---------------------- Hook for other Sanitizers -------------------
+ALWAYS_INLINE void InitFromXsanVeryEarly() { XSAN_HOOKS_EXEC(InitFromXsanVeryEarly); }
+ALWAYS_INLINE void InitFromXsanEarly() { XSAN_HOOKS_EXEC(InitFromXsanEarly); }
+ALWAYS_INLINE void InitFromXsan() { XSAN_HOOKS_EXEC(InitFromXsan); }
+ALWAYS_INLINE void InitFromXsanLate() { XSAN_HOOKS_EXEC(InitFromXsanLate); }
+
 /// Notifies Xsan that the current thread is entering an completely internal
 /// Xsan function, e.g., __asan_handle_no_return.
 /// In such cases, Xsan should not do sanity checks.
@@ -51,13 +55,6 @@ class ScopedXsanInternal {
  public:
   ALWAYS_INLINE ScopedXsanInternal() { xsan_in_intenal++; }
   ALWAYS_INLINE ~ScopedXsanInternal() { xsan_in_intenal--; }
-};
-extern THREADLOCAL int xsan_in_calloc;
-ALWAYS_INLINE bool IsInXsanCalloc() { return xsan_in_calloc != 0; }
-class ScopedXsanCalloc {
- public:
-  ALWAYS_INLINE ScopedXsanCalloc() { xsan_in_calloc++; }
-  ALWAYS_INLINE ~ScopedXsanCalloc() { xsan_in_calloc--; }
 };
 extern THREADLOCAL int is_in_symbolizer;
 ALWAYS_INLINE bool in_symbolizer() { return UNLIKELY(is_in_symbolizer > 0); }
@@ -120,8 +117,20 @@ ALWAYS_INLINE void XsanAllocFreeTailHook(uptr pc) {
   XSAN_HOOKS_EXEC(OnXsanAllocFreeTailHook, pc);
 }
 
+ALWAYS_INLINE void OnFakeStackAlloc(uptr addr, uptr size) {
+  XSAN_HOOKS_EXEC(OnFakeStackAlloc, addr, size);
+}
+
+ALWAYS_INLINE void OnFakeStackFree(uptr addr, uptr size) {
+  XSAN_HOOKS_EXEC(OnFakeStackFree, addr, size);
+}
+
 ALWAYS_INLINE void OnFakeStackDestory(uptr addr, uptr size) {
   XSAN_HOOKS_EXEC(OnFakeStackDestory, addr, size);
+}
+
+ALWAYS_INLINE void OnDtlsAlloc(uptr addr, uptr size) {
+  XSAN_HOOKS_EXEC(OnDtlsAlloc, addr, size);
 }
 
 class ScopedPthreadJoin {
@@ -163,6 +172,8 @@ class ScopedPthreadTryJoin {
 };
 
 // ---------------------- Special Function Hooks -----------------
+
+ALWAYS_INLINE void AtExit() { XSAN_HOOKS_EXEC(AtExit); }
 
 class ScopedAtExitWrapper {
  public:
@@ -233,30 +244,10 @@ ALWAYS_INLINE void OnLongjmp(void *env, const char *fn_name, uptr pc) {
   XSAN_HOOKS_EXEC(OnLongjmp, env, fn_name, pc);
 }
 
-class ScopedUnwinding {
- public:
-  ALWAYS_INLINE explicit ScopedUnwinding(XsanThread *t) {
-    if (thread) {
-      can_unwind = !thread->isUnwinding();
-      thread->setUnwinding(true);
-    }
-    XSAN_HOOKS_EXEC(OnEnterUnwind);
-  }
-  ALWAYS_INLINE ~ScopedUnwinding() {
-    XSAN_HOOKS_EXEC(OnExitUnwind);
-    if (thread) {
-      thread->setUnwinding(false);
-    }
-  }
+ALWAYS_INLINE void OnEnterUnwind() { XSAN_HOOKS_EXEC(OnEnterUnwind); }
+ALWAYS_INLINE void OnExitUnwind() { XSAN_HOOKS_EXEC(OnExitUnwind); }
 
-  ALWAYS_INLINE bool CanUnwind() const { return can_unwind; }
-
- private:
-  XsanThread *thread = nullptr;
-  bool can_unwind = true;
-};
-
-enum class XsanStackTraceType { store };
+enum class XsanStackTraceType { copy };
 
 template <XsanStackTraceType type>
 ALWAYS_INLINE bool RequireStackTraces() {
@@ -272,6 +263,14 @@ ALWAYS_INLINE int RequireStackTracesSize() {
   return size;
 }
 
+template <ScopedFunc func>
+struct XsanFuncScope {
+  XSAN_HOOKS_DEFINE_VAR(FuncScope<func>)
+};
+
+ALWAYS_INLINE void InitializeInterceptors() {
+  XSAN_HOOKS_EXEC(InitializeInterceptors);
+}
 PSEUDO_MACRO void ReadRange(void *_ctx, const void *offset, uptr size) {
   XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
   XSAN_HOOKS_EXEC(ReadRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
@@ -281,6 +280,41 @@ PSEUDO_MACRO void WriteRange(void *_ctx, const void *offset, uptr size) {
   XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
   XSAN_HOOKS_EXEC(WriteRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
                   offset, size, (ctx ? ctx->interceptor_name : nullptr));
+}
+// "use" means that the value is:
+// 1. dereferenced as a pointer
+// 2. used for conditional judgement
+// 3. used for system call
+// 4. loaded to a floating point register
+/// TODO: whether 'ctx' is needed, some places use nullptr now:
+// 1. 'sigaction_impl' in 'tsan_interceptors.cpp'
+// 2. 'CallUserSignalHandler' in 'tsan_interceptors.cpp'
+PSEUDO_MACRO void UseRange(void *_ctx, const void *offset, uptr size) {
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(UseRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
+                  offset, size, (ctx ? ctx->interceptor_name : __func__));
+}
+PSEUDO_MACRO void CopyRange(void *_ctx, const void *dst, const void *src,
+                            uptr size, BufferedStackTrace &stack) {
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(CopyRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
+                  dst, src, size, stack);
+}
+PSEUDO_MACRO void MoveRange(void *_ctx, const void *dst, const void *src,
+                            uptr size, BufferedStackTrace &stack) {
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(MoveRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
+                  dst, src, size, stack);
+}
+/// TODO: whether 'ctx' is needed, some places use nullptr now:
+// 1. 'mallinfo' in 'xsan_malloc_linux.cpp'
+// 2. 'XSAN_COMMON_INIT_RANGE' in 'xsan_interceptors_memintrinsics.h'
+// 3. 'sigaction_impl' in 'tsan_interceptors.cpp'
+// 4. 'CallUserSignalHandler' in 'tsan_interceptors.cpp'
+PSEUDO_MACRO void InitRange(void *_ctx, const void *offset, uptr size) {
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(InitRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
+                  offset, size);
 }
 PSEUDO_MACRO void CommonReadRange(void *_ctx, const void *offset, uptr size) {
   XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
@@ -293,6 +327,35 @@ PSEUDO_MACRO void CommonWriteRange(void *_ctx, const void *offset, uptr size) {
   XSAN_HOOKS_EXEC(CommonWriteRange,
                   XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr}, offset,
                   size, (ctx ? ctx->interceptor_name : nullptr));
+}
+PSEUDO_MACRO void CommonUnpoisonParam(uptr count) {
+  XSAN_HOOKS_EXEC(CommonUnpoisonParam, count);
+}
+PSEUDO_MACRO void CommonInitRange(void *_ctx, const void *offset, uptr size) {
+  XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;
+  XSAN_HOOKS_EXEC(CommonInitRange,
+                  XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr}, offset,
+                  size);
+}
+PSEUDO_MACRO void CommonSyscallPreReadRange(const XsanInterceptorContext &ctx,
+                                            const void *offset, uptr size) {
+  XSAN_HOOKS_EXEC(CommonSyscallPreReadRange, ctx.xsan_ctx, offset, size,
+                  ctx.interceptor_name);
+}
+PSEUDO_MACRO void CommonSyscallPostReadRange(const XsanInterceptorContext &ctx,
+                                             const void *offset, uptr size) {
+  XSAN_HOOKS_EXEC(CommonSyscallPostReadRange, ctx.xsan_ctx, offset, size,
+                  ctx.interceptor_name);
+}
+PSEUDO_MACRO void CommonSyscallPreWriteRange(const XsanInterceptorContext &ctx,
+                                             const void *offset, uptr size) {
+  XSAN_HOOKS_EXEC(CommonSyscallPreWriteRange, ctx.xsan_ctx, offset, size,
+                  ctx.interceptor_name);
+}
+PSEUDO_MACRO void CommonSyscallPostWriteRange(const XsanInterceptorContext &ctx,
+                                              const void *offset, uptr size) {
+  XSAN_HOOKS_EXEC(CommonSyscallPostWriteRange, ctx.xsan_ctx, offset, size,
+                  ctx.interceptor_name);
 }
 
 }  // namespace __xsan

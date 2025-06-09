@@ -17,7 +17,7 @@ using namespace __xsan;
 // memcpy is called during __xsan_init() from the internals of printf(...).
 // We do not treat memcpy with to==from as a bug.
 // See http://llvm.org/bugs/show_bug.cgi?id=11763.
-#define XSAN_MEMCPY_IMPL(ctx, to, from, size)               \
+#define XSAN_MEMCPY_IMPL(ctx, to, from, size)                 \
   do {                                                        \
     if (LIKELY(replace_intrin_cached)) {                      \
       if (LIKELY(to != from)) {                               \
@@ -25,6 +25,7 @@ using namespace __xsan;
       }                                                       \
       XSAN_READ_RANGE(ctx, from, size);                       \
       XSAN_WRITE_RANGE(ctx, to, size);                        \
+      XSAN_COPY_RANGE(ctx, to, from, size);                   \
     } else if (UNLIKELY(!XsanInited())) {                     \
       return internal_memcpy(to, from, size);                 \
     }                                                         \
@@ -36,6 +37,7 @@ using namespace __xsan;
   do {                                        \
     if (LIKELY(replace_intrin_cached)) {      \
       XSAN_WRITE_RANGE(ctx, block, size);     \
+      XSAN_INIT_RANGE(ctx, block, size);      \
     } else if (UNLIKELY(!XsanInited())) {     \
       return internal_memset(block, c, size); \
     }                                         \
@@ -44,9 +46,10 @@ using namespace __xsan;
 
 #define XSAN_MEMMOVE_IMPL(ctx, to, from, size) \
   do {                                         \
-    if (LIKELY(XsanInited())) {                 \
+    if (LIKELY(XsanInited())) {                \
       XSAN_READ_RANGE(ctx, from, size);        \
       XSAN_WRITE_RANGE(ctx, to, size);         \
+      XSAN_MOVE_RANGE(ctx, to, from, size);    \
     }                                          \
     return internal_memmove(to, from, size);   \
   } while (0)

@@ -617,11 +617,11 @@ struct Allocator {
 
     void *res = reinterpret_cast<void *>(user_beg);
 
-    __xsan::XsanAllocHook(user_beg, size, stack);
+    // __xsan::XsanAllocHook(user_beg, size, stack);
     /// Internal allocations do not occur during signal processing
     /// Refer to tsan_fd.cpp
     // __xsan::XsanAllocFreeTailHook();
-    RunMallocHooks(res, size);
+    // RunMallocHooks(res, size);
     return allocated;
   }
 
@@ -952,6 +952,7 @@ struct Allocator {
       // If realloc() races with free(), we may start copying freed memory.
       // However, we will report racy double-free later anyway.
       REAL(memcpy)(new_ptr, old_ptr, memcpy_size);
+      __xsan::CopyRange(nullptr, new_ptr, old_ptr, memcpy_size, *stack);
       Deallocate(old_ptr, 0, 0, stack, FROM_MALLOC);
     }
     return new_ptr;
@@ -1497,6 +1498,10 @@ void XsanAllocator::ForceUnlock() { instance.ForceUnlock(); }
 /// ASan's embedded metadata should not be exposed
 bool XsanAllocator::PointerIsMine(const void *p) {
   return __asan::UserPointerIsMine(p);
+}
+
+bool XsanAllocator::FromPrimary(const void *p) {
+  return instance.allocator.FromPrimary(p);
 }
 
 /// ASan's embedded metadata should not be exposed

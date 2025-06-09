@@ -456,10 +456,13 @@ void TsanHooks::OnXsanAllocFreeTailHook(uptr pc) {
 
 void TsanHooks::OnFakeStackDestory(uptr addr, uptr size) {
   /// The 1st and 2nd arguments are ignored in MemoryResetRange.
-  MemoryResetRange(cur_thread(), 0, addr, size);
+  MemoryResetRange(nullptr, 0, addr, size);
 }
 
-
+void TsanHooks::OnDtlsAlloc(uptr addr, uptr size) {
+  /// The 1st and 2nd arguments are ignored in MemoryResetRange.
+  MemoryResetRange(nullptr, 0, addr, size);
+}
 
 }  // namespace __tsan
 

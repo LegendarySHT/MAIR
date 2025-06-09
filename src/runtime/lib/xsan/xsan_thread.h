@@ -27,10 +27,17 @@ class XsanThread {
   friend XsanThread *GetCurrentThread();
   /// TODO: offer uniform hooks to remove this
   friend struct ::ScopedSyscall;
+  friend struct __sanitizer::BufferedStackTrace;
 
-  struct StackBounds {
-    uptr bottom;
-    uptr top;
+  struct Bounds {
+    union {
+      uptr bottom, begin;
+    };
+    union {
+      uptr top, end;
+    };
+    Bounds() : bottom(0), top(0) {}
+    Bounds(uptr b, uptr t) : bottom(b), top(t) {}
   };
 
  public:
@@ -53,6 +60,7 @@ class XsanThread {
   /// ASan declares this method, but not implements.
   thread_return_t RunThread();
 
+  Bounds GetStackBounds() const;
   uptr stack_top() const;
   uptr stack_bottom() const;
   uptr stack_size() const;
@@ -91,6 +99,20 @@ class XsanThread {
   static bool isMainThread() { return xsan_current_thread->is_main_thread_; }
   static bool isMainThread(const XsanThreadQueryKey &t) {
     return t.xsan_thread_ ? t.xsan_thread_->is_main_thread_ : false;
+  }
+  static Bounds GetStackBounds(const XsanThreadQueryKey &t) {
+    return t.xsan_thread_ ? t.xsan_thread_->GetStackBounds() : Bounds{0, 0};
+  }
+  static Bounds GetTlsBounds(const XsanThreadQueryKey &t) {
+    return t.xsan_thread_
+               ? Bounds{t.xsan_thread_->tls_begin(), t.xsan_thread_->tls_end()}
+               : Bounds{0, 0};
+  }
+  static DTLS *GetDtls(const XsanThreadQueryKey &t) {
+    return t.xsan_thread_ ? t.xsan_thread_->dtls_ : nullptr;
+  }
+  static u32 GetTid(const XsanThreadQueryKey &t) {
+    return t.xsan_thread_ ? t.xsan_thread_->tid_ : kInvalidTid;
   }
 
   // ------------ End of Query Functions ----------------
@@ -136,8 +158,6 @@ class XsanThread {
 
   struct InitOptions;
   void SetThreadStackAndTls(const InitOptions *options);
-
-  StackBounds GetStackBounds() const;
 
   void GetStartData(void *out, uptr out_size) const;
 

@@ -29,7 +29,6 @@ using namespace __xsan;
 namespace __xsan {
 
 THREADLOCAL int xsan_in_intenal = 0;
-THREADLOCAL int xsan_in_calloc = 0;
 THREADLOCAL int is_in_symbolizer;
 
 int get_exit_code(const void *ctx) {

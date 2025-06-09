@@ -14,6 +14,14 @@
 
 namespace __xsan {
 
+enum class ScopedFunc {
+  calloc,
+  getaddrinfo,
+  strdup,
+  common,
+  signal,
+};
+
 // The use of templates here ensures that the `Context` class for sanitizers
 // using the default context is not the same class. This is necessary because
 // implicit type conversion rules need to be defined in bulk. Without templates,
@@ -25,6 +33,7 @@ struct DefaultContext {
   ALWAYS_INLINE DefaultContext(uptr pc) {};
 };
 
+template <XsanHooksSanitizer san>
 struct DefaultThread {};
 
 template <typename Context, typename Thread>
@@ -32,6 +41,17 @@ struct DefaultHooks {
   using BufferedStackTrace = ::__sanitizer::BufferedStackTrace;
   using u32 = ::__sanitizer::u32;
   using uptr = ::__sanitizer::uptr;
+
+  // ---------- Xsan-Initialization-Related Hooks ----------------
+  /// Before any other initialization.
+  /// Used to initialize state of sub-santizers, e.g., Context of TSan.
+  ALWAYS_INLINE static void InitFromXsanVeryEarly() {}
+  /// After flags initialization, before any other initialization.
+  ALWAYS_INLINE static void InitFromXsanEarly() {}
+  ALWAYS_INLINE static void InitFromXsan() {}
+  /// Almost after all is done, e.g., flags, memory, allocator, threads, etc.
+  ALWAYS_INLINE static void InitFromXsanLate() {}
+  // ---------- End of Xsan-Initialization-Related Hooks ----------------
 
   // ----------- State/Ignoration Management Hooks -----------
   /*
@@ -41,10 +61,8 @@ struct DefaultHooks {
     - if XSan should ignore interceptors
     - the exit code of XSan
   */
-
   ALWAYS_INLINE static void EnterSymbolizer() {}
   ALWAYS_INLINE static void ExitSymbolizer() {}
-
   /*
    The sub-sanitizers implement the following ignore predicates to ignore
     - Interceptors
@@ -55,13 +73,9 @@ struct DefaultHooks {
     return false;
   }
   ALWAYS_INLINE static bool ShouldIgnoreAllocFreeHook() { return false; }
-
   // ---------- End of State Management Hooks -----------------
 
   // ---------------------- Memory Management Hooks -------------------
-  /// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
-  /// need to invoke ASan's hooks here.
-
   ALWAYS_INLINE static void OnAllocatorMap(uptr p, uptr size) {}
   ALWAYS_INLINE static void OnAllocatorMapSecondary(uptr p, uptr size,
                                                     uptr user_begin,
@@ -72,13 +86,17 @@ struct DefaultHooks {
   ALWAYS_INLINE static void OnXsanFreeHook(uptr ptr, uptr size,
                                            BufferedStackTrace *stack) {}
   ALWAYS_INLINE static void OnXsanAllocFreeTailHook(uptr pc) {}
+  ALWAYS_INLINE static void OnFakeStackAlloc(uptr addr, uptr size) {}
+  ALWAYS_INLINE static void OnFakeStackFree(uptr addr, uptr size) {}
   ALWAYS_INLINE static void OnFakeStackDestory(uptr addr, uptr size) {}
-
+  // 1. It must not process pending signals.
+  //    Signal handlers may contain MOVDQA instruction (see below).
+  // 2. It must be as simple as possible to not contain MOVDQA.
+  ALWAYS_INLINE static void OnDtlsAlloc(uptr addr, uptr size) {}
   // ---------- End of Memory Management Hooks -------------------
 
   // ---------------------- pthread-related hooks -----------------
   /* pthread_create, pthread_join, pthread_detach, pthread_tryjoin_np, ... */
-
   class ScopedPthreadJoin {
    public:
     /// args:
@@ -90,26 +108,23 @@ struct DefaultHooks {
                                     const void *th) {}
     ALWAYS_INLINE ~ScopedPthreadJoin() {}
   };
-
   class ScopedPthreadDetach {
    public:
     ALWAYS_INLINE ScopedPthreadDetach(const int &res, const Context &ctx,
                                       const void *th) {}
     ALWAYS_INLINE ~ScopedPthreadDetach() {}
   };
-
   class ScopedPthreadTryJoin {
    public:
     ALWAYS_INLINE ScopedPthreadTryJoin(const int &res, const Context &ctx,
                                        const void *th) {}
     ALWAYS_INLINE ~ScopedPthreadTryJoin() {}
   };
-
   ALWAYS_INLINE static void OnPthreadCreate() {}
-
   // ---------------- End of pthread-related hooks -----------------
 
   // ---------------------- Special Function Hooks -----------------
+  ALWAYS_INLINE static void AtExit() {}
   class ScopedAtExitWrapper {
    public:
     ALWAYS_INLINE ScopedAtExitWrapper(uptr pc, const void *ctx) {}
@@ -132,10 +147,8 @@ struct DefaultHooks {
   // --------- End of Special Function Hooks ---------
 
   // ---------- Unwind-related Hooks ----------------
-
   ALWAYS_INLINE static void OnEnterUnwind() {}
   ALWAYS_INLINE static void OnExitUnwind() {}
-
   // ---------- End of Unwind-related Hooks ----------------
 
   // ---------- Require Stack Trace Hooks ----------------
@@ -145,7 +158,6 @@ struct DefaultHooks {
 
   // ---------------------- Flags Registration Hooks ---------------
   ALWAYS_INLINE static void InitializeFlags() {}
-  ALWAYS_INLINE static void InitializeSanitizerFlags() {}
   ALWAYS_INLINE static void SetCommonFlags(CommonFlags &cf) {}
   ALWAYS_INLINE static void ValidateFlags() {}
   // ----------End of Flags Registration Hooks ---------------
@@ -189,40 +201,75 @@ struct DefaultHooks {
                                          uptr size) {}
   // ---------- End of Synchronization and File-Related Hooks ----------------
 
+  // ---------- Func to use special scope ------------------------
+  template <ScopedFunc func>
+  struct FuncScope {};
+  // ---------- End of Func to use special scope ----------------
+
   // ---------- Generic Hooks in Interceptors ----------------
+  ALWAYS_INLINE static void InitializeInterceptors() {}
   PSEUDO_MACRO static void ReadRange(const Context *ctx, const void *offset,
                                      uptr size, const char *func_name) {}
   PSEUDO_MACRO static void WriteRange(const Context *ctx, const void *offset,
                                       uptr size, const char *func_name) {}
+  // "use" means that the value is:
+  // 1. dereferenced as a pointer
+  // 2. used for conditional judgement
+  // 3. used for system call
+  // 4. loaded to a floating point register
+  /// TODO: whether 'ctx' is needed, some places use nullptr now:
+  // 1. 'sigaction_impl' in 'tsan_interceptors.cpp'
+  PSEUDO_MACRO static void UseRange(const Context *ctx, const void *offset,
+                                    uptr size, const char *func_name) {}
+  PSEUDO_MACRO static void CopyRange(const Context *ctx, const void *dst,
+                                     const void *src, uptr size,
+                                     BufferedStackTrace &stack) {}
+  PSEUDO_MACRO static void MoveRange(const Context *ctx, const void *dst,
+                                     const void *src, uptr size,
+                                     BufferedStackTrace &stack) {}
+  /// TODO: whether 'ctx' is needed, some places use nullptr now:
+  // 1. 'mallinfo' in 'xsan_malloc_linux.cpp'
+  // 2. 'XSAN_COMMON_INIT_RANGE' in 'xsan_interceptors_memintrinsics.h'
+  // 3. 'sigaction_impl' in 'tsan_interceptors.cpp'
+  PSEUDO_MACRO static void InitRange(const Context *ctx, const void *offset,
+                                     uptr size) {}
   PSEUDO_MACRO static void CommonReadRange(const Context *ctx,
                                            const void *offset, uptr size,
                                            const char *func_name) {}
   PSEUDO_MACRO static void CommonWriteRange(const Context *ctx,
                                             const void *offset, uptr size,
                                             const char *func_name) {}
+  PSEUDO_MACRO static void CommonUnpoisonParam(uptr count) {}
+  PSEUDO_MACRO static void CommonInitRange(const Context *ctx,
+                                           const void *offset, uptr size) {}
+  PSEUDO_MACRO static void CommonSyscallPreReadRange(const Context &ctx,
+                                                     const void *offset,
+                                                     uptr size,
+                                                     const char *func_name) {}
+  PSEUDO_MACRO static void CommonSyscallPostReadRange(const Context &ctx,
+                                                      const void *offset,
+                                                      uptr size,
+                                                      const char *func_name) {}
+  PSEUDO_MACRO static void CommonSyscallPreWriteRange(const Context &ctx,
+                                                      const void *offset,
+                                                      uptr size,
+                                                      const char *func_name) {}
+  PSEUDO_MACRO static void CommonSyscallPostWriteRange(const Context &ctx,
+                                                       const void *offset,
+                                                       uptr size,
+                                                       const char *func_name) {}
   // ---------- End of Generic Hooks in Interceptors ----------------
 
-  // ---------- xsan_initialization-Related Hooks ----------------
-  ALWAYS_INLINE static void InitFromXsanVeryEarly() {}
-  ALWAYS_INLINE static void InitFromXsanLate() {}
-  ALWAYS_INLINE static void InitializePlatformEarly() {}
-  ALWAYS_INLINE static void InitializeInterceptors() {}
-  ALWAYS_INLINE static void InitFromXsan() {}
-  // ---------- End of xsan_initialization-Related Hooks ----------------
-
-  // ---------- xsan_interface-Related Hooks ----------------
+  // ---------- Xsan-Interface-Related Hooks ----------------
   template <s32 ReadSize>
   ALWAYS_INLINE static void __xsan_unaligned_read(uptr p) {}
-
   template <s32 WriteSize>
   ALWAYS_INLINE static void __xsan_unaligned_write(uptr p) {}
-
   template <s32 ReadSize>
   ALWAYS_INLINE static void __xsan_read(uptr p) {}
-
   template <s32 WriteSize>
   ALWAYS_INLINE static void __xsan_write(uptr p) {}
-  // ---------- End of xsan_interface-Related Hooks ----------------
+  // ---------- End of Xsan-Interface-Related Hooks ----------------
 };
 
 }  // namespace __xsan
