@@ -40,18 +40,45 @@ struct AsanMappingBase {
   static constexpr const uptr kAsanShadowGapEnd = kAsanHighShadowBeg;
 };
 
+struct MsanMappingDesc {
+  uptr start;
+  uptr end;
+  enum Type {
+    INVALID = 1,
+    ALLOCATOR = 2,
+    APP = 4,
+    SHADOW = 8,
+    ORIGIN = 16,
+  } type;
+  const char *name;
+};
+
 /*
 C/C++ on linux/x86_64 and freebsd/x86_64
-0000 0000 1000 - 0200 0000 0000: main binary and/or MAP_32BIT mappings (2TB)
-0200 0000 0000 - 2000 0000 0000: -
-2000 0000 0000 - 4000 0000 0000: shadow (32TB)
-4000 0000 0000 - 4800 0000 0000: metainfo (memory blocks and sync objects; 8TB)
-4800 0000 0000 - 5500 0000 0000: -
-5500 0000 0000 - 5a00 0000 0000: pie binaries without ASLR or on 4.1+ kernels
-5a00 0000 0000 - 7200 0000 0000: -
-7200 0000 0000 - 7400 0000 0000: heap (1TB)
-7400 0000 0000 - 7a00 0000 0000: -
-7a00 0000 0000 - 8000 0000 0000: modules and main thread stack (6TB)
+0000 0000 1000 - 0000 7fff 8000: main binary and/or MAP_32BIT mappings (low app)
+0000 7fff 8000 - 1000 7fff 8000: ASan shadow
+1000 7fff 8000 - 1200 0000 0000: -
+1200 0000 0000 - 3000 0000 0000: TSan shadow
+3000 0000 0000 - 3100 0000 0000: MSan shadow (low app)
+3100 0000 0000 - 3800 0000 0000: -
+3800 0000 0000 - 4000 0000 0000: TSan metainfo
+4000 0000 0000 - 4100 0000 0000: MSan origin (low app)
+4100 0000 0000 - 4200 0000 0000: -
+4200 0000 0000 - 4400 0000 0000: MSan shadow (heap)
+4400 0000 0000 - 4a00 0000 0000: -
+4a00 0000 0000 - 5000 0000 0000: Msan shadow (high app)
+5000 0000 0000 - 5200 0000 0000: -
+5200 0000 0000 - 5400 0000 0000: MSan origin (heap)
+5400 0000 0000 - 5500 0000 0000: -
+5500 0000 0000 - 5a00 0000 0000: pie binaries without ASLR or on 4.1+ kernels (5TB) (mid app)
+5a00 0000 0000 - 6000 0000 0000: MSan origin (high app)
+6000 0000 0000 - 6500 0000 0000: -
+6500 0000 0000 - 6a00 0000 0000: MSan shadow (mid app)
+6a00 0000 0000 - 7200 0000 0000: -
+7200 0000 0000 - 7400 0000 0000: heap (2TB)
+7400 0000 0000 - 7500 0000 0000: -
+7500 0000 0000 - 7a00 0000 0000: MSan origin (mid app)
+7a00 0000 0000 - 8000 0000 0000: modules and main thread stack (6TB) (high app)
 C/C++ on netbsd/amd64 can reuse the same mapping:
  * The address space starts from 0x1000 (option with 0x0) and ends with
    0x7f7ffffff000.
@@ -78,17 +105,44 @@ struct Mapping48AddressSpace : public AsanMappingBase<Mapping48AddressSpace> {
   static constexpr const uptr kVdsoBeg = 0xf000000000000000ull;
 
   /// TSan's Shadow & MetaInfo Shadow parameters
-  static constexpr const uptr kTsanShadowBeg = 0x200000000000ull;
-  static constexpr const uptr kTsanShadowEnd = 0x400000000000ull;
-  static constexpr const uptr kTsanMetaShadowBeg = 0x400000000000ull;
-  static constexpr const uptr kTsanMetaShadowEnd = 0x480000000000ull;
+  static constexpr const uptr kTsanShadowBeg = 0x120000000000ull;
+  static constexpr const uptr kTsanShadowEnd = 0x300000000000ull;
+  static constexpr const uptr kTsanMetaShadowBeg = 0x380000000000ull;
+  static constexpr const uptr kTsanMetaShadowEnd = 0x400000000000ull;
   static constexpr const uptr kTsanShadowMsk = 0x700000000000ull;
-  static constexpr const uptr kTsanShadowXor = 0x000000000000ull;
-  static constexpr const uptr kTsanShadowAdd = 0x200000000000ull;
+  static constexpr const uptr kTsanShadowXor = 0x0b0000000000ull;
+  static constexpr const uptr kTsanShadowAdd = 0x120000000000ull;
 
   /// ASan's Shadow parameters
   static constexpr const uptr kAsanShadowOffset = 0x000000007fff8000ull;
   static constexpr const uptr kAsanShadowScale = 3;
+
+  /// MSan's Shadow parameters
+  static constexpr uptr kMSanShadowXor = 0x300000000000ull;
+  static constexpr uptr kMSanShadowAdd = 0x100000000000ull;
+
+  static constexpr uptr kMSanLoShadowBeg   = 0x300000000000ull;
+  static constexpr uptr kMSanLoShadowEnd   = 0x310000000000ull;
+  static constexpr uptr kMSanMidShadowBeg  = 0x650000000000ull;
+  static constexpr uptr kMSanMidShadowEnd  = 0x6a0000000000ull;
+  static constexpr uptr kMSanHiShadowBeg   = 0x4a0000000000ull;
+  static constexpr uptr kMSanHiShadowEnd   = 0x500000000000ull;
+  static constexpr uptr kMSanHeapShadowBeg = 0x420000000000ull;
+  static constexpr uptr kMSanHeapShadowEnd = 0x440000000000ull;
+  static constexpr MsanMappingDesc kMsanMemoryLayout[] = {
+    {kLoAppMemBeg,  kLoAppMemEnd,  MsanMappingDesc::APP, "app-1"},
+    {kMidAppMemBeg, kMidAppMemEnd, MsanMappingDesc::APP, "app-2"},
+    {kHiAppMemBeg,  kHiAppMemEnd,  MsanMappingDesc::APP, "app-3"},
+    {kHeapMemBeg,   kHeapMemEnd,   MsanMappingDesc::ALLOCATOR, "allocator"},
+    {kMSanLoShadowBeg,   kMSanLoShadowEnd,   MsanMappingDesc::SHADOW, "shadow-1"},
+    {kMSanMidShadowBeg,  kMSanMidShadowEnd,  MsanMappingDesc::SHADOW, "shadow-2"},
+    {kMSanHiShadowBeg,   kMSanHiShadowEnd,   MsanMappingDesc::SHADOW, "shadow-3"},
+    {kMSanHeapShadowBeg, kMSanHeapShadowEnd, MsanMappingDesc::SHADOW, "shadow-alloctor"},
+    {kMSanLoShadowBeg   + kMSanShadowAdd, kMSanLoShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-1"},
+    {kMSanMidShadowBeg  + kMSanShadowAdd, kMSanMidShadowEnd  + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-2"},
+    {kMSanHiShadowBeg   + kMSanShadowAdd, kMSanHiShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-3"},
+    {kMSanHeapShadowBeg + kMSanShadowAdd, kMSanHeapShadowEnd + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-allocator"},
+  };
 };
 
 /*
@@ -793,6 +847,8 @@ struct IsAppMemImpl {
 
 ALWAYS_INLINE
 bool IsAppMem(uptr mem) { return SelectMapping<IsAppMemImpl>(mem); }
+ALWAYS_INLINE
+bool IsAppMem(const void* mem) { return IsAppMem((uptr)mem); }
 
 struct IsTsanShadowMemImpl {
   template <typename Mapping>

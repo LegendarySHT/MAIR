@@ -95,18 +95,18 @@ void CheckAndProtect() {
   ProtectRange(TsanMetaShadowEnd(), HiAppMemBeg());
 #    else
   /// TODO: migrate GAP caculation in xsn_platform.h
-  ProtectRange(LoAppMemEnd(), AsanLowShadowBeg());
+  // ProtectRange(LoAppMemEnd(), AsanLowShadowBeg());
   /// Protected in asan::InitializeShadowMemory  
   // ProtectRange(AsanLowShadowEnd(), AsanHighShadowBeg());
-  ProtectRange(AsanHighShadowEnd(), TsanShadowBeg());
-  if (MidAppMemBeg()) {
-    //Printf("Protecting range: start = 0x%lx, end = 0x%lx\n", TsanMetaShadowEnd(), MidAppMemBeg());
-    ProtectRange(TsanMetaShadowEnd(), MidAppMemBeg());
-    ProtectRange(MidAppMemEnd(), HeapMemBeg());
-  } else {
-    ProtectRange(TsanMetaShadowEnd(), HeapMemBeg());
-  }
-  ProtectRange(HeapEnd(), HiAppMemBeg());
+  // ProtectRange(AsanHighShadowEnd(), TsanShadowBeg());
+  // if (MidAppMemBeg()) {
+  //   //Printf("Protecting range: start = 0x%lx, end = 0x%lx\n", TsanMetaShadowEnd(), MidAppMemBeg());
+  //   ProtectRange(TsanMetaShadowEnd(), MidAppMemBeg());
+  //   ProtectRange(MidAppMemEnd(), HeapMemBeg());
+  // } else {
+  //   ProtectRange(TsanMetaShadowEnd(), HeapMemBeg());
+  // }
+  // ProtectRange(HeapEnd(), HiAppMemBeg());
 #    endif
 
 #    if defined(__s390x__)

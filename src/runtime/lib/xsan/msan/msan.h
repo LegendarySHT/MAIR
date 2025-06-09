@@ -33,6 +33,8 @@
 
 namespace __msan {
 
+using MappingDesc = ::__xsan::MsanMappingDesc;
+
 // Note: MappingDesc::ALLOCATOR entries are only used to check for memory
 // layout compatibility. The actual allocation settings are in
 // msan_allocator.cpp, which need to be kept in sync.
@@ -192,27 +194,32 @@ const MappingDesc kMemoryLayout[] = {
 
 #elif SANITIZER_NETBSD || (SANITIZER_LINUX && SANITIZER_WORDSIZE == 64)
 
+static constexpr auto(&kMemoryLayout) =
+    __xsan::Mapping48AddressSpace::kMsanMemoryLayout;
+#define MEM_TO_SHADOW(mem) ::__msan::MemToShadow(mem)
+#define SHADOW_TO_ORIGIN(mem) ::__msan::ShadowToOrigin(mem)
+
 // All of the following configurations are supported.
 // ASLR disabled: main executable and DSOs at 0x555550000000
 // PIE and ASLR: main executable and DSOs at 0x7f0000000000
 // non-PIE: main executable below 0x100000000, DSOs at 0x7f0000000000
 // Heap at 0x700000000000.
-const MappingDesc kMemoryLayout[] = {
-    {0x000000000000ULL, 0x010000000000ULL, MappingDesc::APP, "app-1"},
-    {0x010000000000ULL, 0x100000000000ULL, MappingDesc::SHADOW, "shadow-2"},
-    {0x100000000000ULL, 0x110000000000ULL, MappingDesc::INVALID, "invalid"},
-    {0x110000000000ULL, 0x200000000000ULL, MappingDesc::ORIGIN, "origin-2"},
-    {0x200000000000ULL, 0x300000000000ULL, MappingDesc::SHADOW, "shadow-3"},
-    {0x300000000000ULL, 0x400000000000ULL, MappingDesc::ORIGIN, "origin-3"},
-    {0x400000000000ULL, 0x500000000000ULL, MappingDesc::INVALID, "invalid"},
-    {0x500000000000ULL, 0x510000000000ULL, MappingDesc::SHADOW, "shadow-1"},
-    {0x510000000000ULL, 0x600000000000ULL, MappingDesc::APP, "app-2"},
-    {0x600000000000ULL, 0x610000000000ULL, MappingDesc::ORIGIN, "origin-1"},
-    {0x610000000000ULL, 0x700000000000ULL, MappingDesc::INVALID, "invalid"},
-    {0x700000000000ULL, 0x740000000000ULL, MappingDesc::ALLOCATOR, "allocator"},
-    {0x740000000000ULL, 0x800000000000ULL, MappingDesc::APP, "app-3"}};
-#define MEM_TO_SHADOW(mem) (((uptr)(mem)) ^ 0x500000000000ULL)
-#define SHADOW_TO_ORIGIN(mem) (((uptr)(mem)) + 0x100000000000ULL)
+// const MappingDesc kMemoryLayout[] = {
+//     {0x000000000000ULL, 0x010000000000ULL, MappingDesc::APP, "app-1"},
+//     {0x010000000000ULL, 0x100000000000ULL, MappingDesc::SHADOW, "shadow-2"},
+//     {0x100000000000ULL, 0x110000000000ULL, MappingDesc::INVALID, "invalid"},
+//     {0x110000000000ULL, 0x200000000000ULL, MappingDesc::ORIGIN, "origin-2"},
+//     {0x200000000000ULL, 0x300000000000ULL, MappingDesc::SHADOW, "shadow-3"},
+//     {0x300000000000ULL, 0x400000000000ULL, MappingDesc::ORIGIN, "origin-3"},
+//     {0x400000000000ULL, 0x500000000000ULL, MappingDesc::INVALID, "invalid"},
+//     {0x500000000000ULL, 0x510000000000ULL, MappingDesc::SHADOW, "shadow-1"},
+//     {0x510000000000ULL, 0x600000000000ULL, MappingDesc::APP, "app-2"},
+//     {0x600000000000ULL, 0x610000000000ULL, MappingDesc::ORIGIN, "origin-1"},
+//     {0x610000000000ULL, 0x700000000000ULL, MappingDesc::INVALID, "invalid"},
+//     {0x700000000000ULL, 0x740000000000ULL, MappingDesc::ALLOCATOR, "allocator"},
+//     {0x740000000000ULL, 0x800000000000ULL, MappingDesc::APP, "app-3"}};
+// #define MEM_TO_SHADOW(mem) (((uptr)(mem)) ^ 0x500000000000ULL)
+// #define SHADOW_TO_ORIGIN(mem) (((uptr)(mem)) + 0x100000000000ULL)
 
 #else
 #error "Unsupported platform"

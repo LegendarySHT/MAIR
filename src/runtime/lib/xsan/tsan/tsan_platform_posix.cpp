@@ -111,43 +111,51 @@ bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
   MemoryMappingLayout proc_maps(true);
   MemoryMappedSegment segment;
   while (proc_maps.Next(&segment)) {
-    if (segment.start >= HeapMemBeg() && segment.end <= HeapEnd()) {
-      if (ignore_heap) {
-        continue;
-      } else {
-        return false;
-      }
+    if ((segment.start > LoAppMemEnd() || segment.end <= LoAppMemBeg()) &&
+        (segment.start > MidAppMemEnd() || segment.end <= MidAppMemBeg()) &&
+        (segment.start > HiAppMemEnd() || segment.end <= HiAppMemBeg()) &&
+        (segment.start > HeapMemEnd() || segment.end <= HeapMemBeg()) &&
+        (segment.start > ShadowEnd() || segment.end <= ShadowBeg()) &&
+        (segment.start > MetaShadowEnd() || segment.end <= MetaShadowBeg())) {
+      continue;
     }
+    // if (segment.start >= HeapMemBeg() && segment.end <= HeapEnd()) {
+    //   if (ignore_heap) {
+    //     continue;
+    //   } else {
+    //     return false;
+    //   }
+    // }
 
-    // Note: IsAppMem includes if it is heap memory, hence we must
-    // put this check after the heap bounds check.
-    if (IsAppMem(segment.start) && IsAppMem(segment.end - 1))
-      continue;
+    // // Note: IsAppMem includes if it is heap memory, hence we must
+    // // put this check after the heap bounds check.
+    // if (IsAppMem(segment.start) && IsAppMem(segment.end - 1))
+    //   continue;
 
-    // Guard page after the heap end
-    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd()) continue;
+    // // Guard page after the heap end
+    // if (segment.start >= HeapMemEnd() && segment.start < HeapEnd()) continue;
 
-    if (__xsan::IsSanitizerPrivateMem(segment.start) ||
-        // One page toleranc, e.g., ASan mmaps one more page left for shadow.
-        __xsan::IsSanitizerPrivateMem(segment.start + GetMmapGranularity()))
-      continue;
+    // if (__xsan::IsSanitizerPrivateMem(segment.start) ||
+    //     // One page toleranc, e.g., ASan mmaps one more page left for shadow.
+    //     __xsan::IsSanitizerPrivateMem(segment.start + GetMmapGranularity()))
+    //   continue;
 
-    if (segment.protection == 0)  // Zero page or mprotected.
-      continue;
+    // if (segment.protection == 0)  // Zero page or mprotected.
+    //   continue;
 
-    if (segment.start >= VdsoBeg())  // vdso
-      break;
+    // if (segment.start >= VdsoBeg())  // vdso
+    //   break;
 
-    // Debug output can break tests. Suppress this message in most cases.
-    if (print_warnings)
-      Printf(
-          "WARNING: ThreadSanitizer: unexpected memory mapping 0x%zx-0x%zx\n",
-          segment.start, segment.end);
+    // // Debug output can break tests. Suppress this message in most cases.
+    // if (print_warnings)
+    //   Printf(
+    //       "WARNING: ThreadSanitizer: unexpected memory mapping 0x%zx-0x%zx\n",
+    //       segment.start, segment.end);
 
-    return false;
+    // return false;
   }
 
-  if (!protect)
+  // if (!protect)
     return true;
 
 #    if SANITIZER_IOS && !SANITIZER_IOSSIM

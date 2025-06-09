@@ -917,7 +917,7 @@ bool IsAppMem(uptr mem) { return SelectMapping<IsAppMemImpl>(mem); }
 struct IsShadowMemImpl {
   template <typename Mapping>
   static bool Apply(uptr mem) {
-    return mem >= Mapping::kShadowBeg && mem <= Mapping::kShadowEnd;
+    return mem >= Mapping::kShadowBeg && mem < Mapping::kShadowEnd;
   }
 };
 
@@ -929,7 +929,7 @@ bool IsShadowMem(RawShadow *p) {
 struct IsMetaMemImpl {
   template <typename Mapping>
   static bool Apply(uptr mem) {
-    return mem >= Mapping::kMetaShadowBeg && mem <= Mapping::kMetaShadowEnd;
+    return mem >= Mapping::kMetaShadowBeg && mem < Mapping::kMetaShadowEnd;
   }
 };
 

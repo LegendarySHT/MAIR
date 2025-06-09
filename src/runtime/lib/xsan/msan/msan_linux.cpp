@@ -29,7 +29,7 @@
 #  include <unwind.h>
 
 #  include "msan.h"
-#  include "msan_allocator.h"
+// #  include "msan_allocator.h"
 #  include "msan_chained_origin_depot.h"
 #  include "msan_report.h"
 #  include "msan_thread.h"
@@ -88,7 +88,7 @@ static void CheckMemoryLayoutSanity() {
     uptr end = kMemoryLayout[i].end;
     MappingDesc::Type type = kMemoryLayout[i].type;
     CHECK_LT(start, end);
-    CHECK_EQ(prev_end, start);
+    // CHECK_EQ(prev_end, start);
     CHECK(addr_is_type(start, type));
     CHECK(addr_is_type((start + end) / 2, type));
     CHECK(addr_is_type(end - 1, type));
@@ -148,9 +148,9 @@ static bool InitShadow(bool init_origins, bool dry_run) {
     if (!map && !protect) {
       CHECK(type == MappingDesc::APP || type == MappingDesc::ALLOCATOR);
 
-      if (dry_run && type == MappingDesc::ALLOCATOR &&
-          !CheckMemoryRangeAvailability(start, size, !dry_run))
-        return false;
+      // if (dry_run && type == MappingDesc::ALLOCATOR &&
+      //     !CheckMemoryRangeAvailability(start, size, !dry_run))
+      //   return false;
     }
     if (map) {
       if (dry_run && !CheckMemoryRangeAvailability(start, size, !dry_run))
@@ -217,111 +217,111 @@ void InstallAtExitHandler() {
 
 // ---------------------- TSD ---------------- {{{1
 
-#if SANITIZER_NETBSD
-// Thread Static Data cannot be used in early init on NetBSD.
-// Reuse the MSan TSD API for compatibility with existing code
-// with an alternative implementation.
+// #if SANITIZER_NETBSD
+// // Thread Static Data cannot be used in early init on NetBSD.
+// // Reuse the MSan TSD API for compatibility with existing code
+// // with an alternative implementation.
 
-static void (*tsd_destructor)(void *tsd) = nullptr;
+// static void (*tsd_destructor)(void *tsd) = nullptr;
 
-struct tsd_key {
-  tsd_key() : key(nullptr) {}
-  ~tsd_key() {
-    CHECK(tsd_destructor);
-    if (key)
-      (*tsd_destructor)(key);
-  }
-  MsanThread *key;
-};
+// struct tsd_key {
+//   tsd_key() : key(nullptr) {}
+//   ~tsd_key() {
+//     CHECK(tsd_destructor);
+//     if (key)
+//       (*tsd_destructor)(key);
+//   }
+//   MsanThread *key;
+// };
 
-static thread_local struct tsd_key key;
+// static thread_local struct tsd_key key;
 
-void MsanTSDInit(void (*destructor)(void *tsd)) {
-  CHECK(!tsd_destructor);
-  tsd_destructor = destructor;
-}
+// void MsanTSDInit(void (*destructor)(void *tsd)) {
+//   CHECK(!tsd_destructor);
+//   tsd_destructor = destructor;
+// }
 
-MsanThread *GetCurrentThread() {
-  CHECK(tsd_destructor);
-  return key.key;
-}
+// MsanThread *GetCurrentThread() {
+//   CHECK(tsd_destructor);
+//   return key.key;
+// }
 
-void SetCurrentThread(MsanThread *tsd) {
-  CHECK(tsd_destructor);
-  CHECK(tsd);
-  CHECK(!key.key);
-  key.key = tsd;
-}
+// void SetCurrentThread(MsanThread *tsd) {
+//   CHECK(tsd_destructor);
+//   CHECK(tsd);
+//   CHECK(!key.key);
+//   key.key = tsd;
+// }
 
-void MsanTSDDtor(void *tsd) {
-  CHECK(tsd_destructor);
-  CHECK_EQ(key.key, tsd);
-  key.key = nullptr;
-  // Make sure that signal handler can not see a stale current thread pointer.
-  atomic_signal_fence(memory_order_seq_cst);
-  MsanThread::TSDDtor(tsd);
-}
-#else
-static pthread_key_t tsd_key;
-static bool tsd_key_inited = false;
+// void MsanTSDDtor(void *tsd) {
+//   CHECK(tsd_destructor);
+//   CHECK_EQ(key.key, tsd);
+//   key.key = nullptr;
+//   // Make sure that signal handler can not see a stale current thread pointer.
+//   atomic_signal_fence(memory_order_seq_cst);
+//   MsanThread::TSDDtor(tsd);
+// }
+// #else
+// static pthread_key_t tsd_key;
+// static bool tsd_key_inited = false;
 
-void MsanTSDInit(void (*destructor)(void *tsd)) {
-  CHECK(!tsd_key_inited);
-  tsd_key_inited = true;
-  CHECK_EQ(0, pthread_key_create(&tsd_key, destructor));
-}
+// void MsanTSDInit(void (*destructor)(void *tsd)) {
+//   CHECK(!tsd_key_inited);
+//   tsd_key_inited = true;
+//   CHECK_EQ(0, pthread_key_create(&tsd_key, destructor));
+// }
 
-static THREADLOCAL MsanThread* msan_current_thread;
+// static THREADLOCAL MsanThread* msan_current_thread;
 
-MsanThread *GetCurrentThread() {
-  return msan_current_thread;
-}
+// MsanThread *GetCurrentThread() {
+//   return msan_current_thread;
+// }
 
-void SetCurrentThread(MsanThread *t) {
-  // Make sure we do not reset the current MsanThread.
-  CHECK_EQ(0, msan_current_thread);
-  msan_current_thread = t;
-  // Make sure that MsanTSDDtor gets called at the end.
-  CHECK(tsd_key_inited);
-  pthread_setspecific(tsd_key, (void *)t);
-}
+// void SetCurrentThread(MsanThread *t) {
+//   // Make sure we do not reset the current MsanThread.
+//   CHECK_EQ(0, msan_current_thread);
+//   msan_current_thread = t;
+//   // Make sure that MsanTSDDtor gets called at the end.
+//   CHECK(tsd_key_inited);
+//   pthread_setspecific(tsd_key, (void *)t);
+// }
 
-void MsanTSDDtor(void *tsd) {
-  MsanThread *t = (MsanThread*)tsd;
-  if (t->destructor_iterations_ > 1) {
-    t->destructor_iterations_--;
-    CHECK_EQ(0, pthread_setspecific(tsd_key, tsd));
-    return;
-  }
-  ScopedBlockSignals block(nullptr);
-  msan_current_thread = nullptr;
-  // Make sure that signal handler can not see a stale current thread pointer.
-  atomic_signal_fence(memory_order_seq_cst);
-  MsanThread::TSDDtor(tsd);
-}
-#  endif
+// void MsanTSDDtor(void *tsd) {
+//   MsanThread *t = (MsanThread*)tsd;
+//   if (t->destructor_iterations_ > 1) {
+//     t->destructor_iterations_--;
+//     CHECK_EQ(0, pthread_setspecific(tsd_key, tsd));
+//     return;
+//   }
+//   ScopedBlockSignals block(nullptr);
+//   msan_current_thread = nullptr;
+//   // Make sure that signal handler can not see a stale current thread pointer.
+//   atomic_signal_fence(memory_order_seq_cst);
+//   MsanThread::TSDDtor(tsd);
+// }
+// #  endif
 
-static void BeforeFork() {
-  VReport(2, "BeforeFork tid: %llu\n", GetTid());
-  // Usually we lock ThreadRegistry, but msan does not have one.
-  LockAllocator();
-  StackDepotLockBeforeFork();
-  ChainedOriginDepotBeforeFork();
-}
+// static void BeforeFork() {
+//   VReport(2, "BeforeFork tid: %llu\n", GetTid());
+//   // Usually we lock ThreadRegistry, but msan does not have one.
+//   LockAllocator();
+//   StackDepotLockBeforeFork();
+//   ChainedOriginDepotBeforeFork();
+// }
 
-static void AfterFork(bool fork_child) {
-  ChainedOriginDepotAfterFork(fork_child);
-  StackDepotUnlockAfterFork(fork_child);
-  UnlockAllocator();
-  // Usually we unlock ThreadRegistry, but msan does not have one.
-  VReport(2, "AfterFork tid: %llu\n", GetTid());
-}
+// static void AfterFork(bool fork_child) {
+//   ChainedOriginDepotAfterFork(fork_child);
+//   StackDepotUnlockAfterFork(fork_child);
+//   UnlockAllocator();
+//   // Usually we unlock ThreadRegistry, but msan does not have one.
+//   VReport(2, "AfterFork tid: %llu\n", GetTid());
+// }
 
-void InstallAtForkHandler() {
-  pthread_atfork(
-      &BeforeFork, []() { AfterFork(/* fork_child= */ false); },
-      []() { AfterFork(/* fork_child= */ true); });
-}
+// void InstallAtForkHandler() {
+//   pthread_atfork(
+//       &BeforeFork, []() { AfterFork(/* fork_child= */ false); },
+//       []() { AfterFork(/* fork_child= */ true); });
+// }
 
 } // namespace __msan
 
