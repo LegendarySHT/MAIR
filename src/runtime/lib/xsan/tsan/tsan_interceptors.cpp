@@ -1442,48 +1442,48 @@ TSAN_INTERCEPTOR(int, pthread_once, void *o, void (*f)()) {
   return 0;
 }
 
-#if SANITIZER_GLIBC
-TSAN_INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__fxstat, version, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(__fxstat)(version, fd, buf);
-}
+// #if SANITIZER_GLIBC
+// TSAN_INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
+//   SCOPED_TSAN_INTERCEPTOR(__fxstat, version, fd, buf);
+//   if (fd > 0)
+//     FdAccess(thr, pc, fd);
+//   return REAL(__fxstat)(version, fd, buf);
+// }
 
-TSAN_INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__fxstat64, version, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(__fxstat64)(version, fd, buf);
-}
-#define TSAN_MAYBE_INTERCEPT___FXSTAT TSAN_INTERCEPT(__fxstat); TSAN_INTERCEPT(__fxstat64)
-#else
-#define TSAN_MAYBE_INTERCEPT___FXSTAT
-#endif
+// TSAN_INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
+//   SCOPED_TSAN_INTERCEPTOR(__fxstat64, version, fd, buf);
+//   if (fd > 0)
+//     FdAccess(thr, pc, fd);
+//   return REAL(__fxstat64)(version, fd, buf);
+// }
+// #define TSAN_MAYBE_INTERCEPT___FXSTAT TSAN_INTERCEPT(__fxstat); TSAN_INTERCEPT(__fxstat64)
+// #else
+// #define TSAN_MAYBE_INTERCEPT___FXSTAT
+// #endif
 
-#if !SANITIZER_GLIBC || __GLIBC_PREREQ(2, 33)
-TSAN_INTERCEPTOR(int, fstat, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(fstat, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(fstat)(fd, buf);
-}
-#  define TSAN_MAYBE_INTERCEPT_FSTAT TSAN_INTERCEPT(fstat)
-#else
-#  define TSAN_MAYBE_INTERCEPT_FSTAT
-#endif
+// #if !SANITIZER_GLIBC || __GLIBC_PREREQ(2, 33)
+// TSAN_INTERCEPTOR(int, fstat, int fd, void *buf) {
+//   SCOPED_TSAN_INTERCEPTOR(fstat, fd, buf);
+//   if (fd > 0)
+//     FdAccess(thr, pc, fd);
+//   return REAL(fstat)(fd, buf);
+// }
+// #  define TSAN_MAYBE_INTERCEPT_FSTAT TSAN_INTERCEPT(fstat)
+// #else
+// #  define TSAN_MAYBE_INTERCEPT_FSTAT
+// #endif
 
-#if __GLIBC_PREREQ(2, 33)
-TSAN_INTERCEPTOR(int, fstat64, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(fstat64, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(fstat64)(fd, buf);
-}
-#  define TSAN_MAYBE_INTERCEPT_FSTAT64 TSAN_INTERCEPT(fstat64)
-#else
-#  define TSAN_MAYBE_INTERCEPT_FSTAT64
-#endif
+// #if __GLIBC_PREREQ(2, 33)
+// TSAN_INTERCEPTOR(int, fstat64, int fd, void *buf) {
+//   SCOPED_TSAN_INTERCEPTOR(fstat64, fd, buf);
+//   if (fd > 0)
+//     FdAccess(thr, pc, fd);
+//   return REAL(fstat64)(fd, buf);
+// }
+// #  define TSAN_MAYBE_INTERCEPT_FSTAT64 TSAN_INTERCEPT(fstat64)
+// #else
+// #  define TSAN_MAYBE_INTERCEPT_FSTAT64
+// #endif
 
 TSAN_INTERCEPTOR(int, open, const char *name, int oflag, ...) {
   mode_t mode = 0;
@@ -1636,13 +1636,13 @@ TSAN_INTERCEPTOR(int, socket, int domain, int type, int protocol) {
   return fd;
 }
 
-TSAN_INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int *fd) {
-  SCOPED_TSAN_INTERCEPTOR(socketpair, domain, type, protocol, fd);
-  int res = REAL(socketpair)(domain, type, protocol, fd);
-  if (res == 0 && fd[0] >= 0 && fd[1] >= 0)
-    FdPipeCreate(thr, pc, fd[0], fd[1]);
-  return res;
-}
+// TSAN_INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int *fd) {
+//   SCOPED_TSAN_INTERCEPTOR(socketpair, domain, type, protocol, fd);
+//   int res = REAL(socketpair)(domain, type, protocol, fd);
+//   if (res == 0 && fd[0] >= 0 && fd[1] >= 0)
+//     FdPipeCreate(thr, pc, fd[0], fd[1]);
+//   return res;
+// }
 
 TSAN_INTERCEPTOR(int, connect, int fd, void *addr, unsigned addrlen) {
   SCOPED_TSAN_INTERCEPTOR(connect, fd, addr, addrlen);
@@ -1701,23 +1701,23 @@ TSAN_INTERCEPTOR(void, __res_iclose, void *state, bool free_addr) {
 #define TSAN_MAYBE_INTERCEPT___RES_ICLOSE
 #endif
 
-TSAN_INTERCEPTOR(int, pipe, int *pipefd) {
-  SCOPED_TSAN_INTERCEPTOR(pipe, pipefd);
-  int res = REAL(pipe)(pipefd);
-  if (res == 0 && pipefd[0] >= 0 && pipefd[1] >= 0)
-    FdPipeCreate(thr, pc, pipefd[0], pipefd[1]);
-  return res;
-}
+// TSAN_INTERCEPTOR(int, pipe, int *pipefd) {
+//   SCOPED_TSAN_INTERCEPTOR(pipe, pipefd);
+//   int res = REAL(pipe)(pipefd);
+//   if (res == 0 && pipefd[0] >= 0 && pipefd[1] >= 0)
+//     FdPipeCreate(thr, pc, pipefd[0], pipefd[1]);
+//   return res;
+// }
 
-#if !SANITIZER_APPLE
-TSAN_INTERCEPTOR(int, pipe2, int *pipefd, int flags) {
-  SCOPED_TSAN_INTERCEPTOR(pipe2, pipefd, flags);
-  int res = REAL(pipe2)(pipefd, flags);
-  if (res == 0 && pipefd[0] >= 0 && pipefd[1] >= 0)
-    FdPipeCreate(thr, pc, pipefd[0], pipefd[1]);
-  return res;
-}
-#endif
+// #if !SANITIZER_APPLE
+// TSAN_INTERCEPTOR(int, pipe2, int *pipefd, int flags) {
+//   SCOPED_TSAN_INTERCEPTOR(pipe2, pipefd, flags);
+//   int res = REAL(pipe2)(pipefd, flags);
+//   if (res == 0 && pipefd[0] >= 0 && pipefd[1] >= 0)
+//     FdPipeCreate(thr, pc, pipefd[0], pipefd[1]);
+//   return res;
+// }
+// #endif
 
 TSAN_INTERCEPTOR(int, unlink, char *path) {
   SCOPED_TSAN_INTERCEPTOR(unlink, path);
@@ -1813,26 +1813,26 @@ TSAN_INTERCEPTOR(int, epoll_ctl, int epfd, int op, int fd, void *ev) {
   return res;
 }
 
-TSAN_INTERCEPTOR(int, epoll_wait, int epfd, void *ev, int cnt, int timeout) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_wait, epfd, ev, cnt, timeout);
-  if (epfd >= 0)
-    FdAccess(thr, pc, epfd);
-  int res = BLOCK_REAL(epoll_wait)(epfd, ev, cnt, timeout);
-  if (res > 0 && epfd >= 0)
-    FdAcquire(thr, pc, epfd);
-  return res;
-}
+// TSAN_INTERCEPTOR(int, epoll_wait, int epfd, void *ev, int cnt, int timeout) {
+//   SCOPED_TSAN_INTERCEPTOR(epoll_wait, epfd, ev, cnt, timeout);
+//   if (epfd >= 0)
+//     FdAccess(thr, pc, epfd);
+//   int res = BLOCK_REAL(epoll_wait)(epfd, ev, cnt, timeout);
+//   if (res > 0 && epfd >= 0)
+//     FdAcquire(thr, pc, epfd);
+//   return res;
+// }
 
-TSAN_INTERCEPTOR(int, epoll_pwait, int epfd, void *ev, int cnt, int timeout,
-                 void *sigmask) {
-  SCOPED_TSAN_INTERCEPTOR(epoll_pwait, epfd, ev, cnt, timeout, sigmask);
-  if (epfd >= 0)
-    FdAccess(thr, pc, epfd);
-  int res = BLOCK_REAL(epoll_pwait)(epfd, ev, cnt, timeout, sigmask);
-  if (res > 0 && epfd >= 0)
-    FdAcquire(thr, pc, epfd);
-  return res;
-}
+// TSAN_INTERCEPTOR(int, epoll_pwait, int epfd, void *ev, int cnt, int timeout,
+//                  void *sigmask) {
+//   SCOPED_TSAN_INTERCEPTOR(epoll_pwait, epfd, ev, cnt, timeout, sigmask);
+//   if (epfd >= 0)
+//     FdAccess(thr, pc, epfd);
+//   int res = BLOCK_REAL(epoll_pwait)(epfd, ev, cnt, timeout, sigmask);
+//   if (res > 0 && epfd >= 0)
+//     FdAcquire(thr, pc, epfd);
+//   return res;
+// }
 
 TSAN_INTERCEPTOR(int, epoll_pwait2, int epfd, void *ev, int cnt, void *timeout,
                  void *sigmask) {
@@ -1855,12 +1855,17 @@ TSAN_INTERCEPTOR(int, epoll_pwait2, int epfd, void *ev, int cnt, void *timeout,
   return res;
 }
 
+// #  define TSAN_MAYBE_INTERCEPT_EPOLL \
+//     TSAN_INTERCEPT(epoll_create);    \
+//     TSAN_INTERCEPT(epoll_create1);   \
+//     TSAN_INTERCEPT(epoll_ctl);       \
+//     TSAN_INTERCEPT(epoll_wait);      \
+//     TSAN_INTERCEPT(epoll_pwait);     \
+//     TSAN_INTERCEPT(epoll_pwait2)
 #  define TSAN_MAYBE_INTERCEPT_EPOLL \
     TSAN_INTERCEPT(epoll_create);    \
     TSAN_INTERCEPT(epoll_create1);   \
     TSAN_INTERCEPT(epoll_ctl);       \
-    TSAN_INTERCEPT(epoll_wait);      \
-    TSAN_INTERCEPT(epoll_pwait);     \
     TSAN_INTERCEPT(epoll_pwait2)
 #else
 #define TSAN_MAYBE_INTERCEPT_EPOLL
@@ -1950,10 +1955,18 @@ static void CallUserSignalHandler(ThreadState *thr, bool sync, bool acquire,
                          ? (uptr)sigactions[sig].sigaction
                          : (uptr)sigactions[sig].handler;
   if (pc != sig_dfl && pc != sig_ign) {
-    // The callback can be either sa_handler or sa_sigaction.
-    // They have different signatures, but we assume that passing
-    // additional arguments to sa_handler works and is harmless.
-    ((__sanitizer_sigactionhandler_ptr)pc)(sig, info, uctx);
+    ::__xsan::XsanFuncScope<::__xsan::ScopedFunc::signal> scope;
+    if (sigactions[sig].sa_flags & SA_SIGINFO) {
+      ::__xsan::CommonUnpoisonParam(3);
+      ::__xsan::InitRange(nullptr, info, sizeof(__sanitizer_sigaction));
+      ::__xsan::InitRange(nullptr, uctx, sizeof(ucontext_t));
+      ::__xsan::InitRange(nullptr, uctx, sizeof(ucontext_t));
+      ((__sanitizer_sigactionhandler_ptr)pc)(sig, info, uctx);
+      ::__xsan::UseRange(nullptr, uctx, sizeof(ucontext_t));
+    } else {
+      ::__xsan::CommonUnpoisonParam(1);
+      ((__sanitizer_sighandler_ptr)pc)(sig);
+    }
   }
   if (!ctx->after_multithreaded_fork) {
     thr->ignore_reads_and_writes = ignore_reads_and_writes;
@@ -2102,24 +2115,24 @@ TSAN_INTERCEPTOR(int, pthread_kill, void *tid, int sig) {
   return res;
 }
 
-TSAN_INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
-  SCOPED_TSAN_INTERCEPTOR(gettimeofday, tv, tz);
-  // It's intercepted merely to process pending signals.
-  return REAL(gettimeofday)(tv, tz);
-}
+// TSAN_INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
+//   SCOPED_TSAN_INTERCEPTOR(gettimeofday, tv, tz);
+//   // It's intercepted merely to process pending signals.
+//   return REAL(gettimeofday)(tv, tz);
+// }
 
 /// See https://github.com/llvm/llvm-project/commit/8cff61f29efee104f14f6e8ff06bdcbc71a5fcf8#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78efR1738
-TSAN_INTERCEPTOR(int, getaddrinfo, void *node, void *service,
-    void *hints, void *rv) {
-  SCOPED_TSAN_INTERCEPTOR(getaddrinfo, node, service, hints, rv);
-  // We miss atomic synchronization in getaddrinfo,
-  // and can report false race between malloc and free
-  // inside of getaddrinfo. So ignore memory accesses.
-  ThreadIgnoreBegin(thr, pc);
-  int res = REAL(getaddrinfo)(node, service, hints, rv);
-  ThreadIgnoreEnd(thr);
-  return res;
-}
+// TSAN_INTERCEPTOR(int, getaddrinfo, void *node, void *service,
+//     void *hints, void *rv) {
+//   SCOPED_TSAN_INTERCEPTOR(getaddrinfo, node, service, hints, rv);
+//   // We miss atomic synchronization in getaddrinfo,
+//   // and can report false race between malloc and free
+//   // inside of getaddrinfo. So ignore memory accesses.
+//   ThreadIgnoreBegin(thr, pc);
+//   int res = REAL(getaddrinfo)(node, service, hints, rv);
+//   ThreadIgnoreEnd(thr);
+//   return res;
+// }
 
 TSAN_INTERCEPTOR(int, fork, int fake) {
   if (in_symbolizer())
@@ -2234,51 +2247,51 @@ TSAN_INTERCEPTOR(int, clone, int (*fn)(void *), void *stack, int flags,
 }
 #endif
 
-#if !SANITIZER_APPLE && !SANITIZER_ANDROID
-typedef int (*dl_iterate_phdr_cb_t)(__sanitizer_dl_phdr_info *info, SIZE_T size,
-                                    void *data);
-struct dl_iterate_phdr_data {
-  ThreadState *thr;
-  uptr pc;
-  dl_iterate_phdr_cb_t cb;
-  void *data;
-};
+// #if !SANITIZER_APPLE && !SANITIZER_ANDROID
+// typedef int (*dl_iterate_phdr_cb_t)(__sanitizer_dl_phdr_info *info, SIZE_T size,
+//                                     void *data);
+// struct dl_iterate_phdr_data {
+//   ThreadState *thr;
+//   uptr pc;
+//   dl_iterate_phdr_cb_t cb;
+//   void *data;
+// };
 
-static bool IsAppNotRodata(uptr addr) {
-  return IsAppMem(addr) && *MemToShadow(addr) != Shadow::kRodata;
-}
+// static bool IsAppNotRodata(uptr addr) {
+//   return IsAppMem(addr) && *MemToShadow(addr) != Shadow::kRodata;
+// }
 
-static int dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
-                              void *data) {
-  dl_iterate_phdr_data *cbdata = (dl_iterate_phdr_data *)data;
-  // dlopen/dlclose allocate/free dynamic-linker-internal memory, which is later
-  // accessible in dl_iterate_phdr callback. But we don't see synchronization
-  // inside of dynamic linker, so we "unpoison" it here in order to not
-  // produce false reports. Ignoring malloc/free in dlopen/dlclose is not enough
-  // because some libc functions call __libc_dlopen.
-  if (info && IsAppNotRodata((uptr)info->dlpi_name))
-    MemoryResetRange(cbdata->thr, cbdata->pc, (uptr)info->dlpi_name,
-                     internal_strlen(info->dlpi_name));
-  int res = cbdata->cb(info, size, cbdata->data);
-  // Perform the check one more time in case info->dlpi_name was overwritten
-  // by user callback.
-  if (info && IsAppNotRodata((uptr)info->dlpi_name))
-    MemoryResetRange(cbdata->thr, cbdata->pc, (uptr)info->dlpi_name,
-                     internal_strlen(info->dlpi_name));
-  return res;
-}
+// static int dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
+//                               void *data) {
+//   dl_iterate_phdr_data *cbdata = (dl_iterate_phdr_data *)data;
+//   // dlopen/dlclose allocate/free dynamic-linker-internal memory, which is later
+//   // accessible in dl_iterate_phdr callback. But we don't see synchronization
+//   // inside of dynamic linker, so we "unpoison" it here in order to not
+//   // produce false reports. Ignoring malloc/free in dlopen/dlclose is not enough
+//   // because some libc functions call __libc_dlopen.
+//   if (info && IsAppNotRodata((uptr)info->dlpi_name))
+//     MemoryResetRange(cbdata->thr, cbdata->pc, (uptr)info->dlpi_name,
+//                      internal_strlen(info->dlpi_name));
+//   int res = cbdata->cb(info, size, cbdata->data);
+//   // Perform the check one more time in case info->dlpi_name was overwritten
+//   // by user callback.
+//   if (info && IsAppNotRodata((uptr)info->dlpi_name))
+//     MemoryResetRange(cbdata->thr, cbdata->pc, (uptr)info->dlpi_name,
+//                      internal_strlen(info->dlpi_name));
+//   return res;
+// }
 
-TSAN_INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb_t cb, void *data) {
-  SCOPED_TSAN_INTERCEPTOR(dl_iterate_phdr, cb, data);
-  dl_iterate_phdr_data cbdata;
-  cbdata.thr = thr;
-  cbdata.pc = pc;
-  cbdata.cb = cb;
-  cbdata.data = data;
-  int res = REAL(dl_iterate_phdr)(dl_iterate_phdr_cb, &cbdata);
-  return res;
-}
-#endif
+// TSAN_INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb_t cb, void *data) {
+//   SCOPED_TSAN_INTERCEPTOR(dl_iterate_phdr, cb, data);
+//   dl_iterate_phdr_data cbdata;
+//   cbdata.thr = thr;
+//   cbdata.pc = pc;
+//   cbdata.cb = cb;
+//   cbdata.data = data;
+//   int res = REAL(dl_iterate_phdr)(dl_iterate_phdr_cb, &cbdata);
+//   return res;
+// }
+// #endif
 
 // static int OnExit(ThreadState *thr) {
 //   int status = Finalize(thr);
@@ -2298,13 +2311,13 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
 
 #include "sanitizer_common/sanitizer_platform_interceptors.h"
 // Causes interceptor recursion (getaddrinfo() and fopen())
-#undef SANITIZER_INTERCEPT_GETADDRINFO
+// #undef SANITIZER_INTERCEPT_GETADDRINFO
 // We define our own.
-#if SANITIZER_INTERCEPT_TLS_GET_ADDR
-#define NEED_TLS_GET_ADDR
-#endif
-#undef SANITIZER_INTERCEPT_TLS_GET_ADDR
-#define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
+// #if SANITIZER_INTERCEPT_TLS_GET_ADDR
+// #define NEED_TLS_GET_ADDR
+// #endif
+// #undef SANITIZER_INTERCEPT_TLS_GET_ADDR
+// #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 
 /// See https://github.com/llvm/llvm-project/commit/89ae290b58e20fc5f56b7bfae4b34e7fef06e1b1#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78ef
 #undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
@@ -2467,6 +2480,12 @@ int sigaction_impl(int sig, const __sanitizer_sigaction *act,
   if (old) internal_memcpy(&old_stored, &sigactions[sig], sizeof(old_stored));
   __sanitizer_sigaction newact;
   if (act) {
+    ::__xsan::UseRange(nullptr, &act->sa_flags, sizeof(act->sa_flags));
+    if (act->sa_flags & SA_SIGINFO)
+      ::__xsan::UseRange(nullptr, &act->sigaction, sizeof(act->sigaction));
+    else
+      ::__xsan::UseRange(nullptr, &act->handler, sizeof(act->handler));
+    ::__xsan::UseRange(nullptr, &act->sa_mask, sizeof(act->sa_mask));
     // Copy act into sigactions[sig].
     // Can't use struct copy, because compiler can emit call to memcpy.
     // Can't use internal_memcpy, because it copies byte-by-byte,
@@ -2494,6 +2513,8 @@ int sigaction_impl(int sig, const __sanitizer_sigaction *act,
   int res = REAL(sigaction)(sig, act, old);
   if (res == 0 && old && old->sigaction == sighandler)
     internal_memcpy(old, &old_stored, sizeof(*old));
+  if (res == 0 && old)
+    ::__xsan::InitRange(nullptr, old, sizeof(__sanitizer_sigaction));
   return res;
 }
 
@@ -2639,45 +2660,45 @@ static __sanitizer_sighandler_ptr signal_impl(int sig,
 // #include "sanitizer_common/sanitizer_common_syscalls.inc"
 // #include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
 
-#ifdef NEED_TLS_GET_ADDR
+// #ifdef NEED_TLS_GET_ADDR
 
-static void handle_tls_addr(void *arg, void *res) {
-  ThreadState *thr = cur_thread();
-  if (!thr)
-    return;
-  DTLS::DTV *dtv = DTLS_on_tls_get_addr(arg, res, thr->tls_addr,
-                                        thr->tls_addr + thr->tls_size);
-  if (!dtv)
-    return;
-  // New DTLS block has been allocated.
-  MemoryResetRange(thr, 0, dtv->beg, dtv->size);
-}
+// static void handle_tls_addr(void *arg, void *res) {
+//   ThreadState *thr = cur_thread();
+//   if (!thr)
+//     return;
+//   DTLS::DTV *dtv = DTLS_on_tls_get_addr(arg, res, thr->tls_addr,
+//                                         thr->tls_addr + thr->tls_size);
+//   if (!dtv)
+//     return;
+//   // New DTLS block has been allocated.
+//   MemoryResetRange(thr, 0, dtv->beg, dtv->size);
+// }
 
-#if !SANITIZER_S390
-// Define own interceptor instead of sanitizer_common's for three reasons:
-// 1. It must not process pending signals.
-//    Signal handlers may contain MOVDQA instruction (see below).
-// 2. It must be as simple as possible to not contain MOVDQA.
-// 3. Sanitizer_common version uses COMMON_INTERCEPTOR_INITIALIZE_RANGE which
-//    is empty for tsan (meant only for msan).
-// Note: __tls_get_addr can be called with mis-aligned stack due to:
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58066
-// So the interceptor must work with mis-aligned stack, in particular, does not
-// execute MOVDQA with stack addresses.
-TSAN_INTERCEPTOR(void *, __tls_get_addr, void *arg) {
-  void *res = REAL(__tls_get_addr)(arg);
-  handle_tls_addr(arg, res);
-  return res;
-}
-#else // SANITIZER_S390
-TSAN_INTERCEPTOR(uptr, __tls_get_addr_internal, void *arg) {
-  uptr res = __tls_get_offset_wrapper(arg, REAL(__tls_get_offset));
-  char *tp = static_cast<char *>(__builtin_thread_pointer());
-  handle_tls_addr(arg, res + tp);
-  return res;
-}
-#endif
-#endif
+// #if !SANITIZER_S390
+// // Define own interceptor instead of sanitizer_common's for three reasons:
+// // 1. It must not process pending signals.
+// //    Signal handlers may contain MOVDQA instruction (see below).
+// // 2. It must be as simple as possible to not contain MOVDQA.
+// // 3. Sanitizer_common version uses COMMON_INTERCEPTOR_INITIALIZE_RANGE which
+// //    is empty for tsan (meant only for msan).
+// // Note: __tls_get_addr can be called with mis-aligned stack due to:
+// // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58066
+// // So the interceptor must work with mis-aligned stack, in particular, does not
+// // execute MOVDQA with stack addresses.
+// TSAN_INTERCEPTOR(void *, __tls_get_addr, void *arg) {
+//   void *res = REAL(__tls_get_addr)(arg);
+//   handle_tls_addr(arg, res);
+//   return res;
+// }
+// #else // SANITIZER_S390
+// TSAN_INTERCEPTOR(uptr, __tls_get_addr_internal, void *arg) {
+//   uptr res = __tls_get_offset_wrapper(arg, REAL(__tls_get_offset));
+//   char *tp = static_cast<char *>(__builtin_thread_pointer());
+//   handle_tls_addr(arg, res + tp);
+//   return res;
+// }
+// #endif
+// #endif
 
 #if SANITIZER_NETBSD
 TSAN_INTERCEPTOR(void, _lwp_exit) {
@@ -2776,17 +2797,17 @@ void InitializeInterceptors() {
 
   new(interceptor_ctx()) InterceptorContext();
 
-  // Interpose __tls_get_addr before the common interposers. This is needed
-  // because dlsym() may call malloc on failure which could result in other
-  // interposed functions being called that could eventually make use of TLS.
-#ifdef NEED_TLS_GET_ADDR
-#  if !SANITIZER_S390
-  TSAN_INTERCEPT(__tls_get_addr);
-#  else
-  TSAN_INTERCEPT(__tls_get_addr_internal);
-  TSAN_INTERCEPT(__tls_get_offset);
-#  endif
-#endif
+//   // Interpose __tls_get_addr before the common interposers. This is needed
+//   // because dlsym() may call malloc on failure which could result in other
+//   // interposed functions being called that could eventually make use of TLS.
+// #ifdef NEED_TLS_GET_ADDR
+// #  if !SANITIZER_S390
+//   TSAN_INTERCEPT(__tls_get_addr);
+// #  else
+//   TSAN_INTERCEPT(__tls_get_addr_internal);
+//   TSAN_INTERCEPT(__tls_get_offset);
+// #  endif
+// #endif
   /// Moved to XSan's InitializeInterceptors.
   // InitializeCommonInterceptors();
   InitializeSignalInterceptors();
@@ -2875,9 +2896,9 @@ void InitializeInterceptors() {
 
   TSAN_INTERCEPT(pthread_once);
 
-  TSAN_MAYBE_INTERCEPT___FXSTAT;
-  TSAN_MAYBE_INTERCEPT_FSTAT;
-  TSAN_MAYBE_INTERCEPT_FSTAT64;
+  // TSAN_MAYBE_INTERCEPT___FXSTAT;
+  // TSAN_MAYBE_INTERCEPT_FSTAT;
+  // TSAN_MAYBE_INTERCEPT_FSTAT64;
   TSAN_INTERCEPT(open);
   TSAN_MAYBE_INTERCEPT_OPEN64;
   TSAN_INTERCEPT(creat);
@@ -2890,7 +2911,7 @@ void InitializeInterceptors() {
   TSAN_MAYBE_INTERCEPT_INOTIFY_INIT;
   TSAN_MAYBE_INTERCEPT_INOTIFY_INIT1;
   TSAN_INTERCEPT(socket);
-  TSAN_INTERCEPT(socketpair);
+  // TSAN_INTERCEPT(socketpair);
   TSAN_INTERCEPT(connect);
   TSAN_INTERCEPT(bind);
   TSAN_INTERCEPT(listen);
@@ -2898,8 +2919,8 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(close);
   TSAN_MAYBE_INTERCEPT___CLOSE;
   TSAN_MAYBE_INTERCEPT___RES_ICLOSE;
-  TSAN_INTERCEPT(pipe);
-  TSAN_INTERCEPT(pipe2);
+  // TSAN_INTERCEPT(pipe);
+  // TSAN_INTERCEPT(pipe2);
 
   TSAN_INTERCEPT(unlink);
   TSAN_INTERCEPT(tmpfile);
@@ -2919,17 +2940,17 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(usleep);
   TSAN_INTERCEPT(nanosleep);
   TSAN_INTERCEPT(pause);
-  TSAN_INTERCEPT(gettimeofday);
-  TSAN_INTERCEPT(getaddrinfo);
+  // TSAN_INTERCEPT(gettimeofday);
+  // TSAN_INTERCEPT(getaddrinfo);
 
   TSAN_INTERCEPT(fork);
   // TSAN_INTERCEPT(vfork);
 #if SANITIZER_LINUX
   TSAN_INTERCEPT(clone);
 #endif
-#if !SANITIZER_ANDROID
-  TSAN_INTERCEPT(dl_iterate_phdr);
-#endif
+// #if !SANITIZER_ANDROID
+//   TSAN_INTERCEPT(dl_iterate_phdr);
+// #endif
   // TSAN_MAYBE_INTERCEPT_ON_EXIT;
   // TSAN_INTERCEPT(__cxa_atexit);
   // TSAN_INTERCEPT(_exit);
@@ -2954,10 +2975,11 @@ void InitializeInterceptors() {
   // }
 
 #if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
-  if (pthread_key_create(&interceptor_ctx()->finalize_key, &thread_finalize)) {
-    Printf("ThreadSanitizer: failed to create thread key\n");
-    Die();
-  }
+  /// Moved to TsanInitFromXsan in tsan_init.cpp
+  // if (pthread_key_create(&interceptor_ctx()->finalize_key, &thread_finalize)) {
+  //   Printf("ThreadSanitizer: failed to create thread key\n");
+  //   Die();
+  // }
 #endif
 
   TSAN_MAYBE_INTERCEPT_FREEBSD_ALIAS(cond_init);

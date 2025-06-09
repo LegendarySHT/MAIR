@@ -39,6 +39,8 @@
 #include "sanitizer_common/sanitizer_stackdepot.h"
 #include "sanitizer_common/sanitizer_vector.h"
 
+#include "msan_interface_xsan.h"
+
 #if SANITIZER_NETBSD
 #define fstat __fstat50
 #define gettimeofday __gettimeofday50
@@ -57,25 +59,33 @@ using __sanitizer::atomic_load;
 using __sanitizer::atomic_store;
 using __sanitizer::atomic_uintptr_t;
 
+#if SANITIZER_NETBSD
+#define shmctl __shmctl50
+#endif
+
 DECLARE_REAL(SIZE_T, strlen, const char *s)
 DECLARE_REAL(SIZE_T, strnlen, const char *s, SIZE_T maxlen)
 DECLARE_REAL(void *, memcpy, void *dest, const void *src, SIZE_T n)
 DECLARE_REAL(void *, memset, void *dest, int c, SIZE_T n)
+DECLARE_REAL(void *, memmove, void *dst, const void *src, usize size);
+DECLARE_REAL(int, shmctl, int shmid, int cmd, void *buf);
 
 // True if this is a nested interceptor.
-static THREADLOCAL int in_interceptor_scope;
+namespace __msan {
+THREADLOCAL int in_interceptor_scope;
+}
 
 void __msan_scoped_disable_interceptor_checks() { ++in_interceptor_scope; }
 void __msan_scoped_enable_interceptor_checks() { --in_interceptor_scope; }
 
-struct InterceptorScope {
-  InterceptorScope() { ++in_interceptor_scope; }
-  ~InterceptorScope() { --in_interceptor_scope; }
-};
+// struct InterceptorScope {
+//   InterceptorScope() { ++in_interceptor_scope; }
+//   ~InterceptorScope() { --in_interceptor_scope; }
+// };
 
-bool IsInInterceptorScope() {
-  return in_interceptor_scope;
-}
+// bool IsInInterceptorScope() {
+//   return in_interceptor_scope;
+// }
 
 struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
   static bool UseImpl() { return !msan_inited; }
@@ -157,160 +167,160 @@ INTERCEPTOR(void *, bcopy, const void *src, void *dest, SIZE_T n) {
   return __msan_memmove(dest, src, n);
 }
 
-INTERCEPTOR(int, posix_memalign, void **memptr, SIZE_T alignment, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  CHECK_NE(memptr, 0);
-  int res = msan_posix_memalign(memptr, alignment, size, &stack);
-  if (!res)
-    __msan_unpoison(memptr, sizeof(*memptr));
-  return res;
-}
+// INTERCEPTOR(int, posix_memalign, void **memptr, SIZE_T alignment, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   CHECK_NE(memptr, 0);
+//   int res = msan_posix_memalign(memptr, alignment, size, &stack);
+//   if (!res)
+//     __msan_unpoison(memptr, sizeof(*memptr));
+//   return res;
+// }
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(void *, memalign, SIZE_T alignment, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  return msan_memalign(alignment, size, &stack);
-}
-#define MSAN_MAYBE_INTERCEPT_MEMALIGN INTERCEPT_FUNCTION(memalign)
-#else
-#define MSAN_MAYBE_INTERCEPT_MEMALIGN
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(void *, memalign, SIZE_T alignment, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_memalign(alignment, size, &stack);
+// }
+// #define MSAN_MAYBE_INTERCEPT_MEMALIGN INTERCEPT_FUNCTION(memalign)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_MEMALIGN
+// #endif
 
-INTERCEPTOR(void *, aligned_alloc, SIZE_T alignment, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  return msan_aligned_alloc(alignment, size, &stack);
-}
+// INTERCEPTOR(void *, aligned_alloc, SIZE_T alignment, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_aligned_alloc(alignment, size, &stack);
+// }
 
-#if !SANITIZER_NETBSD
-INTERCEPTOR(void *, __libc_memalign, SIZE_T alignment, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  return msan_memalign(alignment, size, &stack);
-}
-#define MSAN_MAYBE_INTERCEPT___LIBC_MEMALIGN INTERCEPT_FUNCTION(__libc_memalign)
-#else
-#define MSAN_MAYBE_INTERCEPT___LIBC_MEMALIGN
-#endif
+// #if !SANITIZER_NETBSD
+// INTERCEPTOR(void *, __libc_memalign, SIZE_T alignment, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_memalign(alignment, size, &stack);
+// }
+// #define MSAN_MAYBE_INTERCEPT___LIBC_MEMALIGN INTERCEPT_FUNCTION(__libc_memalign)
+// #else
+// #define MSAN_MAYBE_INTERCEPT___LIBC_MEMALIGN
+// #endif
 
-INTERCEPTOR(void *, valloc, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  return msan_valloc(size, &stack);
-}
+// INTERCEPTOR(void *, valloc, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_valloc(size, &stack);
+// }
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(void *, pvalloc, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  return msan_pvalloc(size, &stack);
-}
-#define MSAN_MAYBE_INTERCEPT_PVALLOC INTERCEPT_FUNCTION(pvalloc)
-#else
-#define MSAN_MAYBE_INTERCEPT_PVALLOC
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(void *, pvalloc, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_pvalloc(size, &stack);
+// }
+// #define MSAN_MAYBE_INTERCEPT_PVALLOC INTERCEPT_FUNCTION(pvalloc)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_PVALLOC
+// #endif
 
-INTERCEPTOR(void, free, void *ptr) {
-  if (UNLIKELY(!ptr))
-    return;
-  if (DlsymAlloc::PointerIsMine(ptr))
-    return DlsymAlloc::Free(ptr);
-  GET_MALLOC_STACK_TRACE;
-  MsanDeallocate(&stack, ptr);
-}
+// INTERCEPTOR(void, free, void *ptr) {
+//   if (UNLIKELY(!ptr))
+//     return;
+//   if (DlsymAlloc::PointerIsMine(ptr))
+//     return DlsymAlloc::Free(ptr);
+//   GET_MALLOC_STACK_TRACE;
+//   MsanDeallocate(&stack, ptr);
+// }
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(void, cfree, void *ptr) {
-  if (UNLIKELY(!ptr))
-    return;
-  if (DlsymAlloc::PointerIsMine(ptr))
-    return DlsymAlloc::Free(ptr);
-  GET_MALLOC_STACK_TRACE;
-  MsanDeallocate(&stack, ptr);
-}
-#  define MSAN_MAYBE_INTERCEPT_CFREE INTERCEPT_FUNCTION(cfree)
-#else
-#define MSAN_MAYBE_INTERCEPT_CFREE
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(void, cfree, void *ptr) {
+//   if (UNLIKELY(!ptr))
+//     return;
+//   if (DlsymAlloc::PointerIsMine(ptr))
+//     return DlsymAlloc::Free(ptr);
+//   GET_MALLOC_STACK_TRACE;
+//   MsanDeallocate(&stack, ptr);
+// }
+// #  define MSAN_MAYBE_INTERCEPT_CFREE INTERCEPT_FUNCTION(cfree)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_CFREE
+// #endif
 
-#if !SANITIZER_NETBSD
-INTERCEPTOR(uptr, malloc_usable_size, void *ptr) {
-  return __sanitizer_get_allocated_size(ptr);
-}
-#define MSAN_MAYBE_INTERCEPT_MALLOC_USABLE_SIZE \
-  INTERCEPT_FUNCTION(malloc_usable_size)
-#else
-#define MSAN_MAYBE_INTERCEPT_MALLOC_USABLE_SIZE
-#endif
+// #if !SANITIZER_NETBSD
+// INTERCEPTOR(uptr, malloc_usable_size, void *ptr) {
+//   return __sanitizer_get_allocated_size(ptr);
+// }
+// #define MSAN_MAYBE_INTERCEPT_MALLOC_USABLE_SIZE \
+//   INTERCEPT_FUNCTION(malloc_usable_size)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_MALLOC_USABLE_SIZE
+// #endif
 
-#if (!SANITIZER_FREEBSD && !SANITIZER_NETBSD) || __GLIBC_PREREQ(2, 33)
-template <class T>
-static NOINLINE void clear_mallinfo(T *sret) {
-  ENSURE_MSAN_INITED();
-  internal_memset(sret, 0, sizeof(*sret));
-  __msan_unpoison(sret, sizeof(*sret));
-}
-#endif
+// #if (!SANITIZER_FREEBSD && !SANITIZER_NETBSD) || __GLIBC_PREREQ(2, 33)
+// template <class T>
+// static NOINLINE void clear_mallinfo(T *sret) {
+//   ENSURE_MSAN_INITED();
+//   internal_memset(sret, 0, sizeof(*sret));
+//   __msan_unpoison(sret, sizeof(*sret));
+// }
+// #endif
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-// Interceptors use NRVO and assume that sret will be pre-allocated in
-// caller frame.
-INTERCEPTOR(__sanitizer_struct_mallinfo, mallinfo,) {
-  __sanitizer_struct_mallinfo sret;
-  clear_mallinfo(&sret);
-  return sret;
-}
-#  define MSAN_MAYBE_INTERCEPT_MALLINFO INTERCEPT_FUNCTION(mallinfo)
-#else
-#  define MSAN_MAYBE_INTERCEPT_MALLINFO
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// // Interceptors use NRVO and assume that sret will be pre-allocated in
+// // caller frame.
+// INTERCEPTOR(__sanitizer_struct_mallinfo, mallinfo,) {
+//   __sanitizer_struct_mallinfo sret;
+//   clear_mallinfo(&sret);
+//   return sret;
+// }
+// #  define MSAN_MAYBE_INTERCEPT_MALLINFO INTERCEPT_FUNCTION(mallinfo)
+// #else
+// #  define MSAN_MAYBE_INTERCEPT_MALLINFO
+// #endif
 
-#if __GLIBC_PREREQ(2, 33)
-INTERCEPTOR(__sanitizer_struct_mallinfo2, mallinfo2) {
-  __sanitizer_struct_mallinfo2 sret;
-  clear_mallinfo(&sret);
-  return sret;
-}
-#  define MSAN_MAYBE_INTERCEPT_MALLINFO2 INTERCEPT_FUNCTION(mallinfo2)
-#else
-#  define MSAN_MAYBE_INTERCEPT_MALLINFO2
-#endif
+// #if __GLIBC_PREREQ(2, 33)
+// INTERCEPTOR(__sanitizer_struct_mallinfo2, mallinfo2) {
+//   __sanitizer_struct_mallinfo2 sret;
+//   clear_mallinfo(&sret);
+//   return sret;
+// }
+// #  define MSAN_MAYBE_INTERCEPT_MALLINFO2 INTERCEPT_FUNCTION(mallinfo2)
+// #else
+// #  define MSAN_MAYBE_INTERCEPT_MALLINFO2
+// #endif
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(int, mallopt, int cmd, int value) {
-  return 0;
-}
-#define MSAN_MAYBE_INTERCEPT_MALLOPT INTERCEPT_FUNCTION(mallopt)
-#else
-#define MSAN_MAYBE_INTERCEPT_MALLOPT
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(int, mallopt, int cmd, int value) {
+//   return 0;
+// }
+// #define MSAN_MAYBE_INTERCEPT_MALLOPT INTERCEPT_FUNCTION(mallopt)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_MALLOPT
+// #endif
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(void, malloc_stats, void) {
-  // FIXME: implement, but don't call REAL(malloc_stats)!
-}
-#define MSAN_MAYBE_INTERCEPT_MALLOC_STATS INTERCEPT_FUNCTION(malloc_stats)
-#else
-#define MSAN_MAYBE_INTERCEPT_MALLOC_STATS
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(void, malloc_stats, void) {
+//   // FIXME: implement, but don't call REAL(malloc_stats)!
+// }
+// #define MSAN_MAYBE_INTERCEPT_MALLOC_STATS INTERCEPT_FUNCTION(malloc_stats)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_MALLOC_STATS
+// #endif
 
-INTERCEPTOR(char *, strcpy, char *dest, const char *src) {
-  ENSURE_MSAN_INITED();
-  GET_STORE_STACK_TRACE;
-  SIZE_T n = internal_strlen(src);
-  CHECK_UNPOISONED_STRING(src + n, 0);
-  char *res = REAL(strcpy)(dest, src);
-  CopyShadowAndOrigin(dest, src, n + 1, &stack);
-  return res;
-}
+// INTERCEPTOR(char *, strcpy, char *dest, const char *src) {
+//   ENSURE_MSAN_INITED();
+//   GET_STORE_STACK_TRACE;
+//   SIZE_T n = internal_strlen(src);
+//   CHECK_UNPOISONED_STRING(src + n, 0);
+//   char *res = REAL(strcpy)(dest, src);
+//   CopyShadowAndOrigin(dest, src, n + 1, &stack);
+//   return res;
+// }
 
-INTERCEPTOR(char *, strncpy, char *dest, const char *src, SIZE_T n) {
-  ENSURE_MSAN_INITED();
-  GET_STORE_STACK_TRACE;
-  SIZE_T copy_size = internal_strnlen(src, n);
-  if (copy_size < n)
-    copy_size++;  // trailing \0
-  char *res = REAL(strncpy)(dest, src, n);
-  CopyShadowAndOrigin(dest, src, copy_size, &stack);
-  __msan_unpoison(dest + copy_size, n - copy_size);
-  return res;
-}
+// INTERCEPTOR(char *, strncpy, char *dest, const char *src, SIZE_T n) {
+//   ENSURE_MSAN_INITED();
+//   GET_STORE_STACK_TRACE;
+//   SIZE_T copy_size = internal_strnlen(src, n);
+//   if (copy_size < n)
+//     copy_size++;  // trailing \0
+//   char *res = REAL(strncpy)(dest, src, n);
+//   CopyShadowAndOrigin(dest, src, copy_size, &stack);
+//   __msan_unpoison(dest + copy_size, n - copy_size);
+//   return res;
+// }
 
 #if !SANITIZER_NETBSD
 INTERCEPTOR(char *, stpcpy, char *dest, const char *src) {
@@ -339,32 +349,32 @@ INTERCEPTOR(char *, stpncpy, char *dest, const char *src, SIZE_T n) {
 #  define MSAN_MAYBE_INTERCEPT_STPNCPY
 #endif
 
-INTERCEPTOR(char *, strdup, char *src) {
-  ENSURE_MSAN_INITED();
-  GET_STORE_STACK_TRACE;
-  // On FreeBSD strdup() leverages strlen().
-  InterceptorScope interceptor_scope;
-  SIZE_T n = internal_strlen(src);
-  CHECK_UNPOISONED_STRING(src + n, 0);
-  char *res = REAL(strdup)(src);
-  CopyShadowAndOrigin(res, src, n + 1, &stack);
-  return res;
-}
+// INTERCEPTOR(char *, strdup, char *src) {
+//   ENSURE_MSAN_INITED();
+//   GET_STORE_STACK_TRACE;
+//   // On FreeBSD strdup() leverages strlen().
+//   InterceptorScope interceptor_scope;
+//   SIZE_T n = internal_strlen(src);
+//   CHECK_UNPOISONED_STRING(src + n, 0);
+//   char *res = REAL(strdup)(src);
+//   CopyShadowAndOrigin(res, src, n + 1, &stack);
+//   return res;
+// }
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(char *, __strdup, char *src) {
-  ENSURE_MSAN_INITED();
-  GET_STORE_STACK_TRACE;
-  SIZE_T n = internal_strlen(src);
-  CHECK_UNPOISONED_STRING(src + n, 0);
-  char *res = REAL(__strdup)(src);
-  CopyShadowAndOrigin(res, src, n + 1, &stack);
-  return res;
-}
-#define MSAN_MAYBE_INTERCEPT___STRDUP INTERCEPT_FUNCTION(__strdup)
-#else
-#define MSAN_MAYBE_INTERCEPT___STRDUP
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(char *, __strdup, char *src) {
+//   ENSURE_MSAN_INITED();
+//   GET_STORE_STACK_TRACE;
+//   SIZE_T n = internal_strlen(src);
+//   CHECK_UNPOISONED_STRING(src + n, 0);
+//   char *res = REAL(__strdup)(src);
+//   CopyShadowAndOrigin(res, src, n + 1, &stack);
+//   return res;
+// }
+// #define MSAN_MAYBE_INTERCEPT___STRDUP INTERCEPT_FUNCTION(__strdup)
+// #else
+// #define MSAN_MAYBE_INTERCEPT___STRDUP
+// #endif
 
 #if !SANITIZER_NETBSD
 INTERCEPTOR(char *, gcvt, double number, SIZE_T ndigit, char *buf) {
@@ -379,29 +389,29 @@ INTERCEPTOR(char *, gcvt, double number, SIZE_T ndigit, char *buf) {
 #define MSAN_MAYBE_INTERCEPT_GCVT
 #endif
 
-INTERCEPTOR(char *, strcat, char *dest, const char *src) {
-  ENSURE_MSAN_INITED();
-  GET_STORE_STACK_TRACE;
-  SIZE_T src_size = internal_strlen(src);
-  SIZE_T dest_size = internal_strlen(dest);
-  CHECK_UNPOISONED_STRING(src + src_size, 0);
-  CHECK_UNPOISONED_STRING(dest + dest_size, 0);
-  char *res = REAL(strcat)(dest, src);
-  CopyShadowAndOrigin(dest + dest_size, src, src_size + 1, &stack);
-  return res;
-}
+// INTERCEPTOR(char *, strcat, char *dest, const char *src) {
+//   ENSURE_MSAN_INITED();
+//   GET_STORE_STACK_TRACE;
+//   SIZE_T src_size = internal_strlen(src);
+//   SIZE_T dest_size = internal_strlen(dest);
+//   CHECK_UNPOISONED_STRING(src + src_size, 0);
+//   CHECK_UNPOISONED_STRING(dest + dest_size, 0);
+//   char *res = REAL(strcat)(dest, src);
+//   CopyShadowAndOrigin(dest + dest_size, src, src_size + 1, &stack);
+//   return res;
+// }
 
-INTERCEPTOR(char *, strncat, char *dest, const char *src, SIZE_T n) {
-  ENSURE_MSAN_INITED();
-  GET_STORE_STACK_TRACE;
-  SIZE_T dest_size = internal_strlen(dest);
-  SIZE_T copy_size = internal_strnlen(src, n);
-  CHECK_UNPOISONED_STRING(dest + dest_size, 0);
-  char *res = REAL(strncat)(dest, src, n);
-  CopyShadowAndOrigin(dest + dest_size, src, copy_size, &stack);
-  __msan_unpoison(dest + dest_size + copy_size, 1); // \0
-  return res;
-}
+// INTERCEPTOR(char *, strncat, char *dest, const char *src, SIZE_T n) {
+//   ENSURE_MSAN_INITED();
+//   GET_STORE_STACK_TRACE;
+//   SIZE_T dest_size = internal_strlen(dest);
+//   SIZE_T copy_size = internal_strnlen(src, n);
+//   CHECK_UNPOISONED_STRING(dest + dest_size, 0);
+//   char *res = REAL(strncat)(dest, src, n);
+//   CopyShadowAndOrigin(dest + dest_size, src, copy_size, &stack);
+//   __msan_unpoison(dest + dest_size + copy_size, 1); // \0
+//   return res;
+// }
 
 // Hack: always pass nptr and endptr as part of __VA_ARGS_ to avoid having to
 // deal with empty __VA_ARGS__ in the case of INTERCEPTOR_STRTO.
@@ -494,8 +504,9 @@ INTERCEPTORS_STRTO_SRET(long double, strtold, char)
 #else
 INTERCEPTORS_STRTO(long double, strtold, char)
 #endif
-INTERCEPTORS_STRTO_BASE(long, strtol, char)
-INTERCEPTORS_STRTO_BASE(long long, strtoll, char)
+// strtol and strtoll are intercepted by XSAN
+// INTERCEPTORS_STRTO_BASE(long, strtol, char)
+// INTERCEPTORS_STRTO_BASE(long long, strtoll, char)
 INTERCEPTORS_STRTO_BASE(unsigned long, strtoul, char)
 INTERCEPTORS_STRTO_BASE(unsigned long long, strtoull, char)
 INTERCEPTORS_STRTO_BASE(u64, strtouq, char)
@@ -520,8 +531,8 @@ INTERCEPTORS_STRTO_SRET(long double, __isoc23_strtold, char)
 #else
 INTERCEPTORS_STRTO(long double, __isoc23_strtold, char)
 #endif
-INTERCEPTORS_STRTO_BASE(long, __isoc23_strtol, char)
-INTERCEPTORS_STRTO_BASE(long long, __isoc23_strtoll, char)
+// INTERCEPTORS_STRTO_BASE(long, __isoc23_strtol, char)
+// INTERCEPTORS_STRTO_BASE(long long, __isoc23_strtoll, char)
 INTERCEPTORS_STRTO_BASE(unsigned long, __isoc23_strtoul, char)
 INTERCEPTORS_STRTO_BASE(unsigned long long, __isoc23_strtoull, char)
 INTERCEPTORS_STRTO_BASE(u64, __isoc23_strtouq, char)
@@ -686,15 +697,15 @@ INTERCEPTOR(int, wcscmp, const wchar_t *s1, const wchar_t *s2) {
   return res;
 }
 
-INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(gettimeofday)(tv, tz);
-  if (tv)
-    __msan_unpoison(tv, 16);
-  if (tz)
-    __msan_unpoison(tz, 8);
-  return res;
-}
+// INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(gettimeofday)(tv, tz);
+//   if (tv)
+//     __msan_unpoison(tv, 16);
+//   if (tz)
+//     __msan_unpoison(tz, 8);
+//   return res;
+// }
 
 #if !SANITIZER_NETBSD
 INTERCEPTOR(char *, fcvt, double x, int a, int *b, int *c) {
@@ -749,57 +760,57 @@ INTERCEPTOR(int, putenv, char *string) {
 }
 
 #define SANITIZER_STAT_LINUX (SANITIZER_LINUX && __GLIBC_PREREQ(2, 33))
-#if SANITIZER_FREEBSD || SANITIZER_NETBSD || SANITIZER_STAT_LINUX
-INTERCEPTOR(int, fstat, int fd, void *buf) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(fstat)(fd, buf);
-  if (!res)
-    __msan_unpoison(buf, __sanitizer::struct_stat_sz);
-  return res;
-}
-#  define MSAN_MAYBE_INTERCEPT_FSTAT MSAN_INTERCEPT_FUNC(fstat)
-#else
-#define MSAN_MAYBE_INTERCEPT_FSTAT
-#endif
+// #if SANITIZER_FREEBSD || SANITIZER_NETBSD || SANITIZER_STAT_LINUX
+// INTERCEPTOR(int, fstat, int fd, void *buf) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(fstat)(fd, buf);
+//   if (!res)
+//     __msan_unpoison(buf, __sanitizer::struct_stat_sz);
+//   return res;
+// }
+// #  define MSAN_MAYBE_INTERCEPT_FSTAT MSAN_INTERCEPT_FUNC(fstat)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_FSTAT
+// #endif
 
-#if SANITIZER_STAT_LINUX
-INTERCEPTOR(int, fstat64, int fd, void *buf) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(fstat64)(fd, buf);
-  if (!res)
-    __msan_unpoison(buf, __sanitizer::struct_stat64_sz);
-  return res;
-}
-#  define MSAN_MAYBE_INTERCEPT_FSTAT64 MSAN_INTERCEPT_FUNC(fstat64)
-#else
-#  define MSAN_MAYBE_INTERCEPT_FSTAT64
-#endif
+// #if SANITIZER_STAT_LINUX
+// INTERCEPTOR(int, fstat64, int fd, void *buf) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(fstat64)(fd, buf);
+//   if (!res)
+//     __msan_unpoison(buf, __sanitizer::struct_stat64_sz);
+//   return res;
+// }
+// #  define MSAN_MAYBE_INTERCEPT_FSTAT64 MSAN_INTERCEPT_FUNC(fstat64)
+// #else
+// #  define MSAN_MAYBE_INTERCEPT_FSTAT64
+// #endif
 
-#if SANITIZER_GLIBC
-INTERCEPTOR(int, __fxstat, int magic, int fd, void *buf) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(__fxstat)(magic, fd, buf);
-  if (!res)
-    __msan_unpoison(buf, __sanitizer::struct_stat_sz);
-  return res;
-}
-#  define MSAN_MAYBE_INTERCEPT___FXSTAT MSAN_INTERCEPT_FUNC(__fxstat)
-#else
-#define MSAN_MAYBE_INTERCEPT___FXSTAT
-#endif
+// #if SANITIZER_GLIBC
+// INTERCEPTOR(int, __fxstat, int magic, int fd, void *buf) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(__fxstat)(magic, fd, buf);
+//   if (!res)
+//     __msan_unpoison(buf, __sanitizer::struct_stat_sz);
+//   return res;
+// }
+// #  define MSAN_MAYBE_INTERCEPT___FXSTAT MSAN_INTERCEPT_FUNC(__fxstat)
+// #else
+// #define MSAN_MAYBE_INTERCEPT___FXSTAT
+// #endif
 
-#if SANITIZER_GLIBC
-INTERCEPTOR(int, __fxstat64, int magic, int fd, void *buf) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(__fxstat64)(magic, fd, buf);
-  if (!res)
-    __msan_unpoison(buf, __sanitizer::struct_stat64_sz);
-  return res;
-}
-#  define MSAN_MAYBE_INTERCEPT___FXSTAT64 MSAN_INTERCEPT_FUNC(__fxstat64)
-#else
-#  define MSAN_MAYBE_INTERCEPT___FXSTAT64
-#endif
+// #if SANITIZER_GLIBC
+// INTERCEPTOR(int, __fxstat64, int magic, int fd, void *buf) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(__fxstat64)(magic, fd, buf);
+//   if (!res)
+//     __msan_unpoison(buf, __sanitizer::struct_stat64_sz);
+//   return res;
+// }
+// #  define MSAN_MAYBE_INTERCEPT___FXSTAT64 MSAN_INTERCEPT_FUNC(__fxstat64)
+// #else
+// #  define MSAN_MAYBE_INTERCEPT___FXSTAT64
+// #endif
 
 #if SANITIZER_FREEBSD || SANITIZER_NETBSD || SANITIZER_STAT_LINUX
 INTERCEPTOR(int, fstatat, int fd, char *pathname, void *buf, int flags) {
@@ -852,31 +863,31 @@ INTERCEPTOR(int, __fxstatat64, int magic, int fd, char *pathname, void *buf,
 #  define MSAN_MAYBE_INTERCEPT___FXSTATAT64
 #endif
 
-INTERCEPTOR(int, pipe, int pipefd[2]) {
-  if (msan_init_is_running)
-    return REAL(pipe)(pipefd);
-  ENSURE_MSAN_INITED();
-  int res = REAL(pipe)(pipefd);
-  if (!res)
-    __msan_unpoison(pipefd, sizeof(int[2]));
-  return res;
-}
+// INTERCEPTOR(int, pipe, int pipefd[2]) {
+//   if (msan_init_is_running)
+//     return REAL(pipe)(pipefd);
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(pipe)(pipefd);
+//   if (!res)
+//     __msan_unpoison(pipefd, sizeof(int[2]));
+//   return res;
+// }
 
-INTERCEPTOR(int, pipe2, int pipefd[2], int flags) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(pipe2)(pipefd, flags);
-  if (!res)
-    __msan_unpoison(pipefd, sizeof(int[2]));
-  return res;
-}
+// INTERCEPTOR(int, pipe2, int pipefd[2], int flags) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(pipe2)(pipefd, flags);
+//   if (!res)
+//     __msan_unpoison(pipefd, sizeof(int[2]));
+//   return res;
+// }
 
-INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int sv[2]) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(socketpair)(domain, type, protocol, sv);
-  if (!res)
-    __msan_unpoison(sv, sizeof(int[2]));
-  return res;
-}
+// INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int sv[2]) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(socketpair)(domain, type, protocol, sv);
+//   if (!res)
+//     __msan_unpoison(sv, sizeof(int[2]));
+//   return res;
+// }
 
 #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
 INTERCEPTOR(char *, fgets_unlocked, char *s, int size, void *stream) {
@@ -962,61 +973,61 @@ INTERCEPTOR(int, gethostname, char *name, SIZE_T len) {
   return res;
 }
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(int, epoll_wait, int epfd, void *events, int maxevents,
-    int timeout) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(epoll_wait)(epfd, events, maxevents, timeout);
-  if (res > 0) {
-    __msan_unpoison(events, __sanitizer::struct_epoll_event_sz * res);
-  }
-  return res;
-}
-#define MSAN_MAYBE_INTERCEPT_EPOLL_WAIT INTERCEPT_FUNCTION(epoll_wait)
-#else
-#define MSAN_MAYBE_INTERCEPT_EPOLL_WAIT
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(int, epoll_wait, int epfd, void *events, int maxevents,
+//     int timeout) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(epoll_wait)(epfd, events, maxevents, timeout);
+//   if (res > 0) {
+//     __msan_unpoison(events, __sanitizer::struct_epoll_event_sz * res);
+//   }
+//   return res;
+// }
+// #define MSAN_MAYBE_INTERCEPT_EPOLL_WAIT INTERCEPT_FUNCTION(epoll_wait)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_EPOLL_WAIT
+// #endif
 
-#if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
-INTERCEPTOR(int, epoll_pwait, int epfd, void *events, int maxevents,
-    int timeout, void *sigmask) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(epoll_pwait)(epfd, events, maxevents, timeout, sigmask);
-  if (res > 0) {
-    __msan_unpoison(events, __sanitizer::struct_epoll_event_sz * res);
-  }
-  return res;
-}
-#define MSAN_MAYBE_INTERCEPT_EPOLL_PWAIT INTERCEPT_FUNCTION(epoll_pwait)
-#else
-#define MSAN_MAYBE_INTERCEPT_EPOLL_PWAIT
-#endif
+// #if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+// INTERCEPTOR(int, epoll_pwait, int epfd, void *events, int maxevents,
+//     int timeout, void *sigmask) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(epoll_pwait)(epfd, events, maxevents, timeout, sigmask);
+//   if (res > 0) {
+//     __msan_unpoison(events, __sanitizer::struct_epoll_event_sz * res);
+//   }
+//   return res;
+// }
+// #define MSAN_MAYBE_INTERCEPT_EPOLL_PWAIT INTERCEPT_FUNCTION(epoll_pwait)
+// #else
+// #define MSAN_MAYBE_INTERCEPT_EPOLL_PWAIT
+// #endif
 
-INTERCEPTOR(void *, calloc, SIZE_T nmemb, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  if (DlsymAlloc::Use())
-    return DlsymAlloc::Callocate(nmemb, size);
-  return msan_calloc(nmemb, size, &stack);
-}
+// INTERCEPTOR(void *, calloc, SIZE_T nmemb, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   if (DlsymAlloc::Use())
+//     return DlsymAlloc::Callocate(nmemb, size);
+//   return msan_calloc(nmemb, size, &stack);
+// }
 
-INTERCEPTOR(void *, realloc, void *ptr, SIZE_T size) {
-  if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
-    return DlsymAlloc::Realloc(ptr, size);
-  GET_MALLOC_STACK_TRACE;
-  return msan_realloc(ptr, size, &stack);
-}
+// INTERCEPTOR(void *, realloc, void *ptr, SIZE_T size) {
+//   if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(ptr))
+//     return DlsymAlloc::Realloc(ptr, size);
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_realloc(ptr, size, &stack);
+// }
 
-INTERCEPTOR(void *, reallocarray, void *ptr, SIZE_T nmemb, SIZE_T size) {
-  GET_MALLOC_STACK_TRACE;
-  return msan_reallocarray(ptr, nmemb, size, &stack);
-}
+// INTERCEPTOR(void *, reallocarray, void *ptr, SIZE_T nmemb, SIZE_T size) {
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_reallocarray(ptr, nmemb, size, &stack);
+// }
 
-INTERCEPTOR(void *, malloc, SIZE_T size) {
-  if (DlsymAlloc::Use())
-    return DlsymAlloc::Allocate(size);
-  GET_MALLOC_STACK_TRACE;
-  return msan_malloc(size, &stack);
-}
+// INTERCEPTOR(void *, malloc, SIZE_T size) {
+//   if (DlsymAlloc::Use())
+//     return DlsymAlloc::Allocate(size);
+//   GET_MALLOC_STACK_TRACE;
+//   return msan_malloc(size, &stack);
+// }
 
 void __msan_allocated_memory(const void *data, uptr size) {
   if (flags()->poison_in_malloc) {
@@ -1055,34 +1066,34 @@ void __sanitizer_dtor_callback_vptr(const void *data) {
   }
 }
 
-template <class Mmap>
-static void *mmap_interceptor(Mmap real_mmap, void *addr, SIZE_T length,
-                              int prot, int flags, int fd, OFF64_T offset) {
-  SIZE_T rounded_length = RoundUpTo(length, GetPageSize());
-  void *end_addr = (char *)addr + (rounded_length - 1);
-  if (addr && (!MEM_IS_APP(addr) || !MEM_IS_APP(end_addr))) {
-    if (flags & map_fixed) {
-      errno = errno_EINVAL;
-      return (void *)-1;
-    } else {
-      addr = nullptr;
-    }
-  }
-  void *res = real_mmap(addr, length, prot, flags, fd, offset);
-  if (res != (void *)-1) {
-    void *end_res = (char *)res + (rounded_length - 1);
-    if (MEM_IS_APP(res) && MEM_IS_APP(end_res)) {
-      __msan_unpoison(res, rounded_length);
-    } else {
-      // Application has attempted to map more memory than is supported by
-      // MSAN. Act as if we ran out of memory.
-      internal_munmap(res, length);
-      errno = errno_ENOMEM;
-      return (void *)-1;
-    }
-  }
-  return res;
-}
+// template <class Mmap>
+// static void *mmap_interceptor(Mmap real_mmap, void *addr, SIZE_T length,
+//                               int prot, int flags, int fd, OFF64_T offset) {
+//   SIZE_T rounded_length = RoundUpTo(length, GetPageSize());
+//   void *end_addr = (char *)addr + (rounded_length - 1);
+//   if (addr && (!MEM_IS_APP(addr) || !MEM_IS_APP(end_addr))) {
+//     if (flags & map_fixed) {
+//       errno = errno_EINVAL;
+//       return (void *)-1;
+//     } else {
+//       addr = nullptr;
+//     }
+//   }
+//   void *res = real_mmap(addr, length, prot, flags, fd, offset);
+//   if (res != (void *)-1) {
+//     void *end_res = (char *)res + (rounded_length - 1);
+//     if (MEM_IS_APP(res) && MEM_IS_APP(end_res)) {
+//       __msan_unpoison(res, rounded_length);
+//     } else {
+//       // Application has attempted to map more memory than is supported by
+//       // MSAN. Act as if we ran out of memory.
+//       internal_munmap(res, length);
+//       errno = errno_ENOMEM;
+//       return (void *)-1;
+//     }
+//   }
+//   return res;
+// }
 
 INTERCEPTOR(int, getrusage, int who, void *usage) {
   ENSURE_MSAN_INITED();
@@ -1092,6 +1103,8 @@ INTERCEPTOR(int, getrusage, int who, void *usage) {
   }
   return res;
 }
+
+#if !XSAN_CONTAINS_TSAN
 
 class SignalHandlerScope {
  public:
@@ -1146,39 +1159,41 @@ static void read_sigaction(const __sanitizer_sigaction *act) {
   CHECK_UNPOISONED(&act->sa_mask, sizeof(act->sa_mask));
 }
 
-extern "C" int pthread_attr_init(void *attr);
-extern "C" int pthread_attr_destroy(void *attr);
+#endif
 
-static void *MsanThreadStartFunc(void *arg) {
-  MsanThread *t = (MsanThread *)arg;
-  SetCurrentThread(t);
-  t->Init();
-  SetSigProcMask(&t->starting_sigset_, nullptr);
-  return t->ThreadStart();
-}
+// extern "C" int pthread_attr_init(void *attr);
+// extern "C" int pthread_attr_destroy(void *attr);
 
-INTERCEPTOR(int, pthread_create, void *th, void *attr, void *(*callback)(void*),
-            void * param) {
-  ENSURE_MSAN_INITED(); // for GetTlsSize()
-  __sanitizer_pthread_attr_t myattr;
-  if (!attr) {
-    pthread_attr_init(&myattr);
-    attr = &myattr;
-  }
+// static void *MsanThreadStartFunc(void *arg) {
+//   MsanThread *t = (MsanThread *)arg;
+//   SetCurrentThread(t);
+//   t->Init();
+//   SetSigProcMask(&t->starting_sigset_, nullptr);
+//   return t->ThreadStart();
+// }
 
-  AdjustStackSize(attr);
+// INTERCEPTOR(int, pthread_create, void *th, void *attr, void *(*callback)(void*),
+//             void * param) {
+//   ENSURE_MSAN_INITED(); // for GetTlsSize()
+//   __sanitizer_pthread_attr_t myattr;
+//   if (!attr) {
+//     pthread_attr_init(&myattr);
+//     attr = &myattr;
+//   }
 
-  MsanThread *t = MsanThread::Create(callback, param);
-  ScopedBlockSignals block(&t->starting_sigset_);
-  int res = REAL(pthread_create)(th, attr, MsanThreadStartFunc, t);
+//   AdjustStackSize(attr);
 
-  if (attr == &myattr)
-    pthread_attr_destroy(&myattr);
-  if (!res) {
-    __msan_unpoison(th, __sanitizer::pthread_t_sz);
-  }
-  return res;
-}
+//   MsanThread *t = MsanThread::Create(callback, param);
+//   ScopedBlockSignals block(&t->starting_sigset_);
+//   int res = REAL(pthread_create)(th, attr, MsanThreadStartFunc, t);
+
+//   if (attr == &myattr)
+//     pthread_attr_destroy(&myattr);
+//   if (!res) {
+//     __msan_unpoison(th, __sanitizer::pthread_t_sz);
+//   }
+//   return res;
+// }
 
 INTERCEPTOR(int, pthread_key_create, __sanitizer_pthread_key_t *key,
             void (*dtor)(void *value)) {
@@ -1196,33 +1211,33 @@ INTERCEPTOR(int, __libc_thr_keycreate, __sanitizer_pthread_key_t *m,
 ALIAS(WRAP(pthread_key_create));
 #endif
 
-INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(pthread_join)(thread, retval);
-  if (!res && retval)
-    __msan_unpoison(retval, sizeof(*retval));
-  return res;
-}
+// INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(pthread_join)(thread, retval);
+//   if (!res && retval)
+//     __msan_unpoison(retval, sizeof(*retval));
+//   return res;
+// }
 
-#if SANITIZER_GLIBC
-INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **retval) {
-  ENSURE_MSAN_INITED();
-  int res = REAL(pthread_tryjoin_np)(thread, retval);
-  if (!res && retval)
-    __msan_unpoison(retval, sizeof(*retval));
-  return res;
-}
+// #if SANITIZER_GLIBC
+// INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **retval) {
+//   ENSURE_MSAN_INITED();
+//   int res = REAL(pthread_tryjoin_np)(thread, retval);
+//   if (!res && retval)
+//     __msan_unpoison(retval, sizeof(*retval));
+//   return res;
+// }
 
-INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **retval,
-            const struct timespec *abstime) {
-  int res = REAL(pthread_timedjoin_np)(thread, retval, abstime);
-  if (!res && retval)
-    __msan_unpoison(retval, sizeof(*retval));
-  return res;
-}
-#endif
+// INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **retval,
+//             const struct timespec *abstime) {
+//   int res = REAL(pthread_timedjoin_np)(thread, retval, abstime);
+//   if (!res && retval)
+//     __msan_unpoison(retval, sizeof(*retval));
+//   return res;
+// }
+// #endif
 
-DEFINE_INTERNAL_PTHREAD_FUNCTIONS
+// DEFINE_INTERNAL_PTHREAD_FUNCTIONS
 
 extern char *tzname[2];
 
@@ -1237,90 +1252,90 @@ INTERCEPTOR(void, tzset, int fake) {
   return;
 }
 
-struct MSanAtExitRecord {
-  void (*func)(void *arg);
-  void *arg;
-};
+// struct MSanAtExitRecord {
+//   void (*func)(void *arg);
+//   void *arg;
+// };
 
-struct InterceptorContext {
-  Mutex atexit_mu;
-  Vector<struct MSanAtExitRecord *> AtExitStack;
+// struct InterceptorContext {
+//   Mutex atexit_mu;
+//   Vector<struct MSanAtExitRecord *> AtExitStack;
 
-  InterceptorContext()
-      : AtExitStack() {
-  }
-};
+//   InterceptorContext()
+//       : AtExitStack() {
+//   }
+// };
 
-alignas(64) static char interceptor_placeholder[sizeof(InterceptorContext)];
-InterceptorContext *interceptor_ctx() {
-  return reinterpret_cast<InterceptorContext*>(&interceptor_placeholder[0]);
-}
+// alignas(64) static char interceptor_placeholder[sizeof(InterceptorContext)];
+// InterceptorContext *interceptor_ctx() {
+//   return reinterpret_cast<InterceptorContext*>(&interceptor_placeholder[0]);
+// }
 
-void MSanAtExitWrapper() {
-  MSanAtExitRecord *r;
-  {
-    Lock l(&interceptor_ctx()->atexit_mu);
+// void MSanAtExitWrapper() {
+//   MSanAtExitRecord *r;
+//   {
+//     Lock l(&interceptor_ctx()->atexit_mu);
 
-    uptr element = interceptor_ctx()->AtExitStack.Size() - 1;
-    r = interceptor_ctx()->AtExitStack[element];
-    interceptor_ctx()->AtExitStack.PopBack();
-  }
+//     uptr element = interceptor_ctx()->AtExitStack.Size() - 1;
+//     r = interceptor_ctx()->AtExitStack[element];
+//     interceptor_ctx()->AtExitStack.PopBack();
+//   }
 
-  UnpoisonParam(1);
-  ((void(*)())r->func)();
-  InternalFree(r);
-}
+//   UnpoisonParam(1);
+//   ((void(*)())r->func)();
+//   InternalFree(r);
+// }
 
-void MSanCxaAtExitWrapper(void *arg) {
-  UnpoisonParam(1);
-  MSanAtExitRecord *r = (MSanAtExitRecord *)arg;
-  // libc before 2.27 had race which caused occasional double handler execution
-  // https://sourceware.org/ml/libc-alpha/2017-08/msg01204.html
-  if (!r->func)
-    return;
-  r->func(r->arg);
-  r->func = nullptr;
-}
+// void MSanCxaAtExitWrapper(void *arg) {
+//   UnpoisonParam(1);
+//   MSanAtExitRecord *r = (MSanAtExitRecord *)arg;
+//   // libc before 2.27 had race which caused occasional double handler execution
+//   // https://sourceware.org/ml/libc-alpha/2017-08/msg01204.html
+//   if (!r->func)
+//     return;
+//   r->func(r->arg);
+//   r->func = nullptr;
+// }
 
-static int setup_at_exit_wrapper(void(*f)(), void *arg, void *dso);
-
-// Unpoison argument shadow for C++ module destructors.
-INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
-            void *dso_handle) {
-  if (msan_init_is_running) return REAL(__cxa_atexit)(func, arg, dso_handle);
-  return setup_at_exit_wrapper((void(*)())func, arg, dso_handle);
-}
+// static int setup_at_exit_wrapper(void(*f)(), void *arg, void *dso);
 
 // Unpoison argument shadow for C++ module destructors.
-INTERCEPTOR(int, atexit, void (*func)()) {
-  // Avoid calling real atexit as it is unreachable on at least on Linux.
-  if (msan_init_is_running)
-    return REAL(__cxa_atexit)((void (*)(void *a))func, 0, 0);
-  return setup_at_exit_wrapper((void(*)())func, 0, 0);
-}
+// INTERCEPTOR(int, __cxa_atexit, void (*func)(void *), void *arg,
+//             void *dso_handle) {
+//   if (msan_init_is_running) return REAL(__cxa_atexit)(func, arg, dso_handle);
+//   return setup_at_exit_wrapper((void(*)())func, arg, dso_handle);
+// }
 
-static int setup_at_exit_wrapper(void(*f)(), void *arg, void *dso) {
-  ENSURE_MSAN_INITED();
-  MSanAtExitRecord *r =
-      (MSanAtExitRecord *)InternalAlloc(sizeof(MSanAtExitRecord));
-  r->func = (void(*)(void *a))f;
-  r->arg = arg;
-  int res;
-  if (!dso) {
-    // NetBSD does not preserve the 2nd argument if dso is equal to 0
-    // Store ctx in a local stack-like structure
+// Unpoison argument shadow for C++ module destructors.
+// INTERCEPTOR(int, atexit, void (*func)()) {
+//   // Avoid calling real atexit as it is unreachable on at least on Linux.
+//   if (msan_init_is_running)
+//     return REAL(__cxa_atexit)((void (*)(void *a))func, 0, 0);
+//   return setup_at_exit_wrapper((void(*)())func, 0, 0);
+// }
 
-    Lock l(&interceptor_ctx()->atexit_mu);
+// static int setup_at_exit_wrapper(void(*f)(), void *arg, void *dso) {
+//   ENSURE_MSAN_INITED();
+//   MSanAtExitRecord *r =
+//       (MSanAtExitRecord *)InternalAlloc(sizeof(MSanAtExitRecord));
+//   r->func = (void(*)(void *a))f;
+//   r->arg = arg;
+//   int res;
+//   if (!dso) {
+//     // NetBSD does not preserve the 2nd argument if dso is equal to 0
+//     // Store ctx in a local stack-like structure
 
-    res = REAL(__cxa_atexit)((void (*)(void *a))MSanAtExitWrapper, 0, 0);
-    if (!res) {
-      interceptor_ctx()->AtExitStack.PushBack(r);
-    }
-  } else {
-    res = REAL(__cxa_atexit)(MSanCxaAtExitWrapper, r, dso);
-  }
-  return res;
-}
+//     Lock l(&interceptor_ctx()->atexit_mu);
+
+//     res = REAL(__cxa_atexit)((void (*)(void *a))MSanAtExitWrapper, 0, 0);
+//     if (!res) {
+//       interceptor_ctx()->AtExitStack.PushBack(r);
+//     }
+//   } else {
+//     res = REAL(__cxa_atexit)(MSanCxaAtExitWrapper, r, dso);
+//   }
+//   return res;
+// }
 
 // NetBSD ships with openpty(3) in -lutil, that needs to be prebuilt explicitly
 // with MSan.
@@ -1362,22 +1377,22 @@ struct MSanInterceptorContext {
   bool in_interceptor_scope;
 };
 
-namespace __msan {
+// namespace __msan {
 
-int OnExit() {
-  // FIXME: ask frontend whether we need to return failure.
-  return 0;
-}
+// int OnExit() {
+//   // FIXME: ask frontend whether we need to return failure.
+//   return 0;
+// }
 
-} // namespace __msan
+// } // namespace __msan
 
-// A version of CHECK_UNPOISONED using a saved scope value. Used in common
-// interceptors.
-#define CHECK_UNPOISONED_CTX(ctx, x, n)                         \
-  do {                                                          \
-    if (!((MSanInterceptorContext *)ctx)->in_interceptor_scope) \
-      CHECK_UNPOISONED_0(x, n);                                 \
-  } while (0)
+// // A version of CHECK_UNPOISONED using a saved scope value. Used in common
+// // interceptors.
+// #define CHECK_UNPOISONED_CTX(ctx, x, n)                         \
+//   do {                                                          \
+//     if (!((MSanInterceptorContext *)ctx)->in_interceptor_scope) \
+//       CHECK_UNPOISONED_0(x, n);                                 \
+//   } while (0)
 
 #define MSAN_INTERCEPT_FUNC(name)                                       \
   do {                                                                  \
@@ -1402,15 +1417,15 @@ int OnExit() {
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
   MSAN_INTERCEPT_FUNC_VER(name, ver)
 #define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
-  MSAN_INTERCEPT_FUNC_VER_UNVERSIONED_FALLBACK(name, ver)
-#define COMMON_INTERCEPTOR_UNPOISON_PARAM(count)  \
-  UnpoisonParam(count)
-#define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size) \
-  __msan_unpoison(ptr, size)
-#define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
-  CHECK_UNPOISONED_CTX(ctx, ptr, size)
-#define COMMON_INTERCEPTOR_INITIALIZE_RANGE(ptr, size) \
-  __msan_unpoison(ptr, size)
+//   MSAN_INTERCEPT_FUNC_VER_UNVERSIONED_FALLBACK(name, ver)
+// #define COMMON_INTERCEPTOR_UNPOISON_PARAM(count)  \
+//   UnpoisonParam(count)
+// #define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size) \
+//   __msan_unpoison(ptr, size)
+// #define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
+//   CHECK_UNPOISONED_CTX(ctx, ptr, size)
+// #define COMMON_INTERCEPTOR_INITIALIZE_RANGE(ptr, size) \
+//   __msan_unpoison(ptr, size)
 #define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)              \
   if (msan_init_is_running)                                   \
     return REAL(func)(__VA_ARGS__);                           \
@@ -1420,75 +1435,77 @@ int OnExit() {
   (void)ctx;                                                  \
   InterceptorScope interceptor_scope;                         \
   __msan_unpoison(__errno_location(), sizeof(int));
-#define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
-  do {                                            \
-  } while (false)
-#define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
-  do {                                         \
-  } while (false)
-#define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
-  do {                                         \
-  } while (false)
-#define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
-  do {                                                      \
-  } while (false)
-#define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
-  do {                                                \
-  } while (false)  // FIXME
-#define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name) \
-  do {                                                         \
-  } while (false)  // FIXME
-#define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
-#define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit()
-#define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle)                    \
-  do {                                                                         \
-    link_map *map = GET_LINK_MAP_BY_DLOPEN_HANDLE((handle));                   \
-    if (filename && map)                                                       \
-      ForEachMappedRegion(map, __msan_unpoison);                               \
-  } while (false)
+// #define COMMON_INTERCEPTOR_DIR_ACQUIRE(ctx, path) \
+//   do {                                            \
+//   } while (false)
+// #define COMMON_INTERCEPTOR_FD_ACQUIRE(ctx, fd) \
+//   do {                                         \
+//   } while (false)
+// #define COMMON_INTERCEPTOR_FD_RELEASE(ctx, fd) \
+//   do {                                         \
+//   } while (false)
+// #define COMMON_INTERCEPTOR_FD_SOCKET_ACCEPT(ctx, fd, newfd) \
+//   do {                                                      \
+//   } while (false)
+// #define COMMON_INTERCEPTOR_SET_THREAD_NAME(ctx, name) \
+//   do {                                                \
+//   } while (false)  // FIXME
+// #define COMMON_INTERCEPTOR_SET_PTHREAD_NAME(ctx, thread, name) \
+//   do {                                                         \
+//   } while (false)  // FIXME
+// #define COMMON_INTERCEPTOR_BLOCK_REAL(name) REAL(name)
+// #define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit()
+// #define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle)                    \
+//   do {                                                                         \
+//     link_map *map = GET_LINK_MAP_BY_DLOPEN_HANDLE((handle));                   \
+//     if (filename && map)                                                       \
+//       ForEachMappedRegion(map, __msan_unpoison);                               \
+//   } while (false)
 
-#define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!msan_inited)
+// #define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!msan_inited)
 
-#define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end)                           \
-  if (MsanThread *t = GetCurrentThread()) {                                    \
-    *begin = t->tls_begin();                                                   \
-    *end = t->tls_end();                                                       \
-  } else {                                                                     \
-    *begin = *end = 0;                                                         \
-  }
+// #define COMMON_INTERCEPTOR_GET_TLS_RANGE(begin, end)                           \
+//   if (MsanThread *t = GetCurrentThread()) {                                    \
+//     *begin = t->tls_begin();                                                   \
+//     *end = t->tls_end();                                                       \
+//   } else {                                                                     \
+//     *begin = *end = 0;                                                         \
+//   }
 
-#define COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, block, c, size) \
-  {                                                         \
-    (void)ctx;                                              \
-    return __msan_memset(block, c, size);                   \
-  }
-#define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
-  {                                                          \
-    (void)ctx;                                               \
-    return __msan_memmove(to, from, size);                   \
-  }
-#define COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, to, from, size) \
-  {                                                         \
-    (void)ctx;                                              \
-    return __msan_memcpy(to, from, size);                   \
-  }
+// #define COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, block, c, size) \
+//   {                                                         \
+//     (void)ctx;                                              \
+//     return __msan_memset(block, c, size);                   \
+//   }
+// #define COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, to, from, size) \
+//   {                                                          \
+//     (void)ctx;                                               \
+//     return __msan_memmove(to, from, size);                   \
+//   }
+// #define COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, to, from, size) \
+//   {                                                         \
+//     (void)ctx;                                              \
+//     return __msan_memcpy(to, from, size);                   \
+//   }
 
-#define COMMON_INTERCEPTOR_COPY_STRING(ctx, to, from, size) \
-  do {                                                      \
-    GET_STORE_STACK_TRACE;                                  \
-    CopyShadowAndOrigin(to, from, size, &stack);            \
-    __msan_unpoison(to + size, 1);                          \
-  } while (false)
+// #define COMMON_INTERCEPTOR_COPY_STRING(ctx, to, from, size) \
+//   do {                                                      \
+//     GET_STORE_STACK_TRACE;                                  \
+//     CopyShadowAndOrigin(to, from, size, &stack);            \
+//     __msan_unpoison(to + size, 1);                          \
+//   } while (false)
 
-#define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, length, prot, flags, fd, \
-                                     offset)                                   \
-  do {                                                                         \
-    return mmap_interceptor(REAL(mmap), addr, sz, prot, flags, fd, off);       \
-  } while (false)
+// #define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, length, prot, flags, fd, \
+//                                      offset)                                   \
+//   do {                                                                         \
+//     return mmap_interceptor(REAL(mmap), addr, sz, prot, flags, fd, off);       \
+//   } while (false)
 
-#include "sanitizer_common/sanitizer_platform_interceptors.h"
-#include "sanitizer_common/sanitizer_common_interceptors_memintrinsics.inc"
-#include "sanitizer_common/sanitizer_common_interceptors.inc"
+// #include "sanitizer_common/sanitizer_platform_interceptors.h"
+// #include "sanitizer_common/sanitizer_common_interceptors_memintrinsics.inc"
+// #include "sanitizer_common/sanitizer_common_interceptors.inc"
+
+#if !XSAN_CONTAINS_TSAN
 
 static uptr signal_impl(int signo, uptr cb);
 static int sigaction_impl(int signo, const __sanitizer_sigaction *act,
@@ -1566,16 +1583,18 @@ static uptr signal_impl(int signo, uptr cb) {
   return cb;
 }
 
-#define COMMON_SYSCALL_PRE_READ_RANGE(p, s) CHECK_UNPOISONED(p, s)
-#define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) \
-  do {                                       \
-  } while (false)
-#define COMMON_SYSCALL_POST_READ_RANGE(p, s) \
-  do {                                       \
-  } while (false)
-#define COMMON_SYSCALL_POST_WRITE_RANGE(p, s) __msan_unpoison(p, s)
-#include "sanitizer_common/sanitizer_common_syscalls.inc"
-#include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
+#endif // XSAN_CONTAINS_TSAN
+
+// #define COMMON_SYSCALL_PRE_READ_RANGE(p, s) CHECK_UNPOISONED(p, s)
+// #define COMMON_SYSCALL_PRE_WRITE_RANGE(p, s) \
+//   do {                                       \
+//   } while (false)
+// #define COMMON_SYSCALL_POST_READ_RANGE(p, s) \
+//   do {                                       \
+//   } while (false)
+// #define COMMON_SYSCALL_POST_WRITE_RANGE(p, s) __msan_unpoison(p, s)
+// #include "sanitizer_common/sanitizer_common_syscalls.inc"
+// #include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
 
 INTERCEPTOR(const char *, strsignal, int sig) {
   void *ctx;
@@ -1621,26 +1640,26 @@ INTERCEPTOR(char *, dlerror, int fake) {
   return res;
 }
 
-typedef int (*dl_iterate_phdr_cb)(__sanitizer_dl_phdr_info *info, SIZE_T size,
-                                  void *data);
-struct dl_iterate_phdr_data {
-  dl_iterate_phdr_cb callback;
-  void *data;
-};
+// typedef int (*dl_iterate_phdr_cb)(__sanitizer_dl_phdr_info *info, SIZE_T size,
+//                                   void *data);
+// struct dl_iterate_phdr_data {
+//   dl_iterate_phdr_cb callback;
+//   void *data;
+// };
 
-static int msan_dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
-                                   void *data) {
-  if (info) {
-    __msan_unpoison(info, size);
-    if (info->dlpi_phdr && info->dlpi_phnum)
-      __msan_unpoison(info->dlpi_phdr, struct_ElfW_Phdr_sz * info->dlpi_phnum);
-    if (info->dlpi_name)
-      __msan_unpoison(info->dlpi_name, internal_strlen(info->dlpi_name) + 1);
-  }
-  dl_iterate_phdr_data *cbdata = (dl_iterate_phdr_data *)data;
-  UnpoisonParam(3);
-  return cbdata->callback(info, size, cbdata->data);
-}
+// static int msan_dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
+//                                    void *data) {
+//   if (info) {
+//     __msan_unpoison(info, size);
+//     if (info->dlpi_phdr && info->dlpi_phnum)
+//       __msan_unpoison(info->dlpi_phdr, struct_ElfW_Phdr_sz * info->dlpi_phnum);
+//     if (info->dlpi_name)
+//       __msan_unpoison(info->dlpi_name, internal_strlen(info->dlpi_name) + 1);
+//   }
+//   dl_iterate_phdr_data *cbdata = (dl_iterate_phdr_data *)data;
+//   UnpoisonParam(3);
+//   return cbdata->callback(info, size, cbdata->data);
+// }
 
 INTERCEPTOR(void *, shmat, int shmid, const void *shmaddr, int shmflg) {
   ENSURE_MSAN_INITED();
@@ -1655,15 +1674,15 @@ INTERCEPTOR(void *, shmat, int shmid, const void *shmaddr, int shmflg) {
   return p;
 }
 
-INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb callback, void *data) {
-  void *ctx;
-  COMMON_INTERCEPTOR_ENTER(ctx, dl_iterate_phdr, callback, data);
-  dl_iterate_phdr_data cbdata;
-  cbdata.callback = callback;
-  cbdata.data = data;
-  int res = REAL(dl_iterate_phdr)(msan_dl_iterate_phdr_cb, (void *)&cbdata);
-  return res;
-}
+// INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb callback, void *data) {
+//   void *ctx;
+//   COMMON_INTERCEPTOR_ENTER(ctx, dl_iterate_phdr, callback, data);
+//   dl_iterate_phdr_data cbdata;
+//   cbdata.callback = callback;
+//   cbdata.data = data;
+//   int res = REAL(dl_iterate_phdr)(msan_dl_iterate_phdr_cb, (void *)&cbdata);
+//   return res;
+// }
 
 // wchar_t *wcschr(const wchar_t *wcs, wchar_t wc);
 INTERCEPTOR(wchar_t *, wcschr, void *s, wchar_t wc, void *ps) {
@@ -1760,28 +1779,30 @@ void InitializeInterceptors() {
 
   __interception::DoesNotSupportStaticLinking();
 
-  new(interceptor_ctx()) InterceptorContext();
+  // new(interceptor_ctx()) InterceptorContext();
 
-  InitializeCommonInterceptors();
+  // InitializeCommonInterceptors();
+#if !XSAN_CONTAINS_TSAN
   InitializeSignalInterceptors();
+#endif
 
-  INTERCEPT_FUNCTION(posix_memalign);
-  MSAN_MAYBE_INTERCEPT_MEMALIGN;
-  MSAN_MAYBE_INTERCEPT___LIBC_MEMALIGN;
-  INTERCEPT_FUNCTION(valloc);
-  MSAN_MAYBE_INTERCEPT_PVALLOC;
-  INTERCEPT_FUNCTION(malloc);
-  INTERCEPT_FUNCTION(calloc);
-  INTERCEPT_FUNCTION(realloc);
-  INTERCEPT_FUNCTION(reallocarray);
-  INTERCEPT_FUNCTION(free);
-  MSAN_MAYBE_INTERCEPT_CFREE;
-  MSAN_MAYBE_INTERCEPT_MALLOC_USABLE_SIZE;
-  MSAN_MAYBE_INTERCEPT_MALLINFO;
-  MSAN_MAYBE_INTERCEPT_MALLINFO2;
-  MSAN_MAYBE_INTERCEPT_MALLOPT;
-  MSAN_MAYBE_INTERCEPT_MALLOC_STATS;
-  INTERCEPT_FUNCTION(fread);
+  // INTERCEPT_FUNCTION(posix_memalign);
+  // MSAN_MAYBE_INTERCEPT_MEMALIGN;
+  // MSAN_MAYBE_INTERCEPT___LIBC_MEMALIGN;
+  // INTERCEPT_FUNCTION(valloc);
+  // MSAN_MAYBE_INTERCEPT_PVALLOC;
+  // INTERCEPT_FUNCTION(malloc);
+  // INTERCEPT_FUNCTION(calloc);
+  // INTERCEPT_FUNCTION(realloc);
+  // INTERCEPT_FUNCTION(reallocarray);
+  // INTERCEPT_FUNCTION(free);
+  // MSAN_MAYBE_INTERCEPT_CFREE;
+  // MSAN_MAYBE_INTERCEPT_MALLOC_USABLE_SIZE;
+  // MSAN_MAYBE_INTERCEPT_MALLINFO;
+  // MSAN_MAYBE_INTERCEPT_MALLINFO2;
+  // MSAN_MAYBE_INTERCEPT_MALLOPT;
+  // MSAN_MAYBE_INTERCEPT_MALLOC_STATS;
+  // INTERCEPT_FUNCTION(fread);
   MSAN_MAYBE_INTERCEPT_FREAD_UNLOCKED;
   INTERCEPT_FUNCTION(memccpy);
   MSAN_MAYBE_INTERCEPT_MEMPCPY;
@@ -1790,15 +1811,15 @@ void InitializeInterceptors() {
   INTERCEPT_FUNCTION(wmemcpy);
   MSAN_MAYBE_INTERCEPT_WMEMPCPY;
   INTERCEPT_FUNCTION(wmemmove);
-  INTERCEPT_FUNCTION(strcpy);
+  // INTERCEPT_FUNCTION(strcpy);
   MSAN_MAYBE_INTERCEPT_STPCPY;
   MSAN_MAYBE_INTERCEPT_STPNCPY;
-  INTERCEPT_FUNCTION(strdup);
-  MSAN_MAYBE_INTERCEPT___STRDUP;
-  INTERCEPT_FUNCTION(strncpy);
+  // INTERCEPT_FUNCTION(strdup);
+  // MSAN_MAYBE_INTERCEPT___STRDUP;
+  // INTERCEPT_FUNCTION(strncpy);
   MSAN_MAYBE_INTERCEPT_GCVT;
-  INTERCEPT_FUNCTION(strcat);
-  INTERCEPT_FUNCTION(strncat);
+  // INTERCEPT_FUNCTION(strcat);
+  // INTERCEPT_FUNCTION(strncat);
   INTERCEPT_STRTO(strtod);
   INTERCEPT_STRTO(strtof);
 #ifdef SANITIZER_NLDBL_VERSION
@@ -1806,9 +1827,9 @@ void InitializeInterceptors() {
 #else
   INTERCEPT_STRTO(strtold);
 #endif
-  INTERCEPT_STRTO(strtol);
+  // INTERCEPT_STRTO(strtol);
   INTERCEPT_STRTO(strtoul);
-  INTERCEPT_STRTO(strtoll);
+  // INTERCEPT_STRTO(strtoll);
   INTERCEPT_STRTO(strtoull);
   INTERCEPT_STRTO(strtouq);
   INTERCEPT_STRTO(wcstod);
@@ -1826,9 +1847,9 @@ void InitializeInterceptors() {
   INTERCEPT_STRTO(__isoc23_strtod);
   INTERCEPT_STRTO(__isoc23_strtof);
   INTERCEPT_STRTO(__isoc23_strtold);
-  INTERCEPT_STRTO(__isoc23_strtol);
+  // INTERCEPT_STRTO(__isoc23_strtol);
   INTERCEPT_STRTO(__isoc23_strtoul);
-  INTERCEPT_STRTO(__isoc23_strtoll);
+  // INTERCEPT_STRTO(__isoc23_strtoll);
   INTERCEPT_STRTO(__isoc23_strtoull);
   INTERCEPT_STRTO(__isoc23_strtouq);
   INTERCEPT_STRTO(__isoc23_wcstod);
@@ -1855,8 +1876,8 @@ void InitializeInterceptors() {
   MSAN_MAYBE_INTERCEPT___WCSFTIME_L;
   INTERCEPT_FUNCTION(mbtowc);
   INTERCEPT_FUNCTION(mbrtowc);
-  INTERCEPT_FUNCTION(wcslen);
-  INTERCEPT_FUNCTION(wcsnlen);
+  // INTERCEPT_FUNCTION(wcslen);
+  // INTERCEPT_FUNCTION(wcsnlen);
   INTERCEPT_FUNCTION(wcschr);
   INTERCEPT_FUNCTION(wcscpy);
   INTERCEPT_FUNCTION(wcsncpy);
@@ -1864,19 +1885,19 @@ void InitializeInterceptors() {
   INTERCEPT_FUNCTION(getenv);
   INTERCEPT_FUNCTION(setenv);
   INTERCEPT_FUNCTION(putenv);
-  INTERCEPT_FUNCTION(gettimeofday);
+  // INTERCEPT_FUNCTION(gettimeofday);
   MSAN_MAYBE_INTERCEPT_FCVT;
-  MSAN_MAYBE_INTERCEPT_FSTAT;
-  MSAN_MAYBE_INTERCEPT_FSTAT64;
-  MSAN_MAYBE_INTERCEPT___FXSTAT;
+  // MSAN_MAYBE_INTERCEPT_FSTAT;
+  // MSAN_MAYBE_INTERCEPT_FSTAT64;
+  // MSAN_MAYBE_INTERCEPT___FXSTAT;
   MSAN_MAYBE_INTERCEPT_FSTATAT;
   MSAN_MAYBE_INTERCEPT_FSTATAT64;
   MSAN_MAYBE_INTERCEPT___FXSTATAT;
-  MSAN_MAYBE_INTERCEPT___FXSTAT64;
+  // MSAN_MAYBE_INTERCEPT___FXSTAT64;
   MSAN_MAYBE_INTERCEPT___FXSTATAT64;
-  INTERCEPT_FUNCTION(pipe);
-  INTERCEPT_FUNCTION(pipe2);
-  INTERCEPT_FUNCTION(socketpair);
+  // INTERCEPT_FUNCTION(pipe);
+  // INTERCEPT_FUNCTION(pipe2);
+  // INTERCEPT_FUNCTION(socketpair);
   MSAN_MAYBE_INTERCEPT_FGETS_UNLOCKED;
   INTERCEPT_FUNCTION(getrlimit);
   MSAN_MAYBE_INTERCEPT___GETRLIMIT;
@@ -1884,34 +1905,34 @@ void InitializeInterceptors() {
   MSAN_MAYBE_INTERCEPT_PRLIMIT;
   MSAN_MAYBE_INTERCEPT_PRLIMIT64;
   INTERCEPT_FUNCTION(gethostname);
-  MSAN_MAYBE_INTERCEPT_EPOLL_WAIT;
-  MSAN_MAYBE_INTERCEPT_EPOLL_PWAIT;
+  // MSAN_MAYBE_INTERCEPT_EPOLL_WAIT;
+  // MSAN_MAYBE_INTERCEPT_EPOLL_PWAIT;
   INTERCEPT_FUNCTION(strsignal);
   INTERCEPT_FUNCTION(dladdr);
   MSAN_MAYBE_INTERCEPT_DLADDR1;
   INTERCEPT_FUNCTION(dlerror);
-  INTERCEPT_FUNCTION(dl_iterate_phdr);
+  // INTERCEPT_FUNCTION(dl_iterate_phdr);
   INTERCEPT_FUNCTION(getrusage);
-#if defined(__mips__)
-  INTERCEPT_FUNCTION_VER(pthread_create, "GLIBC_2.2");
-#else
-  INTERCEPT_FUNCTION(pthread_create);
-#endif
-  INTERCEPT_FUNCTION(pthread_join);
+// #if defined(__mips__)
+//   INTERCEPT_FUNCTION_VER(pthread_create, "GLIBC_2.2");
+// #else
+//   INTERCEPT_FUNCTION(pthread_create);
+// #endif
+//   INTERCEPT_FUNCTION(pthread_join);
   INTERCEPT_FUNCTION(pthread_key_create);
-#if SANITIZER_GLIBC
-  INTERCEPT_FUNCTION(pthread_tryjoin_np);
-  INTERCEPT_FUNCTION(pthread_timedjoin_np);
-#endif
+// #if SANITIZER_GLIBC
+//   INTERCEPT_FUNCTION(pthread_tryjoin_np);
+//   INTERCEPT_FUNCTION(pthread_timedjoin_np);
+// #endif
 
 #if SANITIZER_NETBSD
   INTERCEPT_FUNCTION(__libc_thr_keycreate);
 #endif
 
-  INTERCEPT_FUNCTION(pthread_join);
+  // INTERCEPT_FUNCTION(pthread_join);
   INTERCEPT_FUNCTION(tzset);
-  INTERCEPT_FUNCTION(atexit);
-  INTERCEPT_FUNCTION(__cxa_atexit);
+  // INTERCEPT_FUNCTION(atexit);
+  // INTERCEPT_FUNCTION(__cxa_atexit);
   INTERCEPT_FUNCTION(shmat);
   MSAN_MAYBE_INTERCEPT_OPENPTY;
   MSAN_MAYBE_INTERCEPT_FORKPTY;

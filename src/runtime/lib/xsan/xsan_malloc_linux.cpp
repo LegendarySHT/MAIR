@@ -124,18 +124,22 @@ INTERCEPTOR(uptr, malloc_usable_size, void *ptr) {
 }
 
 #  if SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
-// We avoid including malloc.h for portability reasons.
-// man mallinfo says the fields are "long", but the implementation uses int.
-// It doesn't matter much -- we just need to make sure that the libc's mallinfo
-// is not called.
-struct fake_mallinfo {
-  int x[10];
-};
+// Interceptors use NRVO and assume that sret will be pre-allocated in
+// caller frame.
+INTERCEPTOR(__sanitizer_struct_mallinfo, mallinfo, ) {
+  __sanitizer_struct_mallinfo sret;
+  XsanInitFromRtl();
+  internal_memset(&sret, 0, sizeof(sret));
+  XSAN_INIT_RANGE(nullptr, &sret, sizeof(sret));
+  return sret;
+}
 
-INTERCEPTOR(struct fake_mallinfo, mallinfo, void) {
-  struct fake_mallinfo res;
-  REAL(memset)(&res, 0, sizeof(res));
-  return res;
+INTERCEPTOR(__sanitizer_struct_mallinfo2, mallinfo2, ) {
+  __sanitizer_struct_mallinfo2 sret;
+  XsanInitFromRtl();
+  internal_memset(&sret, 0, sizeof(sret));
+  XSAN_INIT_RANGE(nullptr, &sret, sizeof(sret));
+  return sret;
 }
 
 INTERCEPTOR(int, mallopt, int cmd, int value) { return 0; }

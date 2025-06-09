@@ -42,6 +42,36 @@ void InitializePlatformInterceptors();
 #    define XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX 0
 #  endif
 
+#  if !SANITIZER_GLIBC || __GLIBC_PREREQ(2, 33)
+#    define XSAN_INTERCEPT_FSTAT 1
+#  else
+#    define XSAN_INTERCEPT_FSTAT 0
+#  endif
+
+#  if __GLIBC_PREREQ(2, 33)
+#    define XSAN_INTERCEPT_FSTAT64 1
+#  else
+#    define XSAN_INTERCEPT_FSTAT64 0
+#  endif
+
+#  if SANITIZER_GLIBC
+#    define XSAN_INTERCEPT___FXSTAT 1
+#  else
+#    define XSAN_INTERCEPT___FXSTAT 0
+#  endif
+
+#  if SANITIZER_GLIBC
+#    define XSAN_INTERCEPT___FXSTAT64 1
+#  else
+#    define XSAN_INTERCEPT___FXSTAT64 0
+#  endif
+
+#  if !SANITIZER_FREEBSD && !SANITIZER_NETBSD
+#    define XSAN_INTERCEPT_EPOLL 1
+#  else
+#    define XSAN_INTERCEPT_EPOLL 0
+#  endif
+
 #  if SANITIZER_GLIBC || SANITIZER_SOLARIS
 #    define XSAN_INTERCEPT_SWAPCONTEXT 1
 #  else
@@ -120,6 +150,12 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT_PTHREAD_ATFORK 1
 #  else
 #    define XSAN_INTERCEPT_PTHREAD_ATFORK 0
+#  endif
+
+#  if !SANITIZER_APPLE && !SANITIZER_ANDROID
+#    define XSAN_INTERCEPT_DL_ITERATE_PHDR 1
+#  else
+#    define XSAN_INTERCEPT_DL_ITERATE_PHDR 0
 #  endif
 
 DECLARE_REAL(int, memcmp, const void *a1, const void *a2, SIZE_T size)

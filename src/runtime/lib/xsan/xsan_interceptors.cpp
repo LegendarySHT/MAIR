@@ -520,6 +520,81 @@ struct ScopedSyscall {
 #  include <sanitizer_common/sanitizer_common_syscalls.inc>
 #  include <sanitizer_common/sanitizer_syscalls_netbsd.inc>
 
+// TSan needs special handling of getaddrinfo(), so we need to
+// define our own interceptor.
+/// See https://github.com/llvm/llvm-project/commit/8cff61f29efee104f14f6e8ff06bdcbc71a5fcf8#diff-175adfd2cda6d5ecf524b07984d62e30008c3ef21c05dce215db18c2bd3f78efR1738
+INTERCEPTOR(int, getaddrinfo, char *node, char *service,
+            struct __sanitizer_addrinfo *hints,
+            struct __sanitizer_addrinfo **out) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, getaddrinfo, node, service, hints, out);
+  __xsan::XsanFuncScope<__xsan::ScopedFunc::getaddrinfo> func_scope;
+  if (node)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, node, internal_strlen(node) + 1);
+  if (service)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, service, internal_strlen(service) + 1);
+  if (hints)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, hints, sizeof(__sanitizer_addrinfo));
+  // FIXME: under ASan the call below may write to freed memory and corrupt
+  // its metadata. See
+  // https://github.com/google/sanitizers/issues/321.
+  int res = REAL(getaddrinfo)(node, service, hints, out);
+  if (res == 0 && out) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, out, sizeof(*out));
+    struct __sanitizer_addrinfo *p = *out;
+    while (p) {
+      COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p, sizeof(*p));
+      if (p->ai_addr)
+        COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->ai_addr, p->ai_addrlen);
+      if (p->ai_canonname)
+        COMMON_INTERCEPTOR_WRITE_RANGE(ctx, p->ai_canonname,
+                                       internal_strlen(p->ai_canonname) + 1);
+      p = p->ai_next;
+    }
+  }
+  return res;
+}
+
+#  ifdef XSAN_NEED_TLS_GET_ADDR
+
+static void handle_tls_addr(void *arg, void *res) {
+  XsanThread *thr = ::__xsan::xsan_current_thread;
+  if (!thr)
+    return;
+  DTLS::DTV *dtv =
+      DTLS_on_tls_get_addr(arg, res, thr->tls_begin(), thr->tls_end());
+  if (!dtv)
+    return;
+  // New DTLS block has been allocated.
+  OnDtlsAlloc(dtv->beg, dtv->size);
+}
+
+#    if !SANITIZER_S390
+// Define own interceptor instead of sanitizer_common's for three reasons:
+// 1. It must not process pending signals.
+//    Signal handlers may contain MOVDQA instruction (see below).
+// 2. It must be as simple as possible to not contain MOVDQA.
+// 3. Sanitizer_common version uses COMMON_INTERCEPTOR_INITIALIZE_RANGE which
+//    is empty for tsan (meant only for msan).
+// Note: __tls_get_addr can be called with mis-aligned stack due to:
+// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58066
+// So the interceptor must work with mis-aligned stack, in particular, does not
+// execute MOVDQA with stack addresses.
+INTERCEPTOR(void *, __tls_get_addr, void *arg) {
+  void *res = REAL(__tls_get_addr)(arg);
+  handle_tls_addr(arg, res);
+  return res;
+}
+#    else  // SANITIZER_S390
+TSAN_INTERCEPTOR(uptr, __tls_get_addr_internal, void *arg) {
+  uptr res = __tls_get_offset_wrapper(arg, REAL(__tls_get_offset));
+  char *tp = static_cast<char *>(__builtin_thread_pointer());
+  handle_tls_addr(arg, res + tp);
+  return res;
+}
+#    endif
+#  endif
+
 #  if XSAN_INTERCEPT_PTHREAD_CREATE
 
 struct ThreadParam {
@@ -563,6 +638,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
   const uptr pc = stack.trace_buffer[0];
   XsanContext xsan_ctx(pc);
+  XsanInterceptorContext ctx = {__func__, xsan_ctx};
   ScopedInterceptor si(xsan_ctx, "pthread_create", stack.trace_buffer[1]);
 
 
@@ -629,6 +705,7 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
     p.created.Post();
     // Wait for ThreadParam *p to be free.
     p.started.Wait();
+    XSAN_INIT_RANGE(&ctx, thread, __sanitizer::pthread_t_sz);
   }
   if (attr == &myattr)
     pthread_attr_destroy(&myattr);
@@ -637,12 +714,15 @@ INTERCEPTOR(int, pthread_create, void *thread, void *attr,
 
 INTERCEPTOR(int, pthread_join, void *thread, void **retval) {
   SCOPED_XSAN_INTERCEPTOR_RAW(pthread_join, t, arg);
+  XsanInterceptorContext ctx = {__func__, xsan_ctx};
   int result;
   ScopedPthreadJoin scoped_pthread_join(result, xsan_ctx, thread);
   xsanThreadArgRetval().Join((uptr)thread, [&]() {
     result = COMMON_INTERCEPTOR_BLOCK_REAL(pthread_join)(thread, retval);
     return !result;
   });
+  if (!result && retval)
+    XSAN_INIT_RANGE(&ctx, (void *)retval, sizeof(*retval));
   return result;
 }
 
@@ -666,12 +746,15 @@ INTERCEPTOR(int, pthread_exit, void *retval) {
 #    if XSAN_INTERCEPT_TRYJOIN
 INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **ret) {
   SCOPED_XSAN_INTERCEPTOR_RAW(pthread_tryjoin_np, thread, ret);
+  XsanInterceptorContext ctx = {__func__, xsan_ctx};
   int result;
   ScopedPthreadTryJoin scoped_pthread_tryjoin(result, xsan_ctx, thread);
   xsanThreadArgRetval().Join((uptr)thread, [&]() {
     result = REAL(pthread_tryjoin_np)(thread, ret);
     return !result;
   });
+  if (!result && ret)
+    XSAN_INIT_RANGE(&ctx, (void *)ret, sizeof(*ret));
   return result;
 }
 #    endif
@@ -680,6 +763,7 @@ INTERCEPTOR(int, pthread_tryjoin_np, void *thread, void **ret) {
 INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **ret,
             const struct timespec *abstime) {
   SCOPED_XSAN_INTERCEPTOR_RAW(pthread_timedjoin_np, thread, ret, abstime);
+  XsanInterceptorContext ctx = {__func__, xsan_ctx};
   int result;
   ScopedPthreadTryJoin scoped_pthread_tryjoin(result, xsan_ctx, thread);
   xsanThreadArgRetval().Join((uptr)thread, [&]() {
@@ -687,6 +771,8 @@ INTERCEPTOR(int, pthread_timedjoin_np, void *thread, void **ret,
                                                                  abstime);
     return !result;
   });
+  if (!result && ret)
+    XSAN_INIT_RANGE(&ctx, (void *)ret, sizeof(*ret));
   return result;
 }
 #    endif
@@ -893,9 +979,12 @@ INTERCEPTOR(char *, strcat, char *to, const char *from) {
   if (__asan::flags()->replace_str) {
     uptr from_length = internal_strlen(from);
     XSAN_READ_RANGE(ctx, from, from_length + 1);
+    XSAN_USE_STRING(ctx, from, from_length);
     uptr to_length = internal_strlen(to);
     XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
     XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
+    XSAN_USE_STRING(ctx, to, to_length);
+    XSAN_COPY_RANGE(ctx, to + to_length, from, from_length + 1);
     // If the copying actually happens, the |from| string should not overlap
     // with the resulting string starting at |to|, which has a length of
     // to_length + from_length + 1.
@@ -918,6 +1007,9 @@ INTERCEPTOR(char *, strncat, char *to, const char *from, usize size) {
     uptr to_length = internal_strlen(to);
     XSAN_READ_STRING_OF_LEN(ctx, to, to_length, to_length);
     XSAN_WRITE_RANGE(ctx, to + to_length, from_length + 1);
+    XSAN_USE_STRING(ctx, to, to_length);
+    XSAN_COPY_RANGE(ctx, to + to_length, from, copy_length);
+    XSAN_INIT_RANGE(ctx, to + to_length + copy_length, 1);
     if (from_length > 0) {
       CHECK_RANGES_OVERLAP("strncat", to, to_length + copy_length + 1, from,
                            copy_length);
@@ -940,10 +1032,12 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   }
 
   if (__asan::flags()->replace_str) {
-    uptr from_size = internal_strlen(from) + 1;
+    uptr from_size = internal_strlen(from) + 1; 
     CHECK_RANGES_OVERLAP("strcpy", to, from_size, from, from_size);
     XSAN_READ_RANGE(ctx, from, from_size);
     XSAN_WRITE_RANGE(ctx, to, from_size);
+    XSAN_USE_STRING(ctx, from, from_size - 1);
+    XSAN_COPY_RANGE(ctx, to, from, from_size);
   }
   return REAL(strcpy)(to, from);
 }
@@ -962,17 +1056,20 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
 INTERCEPTOR(char *, strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
+  __xsan::XsanFuncScope<__xsan::ScopedFunc::strdup> func_scope;
   if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
   uptr length = internal_strlen(s);
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
+    XSAN_USE_STRING(ctx, s, length);
   }
   UNINITIALIZED BufferedStackTrace stack;
   GetStackTraceMalloc(stack);
   void *new_mem = xsan_malloc(length + 1, &stack);
   if (new_mem) {
     REAL(memcpy)(new_mem, s, length + 1);
+    XSAN_COPY_RANGE(ctx, new_mem, s, length + 1);
   }
   return reinterpret_cast<char *>(new_mem);
 }
@@ -986,12 +1083,14 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   uptr length = internal_strlen(s);
   if (__asan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
+    XSAN_USE_STRING(ctx, s, length);
   }
   UNINITIALIZED BufferedStackTrace stack;
   GetStackTraceMalloc(stack);
   void *new_mem = xsan_malloc(length + 1, &stack);
   if (new_mem) {
     REAL(memcpy)(new_mem, s, length + 1);
+    XSAN_COPY_RANGE(ctx, new_mem, s, length + 1);
   }
   return reinterpret_cast<char *>(new_mem);
 }
@@ -1006,6 +1105,8 @@ INTERCEPTOR(char *, strncpy, char *to, const char *from, usize size) {
     CHECK_RANGES_OVERLAP("strncpy", to, from_size, from, from_size);
     XSAN_READ_RANGE(ctx, from, from_size);
     XSAN_WRITE_RANGE(ctx, to, size);
+    XSAN_COPY_RANGE(ctx, to, from, from_size);
+    XSAN_INIT_RANGE(ctx, to + from_size, size - from_size);
   }
   return REAL(strncpy)(to, from, size);
 }
@@ -1112,6 +1213,172 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
   XSAN_READ_STRING(ctx, nptr, (real_endptr - nptr) + 1);
   return result;
 }
+
+INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, gettimeofday, tv, tz);
+  XsanInitFromRtl();
+  int res = REAL(gettimeofday)(tv, tz);
+  if (tv)
+    XSAN_INIT_RANGE(ctx, tv, 16);
+  if (tz)
+    XSAN_INIT_RANGE(ctx, tz, 8);
+  return res;
+}
+
+#  if XSAN_INTERCEPT_FSTAT
+INTERCEPTOR(int, fstat, int fd, void *buf) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, fstat, fd, buf);
+  /// TODO: Offer a unified interface
+  if (fd > 0) {
+    const __tsan::TsanContext &tsan_ctx =
+        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+  }
+  int res = REAL(fstat)(fd, buf);
+  if (!res)
+    XSAN_INIT_RANGE(ctx, buf, __sanitizer::struct_stat_sz);
+  return res;
+}
+#  endif  // XSAN_INTERCEPT_FSTAT
+
+#  if XSAN_INTERCEPT_FSTAT64
+INTERCEPTOR(int, fstat64, int fd, void *buf) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, fstat64, fd, buf);
+  /// TODO: Offer a unified interface
+  if (fd > 0) {
+    const __tsan::TsanContext &tsan_ctx =
+        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+  }
+  int res = REAL(fstat64)(fd, buf);
+  if (!res)
+    XSAN_INIT_RANGE(ctx, buf, __sanitizer::struct_stat64_sz);
+  return res;
+}
+#  endif  // XSAN_INTERCEPT_FSTAT64
+
+#  if XSAN_INTERCEPT___FXSTAT
+INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, __fxstat, version, fd, buf);
+  /// TODO: Offer a unified interface
+  if (fd > 0) {
+    const __tsan::TsanContext &tsan_ctx =
+        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+  }
+  int res = REAL(__fxstat)(version, fd, buf);
+  if (!res)
+    XSAN_INIT_RANGE(ctx, buf, __sanitizer::struct_stat_sz);
+  return res;
+}
+#  endif  // XSAN_INTERCEPT___FXSTAT
+
+#  if XSAN_INTERCEPT___FXSTAT64
+INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, __fxstat64, version, fd, buf);
+  /// TODO: Offer a unified interface
+  if (fd > 0) {
+    const __tsan::TsanContext &tsan_ctx =
+        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+  }
+  int res = REAL(__fxstat64)(version, fd, buf);
+  if (!res)
+    XSAN_INIT_RANGE(ctx, buf, __sanitizer::struct_stat64_sz);
+  return res;
+}
+#  endif  // XSAN_INTERCEPT___FXSTAT64
+
+INTERCEPTOR(int, pipe, int pipefd[2]) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, pipe, pipefd);
+  int res = REAL(pipe)(pipefd);
+  if (res == 0) {
+    XSAN_INIT_RANGE(ctx, pipefd, sizeof(int[2]));
+    /// TODO: Offer a unified interface
+    if (pipefd[0] >= 0 && pipefd[1] >= 0) {
+      const __tsan::TsanContext &tsan_ctx =
+          ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+      __tsan::FdPipeCreate(tsan_ctx.thr_, tsan_ctx.pc_, pipefd[0], pipefd[1]);
+    }
+  }
+  return res;
+}
+
+INTERCEPTOR(int, pipe2, int *pipefd, int flags) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, pipe2, pipefd, flags);
+  int res = REAL(pipe2)(pipefd, flags);
+  if (res == 0) {
+    XSAN_INIT_RANGE(ctx, pipefd, sizeof(int[2]));
+    /// TODO: Offer a unified interface
+    if (pipefd[0] >= 0 && pipefd[1] >= 0) {
+      const __tsan::TsanContext &tsan_ctx =
+          ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+      __tsan::FdPipeCreate(tsan_ctx.thr_, tsan_ctx.pc_, pipefd[0], pipefd[1]);
+    }
+  }
+  return res;
+}
+
+INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int sv[2]) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, socketpair, domain, type, protocol, sv);
+  int res = REAL(socketpair)(domain, type, protocol, sv);
+  if (res == 0) {
+    XSAN_INIT_RANGE(ctx, sv, sizeof(int[2]));
+    /// TODO: Offer a unified interface
+    if (sv[0] >= 0 && sv[1] >= 0) {
+      const __tsan::TsanContext &tsan_ctx =
+          ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+      __tsan::FdPipeCreate(tsan_ctx.thr_, tsan_ctx.pc_, sv[0], sv[1]);
+    }
+  }
+  return res;
+}
+
+#  if XSAN_INTERCEPT_EPOLL
+INTERCEPTOR(int, epoll_wait, int epfd, void *ev, int cnt, int timeout) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, epoll_wait, epfd, ev, cnt, timeout);
+  /// TODO: Offer a unified interface
+  const __tsan::TsanContext &tsan_ctx =
+      ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+  if (epfd >= 0)
+    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+  int res = COMMON_INTERCEPTOR_BLOCK_REAL(epoll_wait)(epfd, ev, cnt, timeout);
+  if (res > 0) {
+    XSAN_INIT_RANGE(ctx, ev, (uptr)__sanitizer::struct_epoll_event_sz * res);
+    if (epfd >= 0)
+      __tsan::FdAcquire(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+  }
+  return res;
+}
+
+INTERCEPTOR(int, epoll_pwait, int epfd, void *ev, int cnt, int timeout,
+            void *sigmask) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, epoll_pwait, epfd, ev, cnt, timeout, sigmask);
+  /// TODO: Offer a unified interface
+  const __tsan::TsanContext &tsan_ctx =
+      ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+  if (epfd >= 0)
+    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+  int res = COMMON_INTERCEPTOR_BLOCK_REAL(epoll_pwait)(epfd, ev, cnt, timeout,
+                                                       sigmask);
+  if (res > 0) {
+    XSAN_INIT_RANGE(ctx, ev, (uptr)__sanitizer::struct_epoll_event_sz * res);
+    if (epfd >= 0)
+      __tsan::FdAcquire(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+  }
+  return res;
+}
+#  endif  // XSAN_INTERCEPT_EPOLL
 
 static int setup_at_exit_wrapper(uptr pc, AtExitFuncTy f,
                                  bool is_on_exit = false, void *arg = nullptr,
@@ -1274,6 +1541,68 @@ DEFINE_REAL(int, vfork,)
 DECLARE_EXTERN_INTERCEPTOR_AND_WRAPPER(int, vfork,)
 #  endif
 
+#  if XSAN_INTERCEPT_DL_ITERATE_PHDR
+
+typedef int (*dl_iterate_phdr_cb_t)(__sanitizer_dl_phdr_info *info, SIZE_T size,
+                                    void *data);
+
+struct dl_iterate_phdr_data {
+  dl_iterate_phdr_cb_t cb;
+  void *data;
+  void *ctx;
+};
+
+namespace __tsan {
+static bool IsAppNotRodata(uptr addr) {
+  return IsAppMem(addr) && *MemToShadow(addr) != Shadow::kRodata;
+}
+}  // namespace __tsan
+
+static int dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
+                              void *data) {
+  dl_iterate_phdr_data *cbdata = (dl_iterate_phdr_data *)data;
+  /// TODO: Offer a unified interface
+  const __tsan::TsanContext &tsan_ctx =
+      ((XsanInterceptorContext *)cbdata->ctx)->xsan_ctx.tsan;
+  // dlopen/dlclose allocate/free dynamic-linker-internal memory, which is later
+  // accessible in dl_iterate_phdr callback. But we don't see synchronization
+  // inside of dynamic linker, so we "unpoison" it here in order to not
+  // produce false reports. Ignoring malloc/free in dlopen/dlclose is not enough
+  // because some libc functions call __libc_dlopen.
+  if (info && __tsan::IsAppNotRodata((uptr)info->dlpi_name))
+    MemoryResetRange(tsan_ctx.thr_, tsan_ctx.pc_, (uptr)info->dlpi_name,
+                     internal_strlen(info->dlpi_name));
+  if (info) {
+    XSAN_INIT_RANGE(cbdata->ctx, info, size);
+    if (info->dlpi_phdr && info->dlpi_phnum)
+      XSAN_INIT_RANGE(cbdata->ctx, info->dlpi_phdr,
+                      struct_ElfW_Phdr_sz * info->dlpi_phnum);
+    if (info->dlpi_name)
+      XSAN_INIT_RANGE(cbdata->ctx, info->dlpi_name,
+                      internal_strlen(info->dlpi_name) + 1);
+  }
+  int res = cbdata->cb(info, size, cbdata->data);
+  // Perform the check one more time in case info->dlpi_name was overwritten
+  // by user callback.
+  if (info && __tsan::IsAppNotRodata((uptr)info->dlpi_name))
+    MemoryResetRange(tsan_ctx.thr_, tsan_ctx.pc_, (uptr)info->dlpi_name,
+                     internal_strlen(info->dlpi_name));
+  return res;
+}
+
+INTERCEPTOR(int, dl_iterate_phdr, dl_iterate_phdr_cb_t cb, void *data) {
+  void *ctx;
+  XSAN_INTERCEPTOR_ENTER(ctx, dl_iterate_phdr, cb, data);
+  dl_iterate_phdr_data cbdata;
+  cbdata.cb = cb;
+  cbdata.data = data;
+  cbdata.ctx = ctx;
+  int res = REAL(dl_iterate_phdr)(dl_iterate_phdr_cb, &cbdata);
+  return res;
+}
+
+#  endif
+
 // ---------------------- InitializeXsanInterceptors ---------------- {{{1
 namespace __xsan {
 
@@ -1295,6 +1624,19 @@ void InitializeXsanInterceptors() {
   REAL(memset) = internal_memset;
   REAL(memcpy) = internal_memcpy;
 #  endif
+
+  // Interpose __tls_get_addr before the common interposers. This is needed
+  // because dlsym() may call malloc on failure which could result in other
+  // interposed functions being called that could eventually make use of TLS.
+#  ifdef XSAN_NEED_TLS_GET_ADDR
+#    if !SANITIZER_S390
+  XSAN_INTERCEPT_FUNC(__tls_get_addr);
+#    else
+  XSAN_INTERCEPT_FUNC(__tls_get_addr_internal);
+  XSAN_INTERCEPT_FUNC(__tls_get_offset);
+#    endif
+#  endif
+
   InitializePlatformInterceptors();
   InitializeCommonInterceptors();
 #  if !XSAN_CONTAINS_TSAN
@@ -1318,11 +1660,28 @@ void InitializeXsanInterceptors() {
   ASAN_INTERCEPT_FUNC(atoll);
   XSAN_INTERCEPT_FUNC(strtol);
   XSAN_INTERCEPT_FUNC(strtoll);
+  XSAN_INTERCEPT_FUNC(wcslen);
+  XSAN_INTERCEPT_FUNC(wcsnlen);
 #  if SANITIZER_GLIBC
   XSAN_INTERCEPT_FUNC(__isoc23_strtol);
   XSAN_INTERCEPT_FUNC(__isoc23_strtoll);
 #  endif
-  // Intecept jump-related functions.
+  XSAN_INTERCEPT_FUNC(gettimeofday);
+  XSAN_INTERCEPT_FUNC(getaddrinfo);
+#  if XSAN_INTERCEPT_FSTAT
+  XSAN_INTERCEPT_FUNC(fstat);
+#  endif
+#  if XSAN_INTERCEPT_FSTAT64
+  XSAN_INTERCEPT_FUNC(fstat64);
+#  endif
+  XSAN_INTERCEPT_FUNC(pipe);
+  XSAN_INTERCEPT_FUNC(pipe2);
+  XSAN_INTERCEPT_FUNC(socketpair);
+#  if XSAN_INTERCEPT_EPOLL
+  XSAN_INTERCEPT_FUNC(epoll_wait);
+  XSAN_INTERCEPT_FUNC(epoll_pwait);
+#  endif
+// Intecept jump-related functions.
   XSAN_INTERCEPT_FUNC(longjmp);
 
 #  if XSAN_INTERCEPT_SWAPCONTEXT
@@ -1402,6 +1761,10 @@ void InitializeXsanInterceptors() {
 
 #  if XSAN_INTERCEPT_VFORK
   XSAN_INTERCEPT_FUNC(vfork);
+#  endif
+
+#  if XSAN_INTERCEPT_DL_ITERATE_PHDR
+  XSAN_INTERCEPT_FUNC(dl_iterate_phdr);
 #  endif
 
 #  if !SANITIZER_APPLE && !SANITIZER_ANDROID
