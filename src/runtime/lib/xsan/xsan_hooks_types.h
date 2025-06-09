@@ -11,6 +11,7 @@ namespace __xsan {
 /// TODO: This enum should be unified
 enum class XsanHooksSanitizer {
   Asan,
+  Msan,
   Tsan,
 };
 

@@ -5,11 +5,15 @@
 
 # Define a list of sanitizers that XSan can potentially contain.
 # You can add or remove sanitizers from this list.
-set(XSAN_SANITIZERS TSAN ASAN UBSAN)
+set(XSAN_SANITIZERS TSAN MSAN ASAN UBSAN)
 
 # Define XSAN_CONTAINS_TSAN to ON or OFF TSan
 # This option is used to enable or disable ThreadSanitizer (TSan) globally.
 option(XSAN_CONTAINS_TSAN "Enable ThreadSanitizer (TSan) globally" ON)
+
+# Define XSAN_CONTAINS_MSAN to ON or OFF MSan
+# This option is used to enable or disable MemorySanitizer (MSan) globally.
+option(XSAN_CONTAINS_MSAN "Enable MemorySanitizer (MSan) globally" ON)
 
 # Define XSAN_CONTAINS_ASAN to ON or OFF ASan
 # This option is used to enable or disable AddressSanitizer (ASan) globally.
@@ -21,4 +25,4 @@ option(XSAN_CONTAINS_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan) globally" 
 
 # Because we use this to generate the xsan_hooks_gen.h,in the xsan_hooks_gen.h,
 # We use Xxxx such as Asan, Tsan to represent the enum that contains the hooks for the macro
-set(XSAN_DELEGATED_SANITIZERS Asan Tsan)
+set(XSAN_DELEGATED_SANITIZERS Asan Tsan Msan)

@@ -1,2 +1,3 @@
 __asan_init
 __tsan_init
+__msan_init

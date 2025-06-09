@@ -19,6 +19,6 @@ pythonenv*
 
 TODO.md
 compile_commands.json
-Xsan_config.cmake
+xsan_config.cmake
 
 xsan_hooks_gen.h

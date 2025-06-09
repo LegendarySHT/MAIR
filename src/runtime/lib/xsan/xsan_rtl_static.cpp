@@ -14,6 +14,7 @@ extern "C" {
 
 INTERCEPT_AND_REDIRECT(void, __asan_init)
 INTERCEPT_AND_REDIRECT(void, __tsan_init)
+INTERCEPT_AND_REDIRECT(void, __msan_init)
 
 #undef INTERCEPT_AND_REDIRECT
 #undef RTL_WRAP

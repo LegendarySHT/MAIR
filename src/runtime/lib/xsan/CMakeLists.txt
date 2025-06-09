@@ -184,6 +184,27 @@ if(DEFINED XSAN_CONTAINS_ASAN AND NOT XSAN_CONTAINS_ASAN)
   set(XSAN_CONTAINS_ASAN ON CACHE BOOL "Enable AddressSanitizer (ASan) globally" FORCE)
 endif()
 
+set(MSAN_SOURCES
+  # msan/orig/msan.cpp
+  # msan/orig/msan_allocator.cpp
+  msan/orig/msan_chained_origin_depot.cpp
+  msan/orig/msan_dl.cpp
+  # msan/orig/msan_interceptors.cpp
+  # msan/orig/msan_linux.cpp
+  msan/orig/msan_report.cpp
+  # msan/orig/msan_thread.cpp
+  msan/orig/msan_poisoning.cpp
+)
+
+set(XSAN_MSAN_SOURCES
+  msan/msan.cpp
+  msan/msan_interceptors.cpp
+  msan/msan_linux.cpp
+  msan/msan_hooks.cpp
+  ${MSAN_SOURCES}
+)
+
+
 set(XSAN_SOURCES
   xsan_activation.cpp
   xsan_allocator.cpp
@@ -197,11 +218,13 @@ set(XSAN_SOURCES
   xsan_malloc_linux.cpp
   xsan_posix.cpp
   xsan_rtl.cpp
+  xsan_stack.cpp
   xsan_thread.cpp
   )
 
 extend_list_if(XSAN_CONTAINS_ASAN XSAN_ASAN_SOURCES XSAN_SOURCES)
 extend_list_if(XSAN_CONTAINS_TSAN XSAN_TSAN_SOURCES XSAN_SOURCES)
+extend_list_if(XSAN_CONTAINS_MSAN XSAN_MSAN_SOURCES XSAN_SOURCES)
 
 if (NOT WIN32 AND NOT APPLE)
   list(APPEND XSAN_SOURCES
@@ -306,6 +329,31 @@ set(XSAN_TSAN_HEADERS
   ${TSAN_HEADERS}
 )
 
+
+set(MSAN_HEADERS
+  # msan/orig/msan.h
+  # msan/orig/msan_allocator.h
+  msan/orig/msan_chained_origin_depot.h
+  msan/orig/msan_dl.h
+  msan/orig/msan_flags.h
+  msan/orig/msan_flags.inc
+  msan/orig/msan_interface_internal.h
+  msan/orig/msan_origin.h
+  msan/orig/msan_poisoning.h
+  msan/orig/msan_report.h
+  # msan/orig/msan_thread.h
+)
+
+set(XSAN_MSAN_HEADERS
+  msan/msan.h
+  msan/msan_hooks.h
+  msan/msan_interface_xsan.h
+  msan/msan_rtl_extra.h
+  msan/msan_thread.h
+  ${MSAN_HEADERS}
+)
+
+
 SET(XSAN_HEADERS
   xsan_activation.h
   xsan_allocator.h
@@ -327,6 +375,7 @@ SET(XSAN_HEADERS
 
 extend_list_if(XSAN_CONTAINS_ASAN XSAN_ASAN_HEADERS XSAN_HEADERS)
 extend_list_if(XSAN_CONTAINS_TSAN XSAN_TSAN_HEADERS XSAN_HEADERS)
+extend_list_if(XSAN_CONTAINS_MSAN XSAN_MSAN_HEADERS XSAN_HEADERS)
 
 # include_directories(..)
 set(INCLUDE_DIRS
@@ -339,6 +388,8 @@ append_list_if(XSAN_CONTAINS_ASAN ${CMAKE_CURRENT_SOURCE_DIR}/asan INCLUDE_DIRS)
 append_list_if(XSAN_CONTAINS_ASAN ${CMAKE_CURRENT_SOURCE_DIR}/asan/orig INCLUDE_DIRS)
 append_list_if(XSAN_CONTAINS_TSAN ${CMAKE_CURRENT_SOURCE_DIR}/tsan INCLUDE_DIRS)
 append_list_if(XSAN_CONTAINS_TSAN ${CMAKE_CURRENT_SOURCE_DIR}/tsan/orig INCLUDE_DIRS)
+append_list_if(XSAN_CONTAINS_MSAN ${CMAKE_CURRENT_SOURCE_DIR}/msan INCLUDE_DIRS)
+append_list_if(XSAN_CONTAINS_MSAN ${CMAKE_CURRENT_SOURCE_DIR}/msan/orig INCLUDE_DIRS)
 
 include_directories(${INCLUDE_DIRS})
 
@@ -380,7 +431,17 @@ if(COMPILER_RT_INTERCEPT_LIBDISPATCH)
   list(APPEND TSAN_RTL_CFLAGS ${COMPILER_RT_LIBDISPATCH_CFLAGS})
 endif()
 
-set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${ASAN_CFLAGS} ${TSAN_RTL_CFLAGS})
+set(MSAN_RTL_CFLAGS)
+if(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+  append_list_if(COMPILER_RT_HAS_FTLS_MODEL_INITIAL_EXEC -ftls-model=initial-exec MSAN_RTL_CFLAGS)
+endif()
+if(NOT CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
+  append_list_if(COMPILER_RT_HAS_FPIE_FLAG -fPIE MSAN_RTL_CFLAGS)
+endif()
+# Prevent clang from generating libc calls.
+# append_list_if(COMPILER_RT_HAS_FFREESTANDING_FLAG -ffreestanding MSAN_RTL_CFLAGS)
+
+set(XSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS} ${ASAN_CFLAGS} ${TSAN_RTL_CFLAGS} ${MSAN_RTL_CFLAGS})
 
 append_rtti_flag(OFF XSAN_RTL_CFLAGS)
 
