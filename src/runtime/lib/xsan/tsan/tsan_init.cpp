@@ -57,6 +57,23 @@ void TsanInitFromXsanVeryEarly() {
   cur_thread_init();
 }
 
+#if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
+/// Moved from InitializeInterceptors in tsan_interceptors.cpp. Because MSan
+/// intercept pthread_key_create
+unsigned &finalize_key();
+void thread_finalize(void *v);
+extern "C" int pthread_key_create(unsigned *key, void (*destructor)(void *v));
+
+void TsanAfterInitInterceptors() {
+  if (pthread_key_create(&finalize_key(), &thread_finalize)) {
+    Printf("ThreadSanitizer: failed to create thread key\n");
+    Die();
+  }
+}
+#else
+void TsanAfterInitInterceptors() {}
+#endif
+
 void TsanInitFromXsan() {
   // Thread safe because done before all threads exist.
   INIT_ONCE
@@ -94,6 +111,7 @@ void TsanInitFromXsan() {
 
   /// Move to XSan
   //   InitializeInterceptors();
+  TsanAfterInitInterceptors();
   InitializePlatform();
   InitializeDynamicAnnotations();
 #if !SANITIZER_GO

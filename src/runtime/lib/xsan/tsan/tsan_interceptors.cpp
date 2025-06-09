@@ -28,6 +28,8 @@
 #include "tsan_mman.h"
 #include "tsan_fd.h"
 
+#include "../xsan_hooks.h"
+
 #include <stdarg.h>
 
 using namespace __tsan;
@@ -837,10 +839,9 @@ void PlatformCleanUpThreadState(ThreadState *thr) {
     UnmapOrDie(sctx, sizeof(*sctx));
   }
 }
-}  // namespace __tsan
 
 #if !SANITIZER_APPLE && !SANITIZER_NETBSD && !SANITIZER_FREEBSD
-static void thread_finalize(void *v) {
+void thread_finalize(void *v) {
   uptr iter = (uptr)v;
   if (iter > 1) {
     if (pthread_setspecific(interceptor_ctx()->finalize_key,
@@ -855,6 +856,7 @@ static void thread_finalize(void *v) {
 }
 #endif
 
+}  // namespace __tsan
 
 struct ThreadParam {
   void* (*callback)(void *arg);

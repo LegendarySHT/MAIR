@@ -36,6 +36,8 @@
 // ACHTUNG! No system header includes in this file.
 
 using namespace __sanitizer;
+using __msan::kMsanParamTlsSize;
+using __msan::kMsanRetvalTlsSize;
 
 // Globals.
 static THREADLOCAL int msan_expect_umr = 0;
@@ -679,34 +681,38 @@ void __msan_set_death_callback(void (*callback)(void)) {
 }
 
 void __msan_start_switch_fiber(const void *bottom, uptr size) {
-  MsanThread *t = GetCurrentThread();
-  if (!t) {
-    VReport(1, "__msan_start_switch_fiber called from unknown thread\n");
-    return;
-  }
-  t->StartSwitchFiber((uptr)bottom, size);
+  Printf("FATAL: __msan_start_switch_fiber is not supported by XSan.\n");
+  Die();
+  // MsanThread *t = GetCurrentThread();
+  // if (!t) {
+  //   VReport(1, "__msan_start_switch_fiber called from unknown thread\n");
+  //   return;
+  // }
+  // t->StartSwitchFiber((uptr)bottom, size);
 }
 
 void __msan_finish_switch_fiber(const void **bottom_old, uptr *size_old) {
-  MsanThread *t = GetCurrentThread();
-  if (!t) {
-    VReport(1, "__msan_finish_switch_fiber called from unknown thread\n");
-    return;
-  }
-  t->FinishSwitchFiber((uptr *)bottom_old, (uptr *)size_old);
+  Printf("FATAL: __msan_finish_switch_fiber is not supported by XSan.\n");
+  Die();
+  // MsanThread *t = GetCurrentThread();
+  // if (!t) {
+  //   VReport(1, "__msan_finish_switch_fiber called from unknown thread\n");
+  //   return;
+  // }
+  // t->FinishSwitchFiber((uptr *)bottom_old, (uptr *)size_old);
 
-  internal_memset(__msan_param_tls, 0, sizeof(__msan_param_tls));
-  internal_memset(__msan_retval_tls, 0, sizeof(__msan_retval_tls));
-  internal_memset(__msan_va_arg_tls, 0, sizeof(__msan_va_arg_tls));
+  // internal_memset(__msan_param_tls, 0, sizeof(__msan_param_tls));
+  // internal_memset(__msan_retval_tls, 0, sizeof(__msan_retval_tls));
+  // internal_memset(__msan_va_arg_tls, 0, sizeof(__msan_va_arg_tls));
 
-  if (__msan_get_track_origins()) {
-    internal_memset(__msan_param_origin_tls, 0,
-                    sizeof(__msan_param_origin_tls));
-    internal_memset(&__msan_retval_origin_tls, 0,
-                    sizeof(__msan_retval_origin_tls));
-    internal_memset(__msan_va_arg_origin_tls, 0,
-                    sizeof(__msan_va_arg_origin_tls));
-  }
+  // if (__msan_get_track_origins()) {
+  //   internal_memset(__msan_param_origin_tls, 0,
+  //                   sizeof(__msan_param_origin_tls));
+  //   internal_memset(&__msan_retval_origin_tls, 0,
+  //                   sizeof(__msan_retval_origin_tls));
+  //   internal_memset(__msan_va_arg_origin_tls, 0,
+  //                   sizeof(__msan_va_arg_origin_tls));
+  // }
 }
 
 SANITIZER_INTERFACE_WEAK_DEF(const char *, __msan_default_options, void) {
