@@ -1,8 +1,8 @@
-// RUN: %clangxx_msan -O0 -g %s -o %t && %run %t
-// RUN: %clangxx_msan -O3 -g %s -o %t && %run %t
+// RUN: %clangxx_msan -O0 -g %s -o %t && env MSAN_OPTIONS=handle_ioctl=1 %run %t
+// RUN: %clangxx_msan -O3 -g %s -o %t && env MSAN_OPTIONS=handle_ioctl=1 %run %t
 
-// RUN: %clangxx_msan -DPOSITIVE -O0 -g %s -o %t && not %run %t 2>&1 | FileCheck %s
-// RUN: %clangxx_msan -DPOSITIVE -O3 -g %s -o %t && not %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx_msan -DPOSITIVE -O0 -g %s -o %t && env MSAN_OPTIONS=handle_ioctl=1 not %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx_msan -DPOSITIVE -O3 -g %s -o %t && env MSAN_OPTIONS=handle_ioctl=1 not %run %t 2>&1 | FileCheck %s
 
 // Reports different report (not analyzed)
 // XFAIL: target={{.*netbsd.*}}

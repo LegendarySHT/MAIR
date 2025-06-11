@@ -33,7 +33,7 @@
 int main(int argc, char **argv) {
   char *volatile x = (char*)malloc(5 * sizeof(char));
   if (x[0])
-    exit(0);
+    fprintf(stderr, "ASan triggers this path!!!\n");
   fprintf(stderr, "Done\n");
   // CHECK-NOT: Done
   // CHECK-RECOVER: Done

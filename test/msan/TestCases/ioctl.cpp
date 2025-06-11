@@ -1,5 +1,5 @@
-// RUN: %clangxx_msan -O0 -g %s -o %t && %run %t
-// RUN: %clangxx_msan -O3 -g %s -o %t && %run %t
+// RUN: %clangxx_msan -O0 -g %s -o %t && env MSAN_OPTIONS=handle_ioctl=1 %run %t
+// RUN: %clangxx_msan -O3 -g %s -o %t && env MSAN_OPTIONS=handle_ioctl=1 %run %t
 
 #include <assert.h>
 #include <stdlib.h>

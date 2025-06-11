@@ -1,5 +1,5 @@
-// RUN: %clangxx_msan -O2 %s -o %t && \
-// RUN:     not %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx_msan -fsanitize-recover=address -O2 %s -o %t && \
+// RUN:     env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t 2>&1 | FileCheck %s
 
 #include <stdlib.h>
 

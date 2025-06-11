@@ -14,7 +14,7 @@
 
 const char *mem_to_shadow(const char *p) {
 #if defined(__x86_64__)
-  return (char *)((uintptr_t)p ^ 0x500000000000ULL);
+  return (char *)((uintptr_t)p ^ 0x300000000000ULL);
 #elif defined(__loongarch_lp64)
   return (char *)((uintptr_t)p ^ 0x500000000000ULL);
 #elif defined (__mips64)
@@ -38,5 +38,6 @@ int main(void) {
   char *t = new char[42];
   t[41] = 0;
   assert(strlen(mem_to_shadow(t)) == 41);
+  delete[] t;
   return 0;
 }

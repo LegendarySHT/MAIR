@@ -155,11 +155,17 @@ static bool InitShadow(bool init_origins, bool dry_run) {
     if (map) {
       if (dry_run && !CheckMemoryRangeAvailability(start, size, !dry_run))
         return false;
-      if (!dry_run &&
-          !MmapFixedSuperNoReserve(start, size, kMemoryLayout[i].name))
-        return false;
-      if (!dry_run && common_flags()->use_madv_dontdump)
-        DontDumpShadowMemory(start, size);
+      if (!dry_run) {
+        // Don't count the shadow against mmap_limit_mb.
+        DecreaseTotalMmap(size);
+        if (!MmapFixedSuperNoReserve(start, size, kMemoryLayout[i].name)) {
+          IncreaseTotalMmap(size);
+          return false;
+        }
+        if (common_flags()->use_madv_dontdump) {
+          DontDumpShadowMemory(start, size);
+        }
+      }
     }
     if (protect) {
       if (dry_run && !CheckMemoryRangeAvailability(start, size, !dry_run))

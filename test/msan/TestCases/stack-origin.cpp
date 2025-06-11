@@ -31,5 +31,5 @@ int main(int argc, char **argv) {
   // ORIGINS-LEAN: Uninitialized value was created in the stack frame
   // CHECK-ORIGINS: {{#0 0x.* in main .*stack-origin.cpp:}}[[@LINE-8]]
 
-  // CHECK: SUMMARY: MemorySanitizer: use-of-uninitialized-value {{.*stack-origin.cpp:.* main}}
+  // CHECK: SUMMARY: XSan: use-of-uninitialized-value {{.*stack-origin.cpp:.* main}}
 }

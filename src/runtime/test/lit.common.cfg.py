@@ -715,12 +715,14 @@ if config.host_os == "Linux":
         "-dM",
         "-E",
     ] + shlex.split(config.target_cflags)
+    env = os.environ.copy()
+    env["LANG"] = "C"
     cmd = subprocess.Popen(
         cmd_args,
         stdout=subprocess.PIPE,
         stdin=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
-        env={"LANG": "C"},
+        env=env,
     )
     try:
         sout, _ = cmd.communicate(b"#include <features.h>")

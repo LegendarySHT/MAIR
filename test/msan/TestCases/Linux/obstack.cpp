@@ -1,5 +1,5 @@
-// RUN: %clangxx_msan -O0 -g %s -o %t && %run %t
-// RUN: %clangxx_msan -O0 -g -DPOSITIVE %s -o %t && not %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx_msan -fno-sanitize=undefined -O0 -g %s -o %t && %run %t
+// RUN: %clangxx_msan -fno-sanitize=undefined -O0 -g -DPOSITIVE %s -o %t && not %run %t 2>&1 | FileCheck %s
 
 #include <obstack.h>
 #include <sanitizer/msan_interface.h>

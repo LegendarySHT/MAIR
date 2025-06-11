@@ -38,7 +38,7 @@ elif ubsan_lit_test_mode == "AddressSanitizer":
     default_ubsan_opts += ['detect_leaks=0']
 elif ubsan_lit_test_mode == "MemorySanitizer":
     config.available_features.add("ubsan-msan")
-    clang_ubsan_cflags = ["-fsanitize=memory"]
+    clang_ubsan_cflags = ["-msan"]
 elif ubsan_lit_test_mode == "ThreadSanitizer":
     config.available_features.add("ubsan-tsan")
     # clang_ubsan_cflags = ["-fsanitize=thread"]

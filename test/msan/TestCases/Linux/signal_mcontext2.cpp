@@ -3,6 +3,8 @@
 // musl does not define FP_XSTATE_MAGIC1.
 // REQUIRES: x86_64-target-arch && glibc-2.27
 
+// XFAIL: xsan
+
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>

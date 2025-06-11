@@ -389,10 +389,18 @@ static const MemoryMapParams Linux_X86_64_MemoryMapParams = {
   0x200000000000,  // OriginBase
 #else
   0,               // AndMask (not used)
-  0x300000000000,  // XorMask
+  0x500000000000,  // XorMask
   0,               // ShadowBase (not used)
   0x100000000000,  // OriginBase
 #endif
+};
+
+// x86_64 Linux for XSan
+static const MemoryMapParams XSan_Linux_X86_64_MemoryMapParams = {
+  0,               // AndMask (not used)
+  0x300000000000,  // XorMask
+  0,               // ShadowBase (not used)
+  0x100000000000,  // OriginBase
 };
 
 // mips64 Linux
@@ -958,7 +966,11 @@ void MemorySanitizer::initializeModule(Module &M) {
       case Triple::Linux:
         switch (TargetTriple.getArch()) {
           case Triple::x86_64:
-            MapParams = Linux_X86_MemoryMapParams.bits64;
+#ifdef XSAN_PASS
+            MapParams = &XSan_Linux_X86_64_MemoryMapParams;
+#else
+            MapParams = &Linux_X86_64_MemoryMapParams;
+#endif
             break;
           case Triple::x86:
             MapParams = Linux_X86_MemoryMapParams.bits32;

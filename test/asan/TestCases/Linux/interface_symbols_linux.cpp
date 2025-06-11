@@ -10,6 +10,9 @@
 // RUN:  | grep -v "__sanitizer_syscall"                                       \
 // RUN:  | grep -v "__sanitizer_weak_hook"                                     \
 // RUN:  | grep -v "__sancov_lowest_stack"                                     \
+// RUN:  | grep -v "__sanitizer_dtor_callback"                                 \
+// RUN:  | grep -v "__sanitizer_dtor_callback_fields"                          \
+// RUN:  | grep -v "__sanitizer_dtor_callback_vptr"                            \
 // RUN:  | sed -e "s/__asan_version_mismatch_check_v[0-9]+/__asan_version_mismatch_check/" \
 // RUN:  > %t.exports
 //

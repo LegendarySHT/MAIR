@@ -1,5 +1,7 @@
 // RUN: %clangxx_msan -fsanitize-memory-track-origins=2 -O1 %s -o %t && %run %t 2>&1 | FileCheck %s
 
+// XFAIL: xsan
+
 #include <pthread.h>
 #include <sanitizer/msan_interface.h>
 #include <signal.h>

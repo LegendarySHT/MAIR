@@ -32,6 +32,8 @@ if config.host_os == "Darwin" and config.apple_platform == "osx":
 default_asan_opts_str = ':'.join(default_asan_opts)
 # Disable TSan's report in ASan's test pipeline.
 config.environment['TSAN_OPTIONS'] = "report_bugs=0"
+# Disable MSan's report in ASan's test pipeline.
+config.environment['MSAN_OPTIONS'] = "exit_code_unchanged=1"
 config.environment['XSAN_IN_ASAN_TEST'] = "1"
 if default_asan_opts_str:
     config.environment["ASAN_OPTIONS"] = default_asan_opts_str
@@ -64,6 +66,7 @@ clang_asan_static_cflags = (
         # "-fsanitize=address",
         # "-asan",
         "-xsan",
+        '-fsanitize-recover=memory',
         "-mno-omit-leaf-frame-pointer",
         "-fno-omit-frame-pointer",
         "-fno-optimize-sibling-calls",

@@ -1,19 +1,19 @@
-// RUN: %clangxx_msan -O0 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -O0 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out
-// RUN: %clangxx_msan -O1 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -O1 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out
-// RUN: %clangxx_msan -O2 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -O2 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out
-// RUN: %clangxx_msan -O3 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -O3 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out
 
-// RUN: %clangxx_msan -fsanitize-memory-track-origins -O0 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -fsanitize-memory-track-origins -O0 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out && FileCheck %s --check-prefix=CHECK-ORIGINS < %t.out
-// RUN: %clangxx_msan -fsanitize-memory-track-origins -O1 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -fsanitize-memory-track-origins -O1 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out && FileCheck %s --check-prefix=CHECK-ORIGINS < %t.out
-// RUN: %clangxx_msan -fsanitize-memory-track-origins -O2 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -fsanitize-memory-track-origins -O2 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out && FileCheck %s --check-prefix=CHECK-ORIGINS < %t.out
-// RUN: %clangxx_msan -fsanitize-memory-track-origins -O3 %s -o %t && not %run %t >%t.out 2>&1
+// RUN: %clangxx_msan -fsanitize-recover=address -fsanitize-memory-track-origins -O3 %s -o %t && env ASAN_OPTIONS=halt_on_error=0:recover=1 not %run %t >%t.out 2>&1
 // RUN: FileCheck %s < %t.out && FileCheck %s --check-prefix=CHECK-ORIGINS < %t.out
 
 #include <stdlib.h>

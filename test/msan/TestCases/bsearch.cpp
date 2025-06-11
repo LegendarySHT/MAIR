@@ -20,6 +20,9 @@ poison_msan_param_tls(long a, long b, long c, long d, long e, long f) {
   z = a + b + c + d + e + f;
 }
 
+// Avoid UbSan replacing `*a - *b` and making MSan fail to calculate the
+// shadow of `r`
+__attribute__((no_sanitize("signed-integer-overflow")))
 static int compar(const void *a, const void *b) {
   int r = *(const long *)a - *(const long *)b;
   long x;

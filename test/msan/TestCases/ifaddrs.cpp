@@ -18,7 +18,7 @@
 
 #define CHECK_AND_PUSH(addr, size)                                \
   if (addr) {                                                     \
-    assert(-1 == __msan_test_shadow(addr, sizeof(size)));         \
+    assert(-1 == __msan_test_shadow(addr, (size_t)size));         \
     ranges.push_back(std::make_pair((void *)addr, (size_t)size)); \
   }
 

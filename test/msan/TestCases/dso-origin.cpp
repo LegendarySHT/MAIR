@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
   // CHECK: {{#0 0x.* in .*malloc}}
   // CHECK: {{#1 0x.* in my_alloc .*dso-origin.cpp:}}
   // CHECK: {{#2 0x.* in main .*dso-origin.cpp:}}[[@LINE-10]]
-  // CHECK: SUMMARY: MemorySanitizer: use-of-uninitialized-value {{.*dso-origin.cpp:.* my_access}}
+  // CHECK: SUMMARY: XSan: use-of-uninitialized-value {{.*dso-origin.cpp:.* my_access}}
   return 0;
 }
 
