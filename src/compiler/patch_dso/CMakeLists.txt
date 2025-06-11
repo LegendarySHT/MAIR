@@ -36,14 +36,20 @@ if (LLVM_LINK_LLVM_DYLIB)
     endif()
     message(STATUS "LLVM_SHLIB_SYMBOL_VERSION: ${LLVM_SHLIB_SYMBOL_VERSION}")
     configure_file(simple_version_script.map.in simple_version_script.map)
-    target_link_libraries(clang-patch PRIVATE clang-cpp LLVM)
+    ### Seems we don't need to explicitly link clang-cpp and LLVM libraries
+    ### because clang-patch will be injected into the clang process as a dynamic library
+    ### The clang process has already loaded these libraries, so we can use them directly
+    # target_link_libraries(clang-patch PRIVATE clang-cpp LLVM)
     target_link_options(clang-patch PRIVATE -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/simple_version_script.map)
 else()
     if (CLANG_LINK_CLANG_DYLIB)
     message(FATAL_ERROR "Cannot set CLANG_LINK_CLANG_DYLIB=ON when "
                         "LLVM_LINK_LLVM_DYLIB=OFF")
     endif()
-    target_link_libraries(clang-patch PRIVATE clangBasic LLVMSupport LLVMOption)
+    ### Seems we don't need to explicitly link clang-cpp and LLVM libraries
+    ### because clang-patch will be injected into the clang process as a dynamic library
+    ### The clang process has already loaded these libraries, so we can use them directly
+    # target_link_libraries(clang-patch PRIVATE clangBasic LLVMSupport LLVMOption)
 endif()
 
 

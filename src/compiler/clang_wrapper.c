@@ -6,12 +6,11 @@
  */
 #define AFL_MAIN
 
-#include "include/config.h"
 #include "include/types.h"
 #include "include/debug.h"
 #include "include/alloc-inl.h"
 #include "xsan_common.h"
-#include "config_build_dir.h"
+#include "config_compile.h"
 
 #include <stdio.h>
 #include <unistd.h>

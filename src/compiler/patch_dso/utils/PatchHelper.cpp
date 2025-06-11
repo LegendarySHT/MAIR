@@ -1,10 +1,14 @@
 #include <cstdio>
 #include <dlfcn.h>
 #include <filesystem>
+#include <llvm/Support/Memory.h>
 #include <llvm/Support/Process.h>
 #include <string_view>
 
 #include "PatchHelper.h"
+#include "config_compile.h"
+#include "debug.h"
+#include "types.h"
 #include "xsan_common.h"
 
 namespace fs = std::filesystem;
@@ -22,31 +26,34 @@ const std::bitset<XSan + 1>
 
 namespace {
 
-void *getRealFuncAddrImpl(const char *ManagledName, void *InterceptorAddr) {
-  void *RealAddr = dlsym(RTLD_NEXT, ManagledName);
-  if (!RealAddr) {
-    RealAddr = dlsym(RTLD_DEFAULT, ManagledName);
-    if (RealAddr == InterceptorAddr) {
-      RealAddr = nullptr;
-    }
-  }
-  return RealAddr;
-}
-
 constexpr SanitizerType gen_sanitizer_type() {
-  SanitizerType sanTy = SanNone;
-  for (SanitizerType i : {XSan, ASan, TSan, /* MSan, */ UBSan}) {
+  for (SanitizerType i : {XSan, ASan, TSan, UBSan}) {
     if (xsan_mask.test(i)) {
-      sanTy = i;
-      break;
+      return i;
     }
   }
-  return sanTy;
+  return SanNone;
 }
 
 } // namespace
 
 const SanitizerType sanTy = gen_sanitizer_type();
+
+bool isPatchingClang() {
+  // Get the executable path of the current process.
+  char proc_path[PATH_MAX];
+  ssize_t len = readlink("/proc/self/exe", proc_path, sizeof(proc_path) - 1);
+  if (len == -1) {
+    return false;
+  }
+  proc_path[len] = '\0';
+
+  // Obtain the executable name.
+  std::string pname = fs::path(proc_path).filename().string();
+  llvm::StringRef proc_name = pname;
+  // Match clang, clang++, clang-15, etc
+  return proc_name.startswith("clang");
+}
 
 fs::path getThisPatchDsoPath() {
   fs::path path;
@@ -64,20 +71,19 @@ fs::path getXsanAbsPath(std::string_view rel_path) {
   static const fs::path PatchBaseDir =
       getThisPatchDsoPath().parent_path().parent_path();
   static const bool ExistEnvVarBaseDir =
-      xsan_base_dir.has_value() && fs::exists(xsan_base_dir.getValue());
+      xsan_base_dir.hasValue() && fs::exists(xsan_base_dir.getValue());
   static const fs::path EnvVarBaseDir =
       ExistEnvVarBaseDir ? fs::canonical(xsan_base_dir.getValue()) : fs::path();
 
   fs::path abs_path;
-  if (!xsan_base_dir.has_value()) {
+  if (!xsan_base_dir.hasValue()) {
     abs_path = PatchBaseDir / rel_path;
   } else if (EnvVarBaseDir.empty()) {
     // xsan_base_dir has value, but EnvVarBaseDir is empty.
-    std::fprintf(stderr,
-                 "Warning: The path provided by the environment variable "
-                 "XSAN_BASE_DIR (\"%s\") is invalid. Using auto-detected base "
-                 "path: %s\n",
-                 xsan_base_dir.getValue().c_str(), PatchBaseDir.c_str());
+    WARNF("Warning: The path provided by the environment variable "
+          "XSAN_BASE_DIR (\"%s\") is invalid. Using auto-detected base "
+          "path: %s\n",
+          xsan_base_dir.getValue().c_str(), PatchBaseDir.c_str());
     abs_path = PatchBaseDir / rel_path;
   } else {
     abs_path = EnvVarBaseDir / rel_path;
@@ -87,10 +93,89 @@ fs::path getXsanAbsPath(std::string_view rel_path) {
   return abs_path;
 }
 
-void *getRealFuncAddr(void *InterceptorFunc) {
+static const char *getMangledName(void *InterceptorFunc) {
   Dl_info Info;
   dladdr(InterceptorFunc, &Info);
-  void *RealFuncAddr = getRealFuncAddrImpl(Info.dli_sname, InterceptorFunc);
-  assert(RealFuncAddr && "Failed to find the real function address");
-  return RealFuncAddr;
+  return Info.dli_sname;
+}
+
+void *getRealFuncAddr(const char *ManagledName) {
+  void *RealAddr = dlsym(RTLD_NEXT, ManagledName);
+  if (!RealAddr) {
+    FATAL("Failed to find the real function address for %s", ManagledName);
+  }
+  return RealAddr;
+}
+
+void *getRealFuncAddr(void *InterceptorFunc) {
+  const char *ManagledName = getMangledName(InterceptorFunc);
+  return getRealFuncAddr(ManagledName);
+}
+
+void *getMyFuncAddr(const char *ManagledName) {
+  Dl_info Info;
+  void *MyFuncAddr = dlsym(RTLD_DEFAULT, ManagledName);
+  if (!MyFuncAddr) {
+    FATAL("Failed to find my function address for %s", ManagledName);
+  }
+  dladdr(MyFuncAddr, &Info);
+  if (!llvm::StringRef(Info.dli_fname).endswith(XSAN_DSO_PATCH_FILE)) {
+    FATAL("Found wrong my function address for %s, please check LD_PRELOAD",
+          ManagledName);
+  }
+  return MyFuncAddr;
+}
+
+class ScopedApplyPatch {
+  using Memory = llvm::sys::Memory;
+
+  void changeMemoryProtection(unsigned flags) {
+    if (auto Ret = Memory::protectMappedMemory(Mem, flags)) {
+      FATAL("Failed to protect memory for patching: %s", Ret.message().c_str());
+    }
+  }
+
+public:
+  ScopedApplyPatch(void *FuncAddr) : Mem(FuncAddr, sizeof(XsanPatch)) {
+    changeMemoryProtection(Memory::MF_RWE_MASK);
+  }
+  ~ScopedApplyPatch() {
+    changeMemoryProtection(Memory::MF_READ | Memory::MF_EXEC);
+  }
+
+private:
+  llvm::sys::MemoryBlock Mem;
+};
+
+void XsanPatch::validateInit() const {
+  if (unlikely(!isInitialized)) {
+    FATAL("Cannot use patch without initialization");
+  }
+}
+
+void XsanPatch::initialize(void *MyFunc, void *RealFunc) {
+  std::memcpy(patch, PatchTempl, PatchSize);
+  std::memcpy(&patch[FuncAddrOffset], (void *)&MyFunc, sizeof(void *));
+  std::memcpy(backup, RealFunc, PatchSize);
+  isInitialized = true;
+}
+
+bool XsanPatch::isPatched(void *FuncAddr) {
+  uint8_t *addr = (uint8_t *)FuncAddr;
+  return std::equal(PatchTempl, PatchTempl + FuncAddrOffset, addr) &&
+         std::equal(PatchTempl + FuncAddrOffset + sizeof(void *),
+                    PatchTempl + PatchSize,
+                    addr + FuncAddrOffset + sizeof(void *));
+}
+
+void XsanPatch::applyPatch(void *FuncAddr) const {
+  validateInit();
+  ScopedApplyPatch Scoper(FuncAddr);
+  std::memcpy(FuncAddr, patch, sizeof(Data));
+}
+
+void XsanPatch::applyBackup(void *FuncAddr) const {
+  validateInit();
+  ScopedApplyPatch Scoper(FuncAddr);
+  std::memcpy(FuncAddr, backup, sizeof(Data));
 }

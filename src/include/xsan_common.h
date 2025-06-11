@@ -1,5 +1,15 @@
 #pragma once
 
+/* Comment out to disable terminal colors (note that this makes afl-analyze
+   a lot less nice): */
+
+#define USE_COLOR
+
+/* Comment out to disable fancy ANSI boxes and use poor man's 7-bit UI: */
+
+#define FANCY_BOXES
+
+
 enum SanitizerType { SanNone, ASan, TSan, MSan, UBSan, XSan };
 
 enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };

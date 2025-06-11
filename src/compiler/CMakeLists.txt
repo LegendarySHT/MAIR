@@ -3,10 +3,8 @@
 add_executable(xclang clang_wrapper.c)
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # eliminate warn of `u8* to char*`, which is applied generally in clang-wrapper.c
+    # eliminate warn of `u8* to char*`, which is applied generally in clang_wrapper.c
     target_compile_options(xclang PRIVATE -Wno-pointer-sign)
-    # add_definitions(-DXSAN_PATH="${XSAN_BIN_DIR}")
-    target_compile_definitions(xclang PRIVATE XSAN_PATH="${XSAN_BIN_DIR}")
 endif()
 
 include_directories(include)
@@ -23,7 +21,7 @@ add_custom_command(TARGET xclang POST_BUILD
 
     
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-configure_file(config_build_dir.h.in config_build_dir.h)
+configure_file(config_compile.h.in config_compile.h)
     
 ################# For HotPatch #################
 add_subdirectory(patch_dso)

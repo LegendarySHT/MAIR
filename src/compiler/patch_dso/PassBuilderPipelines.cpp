@@ -50,34 +50,40 @@ ModulePassManager modifySanitizerPassesPipeline(ModulePassManager &MPM) {
 }
 } // namespace
 
+static XsanInterceptor buildPerModuleDefaultPipelineInterceptor(
+    &PassBuilder::buildPerModuleDefaultPipeline);
+static XsanInterceptor buildLTOPreLinkDefaultPipelineInterceptor(
+    &PassBuilder::buildLTOPreLinkDefaultPipeline);
+static XsanInterceptor buildThinLTOPreLinkDefaultPipelineInterceptor(
+    &PassBuilder::buildThinLTOPreLinkDefaultPipeline);
+static XsanInterceptor
+    buildO0DefaultPipelineInterceptor(&PassBuilder::buildO0DefaultPipeline);
+
 ModulePassManager
 PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
                                            bool LTOPreLink) {
-  static auto RealFunc =
-      getRealFuncAddr(&PassBuilder::buildPerModuleDefaultPipeline);
-  ModulePassManager MPM = (this->*RealFunc)(Level, LTOPreLink);
+  ModulePassManager MPM =
+      buildPerModuleDefaultPipelineInterceptor(this, Level, LTOPreLink);
   return ::modifySanitizerPassesPipeline(MPM);
 }
 
 ModulePassManager
 PassBuilder::buildLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
-  static auto RealFunc =
-      getRealFuncAddr(&PassBuilder::buildLTOPreLinkDefaultPipeline);
-  ModulePassManager MPM = (this->*RealFunc)(Level);
+  ModulePassManager MPM =
+      buildLTOPreLinkDefaultPipelineInterceptor(this, Level);
   return ::modifySanitizerPassesPipeline(MPM);
 }
 
 ModulePassManager
 PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
-  static auto RealFunc =
-      getRealFuncAddr(&PassBuilder::buildThinLTOPreLinkDefaultPipeline);
-  ModulePassManager MPM = (this->*RealFunc)(Level);
+  ModulePassManager MPM =
+      buildThinLTOPreLinkDefaultPipelineInterceptor(this, Level);
   return ::modifySanitizerPassesPipeline(MPM);
 }
 
 ModulePassManager PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
                                                       bool LTOPreLink) {
-  static auto RealFunc = getRealFuncAddr(&PassBuilder::buildO0DefaultPipeline);
-  ModulePassManager MPM = (this->*RealFunc)(Level, LTOPreLink);
+  ModulePassManager MPM =
+      buildO0DefaultPipelineInterceptor(this, Level, LTOPreLink);
   return ::modifySanitizerPassesPipeline(MPM);
 }

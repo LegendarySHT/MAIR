@@ -19,11 +19,11 @@
 #include <llvm/Transforms/Instrumentation/AddressSanitizerOptions.h>
 #include <memory>
 
+#include "utils/PatchHelper.h"
+
 using namespace clang;
 using namespace clang::driver;
 using namespace llvm::opt;
-
-extern bool XsanEnabled;
 
 static const SanitizerMask NeedsUbsanRt =
     SanitizerKind::Undefined | SanitizerKind::Integer |
@@ -1079,3 +1079,6 @@ std::string describeSanitizeArg(const llvm::opt::Arg *A, SanitizerMask Mask) {
   assert(!Sanitizers.empty() && "arg didn't provide expected value");
   return "-fsanitize=" + Sanitizers;
 }
+
+static XsanInterceptor Interceptor("_ZN5clang6driver13SanitizerArgsC2ERKNS0_"
+                                   "9ToolChainERKN4llvm3opt7ArgListEb");

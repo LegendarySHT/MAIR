@@ -1,11 +1,13 @@
 // Match functions
+#include "debug.h"
 #include "xsan_common.h"
+#include <atomic>
 #include <bitset>
 #include <cassert>
+#include <cstddef>
 #include <cstring>
-#include <string>
-#include <type_traits>
 #include <filesystem>
+#include <type_traits>
 
 extern const bool XsanEnabled;
 extern const std::bitset<XSan + 1> xsan_mask;
@@ -13,17 +15,234 @@ extern const SanitizerType sanTy;
 
 std::filesystem::path getThisPatchDsoPath();
 std::filesystem::path getXsanAbsPath(std::string_view rel_path);
-void *getRealFuncAddr(void *InterceptorFunc);
 
-template <typename FunPtr>
-static auto getRealFuncAddr(FunPtr InterceptorFunc)
-    -> std::enable_if_t<std::is_function_v<std::remove_pointer_t<FunPtr>> ||
-                            std::is_member_function_pointer_v<FunPtr>,
-                        FunPtr> {
-  void *InterceptorAddr;
-  std::memcpy(&InterceptorAddr, &InterceptorFunc, sizeof(InterceptorAddr));
-  void *RealFuncAddr = getRealFuncAddr(InterceptorAddr);
+// We only patch clang.
+bool isPatchingClang();
+void *getRealFuncAddr(const char *ManagledName);
+void *getRealFuncAddr(void *InterceptorFunc);
+void *getMyFuncAddr(const char *ManagledName);
+
+class XsanPatch {
+#if defined(__x86_64__)
+  static constexpr uint8_t PatchTempl[] = {
+      // movabs rax, <MyFunc>
+      0x48, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0,
+      // jmp rax
+      0xff, 0xe0};
+  static constexpr size_t FuncAddrOffset = 2; // Offset for MyFunc address
+#elif defined(__aarch64__)
+  static constexpr uint8_t PatchTempl[] = {
+      // ldr x16, 0x8
+      0x50, 0x00, 0x00, 0x58,
+      // br x16
+      0x00, 0x02, 0x1f, 0xd6,
+      // .quad <MyFunc>
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  static constexpr size_t FuncAddrOffset = 8; // Offset for MyFunc address
+#elif defined(__loongarch__) && __loongarch_grlen == 64
+  static constexpr uint8_t PatchTempl[] = {
+      // pcaddu18i $t0, 0
+      0x0c, 0x00, 0x00, 0x1e,
+      // ld.d $t0, $t0, 12
+      0x8c, 0x31, 0xc0, 0x28,
+      // jr $t0
+      0x80, 0x01, 0x00, 0x4c,
+      // .quad <MyFunc>
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  static constexpr size_t FuncAddrOffset = 12; // Offset for MyFunc address
+#elif defined(__riscv) && __riscv_xlen == 64
+  static constexpr uint8_t PatchTempl[] = {
+      // auipc t0, 0x0
+      0x97, 0x02, 0x00, 0x00,
+      // ld t0, 10(t0)
+      0x83, 0xb2, 0xa2, 0x00,
+      // c.jr t0
+      0x82, 0x82,
+      // .quad <MyFunc>
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  static constexpr size_t FuncAddrOffset = 10; // Offset for MyFunc address
+#else
+#error "Unsupported architecture"
+#endif
+  static constexpr size_t PatchSize = sizeof(PatchTempl);
+  using Data = uint8_t[PatchSize];
+
+public:
+  XsanPatch() = default;
+  XsanPatch(void *MyFunc, void *RealFunc) { initialize(MyFunc, RealFunc); }
+
+  static bool isPatched(void *FuncAddr);
+
+  void initialize(void *MyFunc, void *RealFunc);
+  void applyPatch(void *FuncAddr) const;
+  void applyBackup(void *FuncAddr) const;
+
+private:
+  void validateInit() const;
+
+private:
+  bool isInitialized;
+  Data patch;
+  Data backup;
+};
+
+template <typename DeriveTy, typename FunPtr> class XsanInterceptorFunctorBase {
+  friend class ScopedCall;
+
+private:
+  static void *get(FunPtr fn) {
+    void *p;
+    if constexpr (sizeof(FunPtr) == sizeof(void *)) {
+      // Function pointer is already void *
+      p = reinterpret_cast<void *>(fn);
+    } else {
+      // Method pointer is 16-byte.
+      std::memcpy(&p, &fn, sizeof(void *));
+    }
+    return p;
+  }
+  static void set(void *p, FunPtr &fn) {
+    if constexpr (sizeof(FunPtr) == sizeof(void *)) {
+      fn = reinterpret_cast<FunPtr>(p);
+    } else {
+      std::memset(&fn, 0, sizeof(FunPtr));
+      std::memcpy(&fn, &p, sizeof(void *));
+    }
+  }
+
+protected:
+  // Member function pointer may not be the same size as void *
+  void *GetMyFunc() const { return get(MyFunc); }
+  void *GetRealFunc() const { return get(RealFunc); }
+  void SetMyFunc(void *p) { set(p, MyFunc); }
+  void SetRealFunc(void *p) { set(p, RealFunc); }
+
+  void PreCall() {}
+  void PostCall() {}
+
+  class ScopedCall {
+  public:
+    ScopedCall(XsanInterceptorFunctorBase *self)
+        : Self(static_cast<DeriveTy *>(self)) {
+      Self->PreCall();
+    }
+    ~ScopedCall() { Self->PostCall(); }
+
+  private:
+    DeriveTy *Self;
+  };
+
+  FunPtr MyFunc;
   FunPtr RealFunc;
-  std::memcpy(&RealFunc, &RealFuncAddr, sizeof(RealFunc));
-  return RealFunc;
-}
+};
+
+template <typename DeriveTy, typename FunPtr>
+class XsanInterceptorFunctor
+    : public XsanInterceptorFunctorBase<DeriveTy, void *> {
+protected:
+  using ScopedCall =
+      typename XsanInterceptorFunctorBase<DeriveTy, void *>::ScopedCall;
+};
+
+template <typename DeriveTy, typename Ret, typename... Args>
+class XsanInterceptorFunctor<DeriveTy, Ret (*)(Args...)>
+    : public XsanInterceptorFunctorBase<DeriveTy, Ret (*)(Args...)> {
+protected:
+  using ScopedCall =
+      typename XsanInterceptorFunctorBase<DeriveTy,
+                                          Ret (*)(Args...)>::ScopedCall;
+
+public:
+  Ret operator()(Args... args) {
+    ScopedCall Scoper(this);
+    return (this->RealFunc)(std::forward<Args>(args)...);
+  }
+};
+
+template <typename DeriveTy, typename Ret, typename Class, typename... Args>
+class XsanInterceptorFunctor<DeriveTy, Ret (Class::*)(Args...)>
+    : public XsanInterceptorFunctorBase<DeriveTy, Ret (Class::*)(Args...)> {
+protected:
+  using ScopedCall =
+      typename XsanInterceptorFunctorBase<DeriveTy,
+                                          Ret (Class::*)(Args...)>::ScopedCall;
+
+public:
+  Ret operator()(Class *obj, Args... args) {
+    ScopedCall Scoper(this);
+    return (obj->*(this->RealFunc))(std::forward<Args>(args)...);
+  }
+};
+
+template <typename FunPtr = void *,
+          typename = std::enable_if_t<
+              std::is_function_v<std::remove_pointer_t<FunPtr>> ||
+              std::is_member_function_pointer_v<FunPtr> ||
+              std::is_same_v<FunPtr, void *>>>
+class XsanInterceptor
+    : public XsanInterceptorFunctor<XsanInterceptor<FunPtr>,
+                                    std::remove_cv_t<FunPtr>> {
+  using BaseTy =
+      XsanInterceptorFunctor<XsanInterceptor<FunPtr>, std::remove_cv_t<FunPtr>>;
+  friend BaseTy;
+  friend typename BaseTy::ScopedCall;
+
+public:
+  XsanInterceptor(FunPtr MyFunc) {
+    if (!isPatchingClang()) {
+      // E.g., lld
+      return;
+    }
+    this->MyFunc = MyFunc;
+    this->SetRealFunc(getRealFuncAddr(this->GetMyFunc()));
+    InitPatch();
+  }
+  XsanInterceptor(const char *ManagledName) {
+    if (!isPatchingClang()) {
+      // E.g., lld
+      return;
+    }
+    this->SetMyFunc(getMyFuncAddr(ManagledName));
+    this->SetRealFunc(getRealFuncAddr(ManagledName));
+    InitPatch();
+  }
+  XsanInterceptor(const XsanInterceptor &) = delete;
+  XsanInterceptor(XsanInterceptor &&) = delete;
+  XsanInterceptor &operator=(const XsanInterceptor &) = delete;
+  XsanInterceptor &operator=(XsanInterceptor &&) = delete;
+  ~XsanInterceptor() { PreCall(); }
+
+private:
+  void InitPatch() {
+    if (XsanPatch::isPatched(this->GetRealFunc())) {
+      FATAL("Function %p is already patched.", this->GetMyFunc());
+    }
+    Patch.initialize(this->GetMyFunc(), this->GetRealFunc());
+    PostCall();
+  }
+
+  void PreCall() {
+    while (Mutex.exchange(true, std::memory_order_acquire)) {
+    }
+    if (!IsEnabled)
+      return;
+
+    Patch.applyBackup(this->GetRealFunc());
+    IsEnabled = false;
+  }
+
+  void PostCall() {
+    if (IsEnabled) {
+      Mutex.store(false, std::memory_order_release);
+      return;
+    }
+
+    Patch.applyPatch(this->GetRealFunc());
+    IsEnabled = true;
+    Mutex.store(false, std::memory_order_release);
+  }
+
+  XsanPatch Patch;
+  std::atomic_bool Mutex;
+  bool IsEnabled = false;
+};

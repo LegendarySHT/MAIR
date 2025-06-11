@@ -11,7 +11,7 @@
 #include <llvm/Option/Option.h>
 #include <optional>
 
-#include "config_build_dir.h"
+#include "config_compile.h"
 #include "debug.h"
 #include "utils/PatchHelper.h"
 #include "xsan_common.h"
@@ -104,7 +104,7 @@ private:
     std::string result = replaced_prefix;
     /// TODO: use the same output structure as clang, i.e.,
     /// lib/x86_64-unknown-linux-gnu/libclang_rt.xsan.a
-    // Get the suffix, e.g., 
+    // Get the suffix, e.g.,
     //  1. *libclang_rt.asan-static.a -> -static.a
     //  2. *libclang_rt.asan.a.syms -> .a.syms
     StringRef suffix = arg.substr(pos);
@@ -145,7 +145,7 @@ private:
     }
     auto It = SeenRts.insert(NewRt.value());
     if (It.second) {
-      // Record whether we have handled xxx_static.a. 
+      // Record whether we have handled xxx_static.a.
       StringRef argref = arg;
       if (argref.contains("_static")) {
         shouldHasStaticRt = false;
@@ -166,7 +166,7 @@ private:
       NewCmdArgs.push_back(saved_args.back().c_str());
       return true;
     } else {
-      // The relevant replaced argument was added, skip to avoid 
+      // The relevant replaced argument was added, skip to avoid
       // duplicated appending.
       if (NewCmdArgs.back() == PreRt) {
         NewCmdArgs.pop_back();
@@ -229,12 +229,13 @@ static void add_wrap_link_option(ArgStringList &CmdArgs) {
 
 } // namespace
 
+static XsanInterceptor Interceptor(tools::addSanitizerRuntimes);
+
 // Should be called before we add system libraries (C++ ABI, libstdc++/libc++,
 // C runtime, etc). Returns true if sanitizer system deps need to be linked in.
 bool tools::addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
                                  ArgStringList &CmdArgs) {
-  static auto RealFunc = getRealFuncAddr(tools::addSanitizerRuntimes);
-  bool result = RealFunc(TC, Args, CmdArgs);
+  bool result = Interceptor(TC, Args, CmdArgs);
   if (::XsanEnabled) {
     HackedSanitizersRtRewriter Rewriter(CmdArgs);
     add_wrap_link_option(CmdArgs);
