@@ -20,7 +20,7 @@ add_library(clang-patch MODULE
             CommonArgs.cpp
             PassBuilderPipelines.cpp
             SanitizerArgs.cpp
-            utils/PatchHelper.cpp
+            ../utils/PatchHelper.cpp
             )
 
 target_link_libraries(clang-patch PRIVATE dl)

@@ -6,11 +6,12 @@
  */
 #define AFL_MAIN
 
-#include "include/types.h"
-#include "include/debug.h"
-#include "include/alloc-inl.h"
-#include "xsan_common.h"
 #include "config_compile.h"
+#include "include/alloc-inl.h"
+#include "include/debug.h"
+#include "include/types.h"
+#include "xsan_common.h"
+#include "xsan_wrapper_helper.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -18,10 +19,9 @@
 #include <string.h>
 #include <limits.h>
 
-static u8 support_dso_inject = 0;   /* Support for DSO injection         */
-static u8*  obj_path;               /* Path to runtime libraries         */
-static const u8 **cc_params;        /* Parameters passed to the real CC  */
-static u32  cc_par_cnt = 1;         /* Param count, including argv0      */
+u8*  obj_path;               /* Path to runtime libraries         */
+const u8 **cc_params;        /* Parameters passed to the real CC  */
+u32  cc_par_cnt = 1;         /* Param count, including argv0      */
 
 #ifndef XSAN_PATH
   #define XSAN_PATH ""
@@ -190,173 +190,6 @@ struct FrontEndOpt {
 
 };
 
-typedef struct kXsanOption {
-  u64 mask;
-} XsanOption;
-
-XsanOption xsan_options;
-XsanOption xsan_recover_options;
-
-void init(XsanOption *opt) {
-#if XSAN_CONTAINS_UBSAN
-  opt->mask |= (u64)1 << UBSan;
-#endif
-#if XSAN_CONTAINS_TSAN
-  opt->mask |= (u64)1 << TSan;
-#endif
-#if XSAN_CONTAINS_ASAN
-  opt->mask |= (u64)1 << ASan;
-#endif
-  opt->mask |= (u64)1 << XSan;
-}
-
-/// TODO: handle unsupported sanTy.
-void set(XsanOption *opt, enum SanitizerType sanTy) {
-  if (sanTy == XSan) {
-    init(opt);
-  } else {
-    opt->mask |= (u64)1 << sanTy;
-  }
-}
-
-void clear(XsanOption *opt, enum SanitizerType sanTy) {
-  opt->mask &= (sanTy == XSan) ? 0 : ~((u64)1 << sanTy);
-}
-
-u8 has(XsanOption *opt, enum SanitizerType sanTy) {
-  return (opt->mask & (((u64)1 << sanTy))) != 0;
-}
-
-u8 has_any(XsanOption *opt) {
-  return (opt->mask & ~(((u64)1 << XSan) | ((u64)1 << SanNone))) != 0;
-}
-
-#define OPT_EQ(arg, opt) (!strcmp((arg), opt))
-#define OPT_EQ_AND_THEN(arg, opt, ...)                                         \
-  if (OPT_EQ(arg, opt)) {                                                      \
-    __VA_ARGS__                                                                \
-  }
-
-#define OPT_MATCH(arg, opt) (!strncmp((arg), opt, sizeof(opt) - 1))
-#define OPT_EMATCH_AND_THEN(arg, opt, ...)                                     \
-  if (OPT_MATCH(arg, opt)) {                                                   \
-    __VA_ARGS__                                                                \
-  }
-#define OPT_GET_VAL_AND_THEN(arg, opt, ...)                                    \
-  if (OPT_MATCH(arg, (opt "="))) {                                             \
-    const char *val = arg + sizeof(opt "=") - 1;                               \
-    __VA_ARGS__                                                                \
-  }
-
-#define ADD_MIDDLE_END_OPTION(opt)                                             \
-  if (!frontend_opt.AsmAsSource) {                                             \
-    cc_params[cc_par_cnt++] = "-mllvm";                                        \
-    cc_params[cc_par_cnt++] = (opt);                                           \
-  }
-
-static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
-  enum SanitizerType xsanTy = SanNone;
-  for (u32 i = 1; i < argc; i++) {
-    const char* cur = argv[i];
-    OPT_EQ_AND_THEN(cur, "-tsan", {
-      /// We should check xsan firstly because xsan can include asan, tsan...
-      if(has(&xsan_options, XSan))
-        FATAL("'-tsan' could not be used with '-xsan'");
-      if (has(&xsan_options, ASan))
-        FATAL("'-tsan' could not be used with '-asan'");
-      xsanTy = TSan;
-      set(&xsan_options, TSan);
-      continue;
-    })
-
-    OPT_EQ_AND_THEN(cur, "-asan", {
-      if(has(&xsan_options, XSan))
-        FATAL("'-asan' could not be used with '-xsan'");
-      if (has(&xsan_options, TSan))
-        FATAL("'-asan' could not be used with '-tsan'");
-      xsanTy = ASan;
-      set(&xsan_options, ASan);
-      continue;
-    })
-
-    OPT_EQ_AND_THEN(cur, "-ubsan", {
-      /// Only if no other sanitizer is specified, we treat it as UBSan
-      /// standalone.
-      if (!has_any(&xsan_options))
-        xsanTy = UBSan;
-      set(&xsan_options, UBSan);
-      continue;
-    })
-
-    OPT_EQ_AND_THEN(cur, "-xsan", {
-      if(has(&xsan_options, ASan))
-        FATAL("'-xsan' could not be used with '-asan'");
-      if (has(&xsan_options, TSan))
-        FATAL("'-xsan' could not be used with '-tsan'");
-      xsanTy = XSan;
-      init(&xsan_options);
-      continue;
-    })
-
-    u8 is_neg = 0;
-    // Check prefix "-f"
-    if (cur[0] != '-' || cur[1] != 'f') {
-      continue;
-    }
-    cur += 2;
-    // Check prefix "no-"
-    if (cur[0] == 'n' && cur[1] == 'o' && cur[2] == '-') {
-      is_neg = 1;
-      cur += 3;
-    }
-
-    // -fsanitize=<value> / -fno-sanitize=<value>
-    OPT_GET_VAL_AND_THEN(cur, "sanitize", {
-      enum SanitizerType sanTy = SanNone;
-      // split value by ',' : -fsanitize=address,undefined
-      char *val_str = ck_strdup((void *)val);
-      char *val_ptr = val_str;
-      while (1) {
-        char *comma = strchr(val_ptr, ',');
-        if (comma) {
-          *comma = 0;
-        }
-        if (OPT_EQ(val_ptr, "address")) {
-          sanTy = ASan;
-        } else if (OPT_EQ(val_ptr, "thread")) {
-          sanTy = TSan;
-        } else if (OPT_EQ(val_ptr, "undefined")) {
-          sanTy = UBSan;
-        } else if (OPT_EQ(val_ptr, "all")) {
-          sanTy = XSan;
-        } else {
-          /// TODO: support other sanitizers
-        }
-        if (is_neg) {
-          clear(&xsan_options, sanTy);
-        } else {
-          set(&xsan_options, sanTy);
-        }
-        if (!comma) {
-          break;
-        }
-        val_ptr = comma + 1;
-      }
-      ck_free(val_str);
-      continue;
-    })
-  }
-
-
-  /// TODO: figure out whether we need to do that.
-  // /// Use our out-of-tree runtime
-  // if (xsanTy != SanNone && !has_any(&xsan_options)) {
-  //   xsanTy = SanNone;
-  // }
-
-  return xsanTy;
-}
-
 /*
  Handle the following options about ASan:
   -fsanitize-address-field-padding=<value>
@@ -403,7 +236,7 @@ static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   // -fsanitize-address-use-after-return=<mode>
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_GET_VAL_AND_THEN(arg, "use-after-return", {
-    ADD_MIDDLE_END_OPTION(
+    ADD_LLVM_MIDDLE_END_OPTION(
         alloc_printf("-sanitize-address-use-after-return=%s", val));
     return 0;
   })
@@ -411,23 +244,24 @@ static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   // -fsanitize-address-use-after-scope
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_EQ_AND_THEN(arg, "use-after-scope", {
-    ADD_MIDDLE_END_OPTION(is_neg ? "-sanitize-address-use-after-scope=0"
-                                 : "-sanitize-address-use-after-scope");
+    ADD_LLVM_MIDDLE_END_OPTION(is_neg ? "-sanitize-address-use-after-scope=0"
+                                      : "-sanitize-address-use-after-scope");
     return 0;
   })
 
   // -fsanitize-address-use-odr-indicator
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_EQ_AND_THEN(arg, "use-odr-indicator", {
-    ADD_MIDDLE_END_OPTION(is_neg ? "-sanitize-address-use-odr-indicator=0"
-                                 : "-sanitize-address-use-odr-indicator");
+    ADD_LLVM_MIDDLE_END_OPTION(is_neg ? "-sanitize-address-use-odr-indicator=0"
+                                      : "-sanitize-address-use-odr-indicator");
     return 0;
   })
 
   // -fsanitize-address-destructor=<value>
   // frontend option, forward to middle-end option defined in PassRegistry.cpp
   OPT_GET_VAL_AND_THEN(arg, "destructor", {
-    ADD_MIDDLE_END_OPTION(alloc_printf("-sanitize-address-destructor=%s", val));
+    ADD_LLVM_MIDDLE_END_OPTION(
+        alloc_printf("-sanitize-address-destructor=%s", val));
     return 0;
   })
 
@@ -435,8 +269,9 @@ static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   OPT_EQ_AND_THEN(arg, "outline-instrumentation", {
     // clang driver translates this frontend option to middle-end options
     //          -mllvm -asan-instrumentation-with-call-threshold=0
-    ADD_MIDDLE_END_OPTION(is_neg ? "-as-instrumentation-with-call-threshold"
-                                 : "-as-instrumentation-with-call-threshold=0");
+    ADD_LLVM_MIDDLE_END_OPTION(
+        is_neg ? "-as-instrumentation-with-call-threshold"
+               : "-as-instrumentation-with-call-threshold=0");
     return 1;
   })
 
@@ -449,7 +284,7 @@ static u8 handle_asan_options(const char* arg, u8 is_mllvm_arg, u8 is_neg) {
   -fsanitize-thread-func-entry-exit
   -fsanitize-thread-memory-access
   -fsanitize-recover=address|all
- Replace with 
+ Replace with
    -mllvm -xxx
  Refer to SanitizerArgs.cpp:1142~1155
  */
@@ -475,7 +310,7 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
     if (!is_neg) {
       return 0;
     }
-    ADD_MIDDLE_END_OPTION("-ts-instrument-atomics=0");
+    ADD_LLVM_MIDDLE_END_OPTION("-ts-instrument-atomics=0");
     return 1;
   })
 
@@ -486,7 +321,7 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
     if (!is_neg) {
       return 0;
     }
-    ADD_MIDDLE_END_OPTION("-ts-instrument-func-entry-exit=0");
+    ADD_LLVM_MIDDLE_END_OPTION("-ts-instrument-func-entry-exit=0");
     return 1;
   })
 
@@ -498,8 +333,8 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
     if (!is_neg) {
       return 0;
     }
-    ADD_MIDDLE_END_OPTION("-ts-instrument-memory-accesses=0");
-    ADD_MIDDLE_END_OPTION("-ts-instrument-memintrinsics=0");
+    ADD_LLVM_MIDDLE_END_OPTION("-ts-instrument-memory-accesses=0");
+    ADD_LLVM_MIDDLE_END_OPTION("-ts-instrument-memintrinsics=0");
     return 1;
   })
 
@@ -585,112 +420,6 @@ static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
   return 0;
 }
 
-static u8 whether_to_support_dso_injection(const char *arg) {
-  // Construct command string, and transmit the argument to the scripyt
-  const char *command =
-      alloc_printf("%s/" XSAN_SUPPORT_DSO_CHECKER " %s", obj_path, arg);
-
-  // Execute the command
-  int status = system(command);
-  if (status == -1) {
-    PFATAL("Cannot execute script to check whether to support DSO "
-           "injection:\n\t%s",
-           command);
-  }
-
-  // Check the return status
-  if (WIFEXITED(status)) {
-    ck_free((void *)command);
-    int exit_code = WEXITSTATUS(status);
-    return exit_code == 0;
-  } else {
-    PFATAL("Command %s terminated abnormally", command);
-  }
-}
-
-static void init_sanitizer_setting(enum SanitizerType sanTy) {
-  u8 *str_options;
-  switch (sanTy) {
-  case ASan:
-  case TSan:
-  case UBSan:
-  case XSan:
-    /// TODO: support unmodified clang
-    // Use env var to control clang only perform frontend 
-    // transformation for sanitizers.
-    str_options = alloc_printf("%llu", xsan_options.mask);
-    setenv("XSAN_ONLY_FRONTEND", str_options, 1);
-
-    // Reuse the frontend code relevant to sanitizer
-    if (has(&xsan_options, ASan)) {
-        if (sanTy == XSan && !XSAN_CONTAINS_ASAN) {
-            FATAL("xsan did not contain asan, '-xsan' could not be used with '-fsanitize=address'");
-        }
-        cc_params[cc_par_cnt++] = "-fsanitize=address";
-    }
-    if (has(&xsan_options, TSan)) {
-        if (sanTy == XSan && !XSAN_CONTAINS_TSAN) {
-            FATAL("xsan did not contain tsan, '-xsan' could not be used with '-fsanitize=thread'");
-        }
-        cc_params[cc_par_cnt++] = "-fsanitize=thread";
-    }
-    if (has(&xsan_options, UBSan)) {
-      cc_params[cc_par_cnt++] = "-fsanitize=undefined";
-      /// FIXME:
-      if (!!getenv("XSAN_IN_ASAN_TEST") || !!getenv("XSAN_IN_TSAN_TEST")) {
-        /// There are so many C testcases of TSan/ASan end with suffix ".cpp",
-        /// leading to the compiler frontend set `getLangOpts().CPlusPlus =
-        /// true`. Subsequently, the C++ only check `-fsanitize=function` is
-        /// applied, and its dependency on RTTI makes the C testcases fail to
-        /// compile. Therefore, to make test pipepline happy, we need to disable
-        /// the `-fsanitize=function` option.
-
-        /// Notably, LLVM 17 uses type hash instead of RTTI to check function
-        /// type, and thus supports both C/C++ code without RTTI. See the
-        /// following commit for details:
-        ///   - No RTTI:
-        ///   https://github.com/llvm/llvm-project/commit/46f366494f3ca8cc98daa6fb4f29c7c446c176b6#diff-da4776ddc2b1fa6aaa0d2e00ff8a835dbec6d0606d2960c94875dc0502d222b8
-        ///   - Support C:
-        ///   https://github.com/llvm/llvm-project/commit/279a4d0d67c874e80c171666822f2fabdd6fa926#diff-9f23818ed51d0b117b5692129d0801721283d0f128a01cbc562353da0266d7adL948
-      
-        cc_params[cc_par_cnt++] = "-fno-sanitize=function";
-      }
-
-      /// Some sub-functionality of UBSan is duplicated with ASan
-      if (has(&xsan_options, ASan)) {
-        /// -object-size option is duplicated with -fsanitize=address, which
-        /// detects overflow issues for object accesses.
-        /// What's more, in LLVM 15, -fsanitize=object-size affects the 
-        /// the function inlining, which may cause some performance issues.
-        /// For those case using libc++: std::string str; str.size(); 
-        cc_params[cc_par_cnt++] = "-fno-sanitize=object-size";
-        /// -bounds option is duplicated with -fsanitize=address, which
-        /// detects overflow issues for array accesses.
-        cc_params[cc_par_cnt++] = "-fno-sanitize=bounds";
-        /// Similarly, -null option is duplicated with -fsanitize=address, which
-        /// detects null pointer dereferences.
-        cc_params[cc_par_cnt++] = "-fno-sanitize=null";
-      }
-    }
-
-    support_dso_inject = whether_to_support_dso_injection(cc_params[0]);
-    if (support_dso_inject) {
-      const char *ld_preload = getenv("LD_PRELOAD");
-      const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
-      const char *new_ld_preload =
-          (ld_preload != NULL)
-              ? (char *)alloc_printf("%s:%s", ld_preload, dso_path)
-              : dso_path;
-      setenv("LD_PRELOAD", new_ld_preload, 1);
-      setenv("XSAN_BASE_DIR", obj_path, 1);
-    }
-    break;
-  case MSan:
-  case SanNone:
-    return;
-  }
-}
-
 static u8 asan_use_globals_gc() {
   /*
     static bool asanUseGlobalsGC(const Triple &T, const CodeGenOptions &CGOpts) {
@@ -741,15 +470,16 @@ static void add_pass_options(enum SanitizerType sanTy) {
 
   if (has(&xsan_options, ASan)) {
     if (!asan_use_globals_gc()) {
-      ADD_MIDDLE_END_OPTION("-asan-globals-gc=0");
+      ADD_LLVM_MIDDLE_END_OPTION("-asan-globals-gc=0");
     }
 
     if (has(&xsan_recover_options, ASan)) {
-      ADD_MIDDLE_END_OPTION("-sanitize-recover-address");
+      ADD_LLVM_MIDDLE_END_OPTION("-sanitize-recover-address");
     }
   }
 }
 
+/// Pass is a specific feature for clang/LLVM
 static void regist_pass_plugin(enum SanitizerType sanTy) {
   /**
    * Need to enable corresponding llvm optimization level, 
@@ -812,147 +542,11 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
     return;
   }
   if (!has(&xsan_options, ASan)) {
-    ADD_MIDDLE_END_OPTION("-xsan-disable-asan");
+    ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-asan");
   }
   if (!has(&xsan_options, TSan)) {
-    ADD_MIDDLE_END_OPTION("-xsan-disable-tsan");
+    ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-tsan");
   }
-}
-
-static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
-  if (sanTy != XSan || support_dso_inject)
-    return;
-
-  /// TODO: only add this link arguments while TSan is enabled togother with LSan.
-  // Use Linker Response File to include lots of -wrap=<symbol> options in one file.
-  cc_params[cc_par_cnt++] = alloc_printf("-Wl,@%s/share/xsan_wrapped_symbols.txt", obj_path);
-}
-
-static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
-                                  u8 is_dso, u8 needs_shared_rt) {
-
-  /**
-   * Need to enable corresponding llvm optimization level, 
-   * where your pass is registed.
-   */
-  u8* san = "";
-  switch (sanTy) {
-  case ASan:
-    san = "asan";
-    break;
-  case TSan:
-    san = "tsan";
-    break;
-  case UBSan:
-    san = "ubsan_standalone";
-    break;
-  case XSan:
-    san = "xsan";
-    break;
-  case MSan:  
-  case SanNone:
-    return;
-  }
-
-  add_wrap_link_option(sanTy, is_cxx);
-
-  if (needs_shared_rt && (sanTy == ASan || sanTy == TSan || sanTy == UBSan)) {
-    cc_params[cc_par_cnt++] = alloc_printf("-Wl,-rpath,%s/lib/linux", obj_path);
-    cc_params[cc_par_cnt++] =
-        alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.so", obj_path, san);
-  }
-
-  /**
-    // Always link the static runtime regardless of DSO or executable.
-    if (SanArgs.needsAsanRt())
-      HelperStaticRuntimes.push_back("asan_static");
-
-    // Collect static runtimes.
-    if (Args.hasArg(options::OPT_shared)) {
-      // Don't link static runtimes into DSOs.
-      return;
-    }
-  */
-  
-  if (sanTy == ASan || sanTy == XSan) {
-    // Link all contents in *.a, rather than only link symbols in demands.
-    // e.g., link preinit_array symbol, which is not used in user program.
-    cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-    // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
-    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.%s_static-x86_64.a", obj_path, san);
-    // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
-    cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
-  }
-
-  if (is_dso) {
-    return;
-  }
-
-  if (needs_shared_rt) {
-    return;
-  }
-
-  // Link all contents in *.a, rather than only link symbols in demands.
-  cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-  // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
-  cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.a", obj_path, san);
-  if (is_cxx) {
-    cc_params[cc_par_cnt++] = alloc_printf("%s/lib/linux/libclang_rt.%s_cxx-x86_64.a", obj_path, san);
-  }
-  // Deativate the effect of `--whole-archive`, i.e., only link symbols in demands.
-  cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
-  // Customize the exported symbols
-  cc_params[cc_par_cnt++] =
-        alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s-x86_64.a.syms", obj_path, san);
-  if (is_cxx) {
-    cc_params[cc_par_cnt++] =
-          alloc_printf("-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms", obj_path, san);
-  }
-  cc_params[cc_par_cnt++] = "-lm";
-  cc_params[cc_par_cnt++] = "-ldl";
-  cc_params[cc_par_cnt++] = "-lpthread"; 
-  if (is_cxx) {
-    cc_params[cc_par_cnt++] = "-lstdc++";
-  }
-
-
-  /**
-   * Transfer the option to pass by `-mllvm -<opt>`
-   */
-  // cc_params[cc_par_cnt++] = "-mllvm";
-  // cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
-}
-
-static void afl_runtime() {
-  cc_params[cc_par_cnt++] = "-lrt";
-  cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-  cc_params[cc_par_cnt++] = alloc_printf("%s/lib/libafl_rt.a", obj_path);
-  cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
-}
-
-static void link_constructor() {
-  /**
-   * Link __attribute__((constructor)) function, seems that in static library,
-   * linker will not link the function if the function is not used in program.
-   * Maybe can use __attribute__((used)) ?
-   */ 
-  //cc_params[cc_par_cnt++] = "-Wl,-u,__dfsw_debug_func";
-  
-}
-
-
-static void sync_hook_id(char *dst, char *src) {
-  // In order to make sure MemlogPass and DFSanPass hook same instructions 
-  // with same HookID.
-  char buf[8];
-  memset(buf, 0, 8);
-  FILE* src_f = fopen(src, "r");
-  fread(buf, 1, sizeof(unsigned int), src_f);
-  fclose(src_f);
-
-  FILE* dst_f = fopen(dst, "w+");
-  fwrite(buf, 1, sizeof(unsigned int), dst_f);
-  fclose(dst_f);
 }
 
 static u8 handle_x_option(const u8* const* arg) {
@@ -1130,10 +724,12 @@ static void edit_params(u32 argc, const char** argv) {
 
     See ASan's testcase "init_fini_sections.cpp" for details.
   */
-  if (!only_lib)
+  if (!only_lib) {
     regist_pass_plugin(xsanTy);
+  }
+
   // *.c/cpp -o *.o, don't link sanitizer runtime library.
-  if (!have_c && !support_dso_inject) {
+  if (!have_c) {
     add_sanitizer_runtime(xsanTy, is_cxx, shared_linking, needs_shared_rt);
   }
 
@@ -1221,94 +817,6 @@ static void edit_params(u32 argc, const char** argv) {
     cc_params[cc_par_cnt++] = "-fno-builtin-strcasestr";
 
   }
-
-  /// Don't optimize initiatively
-  // if (!getenv("X_DONT_OPTIMIZE")) {
-  //   cc_params[cc_par_cnt++] = "-g";
-  //   if (!have_o) cc_params[cc_par_cnt++] = "-O3";
-  //   if (!have_unroll && !have_o) cc_params[cc_par_cnt++] = "-funroll-loops";
-  // }
-  
-
-  // afl_runtime();
-  
-  /*if (getenv("SYNC_HOOK_ID")) {
-    fprintf(stderr, "sync_hook_id\n");
-    if (getenv("MEMLOG_MODE")) {
-      sync_hook_id("/tmp/.DtaintHookID.txt", "/tmp/.MemlogHookID.txt");
-    }
-    else {
-      sync_hook_id("/tmp/.MemlogHookID.txt", "/tmp/.DtaintHookID.txt");
-    }
-    unsetenv("SYNC_HOOK_ID");
-  }*/
-  
-  // /**
-  //  * Enable pie since dfsan maps shadow memory at 0x10000-0x200200000000, 
-  //  * pie is needed to prevent overlapped.
-  //  */
-  // cc_params[cc_par_cnt++] = "-fPIE";
-  // cc_params[cc_par_cnt++] = "-fPIC";
-  // cc_params[cc_par_cnt++] = "-pie";
-  
-  /*if (getenv("X_NO_BUILTIN")) {
-
-    cc_params[cc_par_cnt++] = "-fno-builtin-strcmp";
-    cc_params[cc_par_cnt++] = "-fno-builtin-strncmp";
-    cc_params[cc_par_cnt++] = "-fno-builtin-strcasecmp";
-    cc_params[cc_par_cnt++] = "-fno-builtin-strncasecmp";
-    cc_params[cc_par_cnt++] = "-fno-builtin-memcmp";
-
-  }*/
-
-  /*cc_params[cc_par_cnt++] = "-D__AFL_HAVE_MANUAL_CONTROL=1";
-  cc_params[cc_par_cnt++] = "-D__AFL_COMPILER=1";
-  cc_params[cc_par_cnt++] = "-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION=1";*/
-
-  /* When the user tries to use persistent or deferred forkserver modes by
-     appending a single line to the program, we want to reliably inject a
-     signature into the binary (to be picked up by afl-fuzz) and we want
-     to call a function from the runtime .o file. This is unnecessarily
-     painful for three reasons:
-
-     1) We need to convince the compiler not to optimize out the signature.
-        This is done with __attribute__((used)).
-
-     2) We need to convince the linker, when called with -Wl,--gc-sections,
-        not to do the same. This is done by forcing an assignment to a
-        'volatile' pointer.
-
-     3) We need to declare __afl_persistent_loop() in the global namespace,
-        but doing this within a method in a class is hard - :: and extern "C"
-        are forbidden and __attribute__((alias(...))) doesn't work. Hence the
-        __asm__ aliasing trick.
-
-   */
-
- /* cc_params[cc_par_cnt++] = "-D__AFL_LOOP(_A)="
-    "({ static volatile char *_B __attribute__((used)); "
-    " _B = (char*)\"" PERSIST_SIG "\"; "
-#ifdef __APPLE__
-    "__attribute__((visibility(\"default\"))) "
-    "int _L(unsigned int) __asm__(\"___afl_persistent_loop\"); "
-#else
-    "__attribute__((visibility(\"default\"))) "
-    "int _L(unsigned int) __asm__(\"__afl_persistent_loop\"); "
-#endif*/ /* ^__APPLE__ */
-    /*"_L(_A); })";
-
-  cc_params[cc_par_cnt++] = "-D__AFL_INIT()="
-    "do { static volatile char *_A __attribute__((used)); "
-    " _A = (char*)\"" DEFER_SIG "\"; "
-#ifdef __APPLE__
-    "__attribute__((visibility(\"default\"))) "
-    "void _I(void) __asm__(\"___afl_manual_init\"); "
-#else
-    "__attribute__((visibility(\"default\"))) "
-    "void _I(void) __asm__(\"__afl_manual_init\"); "
-#endif*/ /* ^__APPLE__ */
-   // "_I(); } while (0)";
-
 
   cc_params[cc_par_cnt++] = "-fuse-ld=lld";
   // /usr/local/lib is not the default search path for lld, so we add it here.
@@ -1409,18 +917,18 @@ int main(int argc, const char** argv) {
   if (argc < 2) {
 
     SAYF("\n"
-         "This is a helper application for afl-fuzz. It serves as a drop-in replacement\n"
+         "This is a helper application for XSan. It serves as a drop-in replacement\n"
          "for clang, letting you recompile third-party code with the required runtime\n"
          "instrumentation. A common use pattern would be one of the following:\n\n"
 
-         "  CC=path/clang-wrapper ./configure\n"
-         "  CXX=path/clang-wrapper++ ./configure\n\n"
+         "  CC=path/xclang ./configure\n"
+         "  CXX=path/xclang++ ./configure\n\n"
 
-         "In contrast to the traditional afl-clang tool, this version is implemented as\n"
+         "In contrast to the traditional clang tool, this version is implemented as\n"
          "an LLVM pass and tends to offer improved performance with slow programs.\n\n"
 
-         "You can specify custom next-stage toolchain via AFL_CC and AFL_CXX. Setting\n"
-         "AFL_HARDEN enables hardening optimizations in the compiled code.\n\n");
+         "You can specify custom next-stage toolchain via X_CC and X_CXX. Setting\n"
+         "X_HARDEN enables hardening optimizations in the compiled code.\n\n");
 
     exit(1);
 
