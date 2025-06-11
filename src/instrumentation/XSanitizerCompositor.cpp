@@ -33,7 +33,6 @@ private:
   OptimizationLevel Level;
 };
 
-/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
 void registerAnalysisForXsan(PassBuilder &PB) {
   if (!options::ClDisableAsan) {
     registerAnalysisForAsan(PB);

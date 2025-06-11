@@ -1032,7 +1032,7 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
   }
 
   if (__asan::flags()->replace_str) {
-    uptr from_size = internal_strlen(from) + 1; 
+    uptr from_size = internal_strlen(from) + 1;
     CHECK_RANGES_OVERLAP("strcpy", to, from_size, from, from_size);
     XSAN_READ_RANGE(ctx, from, from_size);
     XSAN_WRITE_RANGE(ctx, to, from_size);

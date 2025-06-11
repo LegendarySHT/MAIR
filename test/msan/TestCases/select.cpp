@@ -17,6 +17,6 @@ int main(int argc, char **argv) {
   // CHECK: WARNING: MemorySanitizer: use-of-uninitialized-value
   // CHECK: {{#0 0x.* in main .*select.cpp:}}[[@LINE-3]]
 
-  // CHECK: SUMMARY: XSan: use-of-uninitialized-value {{.*select.cpp:.* main}}
+  // CHECK: SUMMARY: {{MemorySanitizer|XSan}}: use-of-uninitialized-value {{.*select.cpp:.* main}}
   return 0;
 }

@@ -590,7 +590,7 @@ struct Allocator {
       PoisonShadow((uptr)allocated, allocated_size, kAsanInternalHeapMagic);
     }
 
-    uptr user_beg = reinterpret_cast<uptr>(allocated);
+    // uptr user_beg = reinterpret_cast<uptr>(allocated);
 
     /// TODO: should unpoison the block for internal allocation?
     // uptr size_rounded_down_to_granularity =
@@ -615,7 +615,7 @@ struct Allocator {
     // else
     //   thread_stats.malloced_by_size[SizeClassMap::ClassID(needed_size)]++;
 
-    void *res = reinterpret_cast<void *>(user_beg);
+    // void *res = reinterpret_cast<void *>(user_beg);
 
     // __xsan::XsanAllocHook(user_beg, size, stack);
     /// Internal allocations do not occur during signal processing

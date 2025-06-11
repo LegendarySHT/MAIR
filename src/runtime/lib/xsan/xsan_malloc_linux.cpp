@@ -126,7 +126,7 @@ INTERCEPTOR(uptr, malloc_usable_size, void *ptr) {
 #  if SANITIZER_INTERCEPT_MALLOPT_AND_MALLINFO
 // Interceptors use NRVO and assume that sret will be pre-allocated in
 // caller frame.
-INTERCEPTOR(__sanitizer_struct_mallinfo, mallinfo, ) {
+INTERCEPTOR(__sanitizer_struct_mallinfo, mallinfo, void) {
   __sanitizer_struct_mallinfo sret;
   XsanInitFromRtl();
   internal_memset(&sret, 0, sizeof(sret));
@@ -134,7 +134,7 @@ INTERCEPTOR(__sanitizer_struct_mallinfo, mallinfo, ) {
   return sret;
 }
 
-INTERCEPTOR(__sanitizer_struct_mallinfo2, mallinfo2, ) {
+INTERCEPTOR(__sanitizer_struct_mallinfo2, mallinfo2, void) {
   __sanitizer_struct_mallinfo2 sret;
   XsanInitFromRtl();
   internal_memset(&sret, 0, sizeof(sret));

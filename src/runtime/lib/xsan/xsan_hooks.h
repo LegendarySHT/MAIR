@@ -300,6 +300,7 @@ PSEUDO_MACRO void CopyRange(void *_ctx, const void *dst, const void *src,
   XSAN_HOOKS_EXEC(CopyRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
                   dst, src, size, stack);
 }
+// "move" works properly when source and destination overlap, like memmove.
 PSEUDO_MACRO void MoveRange(void *_ctx, const void *dst, const void *src,
                             uptr size, BufferedStackTrace &stack) {
   XsanInterceptorContext *ctx = (XsanInterceptorContext *)_ctx;

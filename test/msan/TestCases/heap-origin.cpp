@@ -27,5 +27,5 @@ int main(int argc, char **argv) {
   // CHECK-ORIGINS: {{#0 0x.* in .*malloc}}
   // CHECK-ORIGINS: {{#1 0x.* in main .*heap-origin.cpp:}}[[@LINE-7]]
 
-  // CHECK: SUMMARY: XSan: use-of-uninitialized-value {{.*heap-origin.cpp:.* main}}
+  // CHECK: SUMMARY: {{MemorySanitizer|XSan}}: use-of-uninitialized-value {{.*heap-origin.cpp:.* main}}
 }

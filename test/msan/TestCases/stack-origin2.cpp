@@ -39,5 +39,5 @@ int main(int argc, char **argv) {
   // CHECK-ORIGINS: Uninitialized value was created by an allocation of 'x' in the stack frame
   // CHECK-ORIGINS: {{#0 0x.* in f .*stack-origin2.cpp:}}[[@LINE-11]]
 
-  // CHECK: SUMMARY: XSan: use-of-uninitialized-value {{.*stack-origin2.cpp:.* main}}
+  // CHECK: SUMMARY: {{MemorySanitizer|XSan}}: use-of-uninitialized-value {{.*stack-origin2.cpp:.* main}}
 }

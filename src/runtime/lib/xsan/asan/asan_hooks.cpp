@@ -139,10 +139,7 @@ ASAN_INTERFACE_HOOK(4, read, load)
 ASAN_INTERFACE_HOOK(8, read, load)
 ASAN_INTERFACE_HOOK(16, read, load)
 
-template <>
-void AsanHooks ::__xsan_write<1>(uptr p) {
-  __asan_store1(p);
-}
+ASAN_INTERFACE_HOOK(1, write, store)
 ASAN_INTERFACE_HOOK(2, write, store)
 ASAN_INTERFACE_HOOK(4, write, store)
 ASAN_INTERFACE_HOOK(8, write, store)

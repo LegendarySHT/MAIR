@@ -203,6 +203,9 @@ void XsanThread::ThreadStart() {
   {
     // Thread-local state is not initialized yet.
     __xsan::ScopedIgnoreInterceptors ignore;
+    // Some real function calls alloc, which trigger __sanitizer_malloc_hook and
+    // may cause instrumented code do check and read uninitialized thread info.
+    // So we need to do internal allocation here.
     __xsan::ScopedXsanInternal internal;
 
     next_stack_top_ = next_stack_bottom_ = 0;

@@ -947,7 +947,7 @@ public:
 
 AnalysisKey TsanTargetsToInstrumentAnalysis::Key;
 
-/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+/// Moved to this file, as the type information is needed there.
 void registerAnalysisForTsan(PassBuilder &PB) {
   PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
     FAM.registerPass([&] { return TsanTargetsToInstrumentAnalysis(); });

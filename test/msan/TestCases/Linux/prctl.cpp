@@ -17,7 +17,7 @@ int main(void) {
   if (name[6] != '\0') {
     return 0;
   }
-  // CHECK: SUMMARY: XSan: use-of-uninitialized-value {{.*prctl.cpp}}:[[@LINE-3]]
+  // CHECK: SUMMARY: {{MemorySanitizer|XSan}}: use-of-uninitialized-value {{.*prctl.cpp}}:[[@LINE-3]]
 
   return 0;
 }

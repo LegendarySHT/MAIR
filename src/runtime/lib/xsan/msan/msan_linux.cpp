@@ -82,7 +82,7 @@ static bool ProtectMemoryRange(uptr beg, uptr size, const char *name) {
 }
 
 static void CheckMemoryLayoutSanity() {
-  uptr prev_end = 0;
+  // uptr prev_end = 0;
   for (unsigned i = 0; i < kMemoryLayoutSize; ++i) {
     uptr start = kMemoryLayout[i].start;
     uptr end = kMemoryLayout[i].end;
@@ -108,7 +108,7 @@ static void CheckMemoryLayoutSanity() {
       CHECK(MEM_IS_ORIGIN(MEM_TO_ORIGIN(addr)));
       CHECK_EQ(MEM_TO_ORIGIN(addr), SHADOW_TO_ORIGIN(MEM_TO_SHADOW(addr)));
     }
-    prev_end = end;
+    // prev_end = end;
   }
 }
 

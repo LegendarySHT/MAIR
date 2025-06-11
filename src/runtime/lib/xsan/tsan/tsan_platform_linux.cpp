@@ -376,7 +376,7 @@ void InitializePlatformEarly() {
 #    endif
 #  endif
 
-// Remove this to InitializePlatform to avoid call getlim before
+// Move this to InitializePlatform to avoid call getlim before
 // interceptors are initialized.
 // #  if !SANITIZER_GO
 //   // Heap has not been allocated yet

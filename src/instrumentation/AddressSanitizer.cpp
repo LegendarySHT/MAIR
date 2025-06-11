@@ -3674,7 +3674,7 @@ void addAsanRequireAnalysisPass(SubSanitizers &MPM, FunctionPassManager &FPM) {
       Opts.Opts, Opts.UseGlobalGC, Opts.UseOdrIndicator, Opts.DestructorKind));
 }
 
-/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+/// Moved to this file, as the type information is needed there.
 void registerAnalysisForAsan(PassBuilder &PB) {
   PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
     FAM.registerPass([&] { return AsanTargetsToInstrumentAnalysis(); });

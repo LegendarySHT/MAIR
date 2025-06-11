@@ -5709,11 +5709,11 @@ bool MemorySanitizer::sanitizeFunction(Function &F, TargetLibraryInfo &TLI) {
 
 namespace __xsan {
 
-/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+/// Moved to this file, as the type information is needed there.
 void registerAnalysisForMsan(PassBuilder &PB) {
-  PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
-    // FAM.registerPass([&] { return TsanTargetsToInstrumentAnalysis(); });
-  });
+  // PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
+  //   FAM.registerPass([&] { return TsanTargetsToInstrumentAnalysis(); });
+  // });
 }
 
 void addMsanRequireAnalysisPass(SubSanitizers &MPM, FunctionPassManager &FPM) {

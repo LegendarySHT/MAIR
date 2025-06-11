@@ -36,6 +36,6 @@ int main() {
   // CHECK-ORIGINS: {{#0 0x.* in __sanitizer_dtor_callback}}
   // CHECK-ORIGINS: {{#1 0x.* in .*~Simple.*cpp:}}[[@LINE-18]]:
 
-  // CHECK-UAD: SUMMARY: XSan: use-of-uninitialized-value {{.*main}}
-  // CHECK-UAD-OFF-NOT: SUMMARY: XSan: use-of-uninitialized-value
+  // CHECK-UAD: SUMMARY: {{MemorySanitizer|XSan}}: use-of-uninitialized-value {{.*main}}
+  // CHECK-UAD-OFF-NOT: SUMMARY: {{MemorySanitizer|XSan}}: use-of-uninitialized-value
 }

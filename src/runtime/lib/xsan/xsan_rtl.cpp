@@ -64,7 +64,7 @@ uptr ALWAYS_INLINE HeapEnd() {
   return HeapMemEnd() + PrimaryAllocator::AdditionalSize();
 }
 
-static void ProtectRange(uptr beg, uptr end) { 
+[[maybe_unused]] static void ProtectRange(uptr beg, uptr end) {
   if (beg == end) return;
   ProtectGap(beg, end - beg, ZeroBaseShadowStart, ZeroBaseMaxShadowStart);
 }

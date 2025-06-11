@@ -14,14 +14,6 @@
 
 namespace __xsan {
 
-enum class ScopedFunc {
-  calloc,
-  getaddrinfo,
-  strdup,
-  common,
-  signal,
-};
-
 // The use of templates here ensures that the `Context` class for sanitizers
 // using the default context is not the same class. This is necessary because
 // implicit type conversion rules need to be defined in bulk. Without templates,
@@ -224,6 +216,7 @@ struct DefaultHooks {
   PSEUDO_MACRO static void CopyRange(const Context *ctx, const void *dst,
                                      const void *src, uptr size,
                                      BufferedStackTrace &stack) {}
+  // "move" still works when source and destination overlap, like memmove.
   PSEUDO_MACRO static void MoveRange(const Context *ctx, const void *dst,
                                      const void *src, uptr size,
                                      BufferedStackTrace &stack) {}

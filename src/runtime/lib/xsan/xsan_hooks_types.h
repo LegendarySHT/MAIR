@@ -49,6 +49,14 @@ class ScopedSanitizerToolName {
   const char *const old_tool_name_;
 };
 
+enum class ScopedFunc {
+  calloc,
+  getaddrinfo,
+  strdup,
+  common,
+  signal,
+};
+
 // -------------------------- Hooks Checks --------------------------
 
 // If T is a valid type, `using void_t = void` will be exported
