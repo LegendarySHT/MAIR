@@ -13,10 +13,29 @@ using namespace llvm;
 
 namespace {
 constexpr const char *UbsanInterfacePrefix = "__ubsan_";
-
-}
+constexpr char kUbsanMD[] = "xsan.ubsan";
+static unsigned UbsanMDKindID = 0;
+} // namespace
 
 namespace __xsan {
+
+void markAsUbsanInst(llvm::Instruction &I) {
+  if (isUbsanInst(I)) {
+    return;
+  }
+  auto &Ctx = I.getContext();
+  if (!UbsanMDKindID) {
+    UbsanMDKindID = Ctx.getMDKindID(kUbsanMD);
+  }
+  MDNode *N = MDNode::get(Ctx, None);
+  I.setMetadata(UbsanMDKindID, N);
+}
+
+bool isUbsanInst(const llvm::Instruction &I) {
+  if (!UbsanMDKindID)
+    return false;
+  return I.hasMetadata(UbsanMDKindID);
+}
 
 // E.g., __ubsan_handle_add_overflow
 bool isUbsanInterfaceCall(const Instruction &I) {
@@ -28,8 +47,11 @@ bool isUbsanInterfaceCall(const Instruction &I) {
   }
   auto &CB = cast<CallBase>(I);
   auto *CalledFunction = CB.getCalledFunction();
-  return CalledFunction &&
-         CalledFunction->getName().startswith(UbsanInterfacePrefix);
+  return CalledFunction && isUbsanFunction(*CalledFunction);
+}
+
+bool isUbsanFunction(const Function &F) {
+  return F.getName().startswith(UbsanInterfacePrefix);
 }
 
 /*
@@ -49,15 +71,15 @@ label %4, label %6, !prof !6, !nosanitize !5
   ret i32 %7
 ```
 */
-bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &CB, bool strict) {
-  if (!isNoSanitize(CB)) {
+bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &I) {
+  if (!isNoSanitize(I)) {
     return false;
   }
 
   // Check if the call is a checked integer overflow intrinsic call.
   // E.g, llvm.sadd.with.overflow.i32, llvm.uadd.with.overflow.i32, etc.
   // UBSan/Integer Sanitizer will instrument these calls.
-  IntrinsicInst *II = dyn_cast<IntrinsicInst>(&CB);
+  IntrinsicInst *II = dyn_cast<IntrinsicInst>(&I);
   if (!II) {
     return false;
   }
@@ -68,53 +90,19 @@ bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &CB, bool strict) {
     return false;
   }
 
-  // Check if the call affect conditional branch.
-  BranchInst *BI = dyn_cast<BranchInst>(CB.getParent()->getTerminator());
-  if (!BI || !BI->isConditional()) {
-    return false;
-  }
-
-  // Check if the branch instruction has a successor block that is a UBSan
-  // fallback block.
-  if (!any_of(BI->successors(), isUbsanFallbackBlock)) {
-    return false;
-  }
-
-  if (!strict) {
-    return true;
-  }
-
-  // Track the use-def chain of the branch instruction.
-  Value *V = BI->getCondition();
-  const unsigned MaxLookup = 2;
-  for (unsigned Count = 0; Count < MaxLookup; ++Count) {
-    // If V is a xor instruction, we need to check the two operands.
-    if (auto *Xor = dyn_cast<BinaryOperator>(V)) {
-      if (Xor->getOpcode() != BinaryOperator::Xor) {
-        return false;
-      }
-      // In O0 :  xor i1 %x, true
-      V = Xor->getOperand(0);
-    }
-    // Match extractvalue instruction.
-    else if (auto *ExtractValue = dyn_cast<ExtractValueInst>(V)) {
-      if (ExtractValue->getNumIndices() != 1) {
-        return false;
-      }
-      unsigned Index = ExtractValue->getIndices()[0];
-      if (Index != 1) {
-        return false;
-      }
-      V = ExtractValue->getAggregateOperand();
-    }
-  }
-  return V == &CB;
+  return isUbsanInst(I);
 }
 
 bool isUbsanFallbackBlock(const llvm::BasicBlock &BB) {
+  
   if (!isNoSanitize(*BB.getTerminator())) {
     return false;
   }
+  // Has only one predecessor.
+  if (BB.getSinglePredecessor() == nullptr) {
+    return false;
+  }
+  
   return any_of(BB, isUbsanInterfaceCall);
 }
 

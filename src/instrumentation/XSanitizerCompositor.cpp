@@ -1,6 +1,7 @@
 #include "AttributeTaggingPass.hpp"
 #include "Instrumentation.h"
 #include "PassRegistry.h"
+#include "UbsanInstTagging.hpp"
 #include "Utils/Logging.h"
 #include "Utils/Options.h"
 #include "xsan_common.h"
@@ -37,6 +38,7 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
 
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
+        MPM.addPass(UbsanInstTaggingPass());
         MPM.addPass(SanitizerCompositorPass(level));
       });
 
@@ -47,6 +49,7 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
         if (Name == "xsan") {
           MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
           MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+          MPM.addPass(UbsanInstTaggingPass());
           MPM.addPass(SanitizerCompositorPass(OptimizationLevel::O0));
           return true;
         }

@@ -16,12 +16,14 @@ set(XSAN_PASS_COMMON
   AttributeTaggingPass.cpp
   Instrumentation.cpp
   PassRegistry.cpp
+  UbsanInstTagging.cpp
   Analysis/ActiveMopAnalysis.cpp
   Analysis/MopRecurrenceReducer.cpp
   Analysis/TsanMopAnalysis.cpp
   Utils/ValueUtils.cpp
   Utils/Logging.cpp
   Utils/Options.cpp
+  Utils/UbsanUtils.cpp
 )
 
 # TODO: all pass into 1 so
