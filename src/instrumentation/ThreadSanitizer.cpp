@@ -46,7 +46,6 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Instrumentation.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/EscapeEnumerator.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/ModuleUtils.h"
@@ -783,8 +782,8 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     Value *Args[] = {IRB.CreatePointerCast(Addr, PtrTy),
                      IRB.CreateBitOrPointerCast(SI->getValueOperand(), Ty),
                      createOrdering(&IRB, SI->getOrdering())};
-    CallInst *C = CallInst::Create(TsanAtomicStore[Idx], Args);
-    ReplaceInstWithInst(I, C);
+    IRB.CreateCall(TsanAtomicStore[Idx], Args);
+    SI->eraseFromParent();
   } else if (AtomicRMWInst *RMWI = dyn_cast<AtomicRMWInst>(I)) {
     Value *Addr = RMWI->getPointerOperand();
     int Idx =
@@ -798,11 +797,12 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     const unsigned BitSize = ByteSize * 8;
     Type *Ty = Type::getIntNTy(IRB.getContext(), BitSize);
     Type *PtrTy = Ty->getPointerTo();
-    Value *Args[] = {IRB.CreatePointerCast(Addr, PtrTy),
-                     IRB.CreateIntCast(RMWI->getValOperand(), Ty, false),
+    Value *Val = RMWI->getValOperand();
+    Value *Args[] = {Addr, IRB.CreateBitOrPointerCast(Val, Ty),
                      createOrdering(&IRB, RMWI->getOrdering())};
-    CallInst *C = CallInst::Create(F, Args);
-    ReplaceInstWithInst(I, C);
+    Value *C = IRB.CreateCall(F, Args);
+    I->replaceAllUsesWith(IRB.CreateBitOrPointerCast(C, Val->getType()));
+    I->eraseFromParent();
   } else if (AtomicCmpXchgInst *CASI = dyn_cast<AtomicCmpXchgInst>(I)) {
     Value *Addr = CASI->getPointerOperand();
     Type *OrigOldValTy = CASI->getNewValOperand()->getType();
@@ -841,8 +841,8 @@ bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
     FunctionCallee F = FI->getSyncScopeID() == SyncScope::SingleThread
                            ? TsanAtomicSignalFence
                            : TsanAtomicThreadFence;
-    CallInst *C = CallInst::Create(F, Args);
-    ReplaceInstWithInst(I, C);
+    IRB.CreateCall(F, Args);
+    FI->eraseFromParent();
   }
   return true;
 }
