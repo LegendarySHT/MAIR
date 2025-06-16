@@ -1,10 +1,9 @@
 #include "UbsanUtils.h"
 
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/IR/InstIterator.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
@@ -13,6 +12,7 @@ using namespace llvm;
 
 namespace {
 constexpr const char *UbsanInterfacePrefix = "__ubsan_";
+constexpr const char *UbsanReportPrefix = "__ubsan_handle_";
 constexpr char kUbsanMD[] = "xsan.ubsan";
 static unsigned UbsanMDKindID = 0;
 } // namespace
@@ -50,8 +50,21 @@ bool isUbsanInterfaceCall(const Instruction &I) {
   return CalledFunction && isUbsanFunction(*CalledFunction);
 }
 
+bool isUbsanReportCall(const Instruction &I) {
+  if (!isUbsanInterfaceCall(I)) {
+    return false;
+  }
+  auto &CB = cast<CallBase>(I);
+  auto *CalledFunction = CB.getCalledFunction();
+  return CalledFunction && isUbsanReportFunction(*CalledFunction);
+}
+
 bool isUbsanFunction(const Function &F) {
   return F.getName().startswith(UbsanInterfacePrefix);
+}
+
+bool isUbsanReportFunction(const Function &F) {
+  return F.getName().startswith(UbsanReportPrefix);
 }
 
 /*
@@ -72,6 +85,10 @@ label %4, label %6, !prof !6, !nosanitize !5
 ```
 */
 bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &I) {
+  static constexpr Intrinsic::ID ValidIDs[] = {
+      Intrinsic::sadd_with_overflow, Intrinsic::uadd_with_overflow,
+      Intrinsic::ssub_with_overflow, Intrinsic::usub_with_overflow};
+
   if (!isNoSanitize(I)) {
     return false;
   }
@@ -83,9 +100,6 @@ bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &I) {
   if (!II) {
     return false;
   }
-  const Intrinsic::ID ValidIDs[] = {
-      Intrinsic::sadd_with_overflow, Intrinsic::uadd_with_overflow,
-      Intrinsic::ssub_with_overflow, Intrinsic::usub_with_overflow};
   if (!llvm::is_contained(ValidIDs, II->getIntrinsicID())) {
     return false;
   }
@@ -94,7 +108,6 @@ bool isCheckedIntegerOverflowIntrinsicCall(llvm::Instruction &I) {
 }
 
 bool isUbsanFallbackBlock(const llvm::BasicBlock &BB) {
-  
   if (!isNoSanitize(*BB.getTerminator())) {
     return false;
   }
@@ -102,8 +115,8 @@ bool isUbsanFallbackBlock(const llvm::BasicBlock &BB) {
   if (BB.getSinglePredecessor() == nullptr) {
     return false;
   }
-  
-  return any_of(BB, isUbsanInterfaceCall);
+
+  return any_of(BB, isUbsanReportCall);
 }
 
 } // namespace __xsan

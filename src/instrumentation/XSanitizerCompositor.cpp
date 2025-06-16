@@ -36,9 +36,15 @@ private:
 void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
   registerAnalysisForXsan(PB);
 
+  // Register on the start of the pipeline.
+  PB.registerPipelineStartEPCallback(
+      [](ModulePassManager &MPM, OptimizationLevel _) {
+        MPM.addPass(UbsanInstTaggingPass());
+      });
+
+  // Register on the end of the pipeline.
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel level) {
-        MPM.addPass(UbsanInstTaggingPass());
         MPM.addPass(SanitizerCompositorPass(level));
       });
 

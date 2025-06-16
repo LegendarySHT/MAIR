@@ -79,7 +79,6 @@ PreservedAnalyses UbsanInstTaggingPass::run(Module &M,
     return PreservedAnalyses::all();
   }
 
-
   SmallVector<Instruction *, 4> UbsanBoundary;
   auto CollectBoundaryInst = [&](Instruction &I) -> bool {
     if (!__xsan::isNoSanitize(I)) {
@@ -119,7 +118,11 @@ PreservedAnalyses UbsanInstTaggingPass::run(Module &M,
       assert(Pred && "UBSan fallback block should have only one predecessor");
       // Find the branch instruction in the predecessor block.
       auto *Br = dyn_cast<BranchInst>(Pred->getTerminator());
-      assert(Br && "UBSan fallback block should have only one predecessor");
+      if (!Br || !__xsan::isNoSanitize(*Br)) {
+        // The UBSan's check might be eliminated by the optimization.
+        // Some UBSan's fallback blocks are not guarded by a UBSan's check.
+        continue;
+      }
       // Backward tracking
       walkOverUseDefChain(*Br, CollectBoundaryInst);
       // Forward tracking
