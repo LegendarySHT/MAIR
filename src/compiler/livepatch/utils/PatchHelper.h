@@ -20,6 +20,9 @@ std::filesystem::path getXsanAbsPath(std::string_view rel_path);
 std::filesystem::path getSelfPath();
 // Return true if the executable file is PIE
 bool is_self_proc_pie();
+// Return the base address of the executable file
+/// TODO: support base address resolution for shared library.
+void *get_base_address();
 
 // We only patch clang.
 bool isPatchingClang();

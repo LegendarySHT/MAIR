@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <dlfcn.h>
 #include <filesystem>
+#include <link.h>
 #include <llvm/Support/Memory.h>
 #include <llvm/Support/Process.h>
 #include <string_view>
@@ -231,3 +232,36 @@ void XsanPatch::applyBackup(void *FuncAddr) const {
   ScopedApplyPatch Scoper(FuncAddr);
   std::memcpy(FuncAddr, backup, sizeof(Data));
 }
+
+// Return the base address of the executable file
+void *get_base_address() {
+  static std::optional<void *> base_addr = std::nullopt;
+  if (base_addr.has_value()) {
+    return base_addr.value();
+  }
+  std::filesystem::path exe_path = getSelfPath();
+  std::string exe_path_str = exe_path.string();
+  struct ctx_t {
+    std::string exe_path_str;
+    void *base_addr;
+  } ctx = {exe_path_str, (void *)1};
+  dl_iterate_phdr(
+      [](struct dl_phdr_info *info, size_t size, void *data) -> int {
+        auto *ctx = static_cast<ctx_t *>(data);
+        if (!info->dlpi_name || info->dlpi_name[0] == '\0' ||
+            ctx->exe_path_str == info->dlpi_name) {
+          ctx->base_addr = (void *)info->dlpi_addr;
+          return 1; // Stop iteration
+        }
+        return 0; // Continue iteration
+      },
+      &ctx);
+
+  if (ctx.base_addr == (void *)1) {
+    FATAL("Failed to find base address via dl_iterate_phdr");
+  }
+  base_addr = ctx.base_addr;
+  return base_addr.value();
+}
+
+bool is_self_proc_pie() { return get_base_address() != (void *)0; }
