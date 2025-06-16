@@ -1,3 +1,14 @@
+# Clang is well-designed, exposing lots of functionalities into libraries, e.g.,
+# libclang-cpp.so.
+# 
+# We should intercept the following dynamic functions:
+# - `SanitizerArgs::SanitizerArgs`: to suppress the error when enable 'incompatible' sanitizer.
+#   - Could not just intercept the `Driver::Diag`, as we have to guarantee the functionality of
+#     the enabled sanitizers.
+# - `EmitBackendOutput` : to disable the loading of passes.
+# - `addSanitizerRuntimes` : to replace the link options of sanitizer runtimes.
+# - `PassBuilder::build*Pipeline`:  (Optional) to reconstruct the pass pipeline.
+
 set(CMAKE_FIND_PACKAGE_SORT_ORDER NATURAL)
 set(CMAKE_FIND_PACKAGE_SORT_DIRECTION DEC)
 

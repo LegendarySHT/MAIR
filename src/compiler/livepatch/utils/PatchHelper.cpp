@@ -93,18 +93,43 @@ fs::path getXsanAbsPath(std::string_view rel_path) {
   return abs_path;
 }
 
-static const char *getMangledName(void *InterceptorFunc) {
+static const char *getMangledName(void *SymAddr) {
   Dl_info Info;
-  dladdr(InterceptorFunc, &Info);
+  if (!dladdr(SymAddr, &Info)) {
+    FATAL("dladdr failed for address %p. Error: %s", SymAddr,
+          dlerror() ? dlerror() : "Not available");
+  }
   return Info.dli_sname;
 }
 
-void *getRealFuncAddr(const char *ManagledName) {
-  void *RealAddr = dlsym(RTLD_NEXT, ManagledName);
-  if (!RealAddr) {
-    FATAL("Failed to find the real function address for %s", ManagledName);
+static const char *getDSOName(void *SymAddr) {
+  Dl_info Info;
+  if (!dladdr(SymAddr, &Info)) {
+    FATAL("dladdr failed for address %p. Error: %s", SymAddr,
+          dlerror() ? dlerror() : "Not available");
   }
-  return RealAddr;
+  return Info.dli_fname;
+}
+
+static void *checkedDlsym(void *__restrict handle,
+                          const char *__restrict name) {
+  void *addr = dlsym(handle, name);
+  const char *err = dlerror();
+  if (err) {
+    FATAL("dlsym(%s, \"%s\") failed: %s",
+          handle == (void *)RTLD_NEXT ? "RTLD_NEXT" : "RTLD_DEFAULT", name,
+          err);
+  }
+  if (!addr) {
+    FATAL("Failed to find the real function address for %s, but dlerror() is "
+          "null.",
+          name);
+  }
+  return addr;
+}
+
+void *getRealFuncAddr(const char *ManagledName) {
+  return checkedDlsym(RTLD_NEXT, ManagledName);
 }
 
 void *getRealFuncAddr(void *InterceptorFunc) {
@@ -113,15 +138,12 @@ void *getRealFuncAddr(void *InterceptorFunc) {
 }
 
 void *getMyFuncAddr(const char *ManagledName) {
-  Dl_info Info;
-  void *MyFuncAddr = dlsym(RTLD_DEFAULT, ManagledName);
-  if (!MyFuncAddr) {
-    FATAL("Failed to find my function address for %s", ManagledName);
-  }
-  dladdr(MyFuncAddr, &Info);
-  if (!llvm::StringRef(Info.dli_fname).endswith(XSAN_DSO_PATCH_FILE)) {
-    FATAL("Found wrong my function address for %s, please check LD_PRELOAD",
-          ManagledName);
+  void *MyFuncAddr = checkedDlsym(RTLD_DEFAULT, ManagledName);
+  const char *DSOName = getDSOName(MyFuncAddr);
+  if (!llvm::StringRef(DSOName).endswith(XSAN_DSO_PATCH_FILE)) {
+    FATAL("Found wrong my function address for %s, please check LD_PRELOAD. "
+          "DSOName: %s",
+          ManagledName, DSOName);
   }
   return MyFuncAddr;
 }

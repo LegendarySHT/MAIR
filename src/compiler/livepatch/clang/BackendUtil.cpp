@@ -22,7 +22,7 @@ void clang::EmitBackendOutput(DiagnosticsEngine &Diags,
                               const LangOptions &LOpts, StringRef TDesc,
                               Module *M, BackendAction Action,
                               std::unique_ptr<raw_pwrite_stream> OS) {
-  static SanitizerMask HackedSanitizers =
+  static constexpr SanitizerMask HackedSanitizers =
       SanitizerKind::Memory | SanitizerKind::Address | SanitizerKind::Thread;
   LangOptions NewLangOpts = LOpts;
   if (::XsanEnabled) {
