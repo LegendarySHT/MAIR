@@ -48,31 +48,48 @@ SanitizerType getSanType() {
   return sanTy;
 }
 
-bool isPatchingClang() {
+fs::path getSelfPath() {
+  static std::optional<fs::path> self_path = std::nullopt;
+  if (self_path.has_value()) {
+    return self_path.value();
+  }
+
   // Get the executable path of the current process.
   char proc_path[PATH_MAX];
   ssize_t len = readlink("/proc/self/exe", proc_path, sizeof(proc_path) - 1);
   if (len == -1) {
-    return false;
+    FATAL("Failed to read /proc/self/exe");
   }
   proc_path[len] = '\0';
 
   // Obtain the executable name.
-  std::string pname = fs::path(proc_path).filename().string();
+  self_path = fs::path(proc_path);
+  return self_path.value();
+}
+
+bool isPatchingClang() {
+  // Obtain the executable name.
+  std::string pname = getSelfPath().filename().string();
   llvm::StringRef proc_name = pname;
   // Match clang, clang++, clang-15, etc
   return proc_name.startswith("clang");
 }
 
 fs::path getThisPatchDsoPath() {
+  static std::optional<fs::path> this_dso_path = std::nullopt;
+  if (this_dso_path.has_value()) {
+    return this_dso_path.value();
+  }
   fs::path path;
   Dl_info info;
   // Pass the address of the current function to dladdr
   if (dladdr((void *)&getThisPatchDsoPath, &info) != 0 && info.dli_fname) {
     /// Canonicalize the path to remove any symbolic links.
-    return fs::canonical(info.dli_fname);
+    this_dso_path = fs::canonical(info.dli_fname);
+  } else {
+    this_dso_path = fs::path();
   }
-  return "";
+  return this_dso_path.value();
 }
 
 fs::path getXsanAbsPath(std::string_view rel_path) {

@@ -16,6 +16,10 @@ SanitizerType getSanType();
 
 std::filesystem::path getThisPatchDsoPath();
 std::filesystem::path getXsanAbsPath(std::string_view rel_path);
+// Get the executable path of the current process.
+std::filesystem::path getSelfPath();
+// Return true if the executable file is PIE
+bool is_self_proc_pie();
 
 // We only patch clang.
 bool isPatchingClang();
