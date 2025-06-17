@@ -1,6 +1,9 @@
 #ifndef _COMPILER_CONFIG_H
 #define _COMPILER_CONFIG_H
 
+#define HAS_LLVM_OBJECT @HAS_LLVM_OBJECT@
+#define HAS_LIBELF @HAS_LIBELF@
+
 #define XSAN_PATH "@XSAN_BIN_DIR@"
 
 /// TODO: migrate to common.h
