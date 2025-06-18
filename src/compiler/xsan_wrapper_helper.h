@@ -3,6 +3,8 @@
 #include "types.h"
 #include "xsan_common.h"
 
+extern u8* obj_path; /* Path to runtime libraries         */
+
 // ---- Implemented in clang_wrapper.c/gcc_wrapper.c ----
 void add_param(const char *param);
 
@@ -81,4 +83,7 @@ enum SanitizerType detect_san_type(const u32 argc, const char *argv[]);
 void init_sanitizer_setting(enum SanitizerType sanTy);
 void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx);
 void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
-                           u8 needs_shared_rt);
+    u8 needs_shared_rt);
+u8* find_object(u8* obj, u8* argv0);
+void find_obj(u8* argv0);
+u8 handle_x_option(const u8* const* arg, u8* asm_as_source);

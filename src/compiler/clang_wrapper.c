@@ -17,9 +17,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
-u8*  obj_path;               /* Path to runtime libraries         */
 const u8 **cc_params;        /* Parameters passed to the real CC  */
 u32  cc_par_cnt = 1;         /* Param count, including argv0      */
 
@@ -30,142 +28,6 @@ u32  cc_par_cnt = 1;         /* Param count, including argv0      */
 /* MODIFIED FROM AFL++。 TODO: Don't hard code embed linux */
 /* Try to find a specific runtime we need, returns NULL on fail. */
 
-/*
-  in find_object() we look here:
-
-  1. if obj_path is already set we look there first
-  2. then we check the $XSAN_PATH environment variable location if set
-  3. next we check argv[0] if it has path information and use it
-    a) we also check ../lib/linux
-  4. if 3. failed we check /proc (only Linux, Android, NetBSD, DragonFly, and
-     FreeBSD with procfs)
-    a) and check here in ../lib/linux too
-  5. we look into the XSAN_PATH define (usually /usr/local/lib/afl)
-  6. we finally try the current directory
-
-  if all these attempts fail - we return NULL and the caller has to decide
-  what to do.
-*/
-
-static u8 *find_object(u8 *obj, u8 *argv0) {
-
-  u8 *xsan_path = getenv("XSAN_PATH");
-  u8 *slash = NULL, *tmp;
-
-  if (xsan_path) {
-    tmp = alloc_printf("%s/%s", xsan_path, obj);
-    if (!access(tmp, R_OK)) {
-      obj_path = xsan_path;
-      return tmp;
-    }
-    ck_free(tmp);
-  }
-
-  if (argv0) {
-
-    slash = strrchr(argv0, '/');
-    if (slash) {
-
-      u8 *dir = ck_strdup(argv0);
-
-      slash = strrchr(dir, '/');
-      *slash = 0;
-
-      tmp = alloc_printf("%s/%s", dir, obj);
-      if (!access(tmp, R_OK)) {
-        obj_path = dir;
-        return tmp;
-      }
-
-      ck_free(tmp);
-      tmp = alloc_printf("%s/../lib/linux/%s", dir, obj);
-      if (!access(tmp, R_OK)) {
-        u8 *dir2 = alloc_printf("%s/../lib/linux", dir);
-        obj_path = dir2;
-        ck_free(dir);
-        return tmp;
-      }
-
-      ck_free(tmp);
-      ck_free(dir);
-
-    }
-
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__linux__) || \
-    defined(__ANDROID__) || defined(__NetBSD__)
-  #define HAS_PROC_FS 1
-#endif
-#ifdef HAS_PROC_FS
-    else {
-      char *procname = NULL;
-  #if defined(__FreeBSD__) || defined(__DragonFly__)
-      procname = "/proc/curproc/file";
-  #elif defined(__linux__) || defined(__ANDROID__)
-      procname = "/proc/self/exe";
-  #elif defined(__NetBSD__)
-      procname = "/proc/curproc/exe";
-  #endif
-      if (procname) {
-        char    exepath[PATH_MAX];
-        ssize_t exepath_len = readlink(procname, exepath, sizeof(exepath));
-        if (exepath_len > 0 && exepath_len < PATH_MAX) {
-
-          exepath[exepath_len] = 0;
-          slash = strrchr(exepath, '/');
-
-          if (slash) {
-
-            *slash = 0;
-            tmp = alloc_printf("%s/%s", exepath, obj);
-            if (!access(tmp, R_OK)) {
-              u8 *dir = alloc_printf("%s", exepath);
-              obj_path = dir;
-              return tmp;
-            }
-            ck_free(tmp);
-            tmp = alloc_printf("%s/../lib/linux/%s", exepath, obj);
-            if (!access(tmp, R_OK)) {
-              u8 *dir = alloc_printf("%s/../lib/linux/", exepath);
-              obj_path = dir;
-              return tmp;
-            }
-          }
-        }
-      }
-    }
-
-#endif
-#undef HAS_PROC_FS
-  }
-
-  tmp = alloc_printf("%s/%s", XSAN_PATH, obj);
-  if (!access(tmp, R_OK)) {
-    obj_path = XSAN_PATH;
-    return tmp;
-  }
-  ck_free(tmp);
-
-  tmp = alloc_printf("./%s", obj);
-  if (!access(tmp, R_OK)) {
-    obj_path = ".";
-    return tmp;
-  }
-  ck_free(tmp);
-
-  return NULL;
-}
-
-/* Try to find the runtime libraries. If that fails, abort. */
-
-static void find_obj(u8* argv0) {
-
-  obj_path = find_object("", argv0);
-
-  if (!obj_path) {
-    FATAL("Unable to find object path. Please set XSAN_PATH");
-  }
-
-}
 
 struct FrontEndOpt {
   // Middle-end options could not transfer to the asm compilation.
@@ -549,25 +411,6 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   }
 }
 
-static u8 handle_x_option(const u8* const* arg) {
-  const u8 *cur = arg[0];
-  // Check prefix "-x"
-  if (cur[0] != '-' || cur[1] != 'x') {
-    return 0;
-  }
-
-  // If cur == '-xsan', just skip it.
-  OPT_EQ_AND_THEN(cur + 2, "san", { return 0; })
-
-  const u8 *language = (cur[2] == '\0') ? arg[1] : cur + 2;
-
-  // assembler & assembler-with-cpp (with preprocessor)
-  if (!strcmp(language, "assembler") ||
-     !strcmp(language, "assembler-with-cpp")) {
-    frontend_opt.AsmAsSource = 1;
-  }
-  return 1;
-}
 
 /* Copy argv to cc_params, making the necessary edits. */
 static void edit_params(u32 argc, const char** argv) {
@@ -631,7 +474,8 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strcmp(cur, "-m32")) bit_mode = 32;
     else if (!strcmp(cur, "armv7a-linux-androideabi")) bit_mode = 32;
     else if (!strcmp(cur, "-m64")) bit_mode = 64;
-    else if (handle_x_option((const u8 **)&argv[i])) x_set = 1;
+    else if (handle_x_option((const u8**)&argv[i], &frontend_opt.AsmAsSource))
+        x_set = 1;
     else if (!strcmp(cur, "-fsanitize=address") ||
              !strcmp(cur, "-fsanitize=memory")) asan_set = 1;
     else if (strstr(cur, "FORTIFY_SOURCE")) fortify_set = 1;
@@ -645,7 +489,7 @@ static void edit_params(u32 argc, const char** argv) {
     else if (!strcmp(cur, "--relocatable")) partial_linking = 1;
     else if (!strcmp(cur, "-c")) have_c = 1;
     else if (!strncmp(cur, "-O", 2)) have_o = 1;
-    else if (!strncmp(cur, "-funroll-loop", 13)) have_unroll = 1;
+    else if (!strncmp(cur, "-funroll-loops", 14)) have_unroll = 1;
     else {
       OPT_EQ_AND_THEN(cur, "-shared-libsan", {
         if (xsanTy == XSan && has(&xsan_options, MSan)) {

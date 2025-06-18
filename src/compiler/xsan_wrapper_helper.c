@@ -5,11 +5,13 @@
 #include "include/types.h"
 #include "xsan_common.h"
 
+#include <limits.h>
 #include <string.h>
+#include <unistd.h>
 
 extern const u8 **cc_params; /* Parameters passed to the real CC  */
 extern u32 cc_par_cnt;       /* Param count, including argv0      */
-extern u8 *obj_path;         /* Path to runtime libraries         */
+u8 *obj_path;                /* Path to runtime libraries         */
 
 XsanOption xsan_options;
 XsanOption xsan_recover_options;
@@ -37,6 +39,193 @@ static u8 whether_to_support_dso_injection(const char *arg) {
   } else {
     PFATAL("Command %s terminated abnormally", command);
   }
+}
+
+/*
+  in find_object() we look here:
+
+  1. if obj_path is already set we look there first
+  2. then we check the $XSAN_PATH environment variable location if set
+  3. then we check /proc (on Linux, etc.) to find the real executable path.
+    a) We also check ../lib/linux here.
+  4. next we check argv[0] if it has path information and use it
+    a) we also check ../lib/linux
+  5. if 4. failed we check /proc (only Linux, Android, NetBSD, DragonFly, and
+     FreeBSD with procfs)
+    a) and check here in ../lib/linux too
+  6. we look into the XSAN_PATH define (usually /usr/local/lib/afl)
+  7. we finally try the current directory
+
+  if all these attempts fail - we return NULL and the caller has to decide
+  what to do.
+*/
+
+u8 *find_object(u8 *obj, u8 *argv0) {
+
+  u8 *xsan_path = getenv("XSAN_PATH");
+  u8 *slash = NULL, *tmp;
+
+  if (xsan_path) {
+    tmp = alloc_printf("%s/%s", xsan_path, obj);
+    if (!access(tmp, R_OK)) {
+      obj_path = xsan_path;
+      return tmp;
+    }
+    ck_free(tmp);
+  }
+
+#if defined(__linux__) || defined(__ANDROID__)
+  char real_path[PATH_MAX];
+  ssize_t len = readlink("/proc/self/exe", real_path, sizeof(real_path) - 1);
+  if (len != -1) {
+      real_path[len] = '\0';
+      slash = strrchr(real_path, '/');
+      if (slash) {
+          *slash = 0; // "real_path" is now the directory of the executable
+
+          // Search in the same directory as the executable
+          tmp = alloc_printf("%s/%s", real_path, obj);
+          if (!access(tmp, R_OK)) {
+              obj_path = ck_strdup((u8*)real_path);
+              return tmp;
+          }
+          ck_free(tmp);
+
+          // Search in ../lib/linux relative to the executable
+          tmp = alloc_printf("%s/../lib/linux/%s", real_path, obj);
+          if (!access(tmp, R_OK)) {
+              obj_path = alloc_printf("%s/../lib/linux", real_path);
+              return tmp;
+          }
+          ck_free(tmp);
+      }
+  }
+#endif
+
+  if (argv0) {
+
+    slash = strrchr(argv0, '/');
+    if (slash) {
+
+      u8 *dir = ck_strdup(argv0);
+
+      slash = strrchr(dir, '/');
+      *slash = 0;
+
+      tmp = alloc_printf("%s/%s", dir, obj);
+      if (!access(tmp, R_OK)) {
+        obj_path = dir;
+        return tmp;
+      }
+
+      ck_free(tmp);
+      tmp = alloc_printf("%s/../lib/linux/%s", dir, obj);
+      if (!access(tmp, R_OK)) {
+        u8 *dir2 = alloc_printf("%s/../lib/linux", dir);
+        obj_path = dir2;
+        ck_free(dir);
+        return tmp;
+      }
+
+      ck_free(tmp);
+      ck_free(dir);
+
+    }
+
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__linux__) || \
+    defined(__ANDROID__) || defined(__NetBSD__)
+  #define HAS_PROC_FS 1
+#endif
+#ifdef HAS_PROC_FS
+    else {
+      char *procname = NULL;
+  #if defined(__FreeBSD__) || defined(__DragonFly__)
+      procname = "/proc/curproc/file";
+  #elif defined(__linux__) || defined(__ANDROID__)
+      procname = "/proc/self/exe";
+  #elif defined(__NetBSD__)
+      procname = "/proc/curproc/exe";
+  #endif
+      if (procname) {
+        char    exepath[PATH_MAX];
+        ssize_t exepath_len = readlink(procname, exepath, sizeof(exepath));
+        if (exepath_len > 0 && exepath_len < PATH_MAX) {
+
+          exepath[exepath_len] = 0;
+          slash = strrchr(exepath, '/');
+
+          if (slash) {
+
+            *slash = 0;
+            tmp = alloc_printf("%s/%s", exepath, obj);
+            if (!access(tmp, R_OK)) {
+              u8 *dir = alloc_printf("%s", exepath);
+              obj_path = dir;
+              return tmp;
+            }
+            ck_free(tmp);
+            tmp = alloc_printf("%s/../lib/linux/%s", exepath, obj);
+            if (!access(tmp, R_OK)) {
+              u8 *dir = alloc_printf("%s/../lib/linux/", exepath);
+              obj_path = dir;
+              return tmp;
+            }
+          }
+        }
+      }
+    }
+
+#endif
+#undef HAS_PROC_FS
+  }
+
+  tmp = alloc_printf("%s/%s", XSAN_PATH, obj);
+  if (!access(tmp, R_OK)) {
+    obj_path = XSAN_PATH;
+    return tmp;
+  }
+  ck_free(tmp);
+
+  tmp = alloc_printf("./%s", obj);
+  if (!access(tmp, R_OK)) {
+    obj_path = ".";
+    return tmp;
+  }
+  ck_free(tmp);
+
+  return NULL;
+}
+
+/* Try to find the runtime libraries. If that fails, abort. */
+
+void find_obj(u8* argv0) {
+
+  obj_path = find_object("", argv0);
+
+  if (!obj_path) {
+    FATAL("Unable to find object path. Please set XSAN_PATH");
+  }
+
+}
+
+u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
+  const u8 *cur = arg[0];
+  // Check prefix "-x"
+  if (cur[0] != '-' || cur[1] != 'x') {
+    return 0;
+  }
+
+  // If cur == '-xsan', just skip it.
+  OPT_EQ_AND_THEN(cur + 2, "san", { return 0; })
+
+  const u8 *language = (cur[2] == '\0') ? arg[1] : cur + 2;
+
+  // assembler & assembler-with-cpp (with preprocessor)
+  if (!strcmp(language, "assembler") ||
+     !strcmp(language, "assembler-with-cpp")) {
+     *asm_as_source = 1;
+  }
+  return 1;
 }
 
 enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
@@ -269,7 +458,7 @@ void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
 
   add_wrap_link_option(sanTy, is_cxx);
 
-  if (needs_shared_rt && (sanTy == ASan || sanTy == TSan || sanTy == UBSan)) {
+  if (needs_shared_rt && (sanTy == ASan || sanTy == TSan || sanTy == UBSan || sanTy == XSan)) {
     cc_params[cc_par_cnt++] = alloc_printf("-Wl,-rpath,%s/lib/linux", obj_path);
     cc_params[cc_par_cnt++] =
         alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.so", obj_path, san);
