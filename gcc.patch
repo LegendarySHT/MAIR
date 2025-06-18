@@ -1,0 +1,59 @@
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index 410ba67a4..7cdd7628c 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -9412,14 +9412,16 @@ sanitize_spec_function (int argc, const char **argv)
+   if (argc != 1)
+     return NULL;
+ 
++  // MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
++  bool isXsanEnabled = (env.get ("XSAN_ONLY_FRONTEND") != NULL);
+   if (strcmp (argv[0], "address") == 0)
+-    return (flag_sanitize & SANITIZE_USER_ADDRESS) ? "" : NULL;
++    return (!isXsanEnabled && flag_sanitize & SANITIZE_USER_ADDRESS) ? "" : NULL;
+   if (strcmp (argv[0], "kernel-address") == 0)
+     return (flag_sanitize & SANITIZE_KERNEL_ADDRESS) ? "" : NULL;
+   if (strcmp (argv[0], "thread") == 0)
+-    return (flag_sanitize & SANITIZE_THREAD) ? "" : NULL;
++    return (!isXsanEnabled && flag_sanitize & SANITIZE_THREAD) ? "" : NULL;
+   if (strcmp (argv[0], "undefined") == 0)
+-    return ((flag_sanitize
++    return (!isXsanEnabled &&(flag_sanitize
+ 	     & (SANITIZE_UNDEFINED | SANITIZE_UNDEFINED_NONDEFAULT))
+ 	    && !flag_sanitize_undefined_trap_on_error) ? "" : NULL;
+   if (strcmp (argv[0], "leak") == 0)
+diff --git a/gcc/opts.c b/gcc/opts.c
+index 6164d49fa..48eaf2b07 100644
+--- a/gcc/opts.c
++++ b/gcc/opts.c
+@@ -861,6 +861,9 @@ void
+ finish_options (struct gcc_options *opts, struct gcc_options *opts_set,
+ 		location_t loc)
+ {
++  /* XSAN-MODIFIED: Check for Xsan frontend-only mode. */
++  bool isXsanEnabled = (getenv ("XSAN_ONLY_FRONTEND") != NULL);
++
+   enum unwind_info_type ui_except;
+ 
+   if (opts->x_dump_base_name
+@@ -1157,12 +1160,15 @@ finish_options (struct gcc_options *opts, struct gcc_options *opts_set,
+ 	      "%<-fsanitize=address%> is incompatible with "
+ 	      "%<-fsanitize=kernel-address%>");
+ 
++  // XSAN-MODIFIED: modify IncompatibleGroups
+   /* And with TSan.  */
+-  if ((opts->x_flag_sanitize & SANITIZE_ADDRESS)
+-      && (opts->x_flag_sanitize & SANITIZE_THREAD))
+-    error_at (loc,
+-	      "%<-fsanitize=address%> and %<-fsanitize=kernel-address%> "
+-	      "are incompatible with %<-fsanitize=thread%>");
++  if (!isXsanEnabled) {
++      if ((opts->x_flag_sanitize & SANITIZE_ADDRESS)
++          && (opts->x_flag_sanitize & SANITIZE_THREAD))
++          error_at(loc,
++              "%<-fsanitize=address%> and %<-fsanitize=kernel-address%> "
++              "are incompatible with %<-fsanitize=thread%>");
++  }
+ 
+   if ((opts->x_flag_sanitize & SANITIZE_LEAK)
+       && (opts->x_flag_sanitize & SANITIZE_THREAD))

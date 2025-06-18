@@ -91,3 +91,56 @@ Now, XSan supports the following sanitizers:
     make check-ubsan # check the UBSan test cases
     make check-tsan # check the TSan test cases
     ```
+
+### Migrating to GCC
+
+1.  Clone the GCC 9.4.0 Source Code
+    ```shell
+    # Using the official GNU server
+    git clone --depth 1 --branch releases/gcc-9.4.0 https://gcc.gnu.org/git/gcc.git gcc-9.4.0-source /path/to/gcc-9.4.0-source
+    ```
+
+2.  Apply the XSan Patch
+     ```shell
+    cd /path/to/gcc-9.4.0-source
+    git apply /path/to/xsan/gcc.patch
+    ```
+
+3.  Download GCC Prerequisite
+    ```shell
+    cd /path/to/gcc-9.4.0-source
+    ./contrib/download_prerequisites
+    ```
+
+4.  Configure and Build GCC
+    > **Note:** The `--disable-bootstrap` flag is highly recommended for development. It significantly reduces compilation time by building the compiler only once, instead of the default three times.
+
+    ```shell
+    # Create and enter a separate build directory
+    mkdir /path/to/gcc-build
+    cd /path/to/gcc-build
+
+    # Run configure with recommended flags for development
+    /path/to/gcc-9.4.0-source/configure \
+        --prefix=/path/to/gcc-9.4.0-install \
+        --enable-languages=c,c++ \
+        --disable-bootstrap \
+        --disable-multilib \
+        --enable-checking=release
+    
+    # Start the build process and generate compile_commands.json
+    bear make -j$(nproc)
+    ```
+
+5.  Install the New GCC
+    ```shell
+    cd /path/to/gcc-build
+    make install
+    ```
+
+6.  Export Environment Variables
+    ```shell
+    export PATH=/path/to/gcc-9.4.0-install/bin:$PATH
+    ```
+
+After completing these steps, you will have a custom GCC 9.4.0 toolchain ready to be used with the XSan wrappers (`xgcc`/`xg++`).
