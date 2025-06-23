@@ -306,10 +306,6 @@ static void edit_params(u32 argc, const char** argv)
         cc_params[cc_par_cnt++] = "-fno-builtin-strcasestr";
     }
 
-    cc_params[cc_par_cnt++] = "-fuse-ld=lld";
-    // /usr/local/lib is not the default search path for lld, so we add it here. Required for xgcc, otherwise you will get a link error
-    /// TODO: Figure out why it doesn't work and expect to use the default connector
-    cc_params[cc_par_cnt++] = "-L/usr/local/lib";
 
     cc_params[cc_par_cnt] = NULL;
 }
