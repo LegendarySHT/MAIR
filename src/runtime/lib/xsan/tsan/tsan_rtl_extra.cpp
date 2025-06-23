@@ -177,9 +177,10 @@ LSan's check, as this approach does not work for those calls that locate in
 the same file defining the called symbols.
 */
 
-#define TSAN_INTERCEPT_AND_IGNORE_VOID(ret, f)            \
+// ret: return type, f: intercepted function, ... : optional function attributes
+#define TSAN_INTERCEPT_AND_IGNORE_VOID(ret, f, ...)       \
   ret XSAN_REAL(f)(void);                                 \
-  ret XSAN_WRAP(f)(void) {                                \
+  __VA_ARGS__ ret XSAN_WRAP(f)(void) {                    \
     __tsan::ScopedIgnoreInterceptors ignore_interceptors; \
     return XSAN_REAL(f)();                                \
   }
@@ -192,15 +193,15 @@ the same file defining the called symbols.
   }
 
 // __lsan::DoLeakCheck
-TSAN_INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan11DoLeakCheckEv)
+TSAN_INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan11DoLeakCheckEv, )
 // __lsan::DoRecoverableLeakCheck
-TSAN_INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan26DoRecoverableLeakCheckVoidEv)
+TSAN_INTERCEPT_AND_IGNORE_VOID(void, _ZN6__lsan26DoRecoverableLeakCheckVoidEv, )
 // __lsan_do_leak_check
-TSAN_INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_leak_check)
+TSAN_INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_leak_check,
+                               SANITIZER_INTERFACE_ATTRIBUTE)
 // __lsan_do_recoverable_leak_check
-TSAN_INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_recoverable_leak_check)
-
-
+TSAN_INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_recoverable_leak_check,
+                               SANITIZER_INTERFACE_ATTRIBUTE)
 
 /// TODO: define these functions only if UBSan is used.
 /// UBSan uses this function to check if a memory range is accessible, where
