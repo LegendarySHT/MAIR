@@ -59,14 +59,14 @@ class HackedSanitizersRtRewriter {
 
 public:
   HackedSanitizersRtRewriter(ArgStringList &Args)
-      : Args(Args), replace(xsan_mask.any()),
-        shouldHasStaticRt(sanTy == XSan || sanTy == ASan),
+      : Args(Args), replace(getXsanMask().any()),
+        shouldHasStaticRt(getSanType() == XSan || getSanType() == ASan),
         /// TODO: decouple linux here
         replaced_prefix(getXsanAbsPath(XSAN_LINUX_LIB_DIR "/libclang_rt.")) {
-    if (sanTy == SanNone || replaced_prefix.empty())
+    if (getSanType() == SanNone || replaced_prefix.empty())
       return;
 
-    StringRef sanName = hacked_san_names[sanTy];
+    StringRef sanName = hacked_san_names[getSanType()];
     replaced_prefix += sanName;
 
     generate_new_args();
@@ -109,7 +109,7 @@ private:
     //  2. *libclang_rt.asan.a.syms -> .a.syms
     StringRef suffix = arg.substr(pos);
     if (suffix.endswith(".so")) {
-      if (sanTy == XSan && xsan_mask.test(MSan)) {
+      if (getSanType() == XSan && getXsanMask().test(MSan)) {
         PFATAL("XSan with MSan does not support the shared runtime "
                "temporarily, as MSan does not support it either. Consider "
                "disable MSan from XSan if you want to use the shared runtime.");
@@ -218,7 +218,7 @@ private:
 };
 
 static void add_wrap_link_option(ArgStringList &CmdArgs) {
-  if (!::XsanEnabled || sanTy != XSan) {
+  if (!isXsanEnabled() || getSanType() != XSan) {
     return;
   }
   static const std::string WrapSymbolLinkOpt =
@@ -236,7 +236,7 @@ static XsanInterceptor Interceptor(tools::addSanitizerRuntimes);
 bool tools::addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
                                  ArgStringList &CmdArgs) {
   bool result = Interceptor(TC, Args, CmdArgs);
-  if (::XsanEnabled) {
+  if (isXsanEnabled()) {
     HackedSanitizersRtRewriter Rewriter(CmdArgs);
     add_wrap_link_option(CmdArgs);
   }

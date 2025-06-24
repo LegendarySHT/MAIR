@@ -25,7 +25,7 @@ void clang::EmitBackendOutput(DiagnosticsEngine &Diags,
   static constexpr SanitizerMask HackedSanitizers =
       SanitizerKind::Memory | SanitizerKind::Address | SanitizerKind::Thread;
   LangOptions NewLangOpts = LOpts;
-  if (::XsanEnabled) {
+  if (isXsanEnabled()) {
     NewLangOpts.Sanitize.clear(HackedSanitizers);
   }
   Interceptor(Diags, HeaderOpts, CGOpts, TOpts, NewLangOpts, TDesc, M, Action,

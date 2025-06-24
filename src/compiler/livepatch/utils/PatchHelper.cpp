@@ -13,31 +13,40 @@
 
 namespace fs = std::filesystem;
 
-/// TODO: do not use env var to transmit base dir, but parse the DSO link path.
-static const llvm::Optional<std::string> xsan_base_dir =
-    llvm::sys::Process::GetEnv("XSAN_BASE_DIR");
-const bool XsanEnabled =
-    llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
-static const std::string &str_mask =
-    XsanEnabled ? llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").getValue()
-                : "";
-const std::bitset<XSan + 1>
-    xsan_mask(XsanEnabled ? std::strtoul(str_mask.c_str(), nullptr, 0) : 0);
-
-namespace {
-
-constexpr SanitizerType gen_sanitizer_type() {
-  for (SanitizerType i : {XSan, ASan, TSan, UBSan}) {
-    if (xsan_mask.test(i)) {
-      return i;
-    }
-  }
-  return SanNone;
+// Lazy initialization for XsanEnabled
+bool isXsanEnabled() {
+  static const bool enabled =
+      llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
+  return enabled;
 }
 
-} // namespace
+// Lazy initialization for str_mask
+const std::string &getStrMask() {
+  static const std::string val =
+      isXsanEnabled()
+          ? llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").getValue()
+          : "";
+  return val;
+}
 
-const SanitizerType sanTy = gen_sanitizer_type();
+// Lazy initialization for xsan_mask
+const std::bitset<XSan + 1> &getXsanMask() {
+  static const std::bitset<XSan + 1> mask(
+      isXsanEnabled() ? std::strtoul(getStrMask().c_str(), nullptr, 0) : 0);
+  return mask;
+}
+
+SanitizerType getSanType() {
+  static const SanitizerType sanTy = []() {
+    for (SanitizerType i : {XSan, ASan, TSan, UBSan}) {
+      if (getXsanMask().test(i)) {
+        return i;
+      }
+    }
+    return SanNone;
+  }();
+  return sanTy;
+}
 
 bool isPatchingClang() {
   // Get the executable path of the current process.
@@ -67,6 +76,10 @@ fs::path getThisPatchDsoPath() {
 }
 
 fs::path getXsanAbsPath(std::string_view rel_path) {
+  /// TODO: do not use env var to transmit base dir, but parse the DSO link
+  /// path.
+  static const llvm::Optional<std::string> &xsan_base_dir =
+      llvm::sys::Process::GetEnv("XSAN_BASE_DIR");
   // <base_dir>/patch/libclang-patch.so -> <base_dir>/
   static const fs::path PatchBaseDir =
       getThisPatchDsoPath().parent_path().parent_path();

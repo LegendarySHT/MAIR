@@ -256,7 +256,7 @@ bool SanitizerArgs::needsUbsanRt() const {
   // Rt All of these include ubsan.
   if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
       needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||
-      (needsScudoRt() && !requiresMinimalRuntime()) || ::XsanEnabled)
+      (needsScudoRt() && !requiresMinimalRuntime()) || isXsanEnabled())
     return false;
 
   return (Sanitizers.Mask & NeedsUbsanRt & ~TrapSanitizers.Mask) ||
@@ -443,11 +443,11 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
 
   std::pair<SanitizerMask, SanitizerMask> IncompatibleGroups[] = {
       std::make_pair(SanitizerKind::Address,
-                     ::XsanEnabled
+                     isXsanEnabled()
                          ? SanitizerMask()
                          : SanitizerKind::Thread | SanitizerKind::Memory),
       std::make_pair(SanitizerKind::Thread,
-                     ::XsanEnabled ? SanitizerMask() : SanitizerKind::Memory),
+                     isXsanEnabled() ? SanitizerMask() : SanitizerKind::Memory),
       std::make_pair(SanitizerKind::Leak,
                      SanitizerKind::Thread | SanitizerKind::Memory),
       std::make_pair(SanitizerKind::KernelAddress,

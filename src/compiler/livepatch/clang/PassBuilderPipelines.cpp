@@ -42,7 +42,7 @@ private:
 };
 
 ModulePassManager modifySanitizerPassesPipeline(ModulePassManager &MPM) {
-  if (!::XsanEnabled || !xsan_mask[XSan])
+  if (!isXsanEnabled() || !getXsanMask()[XSan])
     return std::move(MPM);
   ModulePassManager NewMPM;
   ::MPMRewriter Rewriter(std::move(MPM));

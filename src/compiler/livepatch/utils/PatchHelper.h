@@ -9,9 +9,10 @@
 #include <filesystem>
 #include <type_traits>
 
-extern const bool XsanEnabled;
-extern const std::bitset<XSan + 1> xsan_mask;
-extern const SanitizerType sanTy;
+bool isXsanEnabled();
+const std::string &getStrMask();
+const std::bitset<XSan + 1> &getXsanMask();
+SanitizerType getSanType();
 
 std::filesystem::path getThisPatchDsoPath();
 std::filesystem::path getXsanAbsPath(std::string_view rel_path);
