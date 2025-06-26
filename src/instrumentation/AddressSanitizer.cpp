@@ -3655,13 +3655,9 @@ private:
 };
 
 void addAsanRequireAnalysisPass(SubSanitizers &MPM, FunctionPassManager &FPM) {
-  llvm::AddressSanitizerOptions Opts;
-  llvm::AsanDtorKind DestructorKind;
-  bool UseOdrIndicator;
-  bool UseGlobalGC;
-  obtainAsanPassArgs(Opts, UseGlobalGC, UseOdrIndicator, DestructorKind);
-  MPM.addPass(AsanRequireAnalysisPass(Opts, UseGlobalGC, UseOdrIndicator,
-                                      DestructorKind));
+  const auto &Opts = obtainAsanPassArgs();
+  MPM.addPass(AsanRequireAnalysisPass(
+      Opts.Opts, Opts.UseGlobalGC, Opts.UseOdrIndicator, Opts.DestructorKind));
 }
 
 /// Moved to ThreadSanitizer.cpp, as the type information is needed there.

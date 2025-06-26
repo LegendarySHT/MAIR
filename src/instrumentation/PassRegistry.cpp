@@ -138,7 +138,6 @@ const AsanOption obtainAsanPassArgs() {
 }
 
 const MsanOption obtainMsanPassArgs() {
-  MsanOption Opts;
   /*
    The relevant code in clang BackendUtil.cpp::addSanitizer
     ```cpp
@@ -149,10 +148,7 @@ const MsanOption obtainMsanPassArgs() {
                                     CodeGenOpts.SanitizeMemoryParamRetval);
     ```
   */
-  Opts.Opts.TrackOrigins = ClMsanTrackOrigins;
-  Opts.Opts.Recover = ClMsanRecover;
-  Opts.Opts.Kernel = false;
-  Opts.Opts.EagerChecks = ClMsanParamRetval;
+  MsanOption Opts(ClMsanTrackOrigins, ClMsanRecover, false, ClMsanParamRetval);
 
   return Opts;
 }
@@ -362,7 +358,6 @@ void registerMsanForClangAndOpt(PassBuilder &PB) {
 
   PB.registerOptimizerLastEPCallback(
       [=](ModulePassManager &MPM, OptimizationLevel Level) {
-        
         addMsanToMPM(MPM, Level);
       });
 
@@ -371,7 +366,7 @@ void registerMsanForClangAndOpt(PassBuilder &PB) {
       [=](StringRef Name, ModulePassManager &MPM,
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "msan") {
-          // MPM.addPass(AttributeTaggingPass(SanitizerType::MSan));
+          MPM.addPass(AttributeTaggingPass(SanitizerType::MSan));
           addMsanToMPM(MPM, OptimizationLevel::O2);
           return true;
         }

@@ -32,10 +32,9 @@ int main() {
   // CHECK-UAD: WARNING: MemorySanitizer: use-of-uninitialized-value
   // CHECK-UAD: {{#0 0x.* in main.*use-after-dtor.cpp:}}[[@LINE-3]]
 
-  // CHECK-ORIGINS: Member fields were destroyed
+  // CHECK-ORIGINS: Memory was marked as uninitialized
   // CHECK-ORIGINS: {{#0 0x.* in __sanitizer_dtor_callback}}
-  // CHECK-ORIGINS: {{#1 0x.* in .*~Simple.*cpp:}}[[@LINE-24]]:
-  // CHECK-ORIGINS: {{#2 0x.* in .*~Simple.*cpp:}}[[@LINE-19]]:
+  // CHECK-ORIGINS: {{#1 0x.* in .*~Simple.*cpp:}}[[@LINE-18]]:
 
   // CHECK-UAD: SUMMARY: MemorySanitizer: use-of-uninitialized-value {{.*main}}
   // CHECK-UAD-OFF-NOT: SUMMARY: MemorySanitizer: use-of-uninitialized-value

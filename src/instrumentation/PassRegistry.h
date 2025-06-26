@@ -24,6 +24,9 @@ struct AsanOption {
 
 struct MsanOption {
   llvm::MemorySanitizerOptions Opts;
+
+  MsanOption(int TrackOrigins, bool Recover, bool Kernel, bool EagerChecks)
+      : Opts(TrackOrigins, Recover, Kernel, EagerChecks) {}
 };
 
 class SubSanitizers : public llvm::ModulePassManager {

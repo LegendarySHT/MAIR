@@ -321,6 +321,8 @@ enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
 
   /// TODO: figure out whether we need to do that.
   // /// Use our out-of-tree runtime
+  if (xsanTy != XSan && !has(&xsan_options, xsanTy))
+    xsanTy = SanNone;
 
   return xsanTy;
 }
@@ -538,9 +540,12 @@ void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
   }
   // If not using livepatch, we might need to link some libraries manually.
   // At least for clang, we should.
+  /// TODO: ref to llvm-source/clang/lib/Driver/ToolChains/CommonArgs.cpp:824 linkSanitizerRuntimeDeps
+  cc_params[cc_par_cnt++] = "-lpthread"; 
+  cc_params[cc_par_cnt++] = "-lrt";
   cc_params[cc_par_cnt++] = "-lm";
   cc_params[cc_par_cnt++] = "-ldl";
-  cc_params[cc_par_cnt++] = "-lpthread";
+  cc_params[cc_par_cnt++] = "-lresolv";
   // if (is_cxx) {
   //   cc_params[cc_par_cnt++] = "-lstdc++";
   // }
