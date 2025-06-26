@@ -29,10 +29,19 @@ void *get_base_address();
 /// TODO: it is too unstable to use name to filter out irrelevant processes.
 /// We should find a better way to filter out irrelevant processes.
 bool isPatchingProc(const char *proc_name);
+
+// Find the symbol in the main executable or other DSOs.
+// 1. Search it by RTLD_NEXT first.
+// 2. If not found, try to find it via RTLD_DEFAULT.
 void *getRealFuncAddr(const char *ManagledName);
 void *getRealFuncAddr(void *InterceptorFunc);
+
+// Find the symbol in the patch DSO.
+// 1. Search it by RTLD_DEFAULT first.
+// 2. If not found, try to find it via explicit dlopen.
 void *getMyFuncAddr(const char *ManagledName);
 
+// Replace the first n instructions to trampoline instructions
 class XsanPatch {
 #if defined(__x86_64__)
   static constexpr uint8_t PatchTempl[] = {
@@ -155,6 +164,8 @@ protected:
       typename XsanInterceptorFunctorBase<DeriveTy, void *>::ScopedCall;
 };
 
+
+// Common function pointers (e.g., Ret (*)(Args...))
 template <typename DeriveTy, typename Ret, typename... Args>
 class XsanInterceptorFunctor<DeriveTy, Ret (*)(Args...)>
     : public XsanInterceptorFunctorBase<DeriveTy, Ret (*)(Args...)> {

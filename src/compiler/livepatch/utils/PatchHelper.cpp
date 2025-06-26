@@ -159,25 +159,36 @@ static const char *getDSOName(void *SymAddr) {
   return Info.dli_fname;
 }
 
-static void *checkedDlsym(void *__restrict handle,
-                          const char *__restrict name) {
-  void *addr = dlsym(handle, name);
+// Find the symbol in the main executable or other DSOs.
+// 1. Search it by RTLD_NEXT first.
+// 2. If not found, try to find it via RTLD_DEFAULT.
+void *getRealFuncAddr(const char *ManagledName) {
+  void *addr = nullptr;
+  dlerror(); // clear previous error
+  addr = dlsym(RTLD_NEXT, ManagledName);
   const char *err = dlerror();
-  if (err) {
-    FATAL("dlsym(%s, \"%s\") failed: %s",
-          handle == (void *)RTLD_NEXT ? "RTLD_NEXT" : "RTLD_DEFAULT", name,
-          err);
+  // If RTLD_NEXT found the symbol, return it.
+  if (addr && !err) {
+    return addr;
   }
-  if (!addr) {
-    FATAL("Failed to find the real function address for %s, but dlerror() is "
-          "null.",
-          name);
+  // RTLD_NEXT not found, try RTLD_DEFAULT (e.g., symbol might exist in the
+  // executable)
+  addr = dlsym(RTLD_DEFAULT, ManagledName);
+  err = dlerror();
+  if (!addr || err) {
+    FATAL("getRealFuncAddr: cannot find symbol %s, RTLD_NEXT/RTLD_DEFAULT "
+          "both failed: %s",
+          ManagledName, err ? err : "null");
+  }
+  // If RTLD_DEFAULT return the symbol of patch so, it means the symbol cannot
+  // be found either in the executable or other DSOs.
+  const char *DSOName = getDSOName(addr);
+  auto selfPatchDso = getThisPatchDsoPath();
+  std::string patchName = selfPatchDso.filename().string();
+  if (llvm::StringRef(DSOName).endswith(patchName)) {
+    FATAL("Cannot find the real addr for dynamic symbol %s", ManagledName);
   }
   return addr;
-}
-
-void *getRealFuncAddr(const char *ManagledName) {
-  return checkedDlsym(RTLD_NEXT, ManagledName);
 }
 
 void *getRealFuncAddr(void *InterceptorFunc) {
@@ -185,15 +196,47 @@ void *getRealFuncAddr(void *InterceptorFunc) {
   return getRealFuncAddr(ManagledName);
 }
 
+// Find the symbol in the patch DSO.
+// 1. Search it by RTLD_DEFAULT first.
+// 2. If not found, try to find it via explicit dlopen.
 void *getMyFuncAddr(const char *ManagledName) {
-  void *MyFuncAddr = checkedDlsym(RTLD_DEFAULT, ManagledName);
-  const char *DSOName = getDSOName(MyFuncAddr);
-  if (!llvm::StringRef(DSOName).endswith(XSAN_DSO_PATCH_FILE)) {
-    FATAL("Found wrong my function address for %s, please check LD_PRELOAD. "
-          "DSOName: %s",
-          ManagledName, DSOName);
+  void *addr = nullptr;
+  dlerror(); // clear previous error
+  addr = dlsym(RTLD_DEFAULT, ManagledName);
+  const char *err = dlerror();
+  if (!addr || err) {
+    FATAL("getMyFuncAddr: dlsym(RTLD_DEFAULT, %s) failed: %s", ManagledName,
+          err ? err : "null");
   }
-  return MyFuncAddr;
+  const char *DSOName = getDSOName(addr);
+  auto selfPatchDso = getThisPatchDsoPath();
+  std::string patchName = selfPatchDso.filename().string();
+  // If the symbol is in the patch DSO, return it.
+  if (llvm::StringRef(DSOName).endswith(patchName)) {
+    return addr;
+  }
+  // If the symbol is not in the patch DSO, it might be masked by the main
+  // executable. Try to find it via explicit dlopen.
+  // RTLD_NOLOAD is used to search the symbol in the loaded DSOs.
+  void *handle = dlopen(selfPatchDso.c_str(), RTLD_LAZY | RTLD_NOLOAD);
+  if (!handle) {
+    FATAL("getMyFuncAddr: dlopen(%s) failed: %s", selfPatchDso.c_str(),
+          dlerror());
+  }
+  dlerror();
+  addr = dlsym(handle, ManagledName);
+  err = dlerror();
+  if (!addr || err) {
+    FATAL("getMyFuncAddr: dlsym(patch_so, %s) failed: %s", ManagledName,
+          err ? err : "null");
+  }
+  const char *my_dso = getDSOName(addr);
+  if (!llvm::StringRef(my_dso).endswith(patchName)) {
+    FATAL("getMyFuncAddr: found symbol %s is not in patch so", my_dso);
+  }
+  // Do not dlclose(handle), because RTLD_NOLOAD does not increase the reference
+  // count.
+  return addr;
 }
 
 class ScopedApplyPatch {
