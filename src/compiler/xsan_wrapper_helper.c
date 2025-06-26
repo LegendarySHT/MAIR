@@ -400,7 +400,7 @@ void init_sanitizer_setting(enum SanitizerType sanTy) {
     support_dso_inject = whether_to_support_dso_injection(cc_params[0]);
     if (support_dso_inject) {
       const char *ld_preload = getenv("LD_PRELOAD");
-      const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
+      const char *dso_path = alloc_printf("%s/" XSAN_CLANG_DSO_PATCH, obj_path);
       const char *new_ld_preload =
           (ld_preload != NULL)
               ? (char *)alloc_printf("%s:%s", ld_preload, dso_path)
