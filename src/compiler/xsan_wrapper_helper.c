@@ -229,48 +229,44 @@ u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
 }
 
 enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
+  static const enum SanitizerType incompatible_san_types[][NumSanitizerTypes] = {
+      [ASan] = {XSan, TSan, MSan},
+      [TSan] = {XSan, ASan, MSan},
+      [MSan] = {XSan, ASan, TSan},
+      [XSan] = {ASan, TSan, MSan},
+  };
+  static const char *const option_names[] = {[ASan] = "-asan",
+                                             [TSan] = "-tsan",
+                                             [MSan] = "-msan",
+                                             [UBSan] = "-ubsan",
+                                             [XSan] = "-xsan"};
+
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     const char *cur = argv[i];
-    OPT_EQ_AND_THEN(cur, "-tsan", {
-      /// We should check xsan firstly because xsan can include asan, tsan...
-      if (has(&xsan_options, XSan))
-        FATAL("'-tsan' could not be used with '-xsan'");
-      if (has(&xsan_options, ASan))
-        FATAL("'-tsan' could not be used with '-asan'");
-      xsanTy = TSan;
-      set(&xsan_options, TSan);
-      continue;
-    })
+    for (u32 j = 1; j < NumSanitizerTypes; j++) {
+      OPT_EQ_AND_THEN(cur, option_names[j], {
+        for (u32 k = 0; k < NumSanitizerTypes; k++) {
+          enum SanitizerType incomp = incompatible_san_types[j][k];
+          if (!incomp)
+            break;
+          if (has(&xsan_options, incomp))
+            FATAL("'%s' could not be used with '%s'", option_names[incomp],
+                  option_names[j]);
+        }
 
-    OPT_EQ_AND_THEN(cur, "-asan", {
-      if (has(&xsan_options, XSan))
-        FATAL("'-asan' could not be used with '-xsan'");
-      if (has(&xsan_options, TSan))
-        FATAL("'-asan' could not be used with '-tsan'");
-      xsanTy = ASan;
-      set(&xsan_options, ASan);
-      continue;
-    })
-
-    OPT_EQ_AND_THEN(cur, "-ubsan", {
-      /// Only if no other sanitizer is specified, we treat it as UBSan
-      /// standalone.
-      if (!has_any(&xsan_options))
-        xsanTy = UBSan;
-      set(&xsan_options, UBSan);
-      continue;
-    })
-
-    OPT_EQ_AND_THEN(cur, "-xsan", {
-      if (has(&xsan_options, ASan))
-        FATAL("'-xsan' could not be used with '-asan'");
-      if (has(&xsan_options, TSan))
-        FATAL("'-xsan' could not be used with '-tsan'");
-      xsanTy = XSan;
-      init(&xsan_options);
-      continue;
-    })
+        if (j == UBSan) {
+          /// Only if no other sanitizer is specified, we treat it as UBSan
+          /// standalone.
+          if (!has_any(&xsan_options))
+            xsanTy = UBSan;
+        } else {
+          xsanTy = j;
+        }
+        set(&xsan_options, xsanTy);
+        continue;
+      })
+    }
 
     u8 is_neg = 0;
     // Check prefix "-f"
@@ -299,6 +295,8 @@ enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
           sanTy = ASan;
         } else if (OPT_EQ(val_ptr, "thread")) {
           sanTy = TSan;
+        } else if (OPT_EQ(val_ptr, "memory")) {
+          sanTy = MSan;
         } else if (OPT_EQ(val_ptr, "undefined")) {
           sanTy = UBSan;
         } else if (OPT_EQ(val_ptr, "all")) {
@@ -323,9 +321,6 @@ enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
 
   /// TODO: figure out whether we need to do that.
   // /// Use our out-of-tree runtime
-  // if (xsanTy != SanNone && !has_any(&xsan_options)) {
-  //   xsanTy = SanNone;
-  // }
 
   return xsanTy;
 }
@@ -335,6 +330,7 @@ void init_sanitizer_setting(enum SanitizerType sanTy) {
   switch (sanTy) {
   case ASan:
   case TSan:
+  case MSan:
   case UBSan:
   case XSan:
     /// TODO: support unmodified clang
@@ -357,6 +353,13 @@ void init_sanitizer_setting(enum SanitizerType sanTy) {
               "'-fsanitize=thread'");
       }
       cc_params[cc_par_cnt++] = "-fsanitize=thread";
+    }
+    if (has(&xsan_options, MSan)) {
+      if (sanTy == XSan && !XSAN_CONTAINS_MSAN) {
+        FATAL("xsan did not contain msan, '-xsan' could not be used with "
+              "'-fsanitize=memory'");
+      }
+      cc_params[cc_par_cnt++] = "-fsanitize=memory";
     }
     if (has(&xsan_options, UBSan)) {
       cc_params[cc_par_cnt++] = "-fsanitize=undefined";
@@ -409,8 +412,8 @@ void init_sanitizer_setting(enum SanitizerType sanTy) {
       setenv("XSAN_BASE_DIR", obj_path, 1);
     }
     break;
-  case MSan:
   case SanNone:
+  default:
     return;
   }
 }
@@ -445,14 +448,17 @@ void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
   case TSan:
     san = "tsan";
     break;
+  case MSan:
+    san = "msan";
+    break;
   case UBSan:
     san = "ubsan_standalone";
     break;
   case XSan:
     san = "xsan";
     break;
-  case MSan:
   case SanNone:
+  default:
     return;
   }
 

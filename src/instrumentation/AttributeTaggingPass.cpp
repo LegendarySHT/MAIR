@@ -35,14 +35,18 @@ PreservedAnalyses AttributeTaggingPass::run(Module &M, ModuleAnalysisManager &_)
       case TSan:
           F.addFnAttr(Attribute::SanitizeThread);
         break;
+      case MSan:
+          F.addFnAttr(Attribute::SanitizeMemory);
+        break;
       case XSan:
           // FIXME: do not hard code embedding!
           F.addFnAttr(Attribute::SanitizeAddress);   
           F.addFnAttr(Attribute::SanitizeThread);
+          F.addFnAttr(Attribute::SanitizeMemory);
         break;
       case UBSan:
-      case MSan:
       case SanNone:
+      default:
         break;
       }
     }

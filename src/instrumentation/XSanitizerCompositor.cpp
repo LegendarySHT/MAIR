@@ -33,6 +33,16 @@ private:
   OptimizationLevel Level;
 };
 
+/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+void registerAnalysisForXsan(PassBuilder &PB) {
+  if (!options::ClDisableAsan) {
+    registerAnalysisForAsan(PB);
+  }
+  if (!options::ClDisableTsan) {
+    registerAnalysisForTsan(PB);
+  }
+}
+
 void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
   registerAnalysisForXsan(PB);
 
@@ -53,8 +63,7 @@ void registerXsanForClangAndOpt(llvm::PassBuilder &PB) {
       [=](StringRef Name, ModulePassManager &MPM,
           ArrayRef<PassBuilder::PipelineElement>) {
         if (Name == "xsan") {
-          MPM.addPass(AttributeTaggingPass(SanitizerType::ASan));
-          MPM.addPass(AttributeTaggingPass(SanitizerType::TSan));
+          MPM.addPass(AttributeTaggingPass(SanitizerType::XSan));
           MPM.addPass(UbsanInstTaggingPass());
           MPM.addPass(SanitizerCompositorPass(OptimizationLevel::O0));
           return true;
@@ -86,7 +95,7 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
     }
   }
 
-  SubSanitizers Sanitizers = SubSanitizers::loadSubSanitizers();
+  SubSanitizers Sanitizers = SubSanitizers::loadSubSanitizers(Level);
   /// Unlike ModulePassManager, SubSanitizers does not invalidate Analysises
   /// between the runnings of sanitizers' passes.
   PreservedAnalyses PA = Sanitizers.run(M, MAM);

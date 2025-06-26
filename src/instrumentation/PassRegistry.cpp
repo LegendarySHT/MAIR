@@ -71,9 +71,24 @@ static cl::opt<bool> ClAsanGlobalsGC(
     cl::desc("Controls whether ASan uses gc-friendly globals instrumentation"),
     cl::Hidden, cl::init(true));
 
+static cl::opt<int>
+    ClMsanTrackOrigins("sanitize-memory-track-origins",
+                       cl::desc("Simulates -fsanitize-memory-track-origins"),
+                       cl::Hidden, cl::init(0));
+
+static cl::opt<bool>
+    ClMsanParamRetval("sanitize-memory-param-retval",
+                      cl::desc("Simulates -fsanitize-memory-param-retval"),
+                      cl::Hidden, cl::init(false));
+
 static cl::opt<bool>
     ClAsanRecover("sanitize-recover-address",
                   cl::desc("Simulates -fsanitize-recover=address"), cl::Hidden,
+                  cl::init(false));
+
+static cl::opt<bool>
+    ClMsanRecover("sanitize-recover-memory",
+                  cl::desc("Simulates -fsanitize-recover=memory"), cl::Hidden,
                   cl::init(false));
 
 static cl::opt<bool> ClAllRecover("sanitize-recover-all",
@@ -90,9 +105,7 @@ namespace __xsan {
 
 bool shouldAsanPoisonInternalGlobals() { return ClAsanPoisonInternalGlobal; }
 
-void obtainAsanPassArgs(AddressSanitizerOptions &Opts, bool &UseGlobalGC,
-                        bool &UseOdrIndicator,
-                        llvm::AsanDtorKind &DestructorKind) {
+const AsanOption obtainAsanPassArgs() {
   /*
    The relevant code in clang BackendUtil.cpp::addSanitizer
     ```cpp
@@ -107,31 +120,84 @@ void obtainAsanPassArgs(AddressSanitizerOptions &Opts, bool &UseGlobalGC,
     Opts.UseAfterReturn = CodeGenOpts.getSanitizeAddressUseAfterReturn();
     ```
   */
+  AsanOption Opts;
   // Here set the default value for each setting, but you can set them by
   // their cl::opt version.
-  Opts.CompileKernel = false;
-  Opts.Recover = ClAsanRecover || ClAllRecover;
+  Opts.Opts.CompileKernel = false;
+  Opts.Opts.Recover = ClAsanRecover || ClAllRecover;
   // The default value of UseAfterScope is true
-  Opts.UseAfterScope = ClAsanUseAfterScope;
-  Opts.UseAfterReturn = ClAsanUseAfterReturn;
+  Opts.Opts.UseAfterScope = ClAsanUseAfterScope;
+  Opts.Opts.UseAfterReturn = ClAsanUseAfterReturn;
 
-  DestructorKind = ClAsanDestructorKind;
+  Opts.DestructorKind = ClAsanDestructorKind;
 
-  UseOdrIndicator = ClAsanUseOdrIndicator;
-  UseGlobalGC = ClAsanGlobalsGC;
+  Opts.UseOdrIndicator = ClAsanUseOdrIndicator;
+  Opts.UseGlobalGC = ClAsanGlobalsGC;
+
+  return Opts;
 }
 
-template <typename PassTy> static PassTy getASanPass() {
-  llvm::AddressSanitizerOptions Opts;
+const MsanOption obtainMsanPassArgs() {
+  MsanOption Opts;
+  /*
+   The relevant code in clang BackendUtil.cpp::addSanitizer
+    ```cpp
+    int TrackOrigins = CodeGenOpts.SanitizeMemoryTrackOrigins;
+    bool Recover = CodeGenOpts.SanitizeRecover.has(Mask);
 
-  llvm::AsanDtorKind DestructorKind;
+    MemorySanitizerOptions options(TrackOrigins, Recover, CompileKernel,
+                                    CodeGenOpts.SanitizeMemoryParamRetval);
+    ```
+  */
+  Opts.Opts.TrackOrigins = ClMsanTrackOrigins;
+  Opts.Opts.Recover = ClMsanRecover;
+  Opts.Opts.Kernel = false;
+  Opts.Opts.EagerChecks = ClMsanParamRetval;
 
-  bool UseOdrIndicator;
-  bool UseGlobalGC;
+  return Opts;
+}
 
-  obtainAsanPassArgs(Opts, UseGlobalGC, UseOdrIndicator, DestructorKind);
+static void addAsanToMPM(ModulePassManager &MPM) {
+  if (options::ClDisableAsan)
+    return;
 
-  return PassTy(Opts, UseGlobalGC, UseOdrIndicator, DestructorKind);
+  const auto &Opts = obtainAsanPassArgs();
+  MPM.addPass(ModuleAddressSanitizerPass(
+      Opts.Opts, Opts.UseGlobalGC, Opts.UseOdrIndicator, Opts.DestructorKind));
+}
+
+static void addTsanToMPM(ModulePassManager &MPM) {
+  if (options::ClDisableTsan)
+    return;
+  // Create ctor and init functions.
+  MPM.addPass(ModuleThreadSanitizerPass());
+  // Function Pass to Module Pass. Instruments functions to detect race
+  // conditions reads.
+  MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
+}
+
+static void addMsanToMPM(ModulePassManager &MPM,
+                         llvm::OptimizationLevel Level) {
+  if (options::ClDisableMsan)
+    return;
+
+  const auto &Opts = obtainMsanPassArgs();
+  MPM.addPass(ModuleMemorySanitizerPass(Opts.Opts));
+  FunctionPassManager FPM;
+  FPM.addPass(MemorySanitizerPass(Opts.Opts));
+  if (Level != OptimizationLevel::O0) {
+    // MemorySanitizer inserts complex instrumentation that mostly
+    // follows the logic of the original code, but operates on
+    // "shadow" values. It can benefit from re-running some
+    // general purpose optimization passes.
+    FPM.addPass(EarlyCSEPass());
+    // TODO: Consider add more passes like in
+    // addGeneralOptsForMemorySanitizer. EarlyCSEPass makes visible
+    // difference on size. It's not clear if the rest is still
+    // usefull. InstCombinePass breakes
+    // compiler-rt/test/msan/select_origin.cpp.
+  }
+  MPM.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 }
 
 PreservedAnalyses SubSanitizers::run(Module &IR, ModuleAnalysisManager &AM) {
@@ -164,7 +230,7 @@ PreservedAnalyses SubSanitizers::run(Module &IR, ModuleAnalysisManager &AM) {
   return PA;
 }
 
-SubSanitizers SubSanitizers::loadSubSanitizers() {
+SubSanitizers SubSanitizers::loadSubSanitizers(llvm::OptimizationLevel Level) {
   SubSanitizers Sanitizers;
   // ---------- Collect targets to instrument first ----------------
   FunctionPassManager FPM;
@@ -177,15 +243,9 @@ SubSanitizers SubSanitizers::loadSubSanitizers() {
   Sanitizers.addPass(createModuleToFunctionPassAdaptor(std::move(FPM)));
 
   // ------------ Then instrument ----------------------------------
-  if (!options::ClDisableAsan) {
-    Sanitizers.addPass(getASanPass<ModuleAddressSanitizerPass>());
-  }
-
-  if (!options::ClDisableTsan) {
-    Sanitizers.addPass(ModuleThreadSanitizerPass());
-    Sanitizers.addPass(
-        createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
-  }
+  addAsanToMPM(Sanitizers);
+  addTsanToMPM(Sanitizers);
+  addMsanToMPM(Sanitizers, Level);
 
   return Sanitizers;
 }
@@ -248,28 +308,11 @@ llvm::ModulePassManager createPostOptimizationPasses(OptimizationLevel Level) {
   return MPM;
 }
 
-static void addAsanToMPM(ModulePassManager &MPM) {
-  if (options::ClDisableAsan)
-    return;
-
-  MPM.addPass(getASanPass<ModuleAddressSanitizerPass>());
-}
-
-static void addTsanToMPM(ModulePassManager &MPM) {
-  if (options::ClDisableTsan)
-    return;
-  // Create ctor and init functions.
-  MPM.addPass(ModuleThreadSanitizerPass());
-  // Function Pass to Module Pass. Instruments functions to detect race
-  // conditions reads.
-  MPM.addPass(createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
-}
-
 void registerAsanForClangAndOpt(PassBuilder &PB) {
   registerAnalysisForAsan(PB);
 
   PB.registerOptimizerLastEPCallback(
-      [=](ModulePassManager &MPM, OptimizationLevel level) {
+      [=](ModulePassManager &MPM, OptimizationLevel Level) {
         addAsanToMPM(MPM);
       });
 
@@ -297,7 +340,7 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
   // );
 
   PB.registerOptimizerLastEPCallback(
-      [=](ModulePassManager &MPM, OptimizationLevel level) {
+      [=](ModulePassManager &MPM, OptimizationLevel Level) {
         addTsanToMPM(MPM);
       });
 
@@ -314,13 +357,26 @@ void registerTsanForClangAndOpt(PassBuilder &PB) {
       });
 }
 
-void registerAnalysisForXsan(PassBuilder &PB) {
-  if (!options::ClDisableAsan) {
-    registerAnalysisForAsan(PB);
-  }
-  if (!options::ClDisableTsan) {
-    registerAnalysisForTsan(PB);
-  }
+void registerMsanForClangAndOpt(PassBuilder &PB) {
+  registerAnalysisForMsan(PB);
+
+  PB.registerOptimizerLastEPCallback(
+      [=](ModulePassManager &MPM, OptimizationLevel Level) {
+        
+        addMsanToMPM(MPM, Level);
+      });
+
+  // 这里注册opt回调的名称
+  PB.registerPipelineParsingCallback(
+      [=](StringRef Name, ModulePassManager &MPM,
+          ArrayRef<PassBuilder::PipelineElement>) {
+        if (Name == "msan") {
+          // MPM.addPass(AttributeTaggingPass(SanitizerType::MSan));
+          addMsanToMPM(MPM, OptimizationLevel::O2);
+          return true;
+        }
+        return false;
+      });
 }
 
 } // namespace __xsan

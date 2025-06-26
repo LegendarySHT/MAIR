@@ -36,8 +36,8 @@ gen_hacked_san_names() {
   result[XSan] = "xsan";
   result[ASan] = "asan";
   result[TSan] = "tsan";
+  result[MSan] = "msan";
   result[UBSan] = "ubsan_standalone";
-  // result[MSan] = "msan";
 
   return result;
 }

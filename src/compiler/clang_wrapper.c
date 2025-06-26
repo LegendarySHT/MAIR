@@ -203,6 +203,58 @@ static u8 handle_tsan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
   return 0;
 }
 
+/*
+ Handle the following options about ASan:
+  -fsanitize-memory-track-origins=<value>
+  -fsanitize-memory-track-origins
+  -fsanitize-memory-param-retval
+ Replace with 
+   -mllvm -xxx
+ Not handle the following options because they are only used in CodeGen:
+  -fsanitize-memory-use-after-dtor
+ */
+static u8 handle_msan_options(const char *arg, u8 is_mllvm_arg, u8 is_neg) {
+  if (is_mllvm_arg) {
+    if (!OPT_MATCH(arg, "-msan-")) {
+      return 0;
+    }
+    arg += sizeof("-msan-") - 1;
+    cc_params[cc_par_cnt++] = alloc_printf("-ms-%s", arg);
+    return 1;
+  }
+
+  if (!OPT_MATCH(arg, "memory-")) {
+    return 0;
+  }
+  arg += sizeof("memory-") - 1;
+
+  // -fsanitize-memory-track-origins=<value>
+  // -fsanitize-memory-track-origins
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
+  if (OPT_MATCH(arg, "track-origins")) {
+    const char *end = arg + sizeof("track-origins") - 1;
+    if (*end == 0) {
+      ADD_LLVM_MIDDLE_END_OPTION(is_neg ? "-sanitize-memory-track-origins=0"
+                                   : "-sanitize-memory-track-origins=2");
+      return 1;
+    } else if (*end == '=') {
+      ADD_LLVM_MIDDLE_END_OPTION(
+          alloc_printf("-sanitize-memory-track-origins=%s", end + 1));
+      return 1;
+    }
+  }
+
+  // -fsanitize-memory-param-retval
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
+  OPT_EQ_AND_THEN(arg, "param-retval", {
+    ADD_LLVM_MIDDLE_END_OPTION(is_neg ? "-sanitize-memory-param-retval=0"
+                                 : "-sanitize-memory-param-retval=1");
+    return 1;
+  })
+
+  return 0;
+}
+
 static u8 handle_ubsan_options(const char* opt) {
   return 0;
 }
@@ -218,7 +270,7 @@ static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
                                    enum SanitizerType sanTy) {
   OPT_EQ_AND_THEN(arg, "-lib-only", { return 1; })
 
-  if (OPT_EQ(arg, "-asan") || OPT_EQ(arg, "-tsan") 
+  if (OPT_EQ(arg, "-asan") || OPT_EQ(arg, "-tsan") || OPT_EQ(arg, "-msan")
       || OPT_EQ(arg, "-ubsan") || OPT_EQ(arg, "-xsan")) {
     return 1;
   }
@@ -261,6 +313,13 @@ static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
         set(&xsan_recover_options, ASan);
       }
     })
+    OPT_EQ_AND_THEN(val, "memory", {
+      if (is_neg) {
+        clear(&xsan_recover_options, MSan);
+      } else {
+        set(&xsan_recover_options, MSan);
+      }
+    })
     return 0;
   })
 
@@ -269,13 +328,15 @@ static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
     return handle_asan_options(arg, is_mllvm_arg, is_neg);
   case TSan:
     return handle_tsan_options(arg, is_mllvm_arg, is_neg);
+  case MSan:
+    return handle_msan_options(arg, is_mllvm_arg, is_neg);
   case UBSan:
     return handle_ubsan_options(arg);
   case XSan:
-    return handle_asan_options(arg, is_mllvm_arg, is_neg) |
-           handle_tsan_options(arg, is_mllvm_arg, is_neg) | handle_ubsan_options(arg);
-  case MSan:
+    return handle_asan_options(arg, is_mllvm_arg, is_neg) | handle_tsan_options(arg, is_mllvm_arg, is_neg) |
+           handle_msan_options(arg, is_mllvm_arg, is_neg) | handle_ubsan_options(arg);
   case SanNone:
+  default:
     break;
   }
 
@@ -339,6 +400,11 @@ static void add_pass_options(enum SanitizerType sanTy) {
       ADD_LLVM_MIDDLE_END_OPTION("-sanitize-recover-address");
     }
   }
+  if (has(&xsan_options, MSan)) {
+    if (has(&xsan_recover_options, MSan)) {
+      ADD_LLVM_MIDDLE_END_OPTION("-sanitize-recover-memory");
+    }
+  }
 }
 
 /// Pass is a specific feature for clang/LLVM
@@ -357,14 +423,17 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   case TSan:
     san_pass = "TSanInstPass.so";
     break;
+  case MSan:
+    san_pass = "MSanInstPass.so";
+    break;
   case XSan:
     san_pass = "XSanInstPass.so";
     cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
     cc_params[cc_par_cnt++] = "-D__SANITIZE_ADDRESS__";
     break;
   case UBSan:
-  case MSan:
   case SanNone:
+  default:
     return;
   }
 
@@ -408,6 +477,9 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   }
   if (!has(&xsan_options, TSan)) {
     ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-tsan");
+  }
+  if (!has(&xsan_options, MSan)) {
+    ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-msan");
   }
 }
 

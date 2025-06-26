@@ -115,6 +115,7 @@ static u8 handle_sanitizer_options(const char* arg,
         return handle_asan_options(arg, is_neg) | handle_tsan_options(arg, is_neg) | handle_ubsan_options(arg);
     case MSan: FATAL("gcc-9.4.0 do not support 'msan'");
     case SanNone:
+    default:
         break;
     }
 

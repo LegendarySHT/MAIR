@@ -55,6 +55,9 @@ extern const cl::opt<bool> ClDisableTsan;
 /// Disable ASan instrumentation.
 extern const cl::opt<bool> ClDisableAsan;
 
+/// Disable MSan instrumentation.
+extern const cl::opt<bool> ClDisableMsan;
+
 /// Enable debug output.
 extern cl::opt<bool> ClDebug;
 

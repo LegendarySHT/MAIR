@@ -46,11 +46,17 @@ add_llvm_pass_plugin(CovSanInstPass
   SanitizerCoverage.cpp
 )
 
+add_llvm_pass_plugin(MSanInstPass
+  PARTIAL_SOURCES_INTENDED # Skip checking for else files 
+  MemorySanitizer.cpp
+  ${XSAN_PASS_COMMON}
+)
 
 add_llvm_pass_plugin(XSanInstPass
   PARTIAL_SOURCES_INTENDED # Skip checking for else files 
   ThreadSanitizer.cpp
   AddressSanitizer.cpp
+  MemorySanitizer.cpp
   XSanitizerCompositor.cpp
   ${XSAN_PASS_COMMON}
 )
@@ -68,6 +74,7 @@ target_compile_definitions(XSanInstPass PRIVATE XSAN_PASS)
 set_target_properties(ASanInstPass
                       TSanInstPass
                       CovSanInstPass
+                      MSanInstPass
                       XSanInstPass
                       TestPass
     PROPERTIES

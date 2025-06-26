@@ -88,6 +88,9 @@ message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 
 
+# Set C standard to C17
+set(CMAKE_C_STANDARD 17 CACHE STRING "C standard to conform to")
+set(CMAKE_C_STANDARD_REQUIRED YES)
 # LLVM 15 requires C++14, but we only compile the runtime and instrumentation
 # supprot C++17
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")

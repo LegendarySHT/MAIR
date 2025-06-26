@@ -59,6 +59,10 @@ const cl::opt<bool> ClDisableAsan("xsan-disable-asan", cl::init(false),
                                   cl::desc("Disable ASan instrumentation"),
                                   cl::Hidden);
 
+const cl::opt<bool> ClDisableMsan("xsan-disable-msan", cl::init(false),
+                                  cl::desc("Disable MSan instrumentation"),
+                                  cl::Hidden);
+
 cl::opt<bool> ClDebug("xsan-debug", cl::init(false),
                       cl::desc("Enable debug output for XSan"), cl::Hidden);
 } // namespace options

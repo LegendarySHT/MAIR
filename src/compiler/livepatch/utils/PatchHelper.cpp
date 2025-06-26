@@ -5,6 +5,7 @@
 #include <link.h>
 #include <llvm/Support/Memory.h>
 #include <llvm/Support/Process.h>
+#include <optional>
 #include <string_view>
 
 #include "PatchHelper.h"
@@ -40,7 +41,7 @@ const std::bitset<NumSanitizerTypes> &getXsanMask() {
 
 SanitizerType getSanType() {
   static const SanitizerType sanTy = []() {
-    for (SanitizerType i : {XSan, ASan, TSan, UBSan}) {
+    for (SanitizerType i : {XSan, ASan, TSan, MSan, UBSan}) {
       if (getXsanMask().test(i)) {
         return i;
       }

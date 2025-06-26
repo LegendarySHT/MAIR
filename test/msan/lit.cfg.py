@@ -12,7 +12,8 @@ config.test_source_root = os.path.dirname(__file__)
 clang_msan_cflags = (
     [
         # "-fsanitize=memory",
-        "-xsan",
+        "-msan",
+        # "-xsan",
         "-mno-omit-leaf-frame-pointer",
         "-fno-omit-frame-pointer",
         "-fno-optimize-sibling-calls",

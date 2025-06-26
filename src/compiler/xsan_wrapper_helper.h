@@ -22,6 +22,9 @@ static inline void init(XsanOption *opt) {
 #if XSAN_CONTAINS_TSAN
   opt->mask |= (u64)1 << TSan;
 #endif
+#if XSAN_CONTAINS_MSAN
+  opt->mask |= (u64)1 << MSan;
+#endif
 #if XSAN_CONTAINS_ASAN
   opt->mask |= (u64)1 << ASan;
 #endif

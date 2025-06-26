@@ -10,7 +10,6 @@
 #pragma once
 
 #include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
 #include "xsan_common.h"
 
 namespace llvm {

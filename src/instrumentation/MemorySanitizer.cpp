@@ -198,6 +198,8 @@
 #include <string>
 #include <tuple>
 
+#include "PassRegistry.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "msan"
@@ -213,44 +215,50 @@ static const unsigned kRetvalTLSSize = 800;
 // Accesses sizes are powers of two: 1, 2, 4, 8.
 static const size_t kNumberOfAccessSizes = 4;
 
+/* modify msan-* to ms-* to avoid conflicts with the embedded original MSan pass */
+
 /// Track origins of uninitialized values.
 ///
 /// Adds a section to MemorySanitizer report that points to the allocation
 /// (stack or heap) the uninitialized bits came from originally.
-static cl::opt<int> ClTrackOrigins("msan-track-origins",
+static cl::opt<int> ClTrackOrigins("ms-track-origins",
        cl::desc("Track origins (allocation sites) of poisoned memory"),
        cl::Hidden, cl::init(0));
 
-static cl::opt<bool> ClKeepGoing("msan-keep-going",
+static cl::opt<bool> ClKeepGoing("ms-keep-going",
        cl::desc("keep going after reporting a UMR"),
        cl::Hidden, cl::init(false));
 
-static cl::opt<bool> ClPoisonStack("msan-poison-stack",
+static cl::opt<bool> ClPoisonStack("ms-poison-stack",
        cl::desc("poison uninitialized stack variables"),
        cl::Hidden, cl::init(true));
 
-static cl::opt<bool> ClPoisonStackWithCall("msan-poison-stack-with-call",
+static cl::opt<bool> ClPoisonStackWithCall("ms-poison-stack-with-call",
        cl::desc("poison uninitialized stack variables with a call"),
        cl::Hidden, cl::init(false));
 
-static cl::opt<int> ClPoisonStackPattern("msan-poison-stack-pattern",
+static cl::opt<int> ClPoisonStackPattern("ms-poison-stack-pattern",
        cl::desc("poison uninitialized stack variables with the given pattern"),
        cl::Hidden, cl::init(0xff));
 
-static cl::opt<bool> ClPoisonUndef("msan-poison-undef",
+static cl::opt<bool> ClPrintStackNames("ms-print-stack-names",
+       cl::desc("Print name of local stack variable"),
+       cl::Hidden, cl::init(true));
+
+static cl::opt<bool> ClPoisonUndef("ms-poison-undef",
        cl::desc("poison undef temps"),
        cl::Hidden, cl::init(true));
 
-static cl::opt<bool> ClHandleICmp("msan-handle-icmp",
+static cl::opt<bool> ClHandleICmp("ms-handle-icmp",
        cl::desc("propagate shadow through ICmpEQ and ICmpNE"),
        cl::Hidden, cl::init(true));
 
-static cl::opt<bool> ClHandleICmpExact("msan-handle-icmp-exact",
+static cl::opt<bool> ClHandleICmpExact("ms-handle-icmp-exact",
        cl::desc("exact handling of relational integer ICmp"),
        cl::Hidden, cl::init(false));
 
 static cl::opt<bool> ClHandleLifetimeIntrinsics(
-    "msan-handle-lifetime-intrinsics",
+    "ms-handle-lifetime-intrinsics",
     cl::desc(
         "when possible, poison scoped variables at the beginning of the scope "
         "(slower, but more precise)"),
@@ -267,7 +275,7 @@ static cl::opt<bool> ClHandleLifetimeIntrinsics(
 // -msan-handle-asm-conservative is on. This is done because we may want to
 // quickly disable assembly instrumentation when it breaks.
 static cl::opt<bool> ClHandleAsmConservative(
-    "msan-handle-asm-conservative",
+    "ms-handle-asm-conservative",
     cl::desc("conservative handling of inline assembly"), cl::Hidden,
     cl::init(true));
 
@@ -277,21 +285,21 @@ static cl::opt<bool> ClHandleAsmConservative(
 // (e.g. only lower bits of address are garbage, or the access happens
 // early at program startup where malloc-ed memory is more likely to
 // be zeroed. As of 2012-08-28 this flag adds 20% slowdown.
-static cl::opt<bool> ClCheckAccessAddress("msan-check-access-address",
+static cl::opt<bool> ClCheckAccessAddress("ms-check-access-address",
        cl::desc("report accesses through a pointer which has poisoned shadow"),
        cl::Hidden, cl::init(true));
 
 static cl::opt<bool> ClEagerChecks(
-    "msan-eager-checks",
+    "ms-eager-checks",
     cl::desc("check arguments and return values at function call boundaries"),
     cl::Hidden, cl::init(false));
 
-static cl::opt<bool> ClDumpStrictInstructions("msan-dump-strict-instructions",
+static cl::opt<bool> ClDumpStrictInstructions("ms-dump-strict-instructions",
        cl::desc("print out instructions with default strict semantics"),
        cl::Hidden, cl::init(false));
 
 static cl::opt<int> ClInstrumentationWithCallThreshold(
-    "msan-instrumentation-with-call-threshold",
+    "ms-instrumentation-with-call-threshold",
     cl::desc(
         "If the function being instrumented requires more than "
         "this number of checks and origin stores, use callbacks instead of "
@@ -299,43 +307,43 @@ static cl::opt<int> ClInstrumentationWithCallThreshold(
     cl::Hidden, cl::init(3500));
 
 static cl::opt<bool>
-    ClEnableKmsan("msan-kernel",
+    ClEnableKmsan("ms-kernel",
                   cl::desc("Enable KernelMemorySanitizer instrumentation"),
                   cl::Hidden, cl::init(false));
 
 static cl::opt<bool>
-    ClDisableChecks("msan-disable-checks",
+    ClDisableChecks("ms-disable-checks",
                     cl::desc("Apply no_sanitize to the whole file"), cl::Hidden,
                     cl::init(false));
 
 // This is an experiment to enable handling of cases where shadow is a non-zero
 // compile-time constant. For some unexplainable reason they were silently
 // ignored in the instrumentation.
-static cl::opt<bool> ClCheckConstantShadow("msan-check-constant-shadow",
+static cl::opt<bool> ClCheckConstantShadow("ms-check-constant-shadow",
        cl::desc("Insert checks for constant shadow values"),
        cl::Hidden, cl::init(false));
 
 // This is off by default because of a bug in gold:
 // https://sourceware.org/bugzilla/show_bug.cgi?id=19002
-static cl::opt<bool> ClWithComdat("msan-with-comdat",
+static cl::opt<bool> ClWithComdat("ms-with-comdat",
        cl::desc("Place MSan constructors in comdat sections"),
        cl::Hidden, cl::init(false));
 
 // These options allow to specify custom memory map parameters
 // See MemoryMapParams for details.
-static cl::opt<uint64_t> ClAndMask("msan-and-mask",
+static cl::opt<uint64_t> ClAndMask("ms-and-mask",
                                    cl::desc("Define custom MSan AndMask"),
                                    cl::Hidden, cl::init(0));
 
-static cl::opt<uint64_t> ClXorMask("msan-xor-mask",
+static cl::opt<uint64_t> ClXorMask("ms-xor-mask",
                                    cl::desc("Define custom MSan XorMask"),
                                    cl::Hidden, cl::init(0));
 
-static cl::opt<uint64_t> ClShadowBase("msan-shadow-base",
+static cl::opt<uint64_t> ClShadowBase("ms-shadow-base",
                                       cl::desc("Define custom MSan ShadowBase"),
                                       cl::Hidden, cl::init(0));
 
-static cl::opt<uint64_t> ClOriginBase("msan-origin-base",
+static cl::opt<uint64_t> ClOriginBase("ms-origin-base",
                                       cl::desc("Define custom MSan OriginBase"),
                                       cl::Hidden, cl::init(0));
 
@@ -5368,3 +5376,26 @@ bool MemorySanitizer::sanitizeFunction(Function &F, TargetLibraryInfo &TLI) {
 
   return Visitor.runOnFunction();
 }
+
+namespace __xsan {
+
+/// Moved to ThreadSanitizer.cpp, as the type information is needed there.
+void registerAnalysisForMsan(PassBuilder &PB) {
+  PB.registerAnalysisRegistrationCallback([](FunctionAnalysisManager &FAM) {
+    // FAM.registerPass([&] { return TsanTargetsToInstrumentAnalysis(); });
+  });
+}
+
+void addMsanRequireAnalysisPass(SubSanitizers &MPM, FunctionPassManager &FPM) {
+  // FPM.addPass(RequireAnalysisPass<TsanTargetsToInstrumentAnalysis,
+  // Function>());
+}
+
+} // namespace __xsan
+
+#ifndef XSAN_PASS
+extern "C" LLVM_ATTRIBUTE_WEAK PassPluginLibraryInfo llvmGetPassPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "MSan Pass", LLVM_VERSION_STRING,
+          __xsan::registerMsanForClangAndOpt};
+}
+#endif
