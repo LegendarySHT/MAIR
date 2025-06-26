@@ -10,11 +10,24 @@
 #include <cstring>
 #include <filesystem>
 #include <type_traits>
+#include <vector>
 
 bool isXsanEnabled();
 const std::string &getStrMask();
 const std::bitset<XSan + 1> &getXsanMask();
 SanitizerType getSanType();
+
+struct ROSegment {
+  char *vaddr;
+  size_t memsz;
+};
+
+// Get the rodata sections of self module, i.e., ignoring other DSOs.
+const std::vector<ROSegment> &getSelfModuleROSegments();
+
+// Memcpy, but can run on address without write permission.
+void memcpy_forcibly(void *dst, const void *src, size_t n,
+                     bool is_dst_exec = false);
 
 std::filesystem::path getThisPatchDsoPath();
 std::filesystem::path getXsanAbsPath(std::string_view rel_path);
@@ -178,6 +191,25 @@ public:
   Ret operator()(Args... args) {
     ScopedCall Scoper(this);
     return (this->RealFunc)(std::forward<Args>(args)...);
+  }
+};
+
+// Variadic function pointers (e.g., Ret (*)(Args..., ...))
+template <typename DeriveTy, typename Ret, typename... Args>
+class XsanInterceptorFunctor<DeriveTy, Ret (*)(Args..., ...)>
+    : public XsanInterceptorFunctorBase<DeriveTy, Ret (*)(Args..., ...)> {
+protected:
+  using ScopedCall =
+      typename XsanInterceptorFunctorBase<DeriveTy,
+                                          Ret (*)(Args..., ...)>::ScopedCall;
+
+public:
+  template <typename... CallArgs>
+  Ret operator()(CallArgs&&... args) {
+    // Note: we can't do parameter number check here, must ensure that the
+    // caller passes the correct parameters to the real function.
+    ScopedCall Scoper(this);
+    return (this->RealFunc)(std::forward<CallArgs>(args)...);
   }
 };
 

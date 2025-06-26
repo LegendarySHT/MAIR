@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <dlfcn.h>
+#include <elf.h>
 #include <filesystem>
 #include <link.h>
 #include <llvm/Support/Memory.h>
@@ -31,8 +32,8 @@ const std::string &getStrMask() {
 }
 
 // Lazy initialization for xsan_mask
-const std::bitset<XSan + 1> &getXsanMask() {
-  static const std::bitset<XSan + 1> mask(
+const std::bitset<NumSanitizerTypes> &getXsanMask() {
+  static const std::bitset<NumSanitizerTypes> mask(
       isXsanEnabled() ? std::strtoul(getStrMask().c_str(), nullptr, 0) : 0);
   return mask;
 }
@@ -47,6 +48,36 @@ SanitizerType getSanType() {
     return SanNone;
   }();
   return sanTy;
+}
+
+// r--p
+static bool is_rodata(Elf64_Word flags) {
+  return (flags & PF_R) && !(flags & PF_W) && !(flags & PF_X);
+}
+
+const std::vector<ROSegment> &getSelfModuleROSegments() {
+  static std::vector<ROSegment> ro_sec;
+  if (!ro_sec.empty())
+    return ro_sec;
+  dl_iterate_phdr(
+      +[](struct dl_phdr_info *info, size_t, void *data) {
+        if (info->dlpi_name != nullptr && strlen(info->dlpi_name) != 0) {
+          return 0;
+        }
+        Elf64_Addr base = info->dlpi_addr;
+        auto &ro_sec = *static_cast<std::vector<ROSegment> *>(data);
+        // Main executable object
+        for (int i = 0; i < info->dlpi_phnum; ++i) {
+          const auto &ph = info->dlpi_phdr[i];
+          if (ph.p_type == PT_LOAD && is_rodata(ph.p_flags)) {
+            ro_sec.push_back({reinterpret_cast<char *>(base + ph.p_vaddr),
+                              (size_t)ph.p_memsz});
+          }
+        }
+        return 1; // 停止迭代
+      },
+      &ro_sec);
+  return ro_sec;
 }
 
 fs::path getSelfPath() {
@@ -242,6 +273,13 @@ void *getMyFuncAddr(const char *ManagledName) {
 class ScopedApplyPatch {
   using Memory = llvm::sys::Memory;
 
+public:
+  enum class MemoryType {
+    Exec,
+    RoData,
+  };
+
+private:
   void changeMemoryProtection(unsigned flags) {
     if (auto Ret = Memory::protectMappedMemory(Mem, flags)) {
       FATAL("Failed to protect memory for patching: %s", Ret.message().c_str());
@@ -249,16 +287,36 @@ class ScopedApplyPatch {
   }
 
 public:
-  ScopedApplyPatch(void *FuncAddr) : Mem(FuncAddr, sizeof(XsanPatch)) {
+  unsigned getMemoryProtectionFlags(MemoryType type) {
+    switch (type) {
+    case MemoryType::Exec:
+      return Memory::MF_EXEC | Memory::MF_READ;
+    case MemoryType::RoData:
+      return Memory::MF_READ;
+    }
+  }
+
+  ScopedApplyPatch(void *FuncAddr, size_t n, MemoryType type = MemoryType::Exec)
+      : Mem(FuncAddr, n), type(type) {
     changeMemoryProtection(Memory::MF_RWE_MASK);
   }
   ~ScopedApplyPatch() {
-    changeMemoryProtection(Memory::MF_READ | Memory::MF_EXEC);
+    changeMemoryProtection(getMemoryProtectionFlags(type));
   }
 
 private:
   llvm::sys::MemoryBlock Mem;
+  MemoryType type;
 };
+
+// Memcpy, but can run on address without write permission.
+void memcpy_forcibly(void *dst, const void *src, size_t n, bool is_dst_exec) {
+  ScopedApplyPatch::MemoryType MemTy =
+      is_dst_exec ? ScopedApplyPatch::MemoryType::Exec
+                  : ScopedApplyPatch::MemoryType::RoData;
+  ScopedApplyPatch Scoper(dst, n, MemTy);
+  std::memcpy(dst, src, n);
+}
 
 void XsanPatch::validateInit() const {
   if (unlikely(!isInitialized)) {
@@ -283,14 +341,12 @@ bool XsanPatch::isPatched(void *FuncAddr) {
 
 void XsanPatch::applyPatch(void *FuncAddr) const {
   validateInit();
-  ScopedApplyPatch Scoper(FuncAddr);
-  std::memcpy(FuncAddr, patch, sizeof(Data));
+  memcpy_forcibly(FuncAddr, patch, sizeof(Data), true);
 }
 
 void XsanPatch::applyBackup(void *FuncAddr) const {
   validateInit();
-  ScopedApplyPatch Scoper(FuncAddr);
-  std::memcpy(FuncAddr, backup, sizeof(Data));
+  memcpy_forcibly(FuncAddr, backup, sizeof(Data), true);
 }
 
 // Return the base address of the executable file
