@@ -51,13 +51,14 @@ ModulePassManager modifySanitizerPassesPipeline(ModulePassManager &MPM) {
 } // namespace
 
 static XsanInterceptor buildPerModuleDefaultPipelineInterceptor(
-    &PassBuilder::buildPerModuleDefaultPipeline);
+    &PassBuilder::buildPerModuleDefaultPipeline, {"clang", "clang++"});
 static XsanInterceptor buildLTOPreLinkDefaultPipelineInterceptor(
-    &PassBuilder::buildLTOPreLinkDefaultPipeline);
+    &PassBuilder::buildLTOPreLinkDefaultPipeline, {"clang", "clang++"});
 static XsanInterceptor buildThinLTOPreLinkDefaultPipelineInterceptor(
-    &PassBuilder::buildThinLTOPreLinkDefaultPipeline);
+    &PassBuilder::buildThinLTOPreLinkDefaultPipeline, {"clang", "clang++"});
 static XsanInterceptor
-    buildO0DefaultPipelineInterceptor(&PassBuilder::buildO0DefaultPipeline);
+    buildO0DefaultPipelineInterceptor(&PassBuilder::buildO0DefaultPipeline,
+                                      {"clang", "clang++"});
 
 ModulePassManager
 PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,

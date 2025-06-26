@@ -1080,5 +1080,6 @@ std::string describeSanitizeArg(const llvm::opt::Arg *A, SanitizerMask Mask) {
   return "-fsanitize=" + Sanitizers;
 }
 
-static XsanInterceptor Interceptor("_ZN5clang6driver13SanitizerArgsC2ERKNS0_"
-                                   "9ToolChainERKN4llvm3opt7ArgListEb");
+static XsanInterceptor Interceptor(
+    "_ZN5clang6driver13SanitizerArgsC2ERKNS0_9ToolChainERKN4llvm3opt7ArgListEb",
+    {"clang", "clang++"});

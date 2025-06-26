@@ -13,7 +13,8 @@
 using namespace clang;
 using namespace llvm;
 
-static XsanInterceptor Interceptor(&clang::EmitBackendOutput);
+static XsanInterceptor Interceptor(&clang::EmitBackendOutput,
+                                   {"clang", "clang++"});
 
 void clang::EmitBackendOutput(DiagnosticsEngine &Diags,
                               const HeaderSearchOptions &HeaderOpts,

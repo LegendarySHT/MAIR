@@ -68,12 +68,29 @@ fs::path getSelfPath() {
   return self_path.value();
 }
 
-bool isPatchingClang() {
+bool isPatchingProc(const char *proc_name) {
   // Obtain the executable name.
   std::string pname = getSelfPath().filename().string();
-  llvm::StringRef proc_name = pname;
-  // Match clang, clang++, clang-15, etc
-  return proc_name.startswith("clang");
+  llvm::StringRef proc_name_str = pname;
+
+  // Retrieve the position of proc_name in the string.
+  size_t pos = pname.find(proc_name);
+  if (pos == std::string::npos) {
+    return false;
+  }
+  
+  // Check if there is a letter character before proc_name.
+  if (pos > 0 && std::isalpha(pname[pos - 1])) {
+    return false;
+  }
+  
+  // Check if there is a letter character after proc_name.
+  size_t after_pos = pos + strlen(proc_name);
+  if (after_pos < pname.length() && std::isalpha(pname[after_pos])) {
+    return false;
+  }
+  
+  return true;
 }
 
 fs::path getThisPatchDsoPath() {

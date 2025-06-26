@@ -229,7 +229,8 @@ static void add_wrap_link_option(ArgStringList &CmdArgs) {
 
 } // namespace
 
-static XsanInterceptor Interceptor(tools::addSanitizerRuntimes);
+static XsanInterceptor Interceptor(tools::addSanitizerRuntimes,
+                                   {"clang", "clang++"});
 
 // Should be called before we add system libraries (C++ ABI, libstdc++/libc++,
 // C runtime, etc). Returns true if sanitizer system deps need to be linked in.

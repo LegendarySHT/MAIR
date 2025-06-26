@@ -1,6 +1,8 @@
 // Match functions
 #include "debug.h"
 #include "xsan_common.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include <atomic>
 #include <bitset>
 #include <cassert>
@@ -24,8 +26,9 @@ bool is_self_proc_pie();
 /// TODO: support base address resolution for shared library.
 void *get_base_address();
 
-// We only patch clang.
-bool isPatchingClang();
+/// TODO: it is too unstable to use name to filter out irrelevant processes.
+/// We should find a better way to filter out irrelevant processes.
+bool isPatchingProc(const char *proc_name);
 void *getRealFuncAddr(const char *ManagledName);
 void *getRealFuncAddr(void *InterceptorFunc);
 void *getMyFuncAddr(const char *ManagledName);
@@ -196,8 +199,9 @@ class XsanInterceptor
   friend typename BaseTy::ScopedCall;
 
 public:
-  XsanInterceptor(FunPtr MyFunc) {
-    if (!isPatchingClang()) {
+  XsanInterceptor(FunPtr MyFunc, llvm::ArrayRef<const char *> target_procs)
+      : target_procs(target_procs) {
+    if (!llvm::any_of(target_procs, isPatchingProc)) {
       // E.g., lld
       return;
     }
@@ -205,8 +209,10 @@ public:
     this->SetRealFunc(getRealFuncAddr(this->GetMyFunc()));
     InitPatch();
   }
-  XsanInterceptor(const char *ManagledName) {
-    if (!isPatchingClang()) {
+  XsanInterceptor(const char *ManagledName,
+                  llvm::ArrayRef<const char *> target_procs)
+      : target_procs(target_procs) {
+    if (!llvm::any_of(target_procs, isPatchingProc)) {
       // E.g., lld
       return;
     }
@@ -250,6 +256,7 @@ private:
     Mutex.store(false, std::memory_order_release);
   }
 
+  llvm::ArrayRef<const char *> target_procs;
   XsanPatch Patch;
   std::atomic_bool Mutex;
   bool IsEnabled = false;
