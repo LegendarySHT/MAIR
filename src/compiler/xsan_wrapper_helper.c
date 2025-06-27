@@ -480,6 +480,19 @@ void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
     // Link all contents in *.a, rather than only link symbols in demands.
     // e.g., link preinit_array symbol, which is not used in user program.
     cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
+    if (needs_shared_rt && !is_dso) {
+      /// TODO: skip in Android
+      /*
+        To support DSO of XSan, see the following commit for details:
+        https://github.com/llvm/llvm-project/commit/56b6ee9833137e0e79667f8e4378895fed5dc2c2
+
+        // These code comes from CommonArgs.cpp in LLVM 15
+        if (!Args.hasArg(options::OPT_shared) && !TC.getTriple().isAndroid())
+          HelperStaticRuntimes.push_back("asan-preinit");
+      */
+      cc_params[cc_par_cnt++] = alloc_printf(
+          "%s/lib/linux/libclang_rt.%s-preinit-x86_64.a", obj_path, san);
+    }
     // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
     cc_params[cc_par_cnt++] = alloc_printf(
         "%s/lib/linux/libclang_rt.%s_static-x86_64.a", obj_path, san);
@@ -517,16 +530,12 @@ void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
         "-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms",
         obj_path, san);
   }
+  // If not using livepatch, we might need to link some libraries manually.
+  // At least for clang, we should.
   cc_params[cc_par_cnt++] = "-lm";
   cc_params[cc_par_cnt++] = "-ldl";
   cc_params[cc_par_cnt++] = "-lpthread";
-  if (is_cxx) {
-    cc_params[cc_par_cnt++] = "-lstdc++";
-  }
-
-  /**
-   * Transfer the option to pass by `-mllvm -<opt>`
-   */
-  // cc_params[cc_par_cnt++] = "-mllvm";
-  // cc_params[cc_par_cnt++] = "-memlog-hook-inst=1";
+  // if (is_cxx) {
+  //   cc_params[cc_par_cnt++] = "-lstdc++";
+  // }
 }
