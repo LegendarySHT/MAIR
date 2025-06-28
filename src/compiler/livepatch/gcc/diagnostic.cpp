@@ -1,3 +1,6 @@
+/*
+Patch the error_at in diagnostic.c/diagnostic.cc in gcc.
+*/
 #include <cstdint>
 #include <string.h>
 
@@ -5,9 +8,6 @@
 #include "llvm/ADT/STLExtras.h"
 #include <llvm/ADT/StringRef.h>
 
-const char *target_msg =
-    "%<-fsanitize=address%> and %<-fsanitize=kernel-address%> "
-    "are incompatible with %<-fsanitize=thread%>";
 
 // This type definition comes from gcc's unexported header file:
 // libcpp/include/line-map.h

@@ -23,8 +23,10 @@ include_directories(${LLVM_INCLUDE_DIRS})
 #             relative address.
 add_link_options(-Wl,-Bsymbolic-functions)
 
-add_subdirectory(clang)
-add_subdirectory(gcc-9.4)
+# Due to the LLVM API, we can only livepatch clang-15.
+add_subdirectory(clang-15)
+# In theory, the hot patch of gcc does not limit the version of gcc
+add_subdirectory(gcc)
 
 
 configure_file(

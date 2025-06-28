@@ -1,4 +1,8 @@
 /*
+Patch the link_command_spec in gcc.c / gcc.cc in gcc.
+*/
+
+/*
 The complete linker spec in gcc-9.4 is as follows:
 
 "%{!fsyntax-only:%{!c:%{!M:%{!MM:%{!E:%{!S:    %(linker)
