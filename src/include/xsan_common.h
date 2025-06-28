@@ -10,7 +10,7 @@
 #define FANCY_BOXES
 
 
-enum SanitizerType { SanNone, ASan, TSan, MSan, UBSan, XSan };
+enum SanitizerType { SanNone, ASan, TSan, MSan, UBSan, XSan, NumSanitizerTypes };
 
 enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };
 
