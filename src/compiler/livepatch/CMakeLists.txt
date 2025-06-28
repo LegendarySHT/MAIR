@@ -24,4 +24,11 @@ include_directories(${LLVM_INCLUDE_DIRS})
 add_link_options(-Wl,-Bsymbolic-functions)
 
 add_subdirectory(clang)
-# add_subdirectory(gcc)
+add_subdirectory(gcc-9.4)
+
+
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/support_dso_injection.sh
+  ${XSAN_PATCH_DIR}/support_dso_injection.sh
+  @ONLY
+)

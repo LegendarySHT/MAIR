@@ -76,9 +76,3 @@ set(CLANG_PATCH_DATADIR ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/clang-p
 #     COMPONENT clang-patch
 #     FILES_MATCHING PATTERN "*.yml"
 # )
-
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/support_dso_injection.sh
-  ${XSAN_PATCH_DIR}/support_dso_injection.sh
-  @ONLY
-)
