@@ -21,8 +21,9 @@ clang_msan_cflags = (
     + [config.target_cflags]
     + config.debug_info_flags
 )
-config.available_features.add("xsan")
-config.environment["LSAN_OPTIONS"] = "detect_leaks=0"
+if "-xsan" in clang_msan_cflags:
+    config.available_features.add("xsan")
+    config.environment["LSAN_OPTIONS"] = "detect_leaks=0"
 # Some Msan tests leverage backtrace() which requires libexecinfo on FreeBSD.
 if config.host_os == "FreeBSD":
     clang_msan_cflags += ["-lexecinfo", "-fPIC"]

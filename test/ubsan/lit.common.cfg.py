@@ -25,19 +25,22 @@ default_ubsan_opts = list(config.default_sanitizer_opts)
 ubsan_lit_test_mode = get_required_attr(config, "ubsan_lit_test_mode")
 if ubsan_lit_test_mode == "Standalone":
     config.available_features.add("ubsan-standalone")
-    config.available_features.add("ubsan-xsan")
     clang_ubsan_cflags = ["-xsan", "-fno-sanitize=undefined"]
-    default_ubsan_opts += ['detect_leaks=0']
+    if "-xsan" in clang_ubsan_cflags:
+        config.available_features.add("ubsan-xsan")
+        default_ubsan_opts += ["detect_leaks=0"]
 elif ubsan_lit_test_mode == "StandaloneStatic":
+    # TODO: support static ubsan
     config.available_features.add("ubsan-standalone-static")
     clang_ubsan_cflags = ["-static-libsan"]
 elif ubsan_lit_test_mode == "AddressSanitizer":
     config.available_features.add("ubsan-asan")
     # clang_ubsan_cflags = ["-fsanitize=address"]
     clang_ubsan_cflags = ["-asan"]
-    default_ubsan_opts += ['detect_leaks=0']
+    default_ubsan_opts += ["detect_leaks=0"]
 elif ubsan_lit_test_mode == "MemorySanitizer":
     config.available_features.add("ubsan-msan")
+    # clang_ubsan_cflags = ["-fsanitize=memory"]
     clang_ubsan_cflags = ["-msan"]
 elif ubsan_lit_test_mode == "ThreadSanitizer":
     config.available_features.add("ubsan-tsan")
