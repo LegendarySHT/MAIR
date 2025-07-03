@@ -53,7 +53,7 @@ int main() {
   c->A_Foo();
 // CVPTR: Memory was marked as uninitialized
 // CVPTR: {{#0 0x.* in __sanitizer_dtor_callback}}
-// CVPTR: {{#1 0x.* in C::~C\(\) .*cpp:}}[[@LINE-28]]:
+// CVPTR: {{#1 0x.* in (C::~C\(\)|~C) .*cpp:}}[[@LINE-28]]:
 // CVPTR: {{#2 0x.* in main .*cpp:}}[[@LINE-7]]:
 #endif
 
@@ -65,7 +65,7 @@ int main() {
   e->A_Foo();
 // EAVPTR: Memory was marked as uninitialized
 // EAVPTR: {{#0 0x.* in __sanitizer_dtor_callback}}
-// EAVPTR: {{#1 0x.* in E::~E\(\) .*cpp:}}[[@LINE-25]]:
+// EAVPTR: {{#1 0x.* in (E::~E\(\)|~E) .*cpp:}}[[@LINE-25]]:
 // EAVPTR: {{#2 0x.* in main .*cpp:}}[[@LINE-7]]:
 #endif
 
@@ -73,7 +73,7 @@ int main() {
   e->D_Foo();
 // EDVPTR: Memory was marked as uninitialized
 // EDVPTR: {{#0 0x.* in __sanitizer_dtor_callback}}
-// EDVPTR: {{#1 0x.* in E::~E\(\) .*cpp:}}[[@LINE-33]]:
+// EDVPTR: {{#1 0x.* in (E::~E\(\)|~E) .*cpp:}}[[@LINE-33]]:
 // EDVPTR: {{#2 0x.* in main .*cpp:}}[[@LINE-15]]:
 #endif
 }

@@ -14,7 +14,11 @@
 
 const char *mem_to_shadow(const char *p) {
 #if defined(__x86_64__)
-  return (char *)((uintptr_t)p ^ 0x300000000000ULL);
+  if (const char *use_xsan_rt = getenv("USE_XSAN_RT");
+      use_xsan_rt && *use_xsan_rt)
+    return (char *)((uintptr_t)p ^ 0x300000000000ULL);
+  else
+    return (char *)((uintptr_t)p ^ 0x500000000000ULL);
 #elif defined(__loongarch_lp64)
   return (char *)((uintptr_t)p ^ 0x500000000000ULL);
 #elif defined (__mips64)
