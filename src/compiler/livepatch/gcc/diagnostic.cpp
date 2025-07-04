@@ -24,14 +24,24 @@ static unsigned
 count_gcc_diag_specifiers(const char *gmsgid,
                           const llvm::StringRef given_spec = "");
 
-template <size_t> intptr_t get_arg(va_list &args) {
-  return va_arg(args, intptr_t);
-}
-// Use varargs template to simplify the repetitive code
+// template <size_t> intptr_t get_arg(va_list &args) {
+//   return va_arg(args, intptr_t);
+// }
+// // Use varargs template to simplify the repetitive code
+// template <size_t... Is>
+// void call_interceptor(location_t loc, const char *gmsgid, va_list &args,
+//                       std::index_sequence<Is...>) {
+//   Interceptor(loc, gmsgid, get_arg<Is>(args)...);
+// }
+
+/// A better implementation to expand the variadic parameters
+/// I.e., use the comma expression.
 template <size_t... Is>
 void call_interceptor(location_t loc, const char *gmsgid, va_list &args,
                       std::index_sequence<Is...>) {
-  Interceptor(loc, gmsgid, get_arg<Is>(args)...);
+  Interceptor(loc, gmsgid,
+              (/* Suppress the compiler warning */ static_cast<void>(Is),
+               va_arg(args, intptr_t))...);
 }
 
 // This symbol exists on cc1's dynsym table.
@@ -166,8 +176,8 @@ void error_at(location_t loc, const char *gmsgid, ...) {
     FORWARD(19)
     FORWARD(20)
 #undef FORWARD
-    default:
-      FATAL("Unsupported number of arguments: %d", count_extra_args);
+  default:
+    FATAL("Unsupported number of arguments: %d", count_extra_args);
   }
 
   va_end(args);
