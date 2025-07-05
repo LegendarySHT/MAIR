@@ -126,7 +126,7 @@ The key components related to sanitizers are:
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <iostream>
+#include <optional>
 #include <type_traits>
 #include <vector>
 

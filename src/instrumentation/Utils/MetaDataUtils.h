@@ -34,6 +34,8 @@ struct HasMetaDataExtra<MetaT, std::void_t<typename MetaT::Extra>>
     : std::bool_constant<
           std::is_base_of_v<MetaDataExtra<typename MetaT::Extra>, MetaT>> {};
 
+/// MetaT is only used to distinguish between different static members and does
+/// not participate in the actual implementation
 template <typename MetaT, typename InstT = llvm::Instruction>
 class MetaDataHelperBase {
 public:
@@ -54,6 +56,8 @@ class MetaDataHelper<MetaT, InstT, false>
   using MetaDataHelperBase<MetaT, InstT>::ID;
 
 public:
+  using MetaDataHelperBase<MetaT, InstT>::is;
+
   static void set(InstT &I);
 };
 
@@ -63,6 +67,7 @@ class MetaDataHelper<MetaT, InstT, true>
   using MetaDataHelperBase<MetaT, InstT>::ID;
 
 public:
+  using MetaDataHelperBase<MetaT, InstT>::is;
   using Extra = typename MetaT::Extra;
 
   static llvm::Optional<Extra> get(const InstT &I);
