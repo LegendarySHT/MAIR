@@ -11,6 +11,9 @@ extern "C" {
 // before any instrumented code is executed and before any call to malloc.
 SANITIZER_INTERFACE_ATTRIBUTE void __xsan_init();
 
+// __asan_init has different semantics.
+SANITIZER_INTERFACE_ATTRIBUTE void __xsan_asan_init();
+
 // Performs cleanup before a NoReturn function. Must be called before things
 // like _exit and execl to avoid false positives on stack.
 SANITIZER_INTERFACE_ATTRIBUTE void __xsan_handle_no_return();

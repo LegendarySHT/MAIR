@@ -10,12 +10,12 @@ extern "C" {
 /// them to __xsan_init.
 
 #define INTERCEPT_AND_REDIRECT(ret, f, ...) \
-  SANITIZER_INTERFACE_ATTRIBUTE ret XSAN_WRAP(f)(__VA_ARGS__) { __xsan_init(); }
+  SANITIZER_INTERFACE_ATTRIBUTE ret XSAN_WRAP(f)(__VA_ARGS__)
 
-INTERCEPT_AND_REDIRECT(void, __asan_init)
-INTERCEPT_AND_REDIRECT(void, __tsan_init)
-INTERCEPT_AND_REDIRECT(void, __msan_init)
+INTERCEPT_AND_REDIRECT(void, __asan_init) { __xsan_asan_init(); }
+INTERCEPT_AND_REDIRECT(void, __tsan_init) { __xsan_init(); }
+INTERCEPT_AND_REDIRECT(void, __msan_init) { __xsan_init(); }
 
 #undef INTERCEPT_AND_REDIRECT
-#undef RTL_WRAP
+
 }

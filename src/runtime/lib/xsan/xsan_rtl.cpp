@@ -33,6 +33,13 @@ constexpr uptr ZeroBaseMaxShadowStart = 1 << 18;
 static StaticSpinMutex xsan_inited_mutex;
 static atomic_uint8_t xsan_inited = {0};
 
+// Originally, __asan_init initialized but didn't activate on the first
+// call, while activated but didn't initialize on the other calls.
+// But __xsan_init may have been called many times, such as called from
+// interceptors. So we can't use xsan_inited to determine whether performing
+// initialization or activation.
+static atomic_uint8_t xsan_asan_inited = {0};
+
 /// Whether we are currently in XSan initialization.
 /// Only set to false after all sub-santizers's initialization.
 bool xsan_in_init;
@@ -279,8 +286,13 @@ void NOINLINE __xsan_handle_no_return() {
 }
 
 // Initialize as requested from instrumented application code.
+void __xsan_init() { XsanInitFromRtl(); }
+
+// __asan_init has different semantics.
 // We use this call as a trigger to wake up ASan from deactivated state.
-void __xsan_init() {
-  XsanActivate();
+void __xsan_asan_init() {
+  // See details about this 'if' in the comment of xsan_asan_inited.
+  if (!atomic_exchange(&xsan_asan_inited, 1, memory_order_acq_rel))
+    XsanActivate();  // This isn't the first call, so we can activate XSan.
   XsanInitFromRtl();
 }
