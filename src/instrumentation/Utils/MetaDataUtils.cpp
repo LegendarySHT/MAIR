@@ -1,4 +1,5 @@
 #include "MetaDataUtils.h"
+#include "llvm/IR/Instruction.h"
 
 using namespace llvm;
 
@@ -16,10 +17,13 @@ bool MetaDataHelperBase<MetaT, InstT>::is(const InstT &I) {
 
 template <typename MetaT, typename InstT>
 void MetaDataHelper<MetaT, InstT, false>::set(InstT &I) {
-  auto &Ctx = I.getContext();
+  // We cannot use func-local static var to init the Ctx, as it might differ for
+  // different Modules.
+  llvm::LLVMContext &Ctx = I.getContext();
   if (!ID)
     ID = Ctx.getMDKindID(MetaT::Name);
-  assert(!is(I) && "Cannot set metadata twice.");
+  if (is(I))
+    return;
   I.setMetadata(ID, llvm::MDNode::get(Ctx, llvm::None));
 }
 
@@ -34,7 +38,9 @@ auto MetaDataHelper<MetaT, InstT, true>::get(const InstT &I)
 
 template <typename MetaT, typename InstT>
 void MetaDataHelper<MetaT, InstT, true>::set(InstT &I, const Extra &Data) {
-  auto &Ctx = I.getContext();
+  // We cannot use func-local static var to init the Ctx, as it might differ for
+  // different Modules.
+  llvm::LLVMContext &Ctx = I.getContext();
   if (!ID)
     ID = Ctx.getMDKindID(MetaT::Name);
   I.setMetadata(ID, MetaDataExtra<Extra>::pack(Ctx, Data));
