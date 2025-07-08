@@ -1,3 +1,12 @@
+//===------------- xsan_wrapper_helper.c.inc --------------------*- C++ -*-===//
+//
+// This file defines some common functions used in different compiler wrappers
+// 
+// This file should be included into the tool's wrapper file,
+// which has to define its own macros before :
+//   WRAP_GCC or WRAP_CLANG
+//===----------------------------------------------------------------------===//
+
 #include "xsan_wrapper_helper.h"
 #include "config_compile.h"
 #include "include/alloc-inl.h"
@@ -9,14 +18,77 @@
 #include <string.h>
 #include <unistd.h>
 
-extern const u8 **cc_params; /* Parameters passed to the real CC  */
-extern u32 cc_par_cnt;       /* Param count, including argv0      */
-u8 *obj_path;                /* Path to runtime libraries         */
+#if defined(WRAP_GCC)
+#  define WRAP_GCC 1
+#  define WRAP_CLANG 0
+// Selection of hotpatches according to compiler
+#  define XSAN_DSO_PATCH XSAN_GCC_DSO_PATCH
+#elif defined(WRAP_CLANG)
+#  define WRAP_GCC 0
+#  define WRAP_CLANG 1
+#  define XSAN_DSO_PATCH XSAN_CLANG_DSO_PATCH
+#else
+static_assert(false,
+              "Please specify either clang or gcc to wrap via macro defines. "
+              "E.g., #define WRAP_GCC or #define WRAP_CLANG");
+#endif
 
-XsanOption xsan_options;
-XsanOption xsan_recover_options;
+// Now, gcc only doesn't support MSan.
+// So we set XSAN_CONTAINS_MSAN to 0.
+// If some gcc version does not support any sanitizer,
+// we can set XSAN_CONTAINS_<san> to 0.
+// Clang support all sanitizers.
+#ifdef COMPILER_UNSUPPORT_MSAN
+  #undef XSAN_CONTAINS_MSAN
+  #define XSAN_CONTAINS_MSAN 0
+#endif
 
-static u8 support_dso_inject = 0; /* Support for DSO injection         */
+
+static const u8 **cc_params;        /* Parameters passed to the real CC  */
+static u32 cc_par_cnt= 1;           /* Param count, including argv0      */
+static u8 *obj_path;                /* Path to runtime libraries         */
+static u8 support_dso_inject = 0;   /* Support for DSO injection         */
+
+
+static XsanOption xsan_options;
+static XsanOption xsan_recover_options;
+
+static void init(XsanOption *opt) {
+#if XSAN_CONTAINS_UBSAN
+  opt->mask |= (u64)1 << UBSan;
+#endif
+#if XSAN_CONTAINS_TSAN
+  opt->mask |= (u64)1 << TSan;
+#endif
+#if XSAN_CONTAINS_MSAN
+  opt->mask |= (u64)1 << MSan;
+#endif
+#if XSAN_CONTAINS_ASAN
+  opt->mask |= (u64)1 << ASan;
+#endif
+  opt->mask |= (u64)1 << XSan;
+}
+
+/// TODO: handle unsupported sanTy.
+static void set(XsanOption *opt, enum SanitizerType sanTy) {
+  if (sanTy == XSan) {
+    init(opt);
+  } else {
+    opt->mask |= (u64)1 << sanTy;
+  }
+}
+
+static void clear(XsanOption *opt, enum SanitizerType sanTy) {
+  opt->mask &= (sanTy == XSan) ? 0 : ~((u64)1 << sanTy);
+}
+
+static u8 has(XsanOption *opt, enum SanitizerType sanTy) {
+  return (opt->mask & (((u64)1 << sanTy))) != 0;
+}
+
+static u8 has_any(XsanOption *opt) {
+  return (opt->mask & ~(((u64)1 << XSan) | ((u64)1 << SanNone))) != 0;
+}
 
 static u8 whether_to_support_dso_injection(const char *arg) {
   // Construct command string, and transmit the argument to the scripyt
@@ -60,7 +132,7 @@ static u8 whether_to_support_dso_injection(const char *arg) {
   what to do.
 */
 
-u8 *find_object(u8 *obj, u8 *argv0) {
+static u8 *find_object(u8 *obj, u8 *argv0) {
 
   u8 *xsan_path = getenv("XSAN_PATH");
   u8 *slash = NULL, *tmp;
@@ -198,7 +270,7 @@ u8 *find_object(u8 *obj, u8 *argv0) {
 
 /* Try to find the runtime libraries. If that fails, abort. */
 
-void find_obj(u8* argv0) {
+static void find_obj(u8* argv0) {
 
   obj_path = find_object("", argv0);
 
@@ -208,7 +280,7 @@ void find_obj(u8* argv0) {
 
 }
 
-u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
+static u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
   const u8 *cur = arg[0];
   // Check prefix "-x"
   if (cur[0] != '-' || cur[1] != 'x') {
@@ -228,13 +300,21 @@ u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
   return 1;
 }
 
-enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
+static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   static const enum SanitizerType incompatible_san_types[][NumSanitizerTypes] = {
       [ASan] = {XSan, TSan, MSan},
       [TSan] = {XSan, ASan, MSan},
       [MSan] = {XSan, ASan, TSan},
       [XSan] = {ASan, TSan, MSan},
   };
+
+  static const u8 support_subsanitizers[] = {
+      [ASan] = XSAN_CONTAINS_ASAN,
+      [TSan] = XSAN_CONTAINS_TSAN,
+      [MSan] = XSAN_CONTAINS_MSAN,
+      [UBSan] = XSAN_CONTAINS_UBSAN,
+  };
+
   static const char *const option_names[] = {[ASan] = "-asan",
                                              [TSan] = "-tsan",
                                              [MSan] = "-msan",
@@ -254,7 +334,9 @@ enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
             FATAL("'%s' could not be used with '%s'", option_names[incomp],
                   option_names[j]);
         }
-
+        if (!support_subsanitizers[j]) {
+          FATAL("'%s' is not supported by this compiler", option_names[j]);
+        }
         if (j == UBSan) {
           /// Only if no other sanitizer is specified, we treat it as UBSan
           /// standalone.
@@ -327,7 +409,7 @@ enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   return xsanTy;
 }
 
-void init_sanitizer_setting(enum SanitizerType sanTy) {
+static void init_sanitizer_setting(enum SanitizerType sanTy) {
   u8 *str_options;
   switch (sanTy) {
   case ASan:
@@ -405,7 +487,7 @@ void init_sanitizer_setting(enum SanitizerType sanTy) {
     support_dso_inject = whether_to_support_dso_injection(cc_params[0]);
     if (support_dso_inject) {
       const char *ld_preload = getenv("LD_PRELOAD");
-      const char *dso_path = alloc_printf("%s/" XSAN_CLANG_DSO_PATCH, obj_path);
+      const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
       const char *new_ld_preload =
           (ld_preload != NULL)
               ? (char *)alloc_printf("%s:%s", ld_preload, dso_path)
@@ -420,8 +502,12 @@ void init_sanitizer_setting(enum SanitizerType sanTy) {
   }
 }
 
-void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
-  if (sanTy != XSan || support_dso_inject)
+
+static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
+  // clang's live patch `add_wrap_link_option` in CommonArgs.cpp take over Symbol wrapped,
+  // However, gcc's live patch implements but does not use  `add_wrap_link_option` in gcc.cpp, which is just for future usage.
+  // Please refer to RoStrPatcher()@gcc.cpp for details.
+  if (sanTy != XSan || (support_dso_inject && !WRAP_GCC)) 
     return;
 
   // Use Linker Response File to include lots of -wrap=<symbol> options in one
@@ -430,11 +516,13 @@ void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
       alloc_printf("-Wl,@%s/share/xsan_wrapped_symbols.txt", obj_path);
 }
 
-void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
-                           u8 needs_shared_rt) {
-  // If support_dso_inject is true, we don't need to add sanitizer runtime here.
-  // Runtime should be added in the DSO injector.
-  if (support_dso_inject) {
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso, u8 needs_shared_rt) {
+    // If support_dso_inject is true, we don't need to add sanitizer runtime here.
+    // Runtime should be added in the DSO injector.
+    // clang's live patch `replaceSanitizerRt` in CommonArgs.cpp take over linked runtime libraries.
+    // However, gcc's live patch implements but does not use  `add_runtime` in gcc.cpp, which is just for future usage.
+    // Please refer to RoStrPatcher()@gcc.cpp for details.
+  if (support_dso_inject && !WRAP_GCC) {
     return;
   }
 

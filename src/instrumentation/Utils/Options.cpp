@@ -55,12 +55,12 @@ const cl::opt<bool> ClDisableAsan("xsan-disable-asan", cl::init(false),
                                   cl::Hidden);
 
 const cl::opt<bool> ClDisableTsan("xsan-disable-tsan",
-                                  cl::init(!XSAN_CONTAINS_TSAN),
+                                  cl::init(false),
                                   cl::desc("Disable TSan instrumentation"),
                                   cl::Hidden);
 
 const cl::opt<bool> ClDisableMsan("xsan-disable-msan",
-                                  cl::init(!XSAN_CONTAINS_MSAN),
+                                  cl::init(false),
                                   cl::desc("Disable MSan instrumentation"),
                                   cl::Hidden);
 

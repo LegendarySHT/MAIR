@@ -3,54 +3,11 @@
 #include "types.h"
 #include "xsan_common.h"
 
-extern u8* obj_path; /* Path to runtime libraries         */
 
 // ---- Implemented in clang_wrapper.c/gcc_wrapper.c ----
-void add_param(const char *param);
-
 typedef struct kXsanOption {
-  u64 mask;
+    u64 mask;
 } XsanOption;
-
-extern XsanOption xsan_options;
-extern XsanOption xsan_recover_options;
-
-static inline void init(XsanOption *opt) {
-#if XSAN_CONTAINS_UBSAN
-  opt->mask |= (u64)1 << UBSan;
-#endif
-#if XSAN_CONTAINS_TSAN
-  opt->mask |= (u64)1 << TSan;
-#endif
-#if XSAN_CONTAINS_MSAN
-  opt->mask |= (u64)1 << MSan;
-#endif
-#if XSAN_CONTAINS_ASAN
-  opt->mask |= (u64)1 << ASan;
-#endif
-  opt->mask |= (u64)1 << XSan;
-}
-
-/// TODO: handle unsupported sanTy.
-static inline void set(XsanOption *opt, enum SanitizerType sanTy) {
-  if (sanTy == XSan) {
-    init(opt);
-  } else {
-    opt->mask |= (u64)1 << sanTy;
-  }
-}
-
-static inline void clear(XsanOption *opt, enum SanitizerType sanTy) {
-  opt->mask &= (sanTy == XSan) ? 0 : ~((u64)1 << sanTy);
-}
-
-static inline u8 has(XsanOption *opt, enum SanitizerType sanTy) {
-  return (opt->mask & (((u64)1 << sanTy))) != 0;
-}
-
-static inline u8 has_any(XsanOption *opt) {
-  return (opt->mask & ~(((u64)1 << XSan) | ((u64)1 << SanNone))) != 0;
-}
 
 #define OPT_EQ(arg, opt) (!strcmp((arg), opt))
 #define OPT_EQ_AND_THEN(arg, opt, ...)                                         \
@@ -82,11 +39,8 @@ static inline u8 has_any(XsanOption *opt) {
  * clang_wrapper.
  */
 
-enum SanitizerType detect_san_type(const u32 argc, const char *argv[]);
-void init_sanitizer_setting(enum SanitizerType sanTy);
-void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx);
-void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso,
-    u8 needs_shared_rt);
-u8* find_object(u8* obj, u8* argv0);
-void find_obj(u8* argv0);
-u8 handle_x_option(const u8* const* arg, u8* asm_as_source);
+static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]);
+static void init_sanitizer_setting(enum SanitizerType sanTy);
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso, u8 needs_shared_rt);
+static void find_obj(u8* argv0);
+static u8 handle_x_option(const u8* const* arg, u8* asm_as_source);

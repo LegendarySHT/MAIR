@@ -7,7 +7,7 @@ enable_language(C CXX ASM)
 # export compile_commands.json for clangd
 set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
-# Decide whether to enable TSan by reading the configuration file. 
+# Reading the configuration file. 
 set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/xsan_config.cmake")
 
 if(EXISTS ${CONFIG_FILE_PATH})
@@ -16,7 +16,7 @@ else()
   message(STATUS "Configuration file not found, using default settings.")
   # If the config file does not exist, define the list here with defaults
   # This ensures the loop runs even without the config file
-  set(XSAN_SANITIZERS TSAN ASAN UBSAN)
+  set(XSAN_SANITIZERS TSAN ASAN UBSAN MSAN)
 endif()
 
 # Now, define options and add definitions in a loop for each sanitizer

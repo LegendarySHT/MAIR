@@ -6,6 +6,7 @@
  */
 #define AFL_MAIN
 
+
 #include "config_compile.h"
 #include "include/alloc-inl.h"
 #include "include/debug.h"
@@ -18,8 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-const u8 **cc_params;        /* Parameters passed to the real CC  */
-u32  cc_par_cnt = 1;         /* Param count, including argv0      */
+#define WRAP_CLANG
+#include "xsan_wrapper_helper.c.inc"
 
 #ifndef XSAN_PATH
   #define XSAN_PATH ""

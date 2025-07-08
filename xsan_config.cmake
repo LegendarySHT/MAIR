@@ -26,3 +26,12 @@ option(XSAN_CONTAINS_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan) globally" 
 # Because we use this to generate the xsan_hooks_gen.h,in the xsan_hooks_gen.h,
 # We use Xxxx such as Asan, Tsan to represent the enum that contains the hooks for the macro
 set(XSAN_DELEGATED_SANITIZERS Asan Tsan Msan)
+
+# TODO: implement the supported sanitizers auto-detection in the future
+# Some sanitizers are supported by gcc.
+set(GCC_SUPPORT_SANITIZERS ASAN TSAN UBSAN)
+
+# TODO: implement the supported sanitizers auto-detection in the future
+# Some sanitizers are supported by clang.
+set(CLANG_SUPPORT_SANITIZERS ASAN TSAN UBSAN MSAN)
+

@@ -26,9 +26,10 @@
 #include <string.h>
 #include <unistd.h>
 
-const u8 **cc_params;        /* Parameters passed to the real CC  */
-u32  cc_par_cnt = 1;         /* Param count, including argv0      */
-u8 AsmAsSource = 0;          /* Whether to treat assembly files as source files */
+#define WRAP_GCC
+#include "xsan_wrapper_helper.c.inc"
+
+static u8 AsmAsSource = 0;          /* Whether to treat assembly files as source files */
 
 #ifndef XSAN_PATH
 #define XSAN_PATH ""

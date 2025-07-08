@@ -121,7 +121,6 @@ The key components related to sanitizers are:
 #include "../utils/PatchHelper.h"
 #include "config_compile.h"
 #include "xsan_common.h"
-
 #include <algorithm>
 #include <array>
 #include <cstddef>
