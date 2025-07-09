@@ -1,36 +1,36 @@
 //===------------- xsan_wrapper_helper.c.inc --------------------*- C++ -*-===//
 //
 // This file defines some common functions used in different compiler wrappers
-// 
+//
 // This file should be included into the tool's wrapper file,
 // which has to define its own macros before :
 //   WRAP_GCC or WRAP_CLANG
 //===----------------------------------------------------------------------===//
 
-#include "xsan_wrapper_helper.h"
 #include "config_compile.h"
 #include "include/alloc-inl.h"
 #include "include/debug.h"
 #include "include/types.h"
 #include "xsan_common.h"
+#include "xsan_wrapper_helper.h"
 
 #include <limits.h>
 #include <string.h>
 #include <unistd.h>
 
 #if defined(WRAP_GCC)
-#  define WRAP_GCC 1
-#  define WRAP_CLANG 0
+#define WRAP_GCC 1
+#define WRAP_CLANG 0
 // Selection of hotpatches according to compiler
-#  define XSAN_DSO_PATCH XSAN_GCC_DSO_PATCH
+#define XSAN_DSO_PATCH XSAN_GCC_DSO_PATCH
 #elif defined(WRAP_CLANG)
-#  define WRAP_GCC 0
-#  define WRAP_CLANG 1
-#  define XSAN_DSO_PATCH XSAN_CLANG_DSO_PATCH
+#define WRAP_GCC 0
+#define WRAP_CLANG 1
+#define XSAN_DSO_PATCH XSAN_CLANG_DSO_PATCH
 #else
-static_assert(false,
-              "Please specify either clang or gcc to wrap via macro defines. "
-              "E.g., #define WRAP_GCC or #define WRAP_CLANG");
+
+#error "Please specify either clang or gcc to wrap via macro defines. "
+"E.g., #define WRAP_GCC or #define WRAP_CLANG"
 #endif
 
 // Now, gcc only doesn't support MSan.
@@ -39,16 +39,14 @@ static_assert(false,
 // we can set XSAN_CONTAINS_<san> to 0.
 // Clang support all sanitizers.
 #ifdef COMPILER_UNSUPPORT_MSAN
-  #undef XSAN_CONTAINS_MSAN
-  #define XSAN_CONTAINS_MSAN 0
+#undef XSAN_CONTAINS_MSAN
+#define XSAN_CONTAINS_MSAN 0
 #endif
 
-
-static const u8 **cc_params;        /* Parameters passed to the real CC  */
-static u32 cc_par_cnt= 1;           /* Param count, including argv0      */
-static u8 *obj_path;                /* Path to runtime libraries         */
-static u8 support_dso_inject = 0;   /* Support for DSO injection         */
-
+static const u8 **cc_params;      /* Parameters passed to the real CC  */
+static u32 cc_par_cnt = 1;        /* Param count, including argv0      */
+static u8 *obj_path;              /* Path to runtime libraries         */
+static u8 support_dso_inject = 0; /* Support for DSO injection         */
 
 static XsanOption xsan_options;
 static XsanOption xsan_recover_options;
@@ -150,27 +148,27 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
   char real_path[PATH_MAX];
   ssize_t len = readlink("/proc/self/exe", real_path, sizeof(real_path) - 1);
   if (len != -1) {
-      real_path[len] = '\0';
-      slash = strrchr(real_path, '/');
-      if (slash) {
-          *slash = 0; // "real_path" is now the directory of the executable
+    real_path[len] = '\0';
+    slash = strrchr(real_path, '/');
+    if (slash) {
+      *slash = 0; // "real_path" is now the directory of the executable
 
-          // Search in the same directory as the executable
-          tmp = alloc_printf("%s/%s", real_path, obj);
-          if (!access(tmp, R_OK)) {
-              obj_path = ck_strdup((u8*)real_path);
-              return tmp;
-          }
-          ck_free(tmp);
-
-          // Search in ../lib/linux relative to the executable
-          tmp = alloc_printf("%s/../lib/linux/%s", real_path, obj);
-          if (!access(tmp, R_OK)) {
-              obj_path = alloc_printf("%s/../lib/linux", real_path);
-              return tmp;
-          }
-          ck_free(tmp);
+      // Search in the same directory as the executable
+      tmp = alloc_printf("%s/%s", real_path, obj);
+      if (!access(tmp, R_OK)) {
+        obj_path = ck_strdup((u8 *)real_path);
+        return tmp;
       }
+      ck_free(tmp);
+
+      // Search in ../lib/linux relative to the executable
+      tmp = alloc_printf("%s/../lib/linux/%s", real_path, obj);
+      if (!access(tmp, R_OK)) {
+        obj_path = alloc_printf("%s/../lib/linux", real_path);
+        return tmp;
+      }
+      ck_free(tmp);
+    }
   }
 #endif
 
@@ -204,22 +202,22 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
 
     }
 
-#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__linux__) || \
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__linux__) ||    \
     defined(__ANDROID__) || defined(__NetBSD__)
-  #define HAS_PROC_FS 1
+#define HAS_PROC_FS 1
 #endif
 #ifdef HAS_PROC_FS
     else {
       char *procname = NULL;
-  #if defined(__FreeBSD__) || defined(__DragonFly__)
+#if defined(__FreeBSD__) || defined(__DragonFly__)
       procname = "/proc/curproc/file";
-  #elif defined(__linux__) || defined(__ANDROID__)
+#elif defined(__linux__) || defined(__ANDROID__)
       procname = "/proc/self/exe";
-  #elif defined(__NetBSD__)
+#elif defined(__NetBSD__)
       procname = "/proc/curproc/exe";
-  #endif
+#endif
       if (procname) {
-        char    exepath[PATH_MAX];
+        char exepath[PATH_MAX];
         ssize_t exepath_len = readlink(procname, exepath, sizeof(exepath));
         if (exepath_len > 0 && exepath_len < PATH_MAX) {
 
@@ -270,17 +268,16 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
 
 /* Try to find the runtime libraries. If that fails, abort. */
 
-static void find_obj(u8* argv0) {
+static void find_obj(u8 *argv0) {
 
   obj_path = find_object("", argv0);
 
   if (!obj_path) {
     FATAL("Unable to find object path. Please set XSAN_PATH");
   }
-
 }
 
-static u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
+static u8 handle_x_option(const u8 *const *arg, u8 *asm_as_source) {
   const u8 *cur = arg[0];
   // Check prefix "-x"
   if (cur[0] != '-' || cur[1] != 'x') {
@@ -294,19 +291,20 @@ static u8 handle_x_option(const u8* const* arg, u8 *asm_as_source)  {
 
   // assembler & assembler-with-cpp (with preprocessor)
   if (!strcmp(language, "assembler") ||
-     !strcmp(language, "assembler-with-cpp")) {
-     *asm_as_source = 1;
+      !strcmp(language, "assembler-with-cpp")) {
+    *asm_as_source = 1;
   }
   return 1;
 }
 
 static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
-  static const enum SanitizerType incompatible_san_types[][NumSanitizerTypes] = {
-      [ASan] = {XSan, TSan, MSan},
-      [TSan] = {XSan, ASan, MSan},
-      [MSan] = {XSan, ASan, TSan},
-      [XSan] = {ASan, TSan, MSan},
-  };
+  static const enum SanitizerType incompatible_san_types[][NumSanitizerTypes] =
+      {
+          [ASan] = {XSan, TSan, MSan},
+          [TSan] = {XSan, ASan, MSan},
+          [MSan] = {XSan, ASan, TSan},
+          [XSan] = {ASan, TSan, MSan},
+      };
 
   static const u8 support_subsanitizers[] = {
       [ASan] = XSAN_CONTAINS_ASAN,
@@ -502,12 +500,12 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   }
 }
 
-
 static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
-  // clang's live patch `add_wrap_link_option` in CommonArgs.cpp take over Symbol wrapped,
-  // However, gcc's live patch implements but does not use  `add_wrap_link_option` in gcc.cpp, which is just for future usage.
-  // Please refer to RoStrPatcher()@gcc.cpp for details.
-  if (sanTy != XSan || (support_dso_inject && !WRAP_GCC)) 
+  // clang's live patch `add_wrap_link_option` in CommonArgs.cpp take over
+  // Symbol wrapped, However, gcc's live patch implements but does not use
+  // `add_wrap_link_option` in gcc.cpp, which is just for future usage. Please
+  // refer to RoStrPatcher()@gcc.cpp for details.
+  if (sanTy != XSan || (support_dso_inject && !WRAP_GCC))
     return;
 
   // Use Linker Response File to include lots of -wrap=<symbol> options in one
@@ -516,12 +514,14 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
       alloc_printf("-Wl,@%s/share/xsan_wrapped_symbols.txt", obj_path);
 }
 
-static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso, u8 needs_shared_rt) {
-    // If support_dso_inject is true, we don't need to add sanitizer runtime here.
-    // Runtime should be added in the DSO injector.
-    // clang's live patch `replaceSanitizerRt` in CommonArgs.cpp take over linked runtime libraries.
-    // However, gcc's live patch implements but does not use  `add_runtime` in gcc.cpp, which is just for future usage.
-    // Please refer to RoStrPatcher()@gcc.cpp for details.
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
+                                  u8 is_dso, u8 needs_shared_rt) {
+  // If support_dso_inject is true, we don't need to add sanitizer runtime here.
+  // Runtime should be added in the DSO injector.
+  // clang's live patch `replaceSanitizerRt` in CommonArgs.cpp take over linked
+  // runtime libraries. However, gcc's live patch implements but does not use
+  // `add_runtime` in gcc.cpp, which is just for future usage. Please refer to
+  // RoStrPatcher()@gcc.cpp for details.
   if (support_dso_inject && !WRAP_GCC) {
     return;
   }
@@ -554,7 +554,8 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
 
   add_wrap_link_option(sanTy, is_cxx);
 
-  if (needs_shared_rt && (sanTy == ASan || sanTy == TSan || sanTy == UBSan || sanTy == XSan)) {
+  if (needs_shared_rt &&
+      (sanTy == ASan || sanTy == TSan || sanTy == UBSan || sanTy == XSan)) {
     cc_params[cc_par_cnt++] = alloc_printf("-Wl,-rpath,%s/lib/linux", obj_path);
     cc_params[cc_par_cnt++] =
         alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.so", obj_path, san);
@@ -628,8 +629,9 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
   }
   // If not using livepatch, we might need to link some libraries manually.
   // At least for clang, we should.
-  /// TODO: ref to llvm-source/clang/lib/Driver/ToolChains/CommonArgs.cpp:824 linkSanitizerRuntimeDeps
-  cc_params[cc_par_cnt++] = "-lpthread"; 
+  /// TODO: ref to llvm-source/clang/lib/Driver/ToolChains/CommonArgs.cpp:824
+  /// linkSanitizerRuntimeDeps
+  cc_params[cc_par_cnt++] = "-lpthread";
   cc_params[cc_par_cnt++] = "-lrt";
   cc_params[cc_par_cnt++] = "-lm";
   cc_params[cc_par_cnt++] = "-ldl";

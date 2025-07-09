@@ -3,10 +3,9 @@
 #include "types.h"
 #include "xsan_common.h"
 
-
 // ---- Implemented in clang_wrapper.c/gcc_wrapper.c ----
 typedef struct kXsanOption {
-    u64 mask;
+  u64 mask;
 } XsanOption;
 
 #define OPT_EQ(arg, opt) (!strcmp((arg), opt))
@@ -41,6 +40,7 @@ typedef struct kXsanOption {
 
 static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]);
 static void init_sanitizer_setting(enum SanitizerType sanTy);
-static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso, u8 needs_shared_rt);
-static void find_obj(u8* argv0);
-static u8 handle_x_option(const u8* const* arg, u8* asm_as_source);
+static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
+                                  u8 is_dso, u8 needs_shared_rt);
+static void find_obj(u8 *argv0);
+static u8 handle_x_option(const u8 *const *arg, u8 *asm_as_source);
