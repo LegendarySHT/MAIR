@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../xsan_platform.h"
 #include "asan_interface_internal.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
@@ -19,33 +20,26 @@ namespace __asan {
 using ::__sanitizer::StackTrace;
 using ::__sanitizer::uptr;
 
-#ifndef ASAN_MAPPING_H
+XSAN_MAP_FIELD_FUNC(AsanShadowOffset, kAsanShadowOffset)
+XSAN_MAP_FIELD_FUNC(AsanShadowScale, kAsanShadowScale)
 
-#  define ASAN_SHADOW_OFFSET_CONST 0x000000007fff8000
-#  define ASAN_SHADOW_OFFSET ASAN_SHADOW_OFFSET_CONST
-#  define ASAN_SHADOW_SCALE 3
-#  define ASAN_SHADOW_GRANULARITY (1ULL << ASAN_SHADOW_SCALE)
-#  define MEM_TO_SHADOW(mem) \
-    (((mem) >> ASAN_SHADOW_SCALE) + (ASAN_SHADOW_OFFSET))
+ALWAYS_INLINE uptr AsanShadowGranularity() {
+  return (1ULL << AsanShadowScale());
+}
 
-#  define DO_ASAN_MAPPING_PROFILE 0  // Set to 1 to profile the functions below.
-
-#  if DO_ASAN_MAPPING_PROFILE
-#    define PROFILE_ASAN_MAPPING() AsanMappingProfile[__LINE__]++;
-#  else
-#    define PROFILE_ASAN_MAPPING()
-#  endif
-
-#endif  // ASAN_MAPPING_H
+template <typename T>
+ALWAYS_INLINE uptr MemToShadow(T mem) {
+  return ((uptr)mem >> AsanShadowScale()) + AsanShadowOffset();
+}
 
 static inline bool AddressIsPoisoned_(uptr a) {
-  PROFILE_ASAN_MAPPING();
+  // PROFILE_ASAN_MAPPING();
   const uptr kAccessSize = 1;
-  u8 *shadow_address = (u8 *)MEM_TO_SHADOW(a);
+  u8 *shadow_address = (u8 *)MemToShadow(a);
   s8 shadow_value = *shadow_address;
   if (shadow_value) {
     u8 last_accessed_byte =
-        (a & (ASAN_SHADOW_GRANULARITY - 1)) + kAccessSize - 1;
+        (a & (AsanShadowGranularity() - 1)) + kAccessSize - 1;
     return (last_accessed_byte >= shadow_value);
   }
   return false;
@@ -54,12 +48,12 @@ static inline bool AddressIsPoisoned_(uptr a) {
 // Return true if we can quickly decide that the region is unpoisoned.
 // We assume that a redzone is at least 16 bytes.
 static inline bool AsanQuickCheckForUnpoisonedRegion_(uptr beg, uptr size) {
-  if (UNLIKELY(size == 0 || size > sizeof(uptr) * ASAN_SHADOW_GRANULARITY))
+  if (UNLIKELY(size == 0 || size > sizeof(uptr) * AsanShadowGranularity()))
     return !size;
 
   uptr last = beg + size - 1;
-  uptr shadow_first = MEM_TO_SHADOW(beg);
-  uptr shadow_last = MEM_TO_SHADOW(last);
+  uptr shadow_first = MemToShadow(beg);
+  uptr shadow_last = MemToShadow(last);
   uptr uptr_first = RoundDownTo(shadow_first, sizeof(uptr));
   uptr uptr_last = RoundDownTo(shadow_last, sizeof(uptr));
   if (LIKELY(((*reinterpret_cast<const uptr *>(uptr_first) |
@@ -78,18 +72,6 @@ static inline bool AsanRangesOverlap_(const char *offset1, uptr length1,
                                       const char *offset2, uptr length2) {
   return !((offset1 + length1 <= offset2) || (offset2 + length2 <= offset1));
 }
-
-#ifndef ASAN_MAPPING_H
-
-#  undef ASAN_SHADOW_OFFSET_CONST
-#  undef ASAN_SHADOW_OFFSET
-#  undef ASAN_SHADOW_SCALE
-#  undef ASAN_SHADOW_GRANULARITY
-#  undef MEM_TO_SHADOW
-#  undef DO_ASAN_MAPPING_PROFILE
-#  undef PROFILE_ASAN_MAPPING
-
-#endif  // ASAN_MAPPING_H
 
 void PoisonShadow(uptr addr, uptr size, u8 value);
 

@@ -21,25 +21,6 @@ enum {
   kBrokenLinearity = 1 << 2,
 };
 
-template <typename Mapping>
-constexpr uptr mem_to_asan_shadow(const uptr mem) {
-  return (mem >> Mapping::kAsanShadowScale) + Mapping::kAsanShadowOffset;
-}
-
-template <typename Mapping>
-struct AsanMappingBase {
-  static constexpr const uptr kAsanLowShadowBeg =
-      mem_to_asan_shadow<Mapping>(0);
-  static constexpr const uptr kAsanLowShadowEnd =
-      mem_to_asan_shadow<Mapping>(Mapping::kLoAppMemEnd);
-  static constexpr const uptr kAsanHighShadowEnd =
-      mem_to_asan_shadow<Mapping>(Mapping::kHiAppMemEnd);
-  static constexpr const uptr kAsanHighShadowBeg =
-      mem_to_asan_shadow<Mapping>(kAsanHighShadowEnd);
-  static constexpr const uptr kAsanShadowGapBeg = kAsanLowShadowEnd;
-  static constexpr const uptr kAsanShadowGapEnd = kAsanHighShadowBeg;
-};
-
 struct MsanMappingDesc {
   uptr start;
   uptr end;
@@ -92,12 +73,14 @@ C/C++ on netbsd/amd64 can reuse the same mapping:
  * ASLR must be disabled per-process or globally.
 */
 /// Modified: enlarge the heap size from 1T to 2T to fit ASan's needs.
-struct Mapping48AddressSpace : public AsanMappingBase<Mapping48AddressSpace> {
+struct Mapping48AddressSpace {
   static constexpr const uptr kHeapMemBeg = 0x720000000000ull;
   static constexpr const uptr kHeapMemEnd = 0x740000000000ull;
 
   static constexpr const uptr kLoAppMemBeg = 0x000000001000ull;
-  static constexpr const uptr kLoAppMemEnd = 0x00007fff8000ull;
+  // ASan set this 0x00007fff8000ull but it protects the last page. So we
+  // only use 0x00007fff7000ull.
+  static constexpr const uptr kLoAppMemEnd = 0x00007fff7000ull;
   static constexpr const uptr kMidAppMemBeg = 0x550000000000ull;
   static constexpr const uptr kMidAppMemEnd = 0x5a0000000000ull;
   static constexpr const uptr kHiAppMemBeg = 0x7a0000000000ull;
@@ -628,54 +611,54 @@ struct MappingGoS390x {
 
 extern uptr vmaSize;
 
-template <typename Func, typename Arg>
-ALWAYS_INLINE auto SelectMapping(Arg arg) {
+template <typename Func, typename... Args>
+ALWAYS_INLINE auto SelectMapping(Args... args) {
 #if SANITIZER_GO
 #  if defined(__powerpc64__)
   switch (vmaSize) {
     case 46:
-      return Func::template Apply<MappingGoPPC64_46>(arg);
+      return Func::template Apply<MappingGoPPC64_46>(args...);
     case 47:
-      return Func::template Apply<MappingGoPPC64_47>(arg);
+      return Func::template Apply<MappingGoPPC64_47>(args...);
   }
 #  elif defined(__mips64)
-  return Func::template Apply<MappingGoMips64_47>(arg);
+  return Func::template Apply<MappingGoMips64_47>(args...);
 #  elif defined(__s390x__)
-  return Func::template Apply<MappingGoS390x>(arg);
+  return Func::template Apply<MappingGoS390x>(args...);
 #  elif defined(__aarch64__)
-  return Func::template Apply<MappingGoAarch64>(arg);
+  return Func::template Apply<MappingGoAarch64>(args...);
 #  elif SANITIZER_WINDOWS
-  return Func::template Apply<MappingGoWindows>(arg);
+  return Func::template Apply<MappingGoWindows>(args...);
 #  else
-  return Func::template Apply<MappingGo48>(arg);
+  return Func::template Apply<MappingGo48>(args...);
 #  endif
 #else  // SANITIZER_GO
 #  if SANITIZER_IOS && !SANITIZER_IOSSIM
-  return Func::template Apply<MappingAppleAarch64>(arg);
+  return Func::template Apply<MappingAppleAarch64>(args...);
 #  elif defined(__x86_64__) || SANITIZER_APPLE
-  return Func::template Apply<Mapping48AddressSpace>(arg);
+  return Func::template Apply<Mapping48AddressSpace>(args...);
 #  elif defined(__aarch64__)
   switch (vmaSize) {
     case 39:
-      return Func::template Apply<MappingAarch64_39>(arg);
+      return Func::template Apply<MappingAarch64_39>(args...);
     case 42:
-      return Func::template Apply<MappingAarch64_42>(arg);
+      return Func::template Apply<MappingAarch64_42>(args...);
     case 48:
-      return Func::template Apply<MappingAarch64_48>(arg);
+      return Func::template Apply<MappingAarch64_48>(args...);
   }
 #  elif defined(__powerpc64__)
   switch (vmaSize) {
     case 44:
-      return Func::template Apply<MappingPPC64_44>(arg);
+      return Func::template Apply<MappingPPC64_44>(args...);
     case 46:
-      return Func::template Apply<MappingPPC64_46>(arg);
+      return Func::template Apply<MappingPPC64_46>(args...);
     case 47:
-      return Func::template Apply<MappingPPC64_47>(arg);
+      return Func::template Apply<MappingPPC64_47>(args...);
   }
 #  elif defined(__mips64)
-  return Func::template Apply<MappingMips64_40>(arg);
+  return Func::template Apply<MappingMips64_40>(args...);
 #  elif defined(__s390x__)
-  return Func::template Apply<MappingS390x>(arg);
+  return Func::template Apply<MappingS390x>(args...);
 #  else
 #    error "unsupported platform"
 #  endif
@@ -704,359 +687,45 @@ void ForEachMapping() {
   Func::template Apply<MappingGoS390x>();
 }
 
-enum MappingType {
-  kLoAppMemBeg,
-  kLoAppMemEnd,
-  kHiAppMemBeg,
-  kHiAppMemEnd,
-  kMidAppMemBeg,
-  kMidAppMemEnd,
-  kHeapMemBeg,
-  kHeapMemEnd,
-  kVdsoBeg,
+#define XSAN_MAP_FUNC(ret, func, parameters, arguments)                 \
+  namespace mapping_impl {                                              \
+  struct func##Impl {                                                   \
+    template <typename Mapping>                                         \
+    static ret Apply parameters;                                        \
+  };                                                                    \
+  }                                                                     \
+  ALWAYS_INLINE ret func parameters {                                   \
+    return ::__xsan::SelectMapping<mapping_impl::func##Impl> arguments; \
+  }                                                                     \
+  template <typename Mapping>                                           \
+  ALWAYS_INLINE ret mapping_impl::func##Impl::Apply parameters
 
-  kAsanLowShadowBeg,
-  kAsanLowShadowEnd,
-  kAsanHighShadowBeg,
-  kAsanHighShadowEnd,
-  kAsanShadowGapBeg,
-  kAsanShadowGapEnd,
-  kTsanShadowBeg,
-  kTsanShadowEnd,
-  kTsanMetaShadowBeg,
-  kTsanMetaShadowEnd,
-};
+#define MAP_FIELD(field) Mapping::field
 
-struct MappingField {
-  template <typename Mapping>
-  static uptr Apply(MappingType type) {
-    switch (type) {
-      case kLoAppMemBeg:
-        return Mapping::kLoAppMemBeg;
-      case kLoAppMemEnd:
-        return Mapping::kLoAppMemEnd;
-      case kMidAppMemBeg:
-        return Mapping::kMidAppMemBeg;
-      case kMidAppMemEnd:
-        return Mapping::kMidAppMemEnd;
-      case kHiAppMemBeg:
-        return Mapping::kHiAppMemBeg;
-      case kHiAppMemEnd:
-        return Mapping::kHiAppMemEnd;
-      case kHeapMemBeg:
-        return Mapping::kHeapMemBeg;
-      case kHeapMemEnd:
-        return Mapping::kHeapMemEnd;
-      case kVdsoBeg:
-        return Mapping::kVdsoBeg;
+#define XSAN_MAP_FUNC_VOID(ret, func) XSAN_MAP_FUNC(ret, func, (), ())
+#define XSAN_MAP_FIELD_FUNC(func, field) \
+  XSAN_MAP_FUNC_VOID(uptr, func) { return MAP_FIELD(field); }
 
-      case kAsanLowShadowBeg:
-        return Mapping::kAsanLowShadowBeg;
-      case kAsanLowShadowEnd:
-        return Mapping::kAsanLowShadowEnd;
-      case kAsanHighShadowBeg:
-        return Mapping::kAsanHighShadowBeg;
-      case kAsanHighShadowEnd:
-        return Mapping::kAsanHighShadowEnd;
-      case kAsanShadowGapBeg:
-        return Mapping::kAsanShadowGapBeg;
-      case kAsanShadowGapEnd:
-        return Mapping::kAsanShadowGapEnd;
-      case kTsanShadowBeg:
-        return Mapping::kTsanShadowBeg;
-      case kTsanShadowEnd:
-        return Mapping::kTsanShadowEnd;
-      case kTsanMetaShadowBeg:
-        return Mapping::kTsanMetaShadowBeg;
-      case kTsanMetaShadowEnd:
-        return Mapping::kTsanMetaShadowEnd;
-    }
-    Die();
-  }
-};
+XSAN_MAP_FIELD_FUNC(LoAppMemBeg, kLoAppMemBeg)
+XSAN_MAP_FIELD_FUNC(LoAppMemEnd, kLoAppMemEnd)
+XSAN_MAP_FIELD_FUNC(MidAppMemBeg, kMidAppMemBeg)
+XSAN_MAP_FIELD_FUNC(MidAppMemEnd, kMidAppMemEnd)
+XSAN_MAP_FIELD_FUNC(HeapMemBeg, kHeapMemBeg)
+XSAN_MAP_FIELD_FUNC(HeapMemEnd, kHeapMemEnd)
+XSAN_MAP_FIELD_FUNC(HiAppMemBeg, kHiAppMemBeg)
+XSAN_MAP_FIELD_FUNC(HiAppMemEnd, kHiAppMemEnd)
+XSAN_MAP_FIELD_FUNC(VdsoBeg, kVdsoBeg)
 
-ALWAYS_INLINE
-uptr LoAppMemBeg(void) { return SelectMapping<MappingField>(kLoAppMemBeg); }
-ALWAYS_INLINE
-uptr LoAppMemEnd(void) { return SelectMapping<MappingField>(kLoAppMemEnd); }
-
-ALWAYS_INLINE
-uptr MidAppMemBeg(void) { return SelectMapping<MappingField>(kMidAppMemBeg); }
-ALWAYS_INLINE
-uptr MidAppMemEnd(void) { return SelectMapping<MappingField>(kMidAppMemEnd); }
-
-ALWAYS_INLINE
-uptr HeapMemBeg(void) { return SelectMapping<MappingField>(kHeapMemBeg); }
-ALWAYS_INLINE
-uptr HeapMemEnd(void) { return SelectMapping<MappingField>(kHeapMemEnd); }
-
-ALWAYS_INLINE
-uptr HiAppMemBeg(void) { return SelectMapping<MappingField>(kHiAppMemBeg); }
-ALWAYS_INLINE
-uptr HiAppMemEnd(void) { return SelectMapping<MappingField>(kHiAppMemEnd); }
-
-ALWAYS_INLINE
-uptr VdsoBeg(void) { return SelectMapping<MappingField>(kVdsoBeg); }
-
-ALWAYS_INLINE
-uptr AsanLowShadowBeg(void) {
-  return SelectMapping<MappingField>(kAsanLowShadowBeg);
-}
-ALWAYS_INLINE
-uptr AsanLowShadowEnd(void) {
-  return SelectMapping<MappingField>(kAsanLowShadowEnd);
-}
-ALWAYS_INLINE
-uptr AsanHighShadowBeg(void) {
-  return SelectMapping<MappingField>(kAsanHighShadowBeg);
-}
-ALWAYS_INLINE
-uptr AsanHighShadowEnd(void) {
-  return SelectMapping<MappingField>(kAsanHighShadowEnd);
-}
-ALWAYS_INLINE
-uptr AsanShadowGapBeg(void) {
-  return SelectMapping<MappingField>(kAsanShadowGapBeg);
-}
-ALWAYS_INLINE
-uptr AsanShadowGapEnd(void) {
-  return SelectMapping<MappingField>(kAsanShadowGapEnd);
-}
-ALWAYS_INLINE
-uptr TsanShadowBeg(void) { return SelectMapping<MappingField>(kTsanShadowBeg); }
-ALWAYS_INLINE
-uptr TsanShadowEnd(void) { return SelectMapping<MappingField>(kTsanShadowEnd); }
-ALWAYS_INLINE
-uptr TsanMetaShadowBeg(void) {
-  return SelectMapping<MappingField>(kTsanMetaShadowBeg);
-}
-ALWAYS_INLINE
-uptr TsanMetaShadowEnd(void) {
-  return SelectMapping<MappingField>(kTsanMetaShadowEnd);
+XSAN_MAP_FUNC(bool, IsAppMem, (uptr mem), (mem)) {
+  return (mem >= MAP_FIELD(kHeapMemBeg) && mem < MAP_FIELD(kHeapMemEnd)) ||
+         (mem >= MAP_FIELD(kMidAppMemBeg) && mem < MAP_FIELD(kMidAppMemEnd)) ||
+         (mem >= MAP_FIELD(kLoAppMemBeg) && mem < MAP_FIELD(kLoAppMemEnd)) ||
+         (mem >= MAP_FIELD(kHiAppMemBeg) && mem < MAP_FIELD(kHiAppMemEnd));
 }
 
-struct IsAppMemImpl {
-  template <typename Mapping>
-  static bool Apply(uptr mem) {
-    return (mem >= Mapping::kHeapMemBeg && mem < Mapping::kHeapMemEnd) ||
-           (mem >= Mapping::kMidAppMemBeg && mem < Mapping::kMidAppMemEnd) ||
-           (mem >= Mapping::kLoAppMemBeg && mem < Mapping::kLoAppMemEnd) ||
-           (mem >= Mapping::kHiAppMemBeg && mem < Mapping::kHiAppMemEnd);
-  }
-};
-
-ALWAYS_INLINE
-bool IsAppMem(uptr mem) { return SelectMapping<IsAppMemImpl>(mem); }
-ALWAYS_INLINE
-bool IsAppMem(const void* mem) { return IsAppMem((uptr)mem); }
-
-struct IsTsanShadowMemImpl {
-  template <typename Mapping>
-  static bool Apply(uptr mem) {
-    return mem >= Mapping::kTsanShadowBeg && mem <= Mapping::kTsanShadowEnd;
-  }
-};
-
-ALWAYS_INLINE
-bool IsTsanShadowMem(uptr p) { return SelectMapping<IsTsanShadowMemImpl>(p); }
-
-struct IsTsanMetaMemImpl {
-  template <typename Mapping>
-  static bool Apply(uptr mem) {
-    return mem >= Mapping::kTsanMetaShadowBeg &&
-           mem <= Mapping::kTsanMetaShadowEnd;
-  }
-};
-
-ALWAYS_INLINE
-bool IsTsanMetaMem(uptr p) { return SelectMapping<IsTsanMetaMemImpl>(p); }
-
-struct IsAsanLowShadowMemImpl {
-  template <typename Mapping>
-  static bool Apply(uptr mem) {
-    return mem >= Mapping::kAsanLowShadowBeg &&
-           mem <= Mapping::kAsanLowShadowEnd;
-  }
-};
-
-ALWAYS_INLINE
-bool IsAsanLowShadowMem(uptr p) {
-  return SelectMapping<IsAsanLowShadowMemImpl>(p);
+template <typename T>
+bool IsAppMem(T ptr) {
+  return IsAppMem((uptr)ptr);
 }
-
-struct IsAsanHighShadowMemImpl {
-  template <typename Mapping>
-  static bool Apply(uptr mem) {
-    return mem >= Mapping::kAsanHighShadowBeg &&
-           mem <= Mapping::kAsanHighShadowEnd;
-  }
-};
-
-ALWAYS_INLINE
-bool IsAsanHighShadowMem(uptr p) {
-  return SelectMapping<IsAsanHighShadowMemImpl>(p);
-}
-
-struct IsAsanShadowGapMemImpl {
-  template <typename Mapping>
-  static bool Apply(uptr mem) {
-    return mem >= Mapping::kAsanShadowGapBeg &&
-           mem <= Mapping::kAsanShadowGapEnd;
-  }
-};
-
-ALWAYS_INLINE
-bool IsAsanShadowGapMem(uptr p) {
-  return SelectMapping<IsAsanShadowGapMemImpl>(p);
-}
-
-ALWAYS_INLINE
-bool IsAsanShadowMem(uptr p) {
-  return IsAsanHighShadowMem(p) || IsAsanLowShadowMem(p);
-}
-
-ALWAYS_INLINE
-bool IsAsanPrivateMem(uptr p) {
-  return IsAsanShadowMem(p) || IsAsanShadowGapMem(p);
-}
-
-ALWAYS_INLINE
-bool IsTsanPrivateMem(uptr p) { return IsTsanShadowMem(p) || IsTsanMetaMem(p); }
-
-ALWAYS_INLINE
-bool IsSanitizerShadowMem(uptr p) {
-  return IsAsanShadowMem(p) || IsTsanShadowMem(p) || IsTsanMetaMem(p);
-}
-
-ALWAYS_INLINE
-bool IsSanitizerPrivateMem(uptr p) {
-  return IsAsanPrivateMem(p) || IsTsanPrivateMem(p);
-}
-
-// struct MemToShadowImpl {
-//   template <typename Mapping>
-//   static uptr Apply(uptr x) {
-//     DCHECK(IsAppMemImpl::Apply<Mapping>(x));
-//     return (((x) & ~(Mapping::kTsanShadowMsk | (kShadowCell - 1))) ^
-//             Mapping::kTsanShadowXor) *
-//                kShadowMultiplier +
-//            Mapping::kTsanShadowAdd;
-//   }
-// };
-
-// ALWAYS_INLINE
-// RawShadow *MemToShadow(uptr x) {
-//   return reinterpret_cast<RawShadow *>(SelectMapping<MemToShadowImpl>(x));
-// }
-
-// struct MemToMetaImpl {
-//   template <typename Mapping>
-//   static u32 *Apply(uptr x) {
-//     DCHECK(IsAppMemImpl::Apply<Mapping>(x));
-//     return (u32 *)(((((x) & ~(Mapping::kTsanShadowMsk | (kMetaShadowCell -
-//     1))))
-//     /
-//                     kMetaShadowCell * kMetaShadowSize) |
-//                    Mapping::kTsanMetaShadowBeg);
-//   }
-// };
-
-// ALWAYS_INLINE
-// u32 *MemToMeta(uptr x) { return SelectMapping<MemToMetaImpl>(x); }
-
-// struct ShadowToMemImpl {
-//   template <typename Mapping>
-//   static uptr Apply(uptr sp) {
-//     if (!IsShadowMemImpl::Apply<Mapping>(sp))
-//       return 0;
-//     // The shadow mapping is non-linear and we've lost some bits, so we don't
-//     // have an easy way to restore the original app address. But the mapping
-//     is
-//     // a bijection, so we try to restore the address as belonging to
-//     // low/mid/high range consecutively and see if shadow->app->shadow
-//     mapping
-//     // gives us the same address.
-//     uptr p =
-//         ((sp - Mapping::kTsanShadowAdd) / kShadowMultiplier) ^
-//         Mapping::kTsanShadowXor;
-//     if (p >= Mapping::kLoAppMemBeg && p < Mapping::kLoAppMemEnd &&
-//         MemToShadowImpl::Apply<Mapping>(p) == sp)
-//       return p;
-//     if (Mapping::kMidAppMemBeg) {
-//       uptr p_mid = p + (Mapping::kMidAppMemBeg & Mapping::kTsanShadowMsk);
-//       if (p_mid >= Mapping::kMidAppMemBeg && p_mid < Mapping::kMidAppMemEnd
-//       &&
-//           MemToShadowImpl::Apply<Mapping>(p_mid) == sp)
-//         return p_mid;
-//     }
-//     return p | Mapping::kTsanShadowMsk;
-//   }
-// };
-
-// ALWAYS_INLINE
-// uptr ShadowToMem(RawShadow *s) {
-//   return SelectMapping<ShadowToMemImpl>(reinterpret_cast<uptr>(s));
-// }
-
-// // Compresses addr to kCompressedAddrBits stored in least significant bits.
-// ALWAYS_INLINE uptr CompressAddr(uptr addr) {
-//   return addr & ((1ull << kCompressedAddrBits) - 1);
-// }
-
-// struct RestoreAddrImpl {
-//   typedef uptr Result;
-//   template <typename Mapping>
-//   static Result Apply(uptr addr) {
-//     // To restore the address we go over all app memory ranges and check if
-//     top
-//     // 3 bits of the compressed addr match that of the app range. If yes, we
-//     // assume that the compressed address come from that range and restore
-//     the
-//     // missing top bits to match the app range address.
-//     const uptr ranges[] = {
-//         Mapping::kLoAppMemBeg,  Mapping::kLoAppMemEnd,
-//         Mapping::kMidAppMemBeg, Mapping::kMidAppMemEnd,
-//         Mapping::kHiAppMemBeg, Mapping::kHiAppMemEnd, Mapping::kHeapMemBeg,
-//         Mapping::kHeapMemEnd,
-//     };
-//     const uptr indicator = 0x0e0000000000ull;
-//     const uptr ind_lsb = 1ull << LeastSignificantSetBitIndex(indicator);
-//     for (uptr i = 0; i < ARRAY_SIZE(ranges); i += 2) {
-//       uptr beg = ranges[i];
-//       uptr end = ranges[i + 1];
-//       if (beg == end)
-//         continue;
-
-//       for (uptr p = beg; p < end; p = RoundDownTo(p + ind_lsb, ind_lsb)) {
-//         if ((addr & indicator) == (p & indicator))
-//           return addr | (p & ~(ind_lsb - 1));
-//       }
-//     }
-//     Printf("ThreadSanitizer: failed to restore address 0x%zx\n", addr);
-//     Die();
-//   }
-// };
-
-// // Restores compressed addr from kCompressedAddrBits to full representation.
-// // This is called only during reporting and is not performance-critical.
-// inline uptr RestoreAddr(uptr addr) {
-//   return SelectMapping<RestoreAddrImpl>(addr);
-// }
-
-// void InitializePlatform();
-// void InitializePlatformEarly();
-// void CheckAndProtect();
-// void InitializeShadowMemoryPlatform();
-// void WriteMemoryProfile(char *buf, uptr buf_size, u64 uptime_ns);
-// int ExtractResolvFDs(void *state, int *fds, int nfd);
-// int ExtractRecvmsgFDs(void *msg, int *fds, int nfd);
-// uptr ExtractLongJmpSp(uptr *env);
-// void ImitateTlsWrite(ThreadState *thr, uptr tls_addr, uptr tls_size);
-
-// int call_pthread_cancel_with_cleanup(int (*fn)(void *arg),
-//                                      void (*cleanup)(void *arg), void *arg);
-
-// void DestroyThreadState();
-// void PlatformCleanUpThreadState(ThreadState *thr);
 
 }  // namespace __xsan

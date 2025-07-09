@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "sanitizer_common/sanitizer_array_ref.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "xsan_attribute.h"
@@ -43,6 +44,10 @@ struct DefaultHooks {
   ALWAYS_INLINE static void InitFromXsan() {}
   /// Almost after all is done, e.g., flags, memory, allocator, threads, etc.
   ALWAYS_INLINE static void InitFromXsanLate() {}
+  // Return the shadow's mappings designated for sub-sanitizers.
+  ALWAYS_INLINE static __sanitizer::ArrayRef<NamedRange> NeededMapRanges() {
+    return {};
+  }
   // ---------- End of Xsan-Initialization-Related Hooks ----------------
 
   // ----------- State/Ignoration Management Hooks -----------

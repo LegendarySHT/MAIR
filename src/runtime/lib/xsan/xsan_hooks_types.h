@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sanitizer_common/sanitizer_range.h"
 #include "sanitizer_common/sanitizer_type_traits.h"
 
 namespace __sanitizer {
@@ -24,6 +25,36 @@ struct XsanHooksSanitizerImpl {
   // If you see this error, you need to specialize this struct to register the
   // hooks for your sanitizer.
   using Hooks = XsanHooksSanitizerUnImpl;
+};
+
+struct NamedRange {
+  Range range;
+  const char *name;
+};
+
+// Can contain up to N elements. Helpful when passing vector on stack.
+template <typename T, usize Bytes = 256>
+struct SmallVector {
+  static constexpr usize N = Bytes / sizeof(T);
+
+  T data[N];
+  usize n = 0;
+
+  usize size() const { return n; }
+
+  void push_back(const T &value) {
+    if (n < N)
+      data[n++] = value;
+  }
+
+  T *begin() { return data; }
+  const T *begin() const { return data; }
+
+  T *end() { return data + n; }
+  const T *end() const { return data + n; }
+
+  T &operator[](usize index) { return data[index]; }
+  const T &operator[](usize index) const { return data[index]; }
 };
 
 class XsanThread;

@@ -45,6 +45,19 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
     msan_init_is_running = 0;
     msan_inited = 1;
   }
+  ALWAYS_INLINE static __sanitizer::ArrayRef<__xsan::NamedRange> NeededMapRanges() {
+    static __xsan::NamedRange map_ranges[] = {
+        {{LoShadowBeg(), LoShadowEnd()}, "msan shadow low"},
+        {{MidShadowBeg(), MidShadowEnd()}, "msan shadow mid"},
+        {{HiShadowBeg(), HiShadowEnd()}, "msan shadow high"},
+        {{HeapShadowBeg(), HeapShadowEnd()}, "msan shadow heap"},
+        {{LoOriginBeg(), LoOriginEnd()}, "msan origin low"},
+        {{MidOriginBeg(), MidOriginEnd()}, "msan origin mid"},
+        {{HiOriginBeg(), HiOriginEnd()}, "msan origin high"},
+        {{HeapOriginBeg(), HeapOriginEnd()}, "msan origin heap"},
+    };
+    return map_ranges;
+  }
 
   static void OnAllocatorUnmap(uptr p, uptr size);
   static void OnXsanAllocHook(uptr ptr, uptr size, BufferedStackTrace *stack);

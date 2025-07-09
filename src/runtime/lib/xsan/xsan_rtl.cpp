@@ -71,7 +71,7 @@ uptr ALWAYS_INLINE HeapEnd() {
   return HeapMemEnd() + PrimaryAllocator::AdditionalSize();
 }
 
-[[maybe_unused]] static void ProtectRange(uptr beg, uptr end) {
+static void ProtectRange(uptr beg, uptr end) {
   if (beg == end) return;
   ProtectGap(beg, end - beg, ZeroBaseShadowStart, ZeroBaseMaxShadowStart);
 }
@@ -84,8 +84,6 @@ void CheckAndProtect() {
     if (IsAppMem(segment.start))
       continue;
     if (segment.start >= HeapMemEnd() && segment.start < HeapEnd())
-      continue;
-    if (__xsan::IsSanitizerShadowMem(segment.start))
       continue;
     if (segment.protection == 0)  // Zero page or mprotected.
       continue;
@@ -101,19 +99,34 @@ void CheckAndProtect() {
   ProtectRange(TsanShadowEnd(), TsanMetaShadowBeg());
   ProtectRange(TsanMetaShadowEnd(), HiAppMemBeg());
 #    else
-  /// TODO: migrate GAP caculation in xsn_platform.h
-  // ProtectRange(LoAppMemEnd(), AsanLowShadowBeg());
-  /// Protected in asan::InitializeShadowMemory  
-  // ProtectRange(AsanLowShadowEnd(), AsanHighShadowBeg());
-  // ProtectRange(AsanHighShadowEnd(), TsanShadowBeg());
-  // if (MidAppMemBeg()) {
-  //   //Printf("Protecting range: start = 0x%lx, end = 0x%lx\n", TsanMetaShadowEnd(), MidAppMemBeg());
-  //   ProtectRange(TsanMetaShadowEnd(), MidAppMemBeg());
-  //   ProtectRange(MidAppMemEnd(), HeapMemBeg());
-  // } else {
-  //   ProtectRange(TsanMetaShadowEnd(), HeapMemBeg());
-  // }
-  // ProtectRange(HeapEnd(), HiAppMemBeg());
+  SmallVector<NamedRange, 1024> map_ranges;
+  map_ranges.push_back({{LoAppMemBeg(), LoAppMemEnd()}, "low app memory"});
+  map_ranges.push_back({{MidAppMemBeg(), MidAppMemEnd()}, "mid app memory"});
+  map_ranges.push_back({{HeapMemBeg(), HeapMemEnd()}, "heap memory"});
+  map_ranges.push_back({{HiAppMemBeg(), HiAppMemEnd()}, "high app memory"});
+  NeededMapRanges(map_ranges);
+  Sort(map_ranges.data, map_ranges.size(),
+       [](const NamedRange &lh, const NamedRange &rh) {
+         return lh.range.begin < rh.range.begin;
+       });
+
+  NamedRange fake_range = {{0, 0}, "fake range"};
+  const NamedRange *last_range = &fake_range;
+  for (const auto &cur_range : map_ranges) {
+    // Printf("Protecting gap before: %s: 0x%zx-0x%zx\n", cur_range.name,
+    //        cur_range.range.begin, cur_range.range.end);
+    if (cur_range.range.begin < last_range->range.end) {
+      Report(
+          "FATAL: XSan: overlapping memory mapping between:\n"
+          "%s: 0x%zx-0x%zx\n"
+          "%s: 0x%zx-0x%zx\n",
+          last_range->name, last_range->range.begin, last_range->range.end,
+          cur_range.name, cur_range.range.begin, cur_range.range.end);
+      Die();
+    }
+    ProtectRange(last_range->range.end, cur_range.range.begin);
+    last_range = &cur_range;
+  }
 #    endif
 
 #    if defined(__s390x__)
@@ -155,6 +168,7 @@ static bool XsanInitInternal() {
     return true;
   SanitizerToolName = "XSan";
   ScopedSanitizerToolName tool_name("XSan");
+  ScopedXsanInternal scoped_xsan_internal;
   xsan_in_init = true;
 
   XsanCheckDynamicRTPrereqs();

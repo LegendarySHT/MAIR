@@ -56,6 +56,15 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
     __xsan::ScopedSanitizerToolName tool_name(name);
     __asan::AsanInitFromXsanLate();
   }
+  ALWAYS_INLINE static __sanitizer::ArrayRef<__xsan::NamedRange> NeededMapRanges() {
+    // ref: asan_shadow_setup.cpp InitializeShadowMemory
+    static auto shadow_begin = AsanShadowOffset() - GetMmapGranularity();
+    static auto shadow_end =
+        (__xsan::HiAppMemEnd() >> AsanShadowScale()) + AsanShadowOffset();
+    static __xsan::NamedRange map_ranges[] = {
+        {{shadow_begin, shadow_end}, "asan shadow"}};
+    return map_ranges;
+  }
   // ---------------------- Memory Management Hooks -------------------
   /// As XSan uses ASan's heap allocator and fake stack directly, hence we don't
   /// need to invoke ASan's hooks here.

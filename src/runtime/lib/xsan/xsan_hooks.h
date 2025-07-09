@@ -45,6 +45,11 @@ ALWAYS_INLINE void InitFromXsanEarly() { XSAN_HOOKS_EXEC(InitFromXsanEarly); }
 ALWAYS_INLINE void InitFromXsan() { XSAN_HOOKS_EXEC(InitFromXsan); }
 ALWAYS_INLINE void InitFromXsanLate() { XSAN_HOOKS_EXEC(InitFromXsanLate); }
 
+template <typename Container>
+ALWAYS_INLINE void NeededMapRanges(Container &res) {
+  XSAN_HOOKS_EXEC_EXTEND(res, NeededMapRanges);
+}
+
 /// Notifies Xsan that the current thread is entering an completely internal
 /// Xsan function, e.g., __asan_handle_no_return.
 /// In such cases, Xsan should not do sanity checks.

@@ -266,7 +266,8 @@ static void ReExecIfNeeded(bool ignore_heap) {
 
   if (reexec) {
     // Don't check the address space since we're going to re-exec anyway.
-  } else if (!CheckAndProtect(false, ignore_heap, false)) {
+  } else if (/* Done by XSan now */ false &&
+             !CheckAndProtect(false, ignore_heap, false)) {
     // ASLR personality check.
     // N.B. 'personality' is sometimes forbidden by sandboxes, so we only call
     // this as a last resort (when the memory mapping is incompatible and TSan

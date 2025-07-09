@@ -766,7 +766,7 @@ static int guard_acquire(ThreadState *thr, uptr pc, atomic_uint32_t *g,
                                          memory_order_relaxed))
         return 1;
     } else if (cmp == kGuardDone) {
-      if (!thr->in_ignored_lib)
+      if (!__xsan::IsInXsanInternal() && !thr->in_ignored_lib)
         Acquire(thr, pc, (uptr)g);
       return 0;
     } else {
@@ -780,7 +780,7 @@ static int guard_acquire(ThreadState *thr, uptr pc, atomic_uint32_t *g,
 
 static void guard_release(ThreadState *thr, uptr pc, atomic_uint32_t *g,
                           u32 v) {
-  if (!thr->in_ignored_lib)
+  if (!__xsan::IsInXsanInternal() && !thr->in_ignored_lib)
     Release(thr, pc, (uptr)g);
   u32 old = atomic_exchange(g, v, memory_order_release);
   if (old & kGuardWaiter)
@@ -806,16 +806,22 @@ static void guard_release(ThreadState *thr, uptr pc, atomic_uint32_t *g,
 
 // Used in thread-safe function static initialization.
 STDCXX_INTERCEPTOR(int, __cxa_guard_acquire, atomic_uint32_t *g) {
+  if (__xsan::IsInXsanInternal())
+    return guard_acquire(nullptr, 0, g);
   SCOPED_INTERCEPTOR_RAW(__cxa_guard_acquire, g);
   return guard_acquire(thr, pc, g);
 }
 
 STDCXX_INTERCEPTOR(void, __cxa_guard_release, atomic_uint32_t *g) {
+  if (__xsan::IsInXsanInternal())
+    return guard_release(nullptr, 0, g, kGuardDone);
   SCOPED_INTERCEPTOR_RAW(__cxa_guard_release, g);
   guard_release(thr, pc, g, kGuardDone);
 }
 
 STDCXX_INTERCEPTOR(void, __cxa_guard_abort, atomic_uint32_t *g) {
+  if (__xsan::IsInXsanInternal())
+    return guard_release(nullptr, 0, g, kGuardInit);
   SCOPED_INTERCEPTOR_RAW(__cxa_guard_abort, g);
   guard_release(thr, pc, g, kGuardInit);
 }

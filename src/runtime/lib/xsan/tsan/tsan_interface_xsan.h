@@ -1,9 +1,15 @@
 #pragma once
 
+#include "../xsan_platform.h"
 #include "sanitizer_common/sanitizer_flags.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
 
 namespace __tsan {
+
+XSAN_MAP_FIELD_FUNC(TsanShadowBeg, kTsanShadowBeg)
+XSAN_MAP_FIELD_FUNC(TsanShadowEnd, kTsanShadowEnd)
+XSAN_MAP_FIELD_FUNC(TsanMetaBeg, kTsanMetaShadowBeg)
+XSAN_MAP_FIELD_FUNC(TsanMetaEnd, kTsanMetaShadowEnd)
 
 void EnterSymbolizer();
 void ExitSymbolizer();

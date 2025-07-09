@@ -6,6 +6,7 @@
 
 namespace __asan {
 
+// ---------------------- pthread-related hooks -----------------
 void AsanHooks::OnPthreadCreate() {
   EnsureMainThreadIDIsCorrect();
 
