@@ -20,7 +20,7 @@
 using namespace __xsan;
 
 struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
-  static bool UseImpl() { return !TryXsanInitFromRtl(); }
+  static bool UseImpl() { return !XsanInited(); }
   static void OnAllocate(const void *ptr, uptr size) {
 #  if CAN_SANITIZE_LEAKS
     // Suppress leaks from dlerror(). Previously dlsym hack on global array was

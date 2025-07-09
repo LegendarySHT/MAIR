@@ -87,9 +87,9 @@ void __msan_scoped_enable_interceptor_checks() { --in_interceptor_scope; }
 //   return in_interceptor_scope;
 // }
 
-struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
-  static bool UseImpl() { return !msan_inited; }
-};
+// struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
+//   static bool UseImpl() { return !msan_inited; }
+// };
 
 #define ENSURE_MSAN_INITED() do { \
   CHECK(!msan_init_is_running); \
@@ -902,10 +902,15 @@ INTERCEPTOR(char *, fgets_unlocked, char *s, int size, void *stream) {
 #define MSAN_MAYBE_INTERCEPT_FGETS_UNLOCKED
 #endif
 
+// XSan init at a very early stage, before which we cannot safely init
+// ourselves. But OS may call __getrlimit before that, so we shouldn't
+// let msan call __msan_init() in that case. But we still need to ensure that
+// the interceptors are initialized.
 #define INTERCEPTOR_GETRLIMIT_BODY(func, resource, rlim)  \
-  if (msan_init_is_running)                               \
+  if (!REAL(getrlimit))                                   \
+    INTERCEPT_FUNCTION(getrlimit);                        \
+  if (!msan_inited || msan_init_is_running)               \
     return REAL(getrlimit)(resource, rlim);               \
-  ENSURE_MSAN_INITED();                                   \
   int res = REAL(func)(resource, rlim);                   \
   if (!res)                                               \
     __msan_unpoison(rlim, __sanitizer::struct_rlimit_sz); \

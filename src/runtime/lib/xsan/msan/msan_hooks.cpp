@@ -9,6 +9,7 @@
 #include "msan.h"
 #include "msan_interface_xsan.h"
 #include "msan_origin.h"
+#include "sanitizer_common/sanitizer_platform_interceptors.h"
 #include "sanitizer_common/sanitizer_tls_get_addr.h"
 
 namespace __msan {
@@ -58,6 +59,14 @@ void MsanHooks::OnXsanFreeHook(uptr ptr, uptr size, BufferedStackTrace *stack) {
       __msan_set_origin(p, size, o.raw_id());
     }
   }
+}
+
+void MsanHooks::OnLibraryLoaded(const char *filename, void *handle) {
+#if SANITIZER_INTERCEPT_DLOPEN_DLCLOSE
+  link_map *map = GET_LINK_MAP_BY_DLOPEN_HANDLE((handle));
+  if (filename && map)
+    ForEachMappedRegion(map, __msan_unpoison);
+#endif
 }
 
 int MsanHooks::RequireStackTracesSize() {

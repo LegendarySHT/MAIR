@@ -1674,6 +1674,12 @@ void InitializeXsanInterceptors() {
 #  if XSAN_INTERCEPT_FSTAT64
   XSAN_INTERCEPT_FUNC(fstat64);
 #  endif
+# if XSAN_INTERCEPT___FXSTAT
+  XSAN_INTERCEPT_FUNC(__fxstat);
+# endif
+# if XSAN_INTERCEPT___FXSTAT64
+  XSAN_INTERCEPT_FUNC(__fxstat64);
+# endif
   XSAN_INTERCEPT_FUNC(pipe);
   XSAN_INTERCEPT_FUNC(pipe2);
   XSAN_INTERCEPT_FUNC(socketpair);

@@ -69,14 +69,7 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
     CommonInitRange(nullptr, (void *)addr, size);
   }
 
-  ALWAYS_INLINE static void OnLibraryLoaded(const char *filename,
-                                            void *handle) {
-#if SANITIZER_INTERCEPT_DLOPEN_DLCLOSE
-    link_map *map = GET_LINK_MAP_BY_DLOPEN_HANDLE((handle));
-    if (filename && map)
-      ForEachMappedRegion(map, __msan_unpoison);
-#endif
-  }
+  static void OnLibraryLoaded(const char *filename, void *handle);
 
   ALWAYS_INLINE static void AtExit() { MsanAtExit(); }
 
@@ -209,6 +202,11 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
     ScopedThreadLocalStateBackup stlsb;
     FuncScope();
     ~FuncScope();
+  };
+
+  template <>
+  struct FuncScope<__xsan::ScopedFunc::getaddrinfo> {
+    FuncScope<__xsan::ScopedFunc::common> common_scope;
   };
 };
 
