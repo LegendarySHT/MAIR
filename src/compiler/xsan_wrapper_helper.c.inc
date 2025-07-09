@@ -638,3 +638,73 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx, u8 is_dso
   //   cc_params[cc_par_cnt++] = "-lstdc++";
   // }
 }
+
+static void print_help() {
+#if WRAP_GCC
+#define CC "gcc"
+#define DESC CC "'s frontend & pass + XSan-local runtime.\n"
+#elif WRAP_CLANG
+#define CC "clang"
+#define DESC CC "'s frontend + XSan-local pass & runtime.\n"
+#else
+#error "Please specify either clang or gcc to wrap via macro defines. "
+  "E.g., #define WRAP_GCC 1 or #define WRAP_CLANG 1"
+#endif
+  puts(
+      "Sanitizer Options:\n"
+      "  -asan          Use our AddressSanitizer (ASan). \n"
+      "                 Uses " DESC
+      "                 Cannot be used with -tsan or -msan.\n"
+      "  -tsan          Use our ThreadSanitizer (TSan).\n"
+      "                 Uses " DESC
+      "                 Cannot be used with -asan or -msan.\n"
+#if WRAP_CLANG
+      "  -msan          Use our MemorySanitizer (MSan).\n"
+      "                 Uses " DESC
+      "                 Cannot be used with -asan or -tsan.\n"
+#endif
+      "  -ubsan         Use our UndefinedBehaviorSanitizer (UBSan). \n"
+      "                 Uses the " CC " frontend (no midend required).\n"
+      "  -xsan          Use our eXtended Sanitizer (XSAN).\n"
+#if WRAP_CLANG
+      "                 Integrates ASan, TSan, MSan and UBSan. \n"
+#elif WRAP_GCC
+      "                 Integrates ASan, TSan and UBSan. \n"
+#endif
+
+      "\nOriginal Sanitizers, for example:\n"
+      "  -fsanitize=address   Use LLVM's original AddressSanitizer.\n"
+      "  -fsanitize=thread    Use LLVM's original ThreadSanitizer.\n"
+#if WRAP_CLANG
+      "  -fsanitize=memory    Use LLVM's original MemorySanitizer.\n"
+#endif
+      "  -fsanitize=undefined Use LLVM's original UndefinedBehaviorSanitizer.\n"
+
+      "\nAutomatically activate XSan:\n"
+      "  -fsanitize=address,thread          Use XSan to enable ASan and TSan.\n"
+#if WRAP_CLANG
+      "  -fsanitize=address,memory          Use XSan to enable ASan and MSan.\n"
+      "  -fsanitize=thread,memory           Use XSan to enable TSan and MSan.\n"
+      "  -fsanitize=address,thread,memory   Use XSan to enable ASan, TSan and "
+      "MSan.\n"
+#endif
+      "If some 'incompatible' sanitizers are enabled via `-fsanitize=...`,\n"
+      "XSan will be automatically enabled to support such composition.\n"
+
+      "\nDisable Sanitizers(works for both XSan and original ones), "
+      "for example:\n"
+      "  -fno-sanitize=address              Disable AddressSanitizer.\n"
+      "  -fno-sanitize=thread               Disable ThreadSanitizer.\n"
+#if WRAP_CLANG
+      "  -fno-sanitize=memory               Disable MemorySanitizer.\n"
+#endif
+      "  -fno-sanitize=undefined            Disable "
+      "UndefinedBehaviorSanitizer.\n"
+
+      "\nNotes:\n"
+      "  - Use -fsanitize=<sanitizer> for LLVM's original sanitizers.\n"
+      "  - Use -fno-sanitize=<sanitizer> to disable specific sanitizers.\n"
+      "  - These options are conflicting: -tsan, -asan, -xsan\n");
+#undef CC
+#undef DESC
+}

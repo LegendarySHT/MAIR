@@ -322,40 +322,6 @@ static void print_cmdline(int argc) {
     printf("\n");
 }
 
-static void print_help(){
-   puts(
-    "GCC does not natively support MemorySanitizer (MSan).\n"
-    "Sanitizer Options:\n"
-    "  -tsan              Use our ThreadSanitizer (TSan).\n"
-    "                     Uses the gcc frontend and our midend. \n"
-    "                     Cannot be used with -asan.\n"
-    "  -asan              Use our AddressSanitizer (ASan). \n"
-    "                     Uses the gcc frontend and our midend. \n"
-    "                     Cannot be used with -tsan.\n"
-    "  -ubsan             Use our UndefinedBehaviorSanitizer (UBSan). \n"
-    "                     Uses the gcc frontend (no midend required).\n"
-    "  -xsan              Use our eXtended Sanitizer (XSAN).\n"
-    "                     Integrates ASan, TSan, and UBSan. \n"
-    "\nOriginal Sanitizers, for example:\n"
-    "  -fsanitize=address   Use GCC's original AddressSanitizer.\n"
-    "  -fsanitize=thread    Use GCC's original ThreadSanitizer.\n"
-    "  -fsanitize=undefined Use GCC's original UndefinedBehaviorSanitizer.\n"
-    "These parameters use the original middle-end plugin.\n"
-    "Cannot combine two different sanitizers.\n"
-    "\nDisable Sanitizers(works for both XSan and original ones), for example:\n"
-    "  -fno-sanitize=address\n"
-    "                     Disable AddressSanitizer.\n"
-    "  -fno-sanitize=thread\n"
-    "                     Disable ThreadSanitizer.\n"
-    "  -fno-sanitize=undefined\n"
-    "                     Disable UndefinedBehaviorSanitizer.\n"
-    "\nNotes:\n"
-    "  - Use -fsanitize=<sanitizer> for GCC's original sanitizers.\n"
-    "  - Use -fno-sanitize=<sanitizer> to disable specific sanitizers.\n"
-    "  - These options are conflicting: -tsan, -asan, -xsan\n"
-);
-}
-
 /* Main entry point */
 int main(int argc, const char** argv)
 {
