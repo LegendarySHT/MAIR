@@ -2,11 +2,26 @@
 
 ## Introduction
 
-XSan is a project aiming to compose a set of sanitizers in a efficient and scalable way. The project is based on the LLVM/Clang compiler infrastructure and is implemented as a Clang plugin.
+XSan is a project aiming to compose a set of sanitizers in a efficient and scalable way. The project is based on the LLVM/Clang compiler infrastructure and is implemented as a Clang/GCC plugin.
 
 Now, XSan supports the following sanitizers:
 - AddressSanitizer (ASan)
+- ThreadSanitizer (TSan)
+- MemorySanitizer (MSan)
 - UndefinedBehaviorSanitizer (UBSan)
+- TODO: support more sanitizers in recent LLVM versions
+    - NSan (Numeric Sanitizer)
+    - TySan (Type Sanitizer)
+
+TODO: support more sanitizers in recent LLVM versions, such as:
+- NSan (NumericSanitizer)
+- TySan (TypeSanitizer)
+- GWP-ASan
+
+Sanitizers that are not considered:
+- Sanitizers from non-LLVM projects: XSan is developed based on the LLVM framework, which makes it difficult to integrate these sanitizers.
+- HWASan, RtSan, MemTagSanitizer: Limited by specific hardware platforms.
+- GWPSan: The architecture design is significantly different from other sanitizers, making it incompatible.
 
 ## Project Structure
 
@@ -15,50 +30,52 @@ Now, XSan supports the following sanitizers:
     - compiler: the compiler wrapper of the XSan project.
     - runtime: the runtime library of the XSan project (major of which come from compiler-rt).
         - lib: the majority of the runtime library.
-      > Almost all the sanitizer runtime libraries are migrated from [LLVM20-commit: 3469996] (https://github.com/llvm/llvm-project/commit/3469996d0d057d99a33ec34ee3c80e5d4fa3afcb)
+      > Almost all the sanitizer runtime libraries are migrated from [LLVM21-commit: 3469996] (https://github.com/llvm/llvm-project/commit/3469996d0d057d99a33ec34ee3c80e5d4fa3afcb)
       > Note that UBSan relies on clang frontend, therefore, the function checks of it could not upgrade as we still use clang-15.
     - instrumentation: the instrumentation code of the XSan project.
-- test: the test cases for the XSan project.
+- test: the regression test cases for the XSan project.
+    - asan: the ASan test cases.
+    - ubsan: the UBSan test cases.
+    - tsan: the TSan test cases.
+    - xsan: the XSan-specific test cases.
 
 ### Branches
 - main: the original code for sanitizers used as plugins.
-- xsan-dev: the development branch for the XSan project.
+- dev-xsan: the development branch for the XSan project.
 
-## Build
+## Build From Source
 
 ### Prerequisites
-1. To build XSan, you need to have the LLVM/Clang-15 source code. You can download the source code from the [LLVM official website](https://github.com/llvm/llvm-project/tree/llvmorg-15.0.7) as follows.
-    ```shell
-    git clone -b llvmorg-15.0.7 --depth 1 https://github.com/llvm/llvm-project.git /path/to/llvm-source
-    ```
-    - Because some sanitizer needs the support of compiler frontend, which is not accessible only via the plugin interface, you need to build the whole LLVM/Clang project with some modifications. The modifications are listed in the `llvm.patch` file.
-2. Build the LLVM/Clang project with the modifications in the `llvm.patch` file.
-    - Apply the patch file to the LLVM/Clang source code.
-    ```shell
-    cd /path/to/llvm-source
-    git apply /path/to/llvm.patch
-    ```
-    - Build the LLVM/Clang project with the following commands:
-      > Note that LLVM15 requires a newer version of gcc/g++ (>= 12.0) to build.
-    ```shell
-    cd /path/to/llvm-build
-    cmake \
-        -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra;compiler-rt;libcxx;libcxxabi;lld' \
-        -DLLVM_ENABLE_PLUGINS=ON \
-        -DBUILD_SHARED_LIBS=ON \
-        -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLLVM_BINUTILS_INCDIR=/usr/include/ \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        /path/to/llvm-source/llvm/
-    make -j$(nproc)
-    ```
-3. Export the relevant environment variables to your dev env (e.g., in .bashrc).
+1. If you need to build the complete XSan from the source, first switch XSan to the dev-xsan branch: `git switch dev-xsan`
+2. To build XSan, you need to prepare an LLVM-15 and Clang-15 environment. You can either build them manually or install them using a package manager.
+3. (Optional) Apply intrusive patches to the compilers.
+    - **ONLY for the scenarios that XSan's livepatches do not work with your `clang`/`gcc`.**
+    - XSan only provides patches for clang-15 and gcc-9.4. If you require support for other compiler versions, please refer to our patch files and apply the modifications manually.
+    - Patch the `clang-15` project with the modifications in the `llvm.patch` file.
+        - Apply the patch file to the LLVM/Clang source code.
+        ```shell
+        git clone -b llvmorg-15.0.7 --depth 1 https://github.com/llvm/llvm-project.git /path/to/llvm-source
+        cd /path/to/llvm-source
+        git apply /path/to/llvm.patch
+        ```
+        - Build and install `clang-15` adhering to the guidelines of the compiler project.
+    - Patch the `gcc-9.4.0` project with the modifications in the `gcc.patch` file.
+        - Apply the patch file to the GCC source code.
+        ```shell
+        git clone --depth=1 --branch=releases/gcc-9.4.0 https://gcc.gnu.org/git/gcc.git /path/to/gcc-source
+        cd /path/to/gcc-9.4.0-source
+        git apply /path/to/gcc.patch
+        ```
+        * Build and install `gcc-9.4.0` adhering to the guidelines of the compiler project.
+4. Export the relevant environment variables to your dev env (e.g., in .bashrc).
     ```shell
     export LLVM_DIR=/path/to/llvm-build
     export PATH=$LLVM_DIR/bin:$PATH
     ```
-### Build XSan
+### Build/Install/Archive XSan
 1. Clone the XSan project.
     ```shell
+    # From GitHub
     git clone https://github.com/Camsyn/XSan.git /path/to/xsan
     ```
     > Note that the above command will only clone the main branch of the XSan project. If you want to clone the development branch, you need to switch to the `dev-xsan` branch by executing the following command.
@@ -78,12 +95,7 @@ Now, XSan supports the following sanitizers:
     cmake -DCMAKE_BUILD_TYPE=Release ..
     make -j$(nproc)
     ```
-3. Export the relevant environment variables to your dev env (e.g., in .bashrc).
-    ```shell
-    export XSAN_DIR=/path/to/xsan
-    export PATH=$XSAN_DIR/build:$PATH
-    ```
-4. Test the XSan (NOTE THAT you need to compile XSan in RELEASE mode).
+3. Test the XSan (NOTE THAT you need to compile XSan in RELEASE mode).
     ```shell
     cd /path/to/xsan/build
     make check-all # check all the test cases
@@ -91,56 +103,82 @@ Now, XSan supports the following sanitizers:
     make check-ubsan # check the UBSan test cases
     make check-tsan # check the TSan test cases
     ```
-
-### Migrating to GCC
-
-1.  Clone the GCC 9.4.0 Source Code
+4. Use XSan without installation.
+    - Export the relevant environment variables to your dev env (e.g., in .bashrc).
     ```shell
-    # Using the official GNU server
-    git clone --depth 1 --branch releases/gcc-9.4.0 https://gcc.gnu.org/git/gcc.git gcc-9.4.0-source /path/to/gcc-9.4.0-source
+    export XSAN_DIR=/path/to/xsan
+    export PATH=$XSAN_DIR/build:$PATH
     ```
-
-2.  Apply the XSan Patch
-     ```shell
-    cd /path/to/gcc-9.4.0-source
-    git apply /path/to/xsan/gcc.patch
-    ```
-
-3.  Download GCC Prerequisite
+5. (Optional) Install XSan to the system.
+    TODO
     ```shell
-    cd /path/to/gcc-9.4.0-source
-    ./contrib/download_prerequisites
-    ```
-
-4.  Configure and Build GCC
-    > **Note:** The `--disable-bootstrap` flag is highly recommended for development. It significantly reduces compilation time by building the compiler only once, instead of the default three times.
-
-    ```shell
-    # Create and enter a separate build directory
-    mkdir /path/to/gcc-build
-    cd /path/to/gcc-build
-
-    # Run configure with recommended flags for development
-    /path/to/gcc-9.4.0-source/configure \
-        --prefix=/path/to/gcc-9.4.0-install \
-        --enable-languages=c,c++ \
-        --disable-bootstrap \
-        --disable-multilib \
-        --enable-checking=release
-    
-    # Start the build process and generate compile_commands.json
-    bear make -j$(nproc)
-    ```
-
-5.  Install the New GCC
-    ```shell
-    cd /path/to/gcc-build
+    cd /path/to/xsan/build
     make install
     ```
-
-6.  Export Environment Variables
+6. (Optional) Archive XSan to a standalone package.
+    TODO
     ```shell
-    export PATH=/path/to/gcc-9.4.0-install/bin:$PATH
+    cd /path/to/xsan/build
+    make archive
     ```
+    Or you can directly archive the build directory.
+    - In theory, XSan supports distributing a standalone package—a compressed archive containing all the necessary binaries—allowing users to run it out of the box after extraction, without requiring installation.
 
-After completing these steps, you will have a custom GCC 9.4.0 toolchain ready to be used with the XSan wrappers (`xgcc`/`xg++`).
+## How to Use
+
+Ensure that the XSan binaries are accessible in your environment, whether they are located in the build directory, installed system-wide, or extracted from the XSan archive.
+
+> `xclang/xclang++` and `xgcc/xg++` are the entry points to the XSan project, which are wrappers upon the real compilers, i.e., `clang` and `gcc`. These wrappers automatically add the compilation parameters required by XSan and actively livepatch the compilers.
+
+1. Access the compiler wrappers (i.e., `xclang` and `xgcc`) for help.
+```shell
+# For clang-15
+/path/to/xclang -h
+# For gcc
+/path/to/xgcc -h
+```
+
+2. Use `xclang`/`xgcc` as a normal compiler.
+    - In theory, our wrapper supports all the options originally supported by the compiler.
+    - If you wish to actively activate all sanitizers supported by XSan:
+    ```shell
+    xclang -xsan ...
+    xgcc -xsan ...
+    ```
+    - If you activate some 'incompatible' sanitizers via `xclang`/`xgcc`, XSan will be automatically enabled to support such composition, as follows.
+    ```shell
+    # XSan is automatically enabled to support the composition of ASan, TSan and MSan
+    xclang -fsanitize=address,thread,memory
+    # gcc does not support memory
+    xgcc -fsanitize=address,thread
+
+    # ASan is compatible with UBSan, hence, this command is equivalent to 
+    # `clang -fsanitize=address,undefined`
+    xclang -fsanitize=address,undefined
+    ```
+    - Note: ASan/TSan/MSan are incompatible with each other; UBSan is compatible with other all, but raise some performance overhead.
+
+3. Construct enabled sanitizer set in XSan
+- In theory, XSan can choose any subset of the set of sanitizers it supports. 
+- XSan supports the selection of sanitizers at XSan-build time and compile time
+
+- XSan-build time:
+    > The following shows how to remove TSan during the XSan build phase
+    - You can choose whether to enable a sanitizer at xsan_config.cmake by modifying:
+    ```cmake
+    option(XSAN_CONTAINS_TSAN "Enable ThreadSanitizer (TSan) globally" ON)
+    ```
+    - Or just transfer cmake options while cmake configure, as follows:
+    ```shell
+    cmake -DXSAN_CONTAINS_TSAN=OFF -DCMAKE_BUILD_TYPE=xxx ..
+    ```
+- Compile time:
+    - You can choose whether to enable a sanitizer at compile time by adding the following flags:
+    ```shell
+    xclang -fsanitize=address,thread,memory
+    xgcc -fsanitize=address,thread
+    ```
+    - Or just disable some sanitizers from `-xsan`, as follows:
+    ```shell
+    xclang -xsan -fno-sanitize=thread
+    ```
