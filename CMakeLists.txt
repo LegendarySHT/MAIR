@@ -2,18 +2,21 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 project(xsan)
+
 # To compile *.S in runtime
 enable_language(C CXX ASM)
-# export compile_commands.json for clangd
-set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
 
-# Reading the configuration file. 
+# export compile_commands.json for clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
+# Reading the configuration file.
 set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/xsan_config.cmake")
 
 if(EXISTS ${CONFIG_FILE_PATH})
   include(${CONFIG_FILE_PATH})
 else()
   message(STATUS "Configuration file not found, using default settings.")
+
   # If the config file does not exist, define the list here with defaults
   # This ensures the loop runs even without the config file
   set(XSAN_SANITIZERS TSAN ASAN UBSAN MSAN)
@@ -23,7 +26,6 @@ endif()
 # The option() command will respect values loaded from the included config file,
 # or use the default OFF value if not set in the config file.
 foreach(san IN LISTS XSAN_SANITIZERS)
-
   # Construct the variable name for the option (e.g., XSAN_CONTAINS_TSAN)
   set(SANITIZER_OPTION_VAR "XSAN_CONTAINS_${san}")
 
@@ -33,13 +35,14 @@ foreach(san IN LISTS XSAN_SANITIZERS)
   if(NOT DEFINED ${SANITIZER_OPTION_VAR})
     option(${SANITIZER_OPTION_VAR} "Enable ${san} globally in XSan" ON)
   endif()
+
   # Print the status of the option
   message(STATUS "${SANITIZER_OPTION_VAR} is set to ${${SANITIZER_OPTION_VAR}}")
 
   # Check if the option is enabled and add the corresponding definition
-  if (${${SANITIZER_OPTION_VAR}}) # Note the double ${} for the condition check
+  if(${${SANITIZER_OPTION_VAR}}) # Note the double ${} for the condition check
     set(MACRO_VALUE 1)
-    message(STATUS "Defining preprocessor macro -D${SANITIZER_OPTION_VAR}=1") 
+    message(STATUS "Defining preprocessor macro -D${SANITIZER_OPTION_VAR}=1")
   else()
     set(MACRO_VALUE 0)
     message(STATUS "Defining preprocessor macro -D${SANITIZER_OPTION_VAR}=0")
@@ -48,8 +51,7 @@ foreach(san IN LISTS XSAN_SANITIZERS)
   add_definitions(-D${SANITIZER_OPTION_VAR}=${MACRO_VALUE})
 endforeach()
 
-
-if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(FATAL_ERROR "
 No build type selected. You need to pass -DCMAKE_BUILD_TYPE=<type> in order to configure LLVM.
 Available options are:
@@ -75,22 +77,23 @@ Learn more about these options in our documentation at https://llvm.org/docs/CMa
 endif()
 
 find_program(CLANG_C_COMPILER clang)
-if (CLANG_C_COMPILER)
-    set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE STRING "C compiler" FORCE)
-    set(CMAKE_CXX_COMPILER ${CLANG_C_COMPILER}++ CACHE STRING "C++ compiler" FORCE)
 
-    message(STATUS "Clang found and set as default compiler: ${CLANG_C_COMPILER}")
+if(CLANG_C_COMPILER)
+  set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE STRING "C compiler" FORCE)
+  set(CMAKE_CXX_COMPILER ${CLANG_C_COMPILER}++ CACHE STRING "C++ compiler" FORCE)
+
+  message(STATUS "Clang found and set as default compiler: ${CLANG_C_COMPILER}")
 else()
-    message(WARNING "Clang not found, use system default compiler (cc).")
+  message(WARNING "Clang not found, use system default compiler (cc).")
 endif()
 
 message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 
-
 # Set C standard to C17
 set(CMAKE_C_STANDARD 17 CACHE STRING "C standard to conform to")
 set(CMAKE_C_STANDARD_REQUIRED YES)
+
 # LLVM 15 requires C++14, but we only compile the runtime and instrumentation
 # supprot C++17
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
@@ -99,14 +102,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED YES)
 # Load LLVMConfig.cmake. If this fails, consider setting `LLVM_DIR` to point
 # to your LLVM installation's `lib/cmake/llvm` directory.
 find_package(LLVM REQUIRED CONFIG)
-#add_definitions(${LLVM_DEFINITIONS})
-#include_directories(${LLVM_INCLUDE_DIRS})
-#link_directories(${LLVM_LIBRARY_DIRS})
 
+# add_definitions(${LLVM_DEFINITIONS})
+# include_directories(${LLVM_INCLUDE_DIRS})
+# link_directories(${LLVM_LIBRARY_DIRS})
 find_program(LLD_PATH lld)
+
 # Preferring lld linker over system linker
-if (LLD_PATH)
+if(LLD_PATH)
   message(STATUS "Found lld and use it as linker: ${LLD_PATH}")
+
   # Fix dynsym corruption issue in libclang_rt.tsan.so
   set(CMAKE_LINKER ${LLD_PATH} CACHE STRING "Linker" FORCE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
@@ -136,9 +141,6 @@ else()
   set(LLVM_THIRD_PARTY_DIR ${LLVM_PATH}/third-party)
 endif()
 
-
-
-
 # Now we only support x86_64
 set(XSAN_SUPPORTED_ARCH ${X86_64})
 message_green("XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
@@ -148,18 +150,20 @@ set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
 set(XSAN_PATCH_DIR "${CMAKE_BINARY_DIR}/patch")
 set(XSAN_RESOURCE_DIR "${CMAKE_BINARY_DIR}/share")
 set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
+
 # If relative path is "", it will be set to "."
 safe_relative_path(XSAN_REL_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_BIN_DIR}")
 safe_relative_path(XSAN_REL_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_LIB_DIR}")
 safe_relative_path(XSAN_REL_PATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PATCH_DIR}")
 safe_relative_path(XSAN_REL_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_RESOURCE_DIR}")
 safe_relative_path(XSAN_REL_PASS_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PASS_DIR}")
+
 # TODO: de-hardcode this
 set(XSAN_COMMON_LIT_CONFIGURE_PATH
   ${CMAKE_BINARY_DIR}/test/lit.common.configured)
 
 add_subdirectory(src)
-# Now this directory is added from /src/runtime/test/CMakeLists.txt, 
+
+# Now this directory is added from /src/runtime/test/CMakeLists.txt,
 # in order to include the relevant variables.
 # add_subdirectory(test)
-

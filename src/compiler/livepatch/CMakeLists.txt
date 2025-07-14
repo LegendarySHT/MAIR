@@ -15,19 +15,18 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 include_directories(${LLVM_INCLUDE_DIRS})
 
-
 # If the dynsym locates in the main executable, the symbol with the same name
 # will be masked. Therefore, we need to use -Bsymbolic-functions to ensure the
 # symbol is not masked.
 # -Bsymbolic: make the refernces to internal dyn symbols to be resolved to the
-#             relative address.
+# relative address.
 add_link_options(-Wl,-Bsymbolic-functions)
 
 # Due to the LLVM API, we can only livepatch clang-15.
 add_subdirectory(clang-15)
+
 # In theory, the hot patch of gcc does not limit the version of gcc
 add_subdirectory(gcc)
-
 
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/support_dso_injection.sh
