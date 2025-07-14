@@ -19,11 +19,13 @@
 #include <unistd.h>
 
 #if defined(WRAP_GCC)
+#undef WRAP_GCC
 #define WRAP_GCC 1
 #define WRAP_CLANG 0
 // Selection of hotpatches according to compiler
 #define XSAN_DSO_PATCH XSAN_GCC_DSO_PATCH
 #elif defined(WRAP_CLANG)
+#undef WRAP_CLANG
 #define WRAP_GCC 0
 #define WRAP_CLANG 1
 #define XSAN_DSO_PATCH XSAN_CLANG_DSO_PATCH
