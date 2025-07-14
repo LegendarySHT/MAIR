@@ -77,7 +77,7 @@ struct Mapping48AddressSpace {
   static constexpr const uptr kHeapMemBeg = 0x720000000000ull;
   static constexpr const uptr kHeapMemEnd = 0x740000000000ull;
 
-  static constexpr const uptr kLoAppMemBeg = 0x000000001000ull;
+  static constexpr const uptr kLoAppMemBeg = 0x000000000000ull;
   // ASan set this 0x00007fff8000ull but it protects the last page. So we
   // only use 0x00007fff7000ull.
   static constexpr const uptr kLoAppMemEnd = 0x00007fff7000ull;
