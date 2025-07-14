@@ -322,26 +322,26 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     const char *cur = argv[i];
-    for (u32 j = 1; j < NumSanitizerTypes; j++) {
-      OPT_EQ_AND_THEN(cur, option_names[j], {
-        for (u32 k = 0; k < NumSanitizerTypes; k++) {
-          enum SanitizerType incomp = incompatible_san_types[j][k];
+    for (enum SanitizerType san = ASan; san < NumSanitizerTypes; san++) {
+      OPT_EQ_AND_THEN(cur, option_names[san], {
+        for (u32 incomp_idx = 0; incomp_idx < NumSanitizerTypes; incomp_idx++) {
+          enum SanitizerType incomp = incompatible_san_types[san][incomp_idx];
           if (!incomp)
             break;
           if (has(&xsan_options, incomp))
             FATAL("'%s' could not be used with '%s'", option_names[incomp],
-                  option_names[j]);
+                  option_names[san]);
         }
-        if (!support_subsanitizers[j]) {
-          FATAL("'%s' is not supported by this compiler", option_names[j]);
+        if (!support_subsanitizers[san]) {
+          FATAL("'%s' is not supported by this compiler", option_names[san]);
         }
-        if (j == UBSan) {
+        if (san == UBSan) {
           /// Only if no other sanitizer is specified, we treat it as UBSan
           /// standalone.
           if (!has_any(&xsan_options))
             xsanTy = UBSan;
         } else {
-          xsanTy = j;
+          xsanTy = san;
         }
         set(&xsan_options, xsanTy);
         continue;
@@ -397,6 +397,29 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
       ck_free(val_str);
       continue;
     })
+  }
+
+  if (xsanTy == SanNone) {
+    u8 has_conflict = 0;
+    for (enum SanitizerType san = ASan;
+         san < NumSanitizerTypes && !has_conflict; san++) {
+      if (san == XSan || san == UBSan)
+        continue;
+      if (!has(&xsan_options, san))
+        continue;
+      for (u32 incomp_idx = 0; incomp_idx < NumSanitizerTypes && !has_conflict;
+           incomp_idx++) {
+        enum SanitizerType incomp = incompatible_san_types[san][incomp_idx];
+        if (!incomp)
+          break;
+        has_conflict = has_conflict || has(&xsan_options, incomp);
+      }
+    }
+
+    if (has_conflict) {
+      xsanTy = XSan;
+      xsan_options.mask |= (u64)1 << XSan;
+    }
   }
 
   /// TODO: figure out whether we need to do that.
