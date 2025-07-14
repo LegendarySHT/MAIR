@@ -75,6 +75,11 @@ static void ReportIgnoresEnabled(ThreadContext *tctx, IgnoreSet *set) {
 }
 
 static void ThreadCheckIgnore(ThreadState *thr) {
+  if (thr->in_vfork_child) {
+    // In vfork's child process, we don't need to check ignores,
+    // as we disable TSan for the vfork child process.
+    return;
+  }
   // If we deactivate TSan during runtime,
   // we should not let the thread terminate abnormally here, as deactivation is
   // what we expect and not an exceptional situation.

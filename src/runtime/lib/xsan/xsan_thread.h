@@ -185,6 +185,7 @@ class XsanThread {
 
   // XsanThreadLocalMallocStorage malloc_storage_;
   bool unwinding_;
+  // Used in vfork interceptor as an off-stack area to store the RA.
   uptr extra_spill_area_;
 
   bool is_main_thread_;

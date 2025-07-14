@@ -1,7 +1,7 @@
 #include "sanitizer_common/sanitizer_asm.h"
 
 #if defined(__linux__)
-#define COMMON_INTERCEPTOR_SPILL_AREA __xsan_vfork_before_and_after
+#define COMMON_INTERCEPTOR_SPILL_AREA __xsan_extra_spill_area
 #define COMMON_INTERCEPTOR_HANDLE_VFORK __xsan_vfork_parent_after
 #include "sanitizer_common/sanitizer_common_interceptors_vfork_aarch64.inc.S"
 #include "sanitizer_common/sanitizer_common_interceptors_vfork_arm.inc.S"

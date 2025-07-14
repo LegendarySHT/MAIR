@@ -132,8 +132,25 @@ struct DefaultHooks {
     ALWAYS_INLINE ScopedAtExitHandler(uptr pc, const void *ctx) {}
     ALWAYS_INLINE ~ScopedAtExitHandler() {}
   };
-  ALWAYS_INLINE static void *vfork_before_and_after() { return nullptr; }
-  ALWAYS_INLINE static void vfork_parent_after(void *sp) {}
+
+  /*
+  vfork interceptor (Refer to xsan_interceptors_vfork.S for details)
+  - (Parent) vfork_before
+  - (Parent/Child) vfork
+  - (Child) vfork_child_after
+  - The following hooks' execution order is not guaranteed
+    - (Parent) vfork_parent_after
+    - (Parent) vfork_parent_after_handle_sp
+  */
+  // Run before and after vfork, return a off-stack spill area to store the ra
+  // for the vfork interceptor. Refer to xsan_interceptors_vfork.S for details.
+  /// @return: the off-stack spill area.
+  ALWAYS_INLINE static void vfork_before() {}
+  ALWAYS_INLINE static void vfork_child_after() {}
+  ALWAYS_INLINE static void vfork_parent_after() {}
+  /// Only called in the parent process after vfork.
+  /// @param sp: the stack pointer of the child process.
+  ALWAYS_INLINE static void vfork_parent_after_handle_sp(void *sp) {}
   ALWAYS_INLINE static void OnForkBefore() {}
   ALWAYS_INLINE static void OnForkAfter(bool is_child) {}
   ALWAYS_INLINE static void OnLibraryLoaded(const char *filename,

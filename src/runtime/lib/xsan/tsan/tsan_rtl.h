@@ -209,6 +209,21 @@ struct alignas(SANITIZER_CACHE_LINE_SIZE) ThreadState {
 #endif
   MutexSet mset;
   bool is_dead;
+  // Indicate whether the current process is a vfork child.
+  // Seems a process-related flag, but we designate it as a thread-local flag
+  // to avoid it affecting the parent process incorrectly for
+  // parent-process-multithreading vfork scenario.
+  // Assume we put this flag in `ctx` bound to process:
+  //   1. Parent process creates multiple threads
+  //   2. One of the threads calls vfork
+  //   3. vfork only suspends the specific thread calling vfork, waiting for
+  //      child process `exit`/`exec`
+  //   4. vfork makes the parent/child processes share the same address space
+  //   5. `in_vfork_child=true` in child process --> other threads in parent
+  //   process will be affected
+  // It is safe to make it thread-local, as it is a UB to create a thread in a
+  // vfork child process (vfork child process can invoke no system calls but
+  // `exit`/`exec`).
   bool in_vfork_child;
   const Tid tid;
   uptr stk_addr;

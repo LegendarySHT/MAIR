@@ -52,7 +52,8 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
     __xsan::ScopedSanitizerToolName tool_name(name);
     __tsan::TsanInitFromXsanLate();
   }
-  ALWAYS_INLINE static __sanitizer::ArrayRef<__xsan::NamedRange> NeededMapRanges() {
+  ALWAYS_INLINE static __sanitizer::ArrayRef<__xsan::NamedRange>
+  NeededMapRanges() {
     static __xsan::NamedRange map_ranges[] = {
         {{TsanShadowBeg(), TsanShadowEnd()}, "tsan shadow"},
         {{TsanMetaBeg(), TsanMetaEnd()}, "tsan meta"},
@@ -147,8 +148,29 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
     ScopedAtExitHandler(uptr pc, const void *ctx);
     ~ScopedAtExitHandler();
   };
-  static void *vfork_before_and_after();
-  static void vfork_parent_after(void *sp);
+  /*
+  - (Parent) vfork_before
+  - vfork
+  - (Child) vfork_child_after
+  - (Parent) vfork_parent_after
+  */
+  static void vfork_child_after() {
+    // ----------  [Child] after vfork ----------------
+    // We need to disable TSan for the vfork child process, because the child
+    // process will inherit the same address space as the parent process.
+    __tsan::DisableTsanForVfork();
+  }
+  static void vfork_parent_after() {
+    // ----------  [Parent] after vfork ----------------
+    // Must after '[Child] after vfork', as parent process will suspend until
+    // child process `exit`/`exec`.
+
+    // Due to the child process sharing the same address space as the parent
+    // process, we need to recover TSan for the parent process after child
+    // exits.
+    __tsan::RecoverTsanAfterVforkParent();
+  }
+
   static void OnForkBefore();
   static void OnForkAfter(bool is_child);
   static void OnLibraryLoaded(const char *filename, void *handle);

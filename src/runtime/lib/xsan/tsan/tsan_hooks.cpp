@@ -116,13 +116,7 @@ TsanHooks::ScopedAtExitHandler::ScopedAtExitHandler(uptr pc, const void *ctx) {
 TsanHooks::ScopedAtExitHandler::~ScopedAtExitHandler() {
   FuncExit(cur_thread());
 }
-void *TsanHooks::vfork_before_and_after() {
-  __tsan::DisableTsanForVfork();
-  return nullptr;
-}
-void TsanHooks::vfork_parent_after(void *sp) {
-  __tsan::RecoverTsanAfterVforkParent();
-}
+
 void TsanHooks::OnForkBefore() { atfork_prepare(); }
 void TsanHooks::OnForkAfter(bool is_child) {
   if (is_child) {

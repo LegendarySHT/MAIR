@@ -89,17 +89,45 @@ Provides hooks for special functions, such as
 
 /// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
 /// Notably, this function is called TWICE at the attitude per process.
-extern "C" void *__xsan_vfork_before_and_after() {
-  void *final_result = nullptr;
-  /// Invoked TRIPLE totally, once before vfork to store the sp, twice after
-  /// vfork child/parent to restore the sp.
-  XSAN_HOOKS_EXEC_NEQ(final_result, nullptr, vfork_before_and_after);
-  return final_result;
+extern "C" void *__xsan_extra_spill_area() {
+  // No process has ID -1.
+  static THREADLOCAL uptr pid_before_vfork = -1;
+  uptr pid = internal_getpid();
+  uptr ppid = internal_getppid();
+  // If pid != pid_before_vfork, it must be the first time to call
+  // vfork_before_and_after in the process.
+  if (pid != pid_before_vfork) {
+    // If ppid == pid_before_vfork, it must be the child process calling
+    // vfork_before_and_after.
+    if (ppid == pid_before_vfork) {
+      XSAN_HOOKS_EXEC(vfork_child_after);
+    }
+    // Otherwise, it must be the parent process calling vfork_before_and_after.
+    else {
+      // ----------  [Parent] before vfork ----------------
+      pid_before_vfork = pid;
+      XSAN_HOOKS_EXEC(vfork_before);
+    }
+  }
+  // Otherwise, it must be the parent process calling vfork_before_and_after
+  // for the second time.
+  else {
+    // ------------  [Parent] after vfork ----------------
+    // Must after '[Child] after vfork', as parent process will suspend until
+    // child process `exit`/`exec`.
+    // Reset pid_before_vfork to -1 to recover the state of this hook.
+    // I.e., make vfork -> fork -> [child] vfork works.
+    pid_before_vfork = -1;
+    XSAN_HOOKS_EXEC(vfork_parent_after);
+  }
+  XsanThread *t = GetCurrentThread();
+  CHECK(t);
+  return t->extra_spill_area();
 }
 
 extern "C" void __xsan_vfork_parent_after(void *sp) {
   /// Unpoison vfork child's new stack space : [stack_bottom, sp]
-  XSAN_HOOKS_EXEC(vfork_parent_after, sp);
+  XSAN_HOOKS_EXEC(vfork_parent_after_handle_sp, sp);
 }
 // Ignore interceptors in OnLibraryLoaded()/Unloaded().  These hooks use code
 // (ListOfModules::init, MemoryMappingLayout::DumpListOfModules) that make

@@ -78,8 +78,13 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
     ScopedAtExitHandler(uptr pc, const void *ctx);
     ~ScopedAtExitHandler();
   };
-  static void *vfork_before_and_after() { return __asan_extra_spill_area(); }
-  static void vfork_parent_after(void *sp) { __asan_handle_vfork(sp); }
+
+  static void vfork_parent_after_handle_sp(void *sp) {
+    /// ASan will reset the shadow of [stk_bot, sp] to 0, 
+    /// eliminating the impact of the vfork child process.
+    __asan_handle_vfork(sp);
+  }
+
   static void OnForkBefore();
   static void OnForkAfter(bool is_child);
   static void OnLongjmp(void *env, const char *fn_name, uptr pc) {

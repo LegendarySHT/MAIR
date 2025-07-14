@@ -99,28 +99,29 @@ ScopedIgnoreTsan::~ScopedIgnoreTsan() {
 #endif
 }
 
-THREADLOCAL bool disabled_tsan = false;
-
 /// See the following comment in tsan_interceptors_posix.cpp:vfork for details.
-// Some programs (e.g. openjdk) call close for all file descriptors
-// in the child process. Under tsan it leads to false positives, because
-// address space is shared, so the parent process also thinks that
-// the descriptors are closed (while they are actually not).
-// This leads to false positives due to missed synchronization.
-// Strictly saying this is undefined behavior, because vfork child is not
-// allowed to call any functions other than exec/exit. But this is what
-// openjdk does, so we want to handle it.
-// We could disable interceptors in the child process. But it's not possible
-// to simply intercept and wrap vfork, because vfork child is not allowed
-// to return from the function that calls vfork, and that's exactly what
-// we would do. So this would require some assembly trickery as well.
-// Instead we simply turn vfork into fork.
+/*
+TSan's original comment says:
+   Some programs (e.g. openjdk) call close for all file descriptors
+   in the child process. Under tsan it leads to false positives, because
+   address space is shared, so the parent process also thinks that
+   the descriptors are closed (while they are actually not).
+   This leads to false positives due to missed synchronization.
+   Strictly saying this is undefined behavior, because vfork child is not
+   allowed to call any functions other than exec/exit. But this is what
+   openjdk does, so we want to handle it.
+   We could disable interceptors in the child process. But it's not possible
+   to simply intercept and wrap vfork, because vfork child is not allowed
+   to return from the function that calls vfork, and that's exactly what
+   we would do. So this would require some assembly trickery as well.
+   Instead we simply turn vfork into fork.
+*/
 void DisableTsanForVfork() {
   /* VFORK is epected to call exit/exec soon, so we should not do TSan's sanity
-   * checks for its child. */
-  if (disabled_tsan)
-    return;
-  disabled_tsan = true;
+   * checks for its child. 
+   * Moreover, it is UB to create new thread in vfork's child process,
+   * therefore, we can disable TSan for the vfork child process just by
+   * setting the flags in cur_thread(). */
   ThreadState *thr = cur_thread();
   thr->ignore_interceptors = true;
   // We've just forked a multi-threaded process. We cannot reasonably function
@@ -133,6 +134,7 @@ void DisableTsanForVfork() {
   ThreadIgnoreSyncBegin(thr, 0);
 }
 
+// Reverse the effect of DisableTsanForVfork.
 void RecoverTsanAfterVforkParent() {
   ThreadState *thr = cur_thread();
   // We've just forked a multi-threaded process. We cannot reasonably function
@@ -143,7 +145,6 @@ void RecoverTsanAfterVforkParent() {
   thr->in_vfork_child = false;
   ThreadIgnoreEnd(thr);
   ThreadIgnoreSyncEnd(thr);
-  disabled_tsan = false;
 }
 
 }  // namespace __tsan

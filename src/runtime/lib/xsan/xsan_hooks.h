@@ -232,9 +232,7 @@ ALWAYS_INLINE void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr,
     return;
   XSAN_HOOKS_EXEC(BeforeMunmap, ctx.xsan_ctx, addr, size);
 }
-/// To implement macro COMMON_INTERCEPTOR_SPILL_AREA in *vfork.S
-/// Notably, this function is called TWICE at the attitude per process.
-extern "C" void *__xsan_vfork_before_and_after();
+
 /// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
 extern "C" void __xsan_vfork_parent_after(void *sp);
 /// Used to lock before fork
