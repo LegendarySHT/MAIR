@@ -1095,6 +1095,7 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   std::unique_ptr<VarArgHelper> VAHelper;
   const TargetLibraryInfo *TLI;
   Instruction *FnPrologueEnd;
+  SmallPtrSet<ExtractValueInst *, 16> RealArithResults;
 
   // The following flags disable parts of MSan instrumentation based on
   // exclusion list contents and command-line options.
@@ -1763,7 +1764,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       if (!PropagateShadow)
         return getCleanShadow(V);
       auto Data = __xsan::ReplacedAlloca::get(*I);
-      if (I->getMetadata(LLVMContext::MD_nosanitize) && !Data)
+      if (I->getMetadata(LLVMContext::MD_nosanitize) && !Data &&
+          !llvm::is_contained(RealArithResults, I))
         return getCleanShadow(V);
       if (Data && Data->Arg)
         return getReplacedArgsShadow(I, Data.value());
@@ -2107,6 +2109,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
     if (auto Data = __xsan::ReplacedAtomic::get(I))
       return visitReplacedAtomicInst(I, Data.value());
+    if (visitUBSanReplacedInst(I))
+      return;
     if (I.getMetadata(LLVMContext::MD_nosanitize))
       return;
     // Don't want to visit if we're in the prologue
@@ -4582,6 +4586,36 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
     setShadow(&I, getCleanShadow(&I));
     setOrigin(&I, getCleanOrigin());
+  }
+
+  // This is a temporary fix of a bug of UBSan. UBSan replaces some arithmetic
+  // instructions with intrinsics to check for overflow. But all replaced
+  // instructions are tagged with nosanitize metadata, which makes other
+  // sanitizers ignore them and miss these arithmetic operations.
+  bool visitUBSanReplacedInst(Instruction &I) {
+    using namespace Intrinsic;
+    constexpr static ID AllInrtrinsicArithInstBeReplacedTo[] = {
+        sadd_with_overflow, uadd_with_overflow, ssub_with_overflow,
+        usub_with_overflow, smul_with_overflow, umul_with_overflow};
+    // Actual arithmetic result. `extractvalue` may be copied and moved by
+    // optimization and lose the metadata, so we don't check metadata.
+    if (auto *EI = dyn_cast<ExtractValueInst>(&I);
+        EI && EI->getNumIndices() == 1 && EI->getIndices()[0] == 0) {
+      // Check whether extract from a replaced arithmetic instructions
+      if (auto *II = dyn_cast<IntrinsicInst>(EI->getAggregateOperand());
+          II && __xsan::UBSanInst::is(*II) &&
+          llvm::is_contained(AllInrtrinsicArithInstBeReplacedTo,
+                             II->getIntrinsicID())) {
+        InstrumentationIRBuilder IRB(EI);
+        ShadowAndOriginCombiner SC(this, IRB);
+        SC.Add(II->getOperand(0));
+        SC.Add(II->getOperand(1));
+        SC.Done(EI);
+        RealArithResults.insert(EI);
+        return true;
+      }
+    }
+    return false;
   }
 };
 

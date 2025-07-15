@@ -16,7 +16,6 @@
 #include <stdarg.h>
 #include <string.h>
 
-__attribute__((noinline, no_sanitize("integer")))
 int sum(int n, ...) {
   va_list args;
   int i, sum = 0, arg;
