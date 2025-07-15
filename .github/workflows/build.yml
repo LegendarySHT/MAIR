@@ -5,6 +5,7 @@ on:
   workflow_call:
     inputs:
       require_build_artifacts:
+        description: Whether to upload build artifacts.
         required: true
         type: boolean
 
@@ -67,12 +68,21 @@ jobs:
              -DCMAKE_C_COMPILER=clang-${{ matrix.version }} \
              .. 
         cmake --build . -j
+    
+    - name: Archive Artifacts
+      if: ${{ inputs.require_build_artifacts }}
+      run: |
+        cd build
+        cmake --build . --target package
+        cmake --build . --target package_source
+        mkdir -p artifacts
+        cp -r XSan-*.tar.gz XSan-*.zip artifacts/
 
-    - name: Upload Build Artifacts
+    - name: Upload Artifacts
       if: ${{ inputs.require_build_artifacts }}
       uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 #v4.3.0
       with:
-        path: build
-        name: build-dir-${{ github.run_id }}-${{ matrix.version }}
+        path: build/artifacts
+        name: artifacts-${{ github.run_id }}-${{ matrix.version }}
         retention-days: 7
 

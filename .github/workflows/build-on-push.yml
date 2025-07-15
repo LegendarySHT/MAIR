@@ -1,0 +1,19 @@
+# A workflow to build XSan automatically.
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev-xsan
+      - 'users/**'
+
+jobs:
+  build:
+    if: github.repository_owner == 'Camsyn'
+    name: Build
+    uses: Camsyn/XSan/.github/workflows/build.yml@dev-xsan
+    with:
+      require_build_artifacts: false
+      build_type: Debug
+      os_list: '["ubuntu-22.04"]'

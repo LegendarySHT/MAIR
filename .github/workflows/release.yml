@@ -1,0 +1,37 @@
+# A workflow to release XSan by manually trigger by repo/Actions.
+
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: Camsyn/XSan/.github/workflows/build.yml@dev-xsan
+    with:
+      require_build_artifacts: true
+      build_type: Release
+      os_list: '["ubuntu-22.04"]'
+
+  release:
+    runs-on: ubuntu-22.04
+    needs: build
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
+        pattern: artifacts-${{ github.run_id }}-*
+        path: artifacts
+   
+    - name: Display structure of downloaded files
+      run: ls -R artifacts
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: artifacts/XSan-*
