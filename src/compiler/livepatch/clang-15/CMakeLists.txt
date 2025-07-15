@@ -63,19 +63,8 @@ set_target_properties(clang-patch
     LIBRARY_OUTPUT_DIRECTORY "${XSAN_PATCH_DIR}"
 )
 
-include(GNUInstallDirs)
-set(CLANG_PATCH_DATADIR ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/clang-patch CACHE PATH "Installation path for translation files")
-
-# install(TARGETS clang-patch
-# LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-# COMPONENT clang-patch
-# )
-# install(TARGETS llvm-i18n
-# LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-# COMPONENT clang-patch
-# )
-# install(DIRECTORY i18n
-# DESTINATION ${CLANG_PATCH_DATADIR}
-# COMPONENT clang-patch
-# FILES_MATCHING PATTERN "*.yml"
-# )
+install(TARGETS clang-patch
+    LIBRARY 
+    DESTINATION ${XSAN_INSTALL_PATCHDIR}
+    COMPONENT patch
+)

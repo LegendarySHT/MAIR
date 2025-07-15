@@ -535,18 +535,18 @@ include(AddWrapSyms)
 #   wrapped by _wrap=<symbol> linker option.
 create_wrap_symbols_target(
   generate_wrap_symbols
-  OUT ${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt
+  OUT ${XSAN_DATA_DIR}/xsan_wrapped_symbols.txt
   IN ${WRAPPED_SYMBOLS}
 )
 
 set(XSAN_COMMON_DEPS generate_wrap_symbols)
 
-set(XSAN_LINK_FLAGS "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt")
+set(XSAN_LINK_FLAGS "-Wl,@${XSAN_DATA_DIR}/xsan_wrapped_symbols.txt")
 
 
 set(XSAN_DYNAMIC_LINK_FLAGS 
   ${SANITIZER_COMMON_LINK_FLAGS} 
-  "-Wl,@${XSAN_RESOURCE_DIR}/xsan_wrapped_symbols.txt"
+  "-Wl,@${XSAN_DATA_DIR}/xsan_wrapped_symbols.txt"
    )
 
 if(ANDROID)

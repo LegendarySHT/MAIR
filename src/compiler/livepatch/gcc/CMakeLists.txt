@@ -36,16 +36,8 @@ set_target_properties(gcc-patch
     LIBRARY_OUTPUT_DIRECTORY "${XSAN_PATCH_DIR}"
 )
 
-include(GNUInstallDirs)
-set(GCC_PATCH_DATADIR ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/gcc-patch CACHE PATH "Installation path for translation files")
-
-# install(TARGETS gcc-patch
-# LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-# COMPONENT gcc-patch
-# )
-
-# configure_file(
-# ${CMAKE_CURRENT_SOURCE_DIR}/support_dso_injection.sh
-# ${XSAN_PATCH_DIR}/support_dso_injection.sh
-# @ONLY
-# )
+install(TARGETS gcc-patch
+    LIBRARY
+    DESTINATION ${XSAN_INSTALL_PATCHDIR}
+    COMPONENT patch
+)

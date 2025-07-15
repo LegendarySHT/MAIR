@@ -124,6 +124,12 @@ function(create_wrap_symbols_target TARGET_NAME)
     else()
         message(STATUS "Ready to generate empty wrapped symbols file ${out_file} with no input files.")
     endif()
+
+    # Install the wrapped symbols file to ${XSAN_INSATLL_DATADIR}
+    install(FILES ${out_file}
+        DESTINATION ${XSAN_INSATLL_DATADIR}
+        COMPONENT resource
+    )
 endfunction()
 
 # If the AddWrapSyms.cmake is used by cmake -P <this_file>, 

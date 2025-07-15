@@ -77,6 +77,12 @@ set_target_properties(ASanInstPass
   LIBRARY_OUTPUT_DIRECTORY "${XSAN_PASS_DIR}"
 )
 
+install(TARGETS ASanInstPass TSanInstPass CovSanInstPass MSanInstPass XSanInstPass
+  LIBRARY
+  DESTINATION ${XSAN_INSTALL_PASSDIR}
+  COMPONENT pass
+)
+
 # add_llvm_component_library(LLVMInstrumentation
 # AddressSanitizer.cpp
 # MemorySanitizer.cpp

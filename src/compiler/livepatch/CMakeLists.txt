@@ -33,3 +33,13 @@ configure_file(
   ${XSAN_PATCH_DIR}/support_dso_injection.sh
   @ONLY
 )
+
+install(FILES ${XSAN_PATCH_DIR}/support_dso_injection.sh
+  DESTINATION ${XSAN_INSTALL_PATCHDIR}
+  COMPONENT patch
+
+  PERMISSIONS # 755 permission: rwxr-xr-x
+  OWNER_READ OWNER_WRITE OWNER_EXECUTE
+  GROUP_READ GROUP_EXECUTE
+  WORLD_READ WORLD_EXECUTE
+)

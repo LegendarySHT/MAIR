@@ -1,7 +1,16 @@
 # Aligned with LLVM 20
 cmake_minimum_required(VERSION 3.20.0)
 
-project(xsan)
+# Setup project version
+# Major Version 0: Initial Setup, see the main branch for details
+# Major Version 1: Support XSan@(ASan + TSan + UBSan)
+# Major Version 2: Support XSan@(ASan + TSan + UBSan + MSan)
+set(PROJECT_VERSION_MAJOR 2)
+set(PROJECT_VERSION_MINOR 0)
+set(PROJECT_VERSION_PATCH 0)
+set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+
+project(xsan VERSION ${PROJECT_VERSION})
 
 # To compile *.S in runtime
 enable_language(C CXX ASM)
@@ -145,18 +154,9 @@ endif()
 set(XSAN_SUPPORTED_ARCH ${X86_64})
 message_green("XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
 
-set(XSAN_BIN_DIR "${CMAKE_BINARY_DIR}")
-set(XSAN_LIB_DIR "${CMAKE_BINARY_DIR}")
-set(XSAN_PATCH_DIR "${CMAKE_BINARY_DIR}/patch")
-set(XSAN_RESOURCE_DIR "${CMAKE_BINARY_DIR}/share")
-set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/pass")
-
-# If relative path is "", it will be set to "."
-safe_relative_path(XSAN_REL_BIN_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_BIN_DIR}")
-safe_relative_path(XSAN_REL_LIB_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_LIB_DIR}")
-safe_relative_path(XSAN_REL_PATCH_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PATCH_DIR}")
-safe_relative_path(XSAN_REL_RESOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_RESOURCE_DIR}")
-safe_relative_path(XSAN_REL_PASS_DIR "${CMAKE_CURRENT_BINARY_DIR}" "${XSAN_PASS_DIR}")
+# ------------------------ Configure XSan build/install/package ------------------------
+include(XsanBuildInstallPack)
+# ---------------------------------------------------------------------------------------
 
 # TODO: de-hardcode this
 set(XSAN_COMMON_LIT_CONFIGURE_PATH
