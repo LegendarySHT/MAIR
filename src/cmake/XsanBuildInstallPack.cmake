@@ -16,23 +16,23 @@ set(XSAN_DATA_DIR "${CMAKE_BINARY_DIR}/${XSAN_REL_DATA_DIR}")
 set(XSAN_PASS_DIR "${CMAKE_BINARY_DIR}/${XSAN_REL_PASS_DIR}")
 
 # ------------------------ Vars for install ------------------------
-# The whole XSan is installed to ${XSAN_INSATLL_DIR}, to preserve the designated directory structure.
+# The whole XSan is installed to ${XSAN_INSTALL_DIR}, to preserve the designated directory structure.
 
 # To disable the default installation of add_llvm_pass_plugin()
 set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "Only include toolchain files in the 'install' target." FORCE)
 
-set(XSAN_INSATLL_DIR "${CMAKE_INSTALL_LIBDIR}/xsan")
+set(XSAN_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/xsan")
 
 # To change the default value of COMPILER_RT_INSTALL_PATH
-set(COMPILER_RT_INSTALL_PATH "${XSAN_INSATLL_DIR}" CACHE PATH
+set(COMPILER_RT_INSTALL_PATH "${XSAN_INSTALL_DIR}" CACHE PATH
     "Prefix for directories where built compiler-rt artifacts should be installed."
     FORCE # Use FORCE to override the default value in base-config-ix.cmake
 )
-set(XSAN_INSTALL_BINDIR ${XSAN_INSATLL_DIR}/${XSAN_REL_BIN_DIR} CACHE PATH "Installation path for bin")
-set(XSAN_INSATLL_LIBDIR ${XSAN_INSATLL_DIR}/${XSAN_REL_LIB_DIR} CACHE PATH "Installation path for lib")
-set(XSAN_INSATLL_PATCHDIR ${XSAN_INSATLL_DIR}/${XSAN_REL_PATCH_DIR} CACHE PATH "Installation path for livepatch")
-set(XSAN_INSATLL_PASSDIR ${XSAN_INSATLL_DIR}/${XSAN_REL_PASS_DIR} CACHE PATH "Installation path for pass")
-set(XSAN_INSATLL_DATADIR ${XSAN_INSATLL_DIR}/${XSAN_REL_DATA_DIR} CACHE PATH "Installation path for resource")
+set(XSAN_INSTALL_BINDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_BIN_DIR} CACHE PATH "Installation path for bin")
+set(XSAN_INSTALL_LIBDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_LIB_DIR} CACHE PATH "Installation path for lib")
+set(XSAN_INSTALL_PATCHDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_PATCH_DIR} CACHE PATH "Installation path for livepatch")
+set(XSAN_INSTALL_PASSDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_PASS_DIR} CACHE PATH "Installation path for pass")
+set(XSAN_INSTALL_DATADIR ${XSAN_INSTALL_DIR}/${XSAN_REL_DATA_DIR} CACHE PATH "Installation path for resource")
 
 # ## Template for install(TARGETS|FILES|DIRECTORY)
 # install(TARGETS ${name}
