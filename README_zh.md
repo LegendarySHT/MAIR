@@ -1,5 +1,7 @@
 # XSan 项目说明文档（README）
 
+[![Build](https://github.com/Camsyn/XSan/actions/workflows/build.yml/badge.svg)](https://github.com/Camsyn/XSan/actions/workflows/build.yml)
+
 ## 项目简介
 
 XSan 项目旨在以高效且可扩展的方式组合多种 Sanitizer 工具。该项目基于 LLVM/Clang 编译器基础设施实现，并以 Clang/GCC 插件的形式集成。

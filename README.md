@@ -1,5 +1,7 @@
 # XSan Project README
 
+[![Build](https://github.com/Camsyn/XSan/actions/workflows/build.yml/badge.svg)](https://github.com/Camsyn/XSan/actions/workflows/build.yml)
+
 ## Introduction
 
 XSan is a project aiming to compose a set of sanitizers in a efficient and scalable way. The project is based on the LLVM/Clang compiler infrastructure and is implemented as a Clang/GCC plugin.
