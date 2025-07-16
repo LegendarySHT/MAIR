@@ -807,7 +807,7 @@ static void guard_release(ThreadState *thr, uptr pc, atomic_uint32_t *g,
 // Used in thread-safe function static initialization.
 STDCXX_INTERCEPTOR(int, __cxa_guard_acquire, atomic_uint32_t *g) {
   if (__xsan::IsInXsanInternal())
-    return guard_acquire(nullptr, 0, g);
+    return guard_acquire(nullptr, 0, g, false);
   SCOPED_INTERCEPTOR_RAW(__cxa_guard_acquire, g);
   return guard_acquire(thr, pc, g);
 }
