@@ -88,3 +88,5 @@ set(CPACK_SOURCE_IGNORE_FILES
 # - make package_source
 # Or use `cpack` / `cmake --build . --target package` to generate the package.
 include(CPack)
+
+# TODO: support package in different platforms

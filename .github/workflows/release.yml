@@ -43,4 +43,4 @@ jobs:
         body: |
           Official release for version ${{ env.RELEASE_VERSION }}.
           See attached assets for details.
-        files: artifacts/XSan-*
+        files: artifacts/XSan-*-Linux*
