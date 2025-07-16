@@ -76,7 +76,7 @@ jobs:
         cmake --build . --target package
         cmake --build . --target package_source
         mkdir -p artifacts
-        cp -r XSan-*.tar.gz XSan-*.zip artifacts/
+        cp -r XSan-*.tar.gz XSan-*.zip version.txt artifacts/
 
     - name: Upload Artifacts
       if: ${{ inputs.require_build_artifacts }}
