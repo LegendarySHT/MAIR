@@ -398,9 +398,9 @@ static const MemoryMapParams Linux_X86_64_MemoryMapParams = {
 // x86_64 Linux for XSan
 static const MemoryMapParams XSan_Linux_X86_64_MemoryMapParams = {
   0,               // AndMask (not used)
-  0x300000000000,  // XorMask
+  0x400000000000,  // XorMask
   0,               // ShadowBase (not used)
-  0x100000000000,  // OriginBase
+  0x300000000000,  // OriginBase
 };
 
 // mips64 Linux

@@ -990,6 +990,35 @@ struct ShadowToMemImpl {
     }
     return p | Mapping::kShadowMsk;
   }
+
+  // Current Mapping48AddressSpace is not compatible with the default
+  // ShadowToMemImpl. So this specialization is needed.
+  template <>
+  uptr Apply<Mapping48AddressSpace>(uptr sp) {
+    using Mapping = Mapping48AddressSpace;
+    constexpr uptr MidBeg = Mapping::kMidAppMemBeg & ~Mapping::kTsanShadowMsk;
+    constexpr uptr MidEnd = Mapping::kMidAppMemEnd & ~Mapping::kTsanShadowMsk;
+    constexpr uptr HiBeg = Mapping::kHiAppMemBeg & ~Mapping::kTsanShadowMsk;
+    constexpr uptr HiEnd = Mapping::kHiAppMemEnd & ~Mapping::kTsanShadowMsk;
+    constexpr uptr HeapBeg = Mapping::kHeapMemBeg & ~Mapping::kTsanShadowMsk;
+    constexpr uptr HeapEnd = Mapping::kHeapMemEnd & ~Mapping::kTsanShadowMsk;
+
+    constexpr uptr MidOr = Mapping::kMidAppMemBeg & Mapping::kTsanShadowMsk;
+    constexpr uptr HiOr = Mapping::kHiAppMemBeg & Mapping::kTsanShadowMsk;
+    constexpr uptr HeapOr = Mapping::kHeapMemBeg & Mapping::kTsanShadowMsk;
+
+    if (!IsShadowMemImpl::Apply<Mapping>(sp))
+      return 0;
+    uptr p =
+        ((sp - Mapping::kShadowAdd) / kShadowMultiplier) ^ Mapping::kShadowXor;
+    if (p >= MidBeg && p < MidEnd)
+      return p | MidOr;
+    if (p >= HiBeg && p < HiEnd)
+      return p | HiOr;
+    if (p >= HeapBeg && p < HeapEnd)
+      return p | HeapOr;
+    return p;
+  }
 };
 
 ALWAYS_INLINE

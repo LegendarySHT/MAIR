@@ -39,26 +39,26 @@ C/C++ on linux/x86_64 and freebsd/x86_64
 0000 0000 1000 - 0000 7fff 8000: main binary and/or MAP_32BIT mappings (low app)
 0000 7fff 8000 - 1000 7fff 8000: ASan shadow
 1000 7fff 8000 - 1200 0000 0000: -
-1200 0000 0000 - 3000 0000 0000: TSan shadow
-3000 0000 0000 - 3100 0000 0000: MSan shadow (low app)
-3100 0000 0000 - 3800 0000 0000: -
-3800 0000 0000 - 4000 0000 0000: TSan metainfo
-4000 0000 0000 - 4100 0000 0000: MSan origin (low app)
+1200 0000 0000 - 1400 0000 0000: MSan shadow (heap)
+1400 0000 0000 - 1500 0000 0000: -
+1500 0000 0000 - 1a00 0000 0000: MSan shadow (mid app)
+1a00 0000 0000 - 3a00 0000 0000: TSan shadow
+3a00 0000 0000 - 4000 0000 0000: MSan shadow (high app)
+4000 0000 0000 - 4100 0000 0000: MSan shadow (low app)
 4100 0000 0000 - 4200 0000 0000: -
-4200 0000 0000 - 4400 0000 0000: MSan shadow (heap)
-4400 0000 0000 - 4a00 0000 0000: -
-4a00 0000 0000 - 5000 0000 0000: Msan shadow (high app)
-5000 0000 0000 - 5200 0000 0000: -
-5200 0000 0000 - 5400 0000 0000: MSan origin (heap)
+4200 0000 0000 - 4400 0000 0000: MSan origin (heap)
+4400 0000 0000 - 4500 0000 0000: -
+4500 0000 0000 - 4a00 0000 0000: MSan origin (mid app)
+4a00 0000 0000 - 5200 0000 0000: -
+5200 0000 0000 - 5400 0000 0000: heap (2TB)
 5400 0000 0000 - 5500 0000 0000: -
 5500 0000 0000 - 5a00 0000 0000: pie binaries without ASLR or on 4.1+ kernels (5TB) (mid app)
-5a00 0000 0000 - 6000 0000 0000: MSan origin (high app)
-6000 0000 0000 - 6500 0000 0000: -
-6500 0000 0000 - 6a00 0000 0000: MSan shadow (mid app)
-6a00 0000 0000 - 7200 0000 0000: -
-7200 0000 0000 - 7400 0000 0000: heap (2TB)
-7400 0000 0000 - 7500 0000 0000: -
-7500 0000 0000 - 7a00 0000 0000: MSan origin (mid app)
+5a00 0000 0000 - 6000 0000 0000: -
+6000 0000 0000 - 6800 0000 0000: TSan metainfo
+6800 0000 0000 - 6a00 0000 0000: -
+6a00 0000 0000 - 7000 0000 0000: MSan origin (high app)
+7000 0000 0000 - 7100 0000 0000: MSan origin (low app)
+7100 0000 0000 - 7a00 0000 0000: -
 7a00 0000 0000 - 8000 0000 0000: modules and main thread stack (6TB) (high app)
 C/C++ on netbsd/amd64 can reuse the same mapping:
  * The address space starts from 0x1000 (option with 0x0) and ends with
@@ -74,8 +74,8 @@ C/C++ on netbsd/amd64 can reuse the same mapping:
 */
 /// Modified: enlarge the heap size from 1T to 2T to fit ASan's needs.
 struct Mapping48AddressSpace {
-  static constexpr const uptr kHeapMemBeg = 0x720000000000ull;
-  static constexpr const uptr kHeapMemEnd = 0x740000000000ull;
+  static constexpr const uptr kHeapMemBeg = 0x520000000000ull;
+  static constexpr const uptr kHeapMemEnd = 0x540000000000ull;
 
   static constexpr const uptr kLoAppMemBeg = 0x000000000000ull;
   // ASan set this 0x00007fff8000ull but it protects the last page. So we
@@ -88,30 +88,30 @@ struct Mapping48AddressSpace {
   static constexpr const uptr kVdsoBeg = 0xf000000000000000ull;
 
   /// TSan's Shadow & MetaInfo Shadow parameters
-  static constexpr const uptr kTsanShadowBeg = 0x120000000000ull;
-  static constexpr const uptr kTsanShadowEnd = 0x300000000000ull;
-  static constexpr const uptr kTsanMetaShadowBeg = 0x380000000000ull;
-  static constexpr const uptr kTsanMetaShadowEnd = 0x400000000000ull;
+  static constexpr const uptr kTsanShadowBeg = 0x1a0000000000ull;
+  static constexpr const uptr kTsanShadowEnd = 0x3a0000000000ull;
+  static constexpr const uptr kTsanMetaShadowBeg = 0x600000000000ull;
+  static constexpr const uptr kTsanMetaShadowEnd = 0x680000000000ull;
   static constexpr const uptr kTsanShadowMsk = 0x700000000000ull;
-  static constexpr const uptr kTsanShadowXor = 0x0b0000000000ull;
-  static constexpr const uptr kTsanShadowAdd = 0x120000000000ull;
+  static constexpr const uptr kTsanShadowXor = 0x000000000000ull;
+  static constexpr const uptr kTsanShadowAdd = 0x1a0000000000ull;
 
   /// ASan's Shadow parameters
   static constexpr const uptr kAsanShadowOffset = 0x000000007fff8000ull;
   static constexpr const uptr kAsanShadowScale = 3;
 
   /// MSan's Shadow parameters
-  static constexpr uptr kMSanShadowXor = 0x300000000000ull;
-  static constexpr uptr kMSanShadowAdd = 0x100000000000ull;
+  static constexpr uptr kMSanShadowXor = 0x400000000000ull;
+  static constexpr uptr kMSanShadowAdd = 0x300000000000ull;
 
-  static constexpr uptr kMSanLoShadowBeg   = 0x300000000000ull;
-  static constexpr uptr kMSanLoShadowEnd   = 0x310000000000ull;
-  static constexpr uptr kMSanMidShadowBeg  = 0x650000000000ull;
-  static constexpr uptr kMSanMidShadowEnd  = 0x6a0000000000ull;
-  static constexpr uptr kMSanHiShadowBeg   = 0x4a0000000000ull;
-  static constexpr uptr kMSanHiShadowEnd   = 0x500000000000ull;
-  static constexpr uptr kMSanHeapShadowBeg = 0x420000000000ull;
-  static constexpr uptr kMSanHeapShadowEnd = 0x440000000000ull;
+  static constexpr uptr kMSanLoShadowBeg   = 0x400000000000ull;
+  static constexpr uptr kMSanLoShadowEnd   = 0x410000000000ull;
+  static constexpr uptr kMSanMidShadowBeg  = 0x150000000000ull;
+  static constexpr uptr kMSanMidShadowEnd  = 0x1a0000000000ull;
+  static constexpr uptr kMSanHiShadowBeg   = 0x3a0000000000ull;
+  static constexpr uptr kMSanHiShadowEnd   = 0x400000000000ull;
+  static constexpr uptr kMSanHeapShadowBeg = 0x120000000000ull;
+  static constexpr uptr kMSanHeapShadowEnd = 0x140000000000ull;
   static constexpr MsanMappingDesc kMsanMemoryLayout[] = {
     {kLoAppMemBeg,  kLoAppMemEnd,  MsanMappingDesc::APP, "app-1"},
     {kMidAppMemBeg, kMidAppMemEnd, MsanMappingDesc::APP, "app-2"},

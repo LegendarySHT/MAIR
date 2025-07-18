@@ -219,7 +219,6 @@ ALWAYS_INLINE void SetSanitizerThreadNameByUserId(uptr uid, const char *name) {
 bool GetMellocStackTrace(u32 &stack_trace_id, uptr addr,
                          bool set_stack_trace_id);
 
-/// Used in the Atexit registration.
 ALWAYS_INLINE void AfterMmap(const XsanInterceptorContext &ctx, void *res,
                              uptr size, int fd) {
   XSAN_HOOKS_EXEC(AfterMmap, ctx.xsan_ctx, res, size, fd);
