@@ -55,6 +55,10 @@ jobs:
           OUTPUT_FOLDER: docs/release_notes # Output Release Notes to specific folder
           USE_MILESTONE_TITLE: "true"
 
+      - name: Fix file permissions
+        if: steps.get_version.outputs.version
+        run: sudo chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE
+
       - name: Create Pull Request
         if: steps.get_version.outputs.version
         uses: peter-evans/create-pull-request@v6
@@ -70,11 +74,15 @@ jobs:
           branch: "release/v${{ steps.get_version.outputs.version }}"
           base: "dev-xsan"
           labels: "release"
+          add-paths: |
+            docs/release_notes/${{ steps.get_version.outputs.version }}.md
+            CMakeLists.txt
 
       - name: Create Milestone
         if: steps.get_version.outputs.version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
           MAJOR: ${{ steps.get_version.outputs.major }}
           MINOR: ${{ steps.get_version.outputs.minor }}
           PATCH: ${{ steps.get_version.outputs.patch }}
@@ -86,24 +94,23 @@ jobs:
           NEXT_PATCH=$((PATCH + 1))
 
           # List of milestones to check/create
-          MILESTONES=(
+          MILESTONES_TO_CREATE=(
             "${NEXT_MAJOR}.0.0"
-            "${MAJOR}.0.1"
-            "${MAJOR}.1.0"
             "${MAJOR}.${NEXT_MINOR}.0"
-            "${MAJOR}.${MINOR}.1"
             "${MAJOR}.${MINOR}.${NEXT_PATCH}"
           )
 
-          # Get all existing milestone names
-          EXISTING=$(gh api repos/${{ github.repository }}/milestones --paginate --jq '.[].title')
+          # Fetch existing milestone titles using GitHub API
+          EXISTING_TITLES=$(gh api repos/$GITHUB_REPOSITORY/milestones --jq '.[].title')
 
-          for M in "${MILESTONES[@]}"; do
-            if echo "$EXISTING" | grep -Fxq "$M"; then
-              echo "Milestone $M already exists, skipping."
+          for M in "${MILESTONES_TO_CREATE[@]}"; do
+            if echo "$EXISTING_TITLES" | grep -Fxq "$M"; then
+              echo "Milestone '$M' already exists, skipping."
             else
-              echo "Milestone $M does not exist, creating..."
-              gh api repos/${{ github.repository }}/milestones -f title="$M" -f state="open"
+              echo "Creating milestone: $M"
+              gh api repos/$GITHUB_REPOSITORY/milestones \
+                -f title="$M" \
+                -f state="open"
             fi
           done
         shell: bash
