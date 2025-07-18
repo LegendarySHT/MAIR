@@ -29,41 +29,43 @@ using ::__sanitizer::uptr;
 #define MSAN_SHADOW_TO_ORIGIN(p) ((p) + MAP_FIELD(kMSanShadowAdd))
 #define MSAN_MEM_TO_ORIGIN(p) MSAN_SHADOW_TO_ORIGIN(MSAN_MEM_TO_SHADOW(p))
 
-#define MSAN_CVT_FUNC(func, cvt)                              \
-  XSAN_MAP_FUNC(uptr, func, (uptr p), (p)) { return cvt(p); } \
+#define MSAN_CVT_FUNC(name, cvt)                              \
+  XSAN_MAP_FUNC(uptr, name, (uptr p), (p)) { return cvt(p); } \
   template <typename T>                                       \
-  ALWAYS_INLINE uptr func(T p) {                              \
-    return func((uptr)p);                                     \
+  ALWAYS_INLINE uptr name(T p) {                              \
+    return name((uptr)p);                                     \
   }
 
-#define MSAN_MAP_ORIGIN_FUNC(func, field)                  \
-  XSAN_MAP_FUNC_VOID(uptr, func) {                         \
-    return MSAN_SHADOW_TO_ORIGIN(MAP_FIELD(kMSan##field)); \
-  }
+#define MSAN_MAP_BEG(name, field, map) \
+  XSAN_MAP_FUNC_VOID(uptr, name) { return map(MAP_FIELD(field)); }
 
-XSAN_MAP_FIELD_FUNC(LoShadowBeg, kMSanLoShadowBeg)
-XSAN_MAP_FIELD_FUNC(LoShadowEnd, kMSanLoShadowEnd)
-XSAN_MAP_FIELD_FUNC(MidShadowBeg, kMSanMidShadowBeg)
-XSAN_MAP_FIELD_FUNC(MidShadowEnd, kMSanMidShadowEnd)
-XSAN_MAP_FIELD_FUNC(HiShadowBeg, kMSanHiShadowBeg)
-XSAN_MAP_FIELD_FUNC(HiShadowEnd, kMSanHiShadowEnd)
-XSAN_MAP_FIELD_FUNC(HeapShadowBeg, kMSanHeapShadowBeg)
-XSAN_MAP_FIELD_FUNC(HeapShadowEnd, kMSanHeapShadowEnd)
+#define MSAN_MAP_END(name, field, map) \
+  XSAN_MAP_FUNC_VOID(uptr, name) { return map(MAP_FIELD(field) - 1) + 1; }
+
+MSAN_MAP_BEG(LoShadowBeg, kLoAppMemBeg, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_END(LoShadowEnd, kLoAppMemEnd, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_BEG(MidShadowBeg, kMidAppMemBeg, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_END(MidShadowEnd, kMidAppMemEnd, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_BEG(HiShadowBeg, kHiAppMemBeg, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_END(HiShadowEnd, kHiAppMemEnd, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_BEG(HeapShadowBeg, kHeapMemBeg, MSAN_MEM_TO_SHADOW)
+MSAN_MAP_END(HeapShadowEnd, kHeapMemEnd, MSAN_MEM_TO_SHADOW)
+
+MSAN_MAP_BEG(LoOriginBeg, kLoAppMemBeg, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_END(LoOriginEnd, kLoAppMemEnd, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_BEG(MidOriginBeg, kMidAppMemBeg, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_END(MidOriginEnd, kMidAppMemEnd, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_BEG(HiOriginBeg, kHiAppMemBeg, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_END(HiOriginEnd, kHiAppMemEnd, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_BEG(HeapOriginBeg, kHeapMemBeg, MSAN_MEM_TO_ORIGIN)
+MSAN_MAP_END(HeapOriginEnd, kHeapMemEnd, MSAN_MEM_TO_ORIGIN)
 
 MSAN_CVT_FUNC(MemToShadow, MSAN_MEM_TO_SHADOW)
 MSAN_CVT_FUNC(ShadowToOrigin, MSAN_SHADOW_TO_ORIGIN)
 MSAN_CVT_FUNC(MemToOrigin, MSAN_MEM_TO_ORIGIN)
 
-MSAN_MAP_ORIGIN_FUNC(LoOriginBeg, LoShadowBeg)
-MSAN_MAP_ORIGIN_FUNC(LoOriginEnd, LoShadowEnd)
-MSAN_MAP_ORIGIN_FUNC(MidOriginBeg, MidShadowBeg)
-MSAN_MAP_ORIGIN_FUNC(MidOriginEnd, MidShadowEnd)
-MSAN_MAP_ORIGIN_FUNC(HiOriginBeg, HiShadowBeg)
-MSAN_MAP_ORIGIN_FUNC(HiOriginEnd, HiShadowEnd)
-MSAN_MAP_ORIGIN_FUNC(HeapOriginBeg, HeapShadowBeg)
-MSAN_MAP_ORIGIN_FUNC(HeapOriginEnd, HeapShadowEnd)
-
-#undef MSAN_MAP_ORIGIN_FUNC
+#undef MSAN_MAP_END
+#undef MSAN_MAP_BEG
 #undef MSAN_CVT_FUNC
 #undef MSAN_MEM_TO_ORIGIN
 #undef MSAN_SHADOW_TO_ORIGIN

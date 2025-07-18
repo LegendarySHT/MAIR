@@ -21,19 +21,6 @@ enum {
   kBrokenLinearity = 1 << 2,
 };
 
-struct MsanMappingDesc {
-  uptr start;
-  uptr end;
-  enum Type {
-    INVALID = 1,
-    ALLOCATOR = 2,
-    APP = 4,
-    SHADOW = 8,
-    ORIGIN = 16,
-  } type;
-  const char *name;
-};
-
 /*
 C/C++ on linux/x86_64 and freebsd/x86_64
 0000 0000 1000 - 0000 7fff 8000: main binary and/or MAP_32BIT mappings (low app)
@@ -103,29 +90,6 @@ struct Mapping48AddressSpace {
   /// MSan's Shadow parameters
   static constexpr uptr kMSanShadowXor = 0x400000000000ull;
   static constexpr uptr kMSanShadowAdd = 0x300000000000ull;
-
-  static constexpr uptr kMSanLoShadowBeg   = 0x400000000000ull;
-  static constexpr uptr kMSanLoShadowEnd   = 0x410000000000ull;
-  static constexpr uptr kMSanMidShadowBeg  = 0x150000000000ull;
-  static constexpr uptr kMSanMidShadowEnd  = 0x1a0000000000ull;
-  static constexpr uptr kMSanHiShadowBeg   = 0x3a0000000000ull;
-  static constexpr uptr kMSanHiShadowEnd   = 0x400000000000ull;
-  static constexpr uptr kMSanHeapShadowBeg = 0x120000000000ull;
-  static constexpr uptr kMSanHeapShadowEnd = 0x140000000000ull;
-  static constexpr MsanMappingDesc kMsanMemoryLayout[] = {
-    {kLoAppMemBeg,  kLoAppMemEnd,  MsanMappingDesc::APP, "app-1"},
-    {kMidAppMemBeg, kMidAppMemEnd, MsanMappingDesc::APP, "app-2"},
-    {kHiAppMemBeg,  kHiAppMemEnd,  MsanMappingDesc::APP, "app-3"},
-    {kHeapMemBeg,   kHeapMemEnd,   MsanMappingDesc::ALLOCATOR, "allocator"},
-    {kMSanLoShadowBeg,   kMSanLoShadowEnd,   MsanMappingDesc::SHADOW, "shadow-1"},
-    {kMSanMidShadowBeg,  kMSanMidShadowEnd,  MsanMappingDesc::SHADOW, "shadow-2"},
-    {kMSanHiShadowBeg,   kMSanHiShadowEnd,   MsanMappingDesc::SHADOW, "shadow-3"},
-    {kMSanHeapShadowBeg, kMSanHeapShadowEnd, MsanMappingDesc::SHADOW, "shadow-alloctor"},
-    {kMSanLoShadowBeg   + kMSanShadowAdd, kMSanLoShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-1"},
-    {kMSanMidShadowBeg  + kMSanShadowAdd, kMSanMidShadowEnd  + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-2"},
-    {kMSanHiShadowBeg   + kMSanShadowAdd, kMSanHiShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-3"},
-    {kMSanHeapShadowBeg + kMSanShadowAdd, kMSanHeapShadowEnd + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-allocator"},
-  };
 };
 
 /*
@@ -287,29 +251,6 @@ struct MappingAarch64_48 {
   /// MSan's Shadow parameters
   static constexpr uptr kMSanShadowXor = 0x0600000000000ull;
   static constexpr uptr kMSanShadowAdd = 0x0040000000000ull;
-
-  static constexpr uptr kMSanLoShadowBeg   = 0x0600000000000ull;
-  static constexpr uptr kMSanLoShadowEnd   = 0x0610000000000ull;
-  static constexpr uptr kMSanMidShadowBeg  = 0x0ca0000000000ull;
-  static constexpr uptr kMSanMidShadowEnd  = 0x0cc0000000000ull;
-  static constexpr uptr kMSanHiShadowBeg   = 0x09c0000000000ull;
-  static constexpr uptr kMSanHiShadowEnd   = 0x0a00000000000ull;
-  static constexpr uptr kMSanHeapShadowBeg = 0x0920000000000ull;
-  static constexpr uptr kMSanHeapShadowEnd = 0x0940000000000ull;
-  static constexpr MsanMappingDesc kMsanMemoryLayout[] = {
-    {kLoAppMemBeg,  kLoAppMemEnd,  MsanMappingDesc::APP, "app-1"},
-    {kMidAppMemBeg, kMidAppMemEnd, MsanMappingDesc::APP, "app-2"},
-    {kHiAppMemBeg,  kHiAppMemEnd,  MsanMappingDesc::APP, "app-3"},
-    {kHeapMemBeg,   kHeapMemEnd,   MsanMappingDesc::ALLOCATOR, "allocator"},
-    {kMSanLoShadowBeg,   kMSanLoShadowEnd,   MsanMappingDesc::SHADOW, "shadow-1"},
-    {kMSanMidShadowBeg,  kMSanMidShadowEnd,  MsanMappingDesc::SHADOW, "shadow-2"},
-    {kMSanHiShadowBeg,   kMSanHiShadowEnd,   MsanMappingDesc::SHADOW, "shadow-3"},
-    {kMSanHeapShadowBeg, kMSanHeapShadowEnd, MsanMappingDesc::SHADOW, "shadow-allocator"},
-    {kMSanLoShadowBeg   + kMSanShadowAdd, kMSanLoShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-1"},
-    {kMSanMidShadowBeg  + kMSanShadowAdd, kMSanMidShadowEnd  + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-2"},
-    {kMSanHiShadowBeg   + kMSanShadowAdd, kMSanHiShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-3"},
-    {kMSanHeapShadowBeg + kMSanShadowAdd, kMSanHeapShadowEnd + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-allocator"},
-  };
 };
 
 /*

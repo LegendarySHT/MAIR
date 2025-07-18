@@ -33,15 +33,28 @@
 
 namespace __msan {
 
-using MappingDesc = ::__xsan::MsanMappingDesc;
+struct MappingDesc {
+  uptr start;
+  uptr end;
+  enum Type {
+    INVALID = 1,
+    ALLOCATOR = 2,
+    APP = 4,
+    SHADOW = 8,
+    ORIGIN = 16,
+  } type;
+  const char *name;
+};
+
 #define MEM_TO_SHADOW(mem) ::__msan::MemToShadow(mem)
 #define SHADOW_TO_ORIGIN(mem) ::__msan::ShadowToOrigin(mem)
 #define MEM_TO_ORIGIN(mem) ::__msan::MemToOrigin(mem)
 
 // some architecture has different layouts depending on the VMA size, which can
 // only be determined at runtime.
-extern const __xsan::MsanMappingDesc *kMemoryLayout;
-extern uptr kMemoryLayoutSize;
+extern MappingDesc kMemoryLayout[12];
+constexpr uptr kMemoryLayoutSize =
+    sizeof(kMemoryLayout) / sizeof(kMemoryLayout[0]);
 
 // Note: MappingDesc::ALLOCATOR entries are only used to check for memory
 // layout compatibility. The actual allocation settings are in

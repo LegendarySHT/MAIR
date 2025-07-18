@@ -780,22 +780,30 @@ SANITIZER_INTERFACE_WEAK_DEF(const char *, __msan_default_options, void) {
 
 namespace __msan {
 
-const __xsan::MsanMappingDesc *kMemoryLayout;
-uptr kMemoryLayoutSize;
+MappingDesc kMemoryLayout[12];
 
-XSAN_MAP_FUNC_VOID(decltype(kMemoryLayout), MemoryLayout) {
-  return MAP_FIELD(kMsanMemoryLayout);
-}
-
-XSAN_MAP_FUNC_VOID(uptr, MemoryLayoutSize) {
-  return sizeof(MAP_FIELD(kMsanMemoryLayout)) /
-         sizeof(MAP_FIELD(kMsanMemoryLayout[0]));
+void InitMemoryLayout() {
+  const MappingDesc tmp[] = {
+      {__xsan::LoAppMemBeg(),  __xsan::LoAppMemEnd(),  MappingDesc::APP,       "app-1"},
+      {__xsan::MidAppMemBeg(), __xsan::MidAppMemEnd(), MappingDesc::APP,       "app-2"},
+      {__xsan::HiAppMemBeg(),  __xsan::HiAppMemEnd(),  MappingDesc::APP,       "app-3"},
+      {__xsan::HeapMemBeg(),   __xsan::HeapMemEnd(),   MappingDesc::ALLOCATOR, "allocator"},
+      {LoShadowBeg(),          LoShadowEnd(),          MappingDesc::SHADOW,    "shadow-1"},
+      {MidShadowBeg(),         MidShadowEnd(),         MappingDesc::SHADOW,    "shadow-2"},
+      {HiShadowBeg(),          HiShadowEnd(),          MappingDesc::SHADOW,    "shadow-3"},
+      {HeapShadowBeg(),        HeapShadowEnd(),        MappingDesc::SHADOW,    "shadow-allocator"},
+      {LoOriginBeg(),          LoOriginEnd(),          MappingDesc::ORIGIN,    "origin-1"},
+      {MidOriginBeg(),         MidOriginEnd(),         MappingDesc::ORIGIN,    "origin-2"},
+      {HiOriginBeg(),          HiOriginEnd(),          MappingDesc::ORIGIN,    "origin-3"},
+      {HeapOriginBeg(),        HeapOriginEnd(),        MappingDesc::ORIGIN,    "origin-allocator"},
+  };
+  static_assert(sizeof(kMemoryLayout) == sizeof(tmp),
+                "Memory layout size mismatch");
+  internal_memcpy(kMemoryLayout, tmp, sizeof(kMemoryLayout));
 }
 
 void MsanInitFromXsan() {
-  kMemoryLayout = MemoryLayout();
-  kMemoryLayoutSize = MemoryLayoutSize();
-
+  InitMemoryLayout();
   // CHECK(!msan_init_is_running);
   // if (msan_inited) return;
   // msan_init_is_running = 1;

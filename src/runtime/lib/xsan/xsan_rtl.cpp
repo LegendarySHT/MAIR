@@ -116,13 +116,13 @@ void CheckAndProtect() {
   NamedRange fake_range = {{0, 0}, "fake range"};
   const NamedRange *last_range = &fake_range;
   for (const auto &cur_range : map_ranges) {
-    // Printf("Protecting gap before: %s: 0x%zx-0x%zx\n", cur_range.name,
-    //        cur_range.range.begin, cur_range.range.end);
+    VPrintf(1, "Protecting gap before: %s: 0x%zx-0x%zx\n", cur_range.name,
+            cur_range.range.begin, cur_range.range.end);
     if (cur_range.range.begin < last_range->range.end) {
       Report(
           "FATAL: XSan: overlapping memory mapping between:\n"
-          "%s: 0x%zx-0x%zx\n"
-          "%s: 0x%zx-0x%zx\n",
+          "%s: \t0x%zx-0x%zx\n"
+          "%s: \t0x%zx-0x%zx\n",
           last_range->name, last_range->range.begin, last_range->range.end,
           cur_range.name, cur_range.range.begin, cur_range.range.end);
       Die();
