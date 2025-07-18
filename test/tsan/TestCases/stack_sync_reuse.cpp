@@ -1,6 +1,3 @@
-// If ASan and TSan are enabled together, more registers would be used at function `foobar`.
-// Accordingly, `foobar` push more registers onto the stack, which leads to its `&s` is 
-// different from `&s` in `barfoo`.
 // RUN: %clang_tsan -fno-sanitize=address -O1 %s -o %t && ASAN_OPTIONS=detect_stack_use_after_return=0 %run %t 2>&1 | FileCheck %s
 #include "test.h"
 
@@ -24,6 +21,25 @@ long *syncp;
 long *addr;
 long sink;
 
+// If multiple sanitizers instrument the code. The used registers in foobar and
+// barfoo may be different and lead to different stack layouts. So we invalidate
+// all registers to make compiler save all registers to the stack (actually only
+// callee-saved registers are saved)
+#if defined(__x86_64__)
+#define InvalidAllRegisters                                                    \
+  __asm__ volatile("" ::                                                       \
+                       : "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp",      \
+                         "rsp", "r8", "r9", "r10", "r11", "r12", "r13", "r14", \
+                         "r15");
+#elif defined(__aarch64__)
+#define InvalidAllRegisters                                                    \
+  __asm__ volatile("" ::                                                       \
+                       : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", \
+                         "x9", "x10", "x11", "x12", "x13", "x14", "x15",       \
+                         "x16", "x17", "x18", "x19", "x20", "x21", "x22",      \
+                         "x23", "x24", "x25", "x26", "x27", "x28");
+#endif
+
 void *Thread(void *x) {
   while (__atomic_load_n(&syncp, __ATOMIC_ACQUIRE) == 0)
     usleep(1000);  // spin wait
@@ -34,6 +50,7 @@ void *Thread(void *x) {
 }
 
 void __attribute__((noinline)) foobar() {
+  InvalidAllRegisters;
   __attribute__((aligned(64))) long s;
 
   addr = &s;
@@ -44,6 +61,7 @@ void __attribute__((noinline)) foobar() {
 }
 
 void __attribute__((noinline)) barfoo() {
+  InvalidAllRegisters;
   __attribute__((aligned(64))) long s;
 
   if (addr != &s) {

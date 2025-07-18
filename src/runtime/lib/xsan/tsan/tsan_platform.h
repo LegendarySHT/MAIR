@@ -180,24 +180,26 @@ C/C++ on linux/aarch64 (39-bit VMA)
 7a00 0000 00 - 7d00 0000 00: heap                           (12 GB)
 7d00 0000 00 - 7fff ffff ff: modules and main thread stack  (12 GB)
 */
-struct MappingAarch64_39 {
-  static const uptr kLoAppMemBeg   = 0x0000001000ull;
-  static const uptr kLoAppMemEnd   = 0x0500000000ull;
-  static const uptr kShadowBeg     = 0x2000000000ull;
-  static const uptr kShadowEnd     = 0x4000000000ull;
-  static const uptr kMetaShadowBeg = 0x4000000000ull;
-  static const uptr kMetaShadowEnd = 0x4800000000ull;
-  static const uptr kMidAppMemBeg  = 0x5500000000ull;
-  static const uptr kMidAppMemEnd  = 0x5a00000000ull;
-  static const uptr kHeapMemBeg    = 0x7a00000000ull;
-  static const uptr kHeapMemEnd    = 0x7d00000000ull;
-  static const uptr kHiAppMemBeg   = 0x7d00000000ull;
-  static const uptr kHiAppMemEnd   = 0x7fffffffffull;
-  static const uptr kShadowMsk     = 0x7000000000ull;
-  static const uptr kShadowXor     = 0x1000000000ull;
-  static const uptr kShadowAdd     = 0x0000000000ull;
-  static const uptr kVdsoBeg       = 0x7f00000000ull;
-};
+
+using MappingAarch64_39 = TsanMapping<__xsan::MappingAarch64_39>;
+// struct MappingAarch64_39 {
+//   static const uptr kLoAppMemBeg   = 0x0000001000ull;
+//   static const uptr kLoAppMemEnd   = 0x0500000000ull;
+//   static const uptr kShadowBeg     = 0x2000000000ull;
+//   static const uptr kShadowEnd     = 0x4000000000ull;
+//   static const uptr kMetaShadowBeg = 0x4000000000ull;
+//   static const uptr kMetaShadowEnd = 0x4800000000ull;
+//   static const uptr kMidAppMemBeg  = 0x5500000000ull;
+//   static const uptr kMidAppMemEnd  = 0x5a00000000ull;
+//   static const uptr kHeapMemBeg    = 0x7a00000000ull;
+//   static const uptr kHeapMemEnd    = 0x7d00000000ull;
+//   static const uptr kHiAppMemBeg   = 0x7d00000000ull;
+//   static const uptr kHiAppMemEnd   = 0x7fffffffffull;
+//   static const uptr kShadowMsk     = 0x7000000000ull;
+//   static const uptr kShadowXor     = 0x1000000000ull;
+//   static const uptr kShadowAdd     = 0x0000000000ull;
+//   static const uptr kVdsoBeg       = 0x7f00000000ull;
+// };
 
 /*
 C/C++ on linux/aarch64 (42-bit VMA)
@@ -211,24 +213,26 @@ C/C++ on linux/aarch64 (42-bit VMA)
 3c000 0000 00 - 3f000 0000 00: heap                          (192 GB)
 3f000 0000 00 - 3ffff ffff ff: modules and main thread stack  (64 GB)
 */
-struct MappingAarch64_42 {
-  static const uptr kLoAppMemBeg   = 0x00000001000ull;
-  static const uptr kLoAppMemEnd   = 0x02000000000ull;
-  static const uptr kShadowBeg     = 0x10000000000ull;
-  static const uptr kShadowEnd     = 0x20000000000ull;
-  static const uptr kMetaShadowBeg = 0x20000000000ull;
-  static const uptr kMetaShadowEnd = 0x24000000000ull;
-  static const uptr kMidAppMemBeg  = 0x2aa00000000ull;
-  static const uptr kMidAppMemEnd  = 0x2c000000000ull;
-  static const uptr kHeapMemBeg    = 0x3c000000000ull;
-  static const uptr kHeapMemEnd    = 0x3f000000000ull;
-  static const uptr kHiAppMemBeg   = 0x3f000000000ull;
-  static const uptr kHiAppMemEnd   = 0x3ffffffffffull;
-  static const uptr kShadowMsk     = 0x38000000000ull;
-  static const uptr kShadowXor     = 0x08000000000ull;
-  static const uptr kShadowAdd     = 0x00000000000ull;
-  static const uptr kVdsoBeg       = 0x37f00000000ull;
-};
+
+using MappingAarch64_42 = TsanMapping<__xsan::MappingAarch64_42>;
+// struct MappingAarch64_42 {
+//   static const uptr kLoAppMemBeg   = 0x00000001000ull;
+//   static const uptr kLoAppMemEnd   = 0x02000000000ull;
+//   static const uptr kShadowBeg     = 0x10000000000ull;
+//   static const uptr kShadowEnd     = 0x20000000000ull;
+//   static const uptr kMetaShadowBeg = 0x20000000000ull;
+//   static const uptr kMetaShadowEnd = 0x24000000000ull;
+//   static const uptr kMidAppMemBeg  = 0x2aa00000000ull;
+//   static const uptr kMidAppMemEnd  = 0x2c000000000ull;
+//   static const uptr kHeapMemBeg    = 0x3c000000000ull;
+//   static const uptr kHeapMemEnd    = 0x3f000000000ull;
+//   static const uptr kHiAppMemBeg   = 0x3f000000000ull;
+//   static const uptr kHiAppMemEnd   = 0x3ffffffffffull;
+//   static const uptr kShadowMsk     = 0x38000000000ull;
+//   static const uptr kShadowXor     = 0x08000000000ull;
+//   static const uptr kShadowAdd     = 0x00000000000ull;
+//   static const uptr kVdsoBeg       = 0x37f00000000ull;
+// };
 
 /*
 C/C++ on linux/aarch64 (48-bit VMA)
@@ -246,24 +250,25 @@ N.B. the shadow memory region has a strange start address, because it
 contains the shadows for the mid, high and low app regions (in this
 unusual order).
 */
-struct MappingAarch64_48 {
-  static const uptr kLoAppMemBeg   = 0x0000000001000ull;
-  static const uptr kLoAppMemEnd   = 0x00a0000000000ull;
-  static const uptr kShadowBeg     = 0x0155400000000ull;
-  static const uptr kShadowEnd     = 0x0540000000000ull;
-  static const uptr kMetaShadowBeg = 0x0800000000000ull;
-  static const uptr kMetaShadowEnd = 0x0a00000000000ull;
-  static const uptr kMidAppMemBeg  = 0x0aaaa00000000ull;
-  static const uptr kMidAppMemEnd  = 0x0ac0000000000ull;
-  static const uptr kHiAppMemBeg   = 0x0fc0000000000ull;
-  static const uptr kHiAppMemEnd   = 0x1000000000000ull;
-  static const uptr kHeapMemBeg    = 0x0fc0000000000ull;
-  static const uptr kHeapMemEnd    = 0x0fc0000000000ull;
-  static const uptr kShadowMsk     = 0x0c00000000000ull;
-  static const uptr kShadowXor     = 0x0200000000000ull;
-  static const uptr kShadowAdd     = 0x0000000000000ull;
-  static const uptr kVdsoBeg       = 0xffff000000000ull;
-};
+using MappingAarch64_48 = TsanMapping<__xsan::MappingAarch64_48>;
+// struct MappingAarch64_48 {
+//   static const uptr kLoAppMemBeg   = 0x0000000001000ull;
+//   static const uptr kLoAppMemEnd   = 0x00a0000000000ull;
+//   static const uptr kShadowBeg     = 0x0155400000000ull;
+//   static const uptr kShadowEnd     = 0x0540000000000ull;
+//   static const uptr kMetaShadowBeg = 0x0800000000000ull;
+//   static const uptr kMetaShadowEnd = 0x0a00000000000ull;
+//   static const uptr kMidAppMemBeg  = 0x0aaaa00000000ull;
+//   static const uptr kMidAppMemEnd  = 0x0ac0000000000ull;
+//   static const uptr kHiAppMemBeg   = 0x0fc0000000000ull;
+//   static const uptr kHiAppMemEnd   = 0x1000000000000ull;
+//   static const uptr kHeapMemBeg    = 0x0fc0000000000ull;
+//   static const uptr kHeapMemEnd    = 0x0fc0000000000ull;
+//   static const uptr kShadowMsk     = 0x0c00000000000ull;
+//   static const uptr kShadowXor     = 0x0200000000000ull;
+//   static const uptr kShadowAdd     = 0x0000000000000ull;
+//   static const uptr kVdsoBeg       = 0xffff000000000ull;
+// };
 
 /* C/C++ on linux/loongarch64 (47-bit VMA)
 0000 0000 4000 - 0080 0000 0000: main binary

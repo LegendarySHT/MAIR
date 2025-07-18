@@ -430,9 +430,17 @@ static const MemoryMapParams Linux_S390X_MemoryMapParams = {
 // aarch64 Linux
 static const MemoryMapParams Linux_AArch64_MemoryMapParams = {
   0,               // AndMask (not used)
-  0x06000000000,   // XorMask
+  0x0B00000000000, // XorMask
   0,               // ShadowBase (not used)
-  0x01000000000,   // OriginBase
+  0x0200000000000, // OriginBase
+};
+
+// aarch64 Linux for XSan
+static const MemoryMapParams XSan_Linux_AArch64_MemoryMapParams = {
+  0,               // AndMask (not used)
+  0x600000000000,  // XorMask
+  0,               // ShadowBase (not used)
+  0x040000000000,  // OriginBase
 };
 
 // aarch64 FreeBSD
@@ -969,7 +977,7 @@ void MemorySanitizer::initializeModule(Module &M) {
 #ifdef XSAN_PASS
             MapParams = &XSan_Linux_X86_64_MemoryMapParams;
 #else
-            MapParams = &Linux_X86_64_MemoryMapParams;
+            MapParams = Linux_X86_MemoryMapParams.bits64;
 #endif
             break;
           case Triple::x86:
@@ -988,7 +996,11 @@ void MemorySanitizer::initializeModule(Module &M) {
             break;
           case Triple::aarch64:
           case Triple::aarch64_be:
+#ifdef XSAN_PASS
+            MapParams = &XSan_Linux_AArch64_MemoryMapParams;
+#else
             MapParams = Linux_ARM_MemoryMapParams.bits64;
+#endif
             break;
           default:
             report_fatal_error("unsupported architecture");
@@ -5043,14 +5055,27 @@ struct VarArgAArch64Helper : public VarArgHelperBase {
                       MemorySanitizerVisitor &MSV)
       : VarArgHelperBase(F, MS, MSV, /*VAListTagSize=*/32) {}
 
-  ArgKind classifyArgument(Value* arg) {
-    Type *T = arg->getType();
-    if (T->isFPOrFPVectorTy())
-      return AK_FloatingPoint;
-    if ((T->isIntegerTy() && T->getPrimitiveSizeInBits() <= 64)
-        || (T->isPointerTy()))
-      return AK_GeneralPurpose;
-    return AK_Memory;
+  // A very rough approximation of aarch64 argument classification rules.
+  std::pair<ArgKind, uint64_t> classifyArgument(Type *T) {
+    if (T->isIntOrPtrTy() && T->getPrimitiveSizeInBits() <= 64)
+      return {AK_GeneralPurpose, 1};
+    if (T->isFloatingPointTy() && T->getPrimitiveSizeInBits() <= 128)
+      return {AK_FloatingPoint, 1};
+
+    if (T->isArrayTy()) {
+      auto R = classifyArgument(T->getArrayElementType());
+      R.second *= T->getScalarType()->getArrayNumElements();
+      return R;
+    }
+
+    if (const FixedVectorType *FV = dyn_cast<FixedVectorType>(T)) {
+      auto R = classifyArgument(FV->getScalarType());
+      R.second *= FV->getNumElements();
+      return R;
+    }
+
+    LLVM_DEBUG(errs() << "Unknown vararg type: " << *T << "\n");
+    return {AK_Memory, 0};
   }
 
   // The instrumentation stores the argument shadow in a non ABI-specific
@@ -5073,20 +5098,22 @@ struct VarArgAArch64Helper : public VarArgHelperBase {
       Value *A = *ArgIt;
       unsigned ArgNo = CB.getArgOperandNo(ArgIt);
       bool IsFixed = ArgNo < CB.getFunctionType()->getNumParams();
-      ArgKind AK = classifyArgument(A);
-      if (AK == AK_GeneralPurpose && GrOffset >= AArch64GrEndOffset)
+      auto [AK, RegNum] = classifyArgument(A->getType());
+      if (AK == AK_GeneralPurpose &&
+          (GrOffset + RegNum * 8) > AArch64GrEndOffset)
         AK = AK_Memory;
-      if (AK == AK_FloatingPoint && VrOffset >= AArch64VrEndOffset)
+      if (AK == AK_FloatingPoint &&
+          (VrOffset + RegNum * 16) > AArch64VrEndOffset)
         AK = AK_Memory;
       Value *Base;
       switch (AK) {
       case AK_GeneralPurpose:
-        Base = getShadowPtrForVAArgument(A->getType(), IRB, GrOffset, 8);
-        GrOffset += 8;
+        Base = getShadowPtrForVAArgument(A->getType(), IRB, GrOffset);
+        GrOffset += 8 * RegNum;
         break;
       case AK_FloatingPoint:
-        Base = getShadowPtrForVAArgument(A->getType(), IRB, VrOffset, 8);
-        VrOffset += 16;
+        Base = getShadowPtrForVAArgument(A->getType(), IRB, VrOffset);
+        VrOffset += 16 * RegNum;
         break;
       case AK_Memory:
         // Don't count fixed arguments in the overflow area - va_start will

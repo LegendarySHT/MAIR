@@ -198,10 +198,11 @@ const uptr kAllocatorSpace = 0x600000000000ULL;
 #    if defined(__powerpc64__)
 const uptr kAllocatorSize  =  0x20000000000ULL;  // 2T.
 typedef DefaultSizeClassMap SizeClassMap;
-#    elif defined(__aarch64__) && SANITIZER_ANDROID
-// Android needs to support 39, 42 and 48 bit VMA.
-const uptr kAllocatorSpace =  ~(uptr)0;
-const uptr kAllocatorSize  =  0x2000000000ULL;  // 128G.
+#    elif defined(__aarch64__)
+/// TODO: aarch64 needs to support 39, 42 and 48 bit VMA.
+const uptr kAllocatorSpace = __xsan::MappingAarch64_48::kHeapMemBeg;
+const uptr kAllocatorSize = __xsan::MappingAarch64_48::kHeapMemEnd -
+                            __xsan::MappingAarch64_48::kHeapMemBeg;
 typedef VeryCompactSizeClassMap SizeClassMap;
 #    elif SANITIZER_RISCV64
 const uptr kAllocatorSpace = ~(uptr)0;

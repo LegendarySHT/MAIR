@@ -16,6 +16,14 @@
 #include "utils/PatchHelper.h"
 #include "xsan_common.h"
 
+#if defined(__aarch64__) || defined(__arm64__)
+#define ARCH_SUFFIX "-aarch64"
+#elif defined(__x86_64__)
+#define ARCH_SUFFIX "-x86_64"
+#else
+#define ARCH_SUFFIX "" 
+#endif
+
 namespace clang {
 namespace driver {
 namespace tools {
@@ -103,7 +111,8 @@ private:
     // Initialize the new RT as <XSan-Path>/lib/linux/libclang_rt.<san>
     std::string result = replaced_prefix;
     /// TODO: use the same output structure as clang, i.e.,
-    /// lib/x86_64-unknown-linux-gnu/libclang_rt.xsan.a
+    /// lib/x86_64-unknown-linux-gnu/libclang_rt.xsan.a or
+    /// lib/aarch64-unknown-linux-gnu/libclang_rt.xsan.a
     // Get the suffix, e.g.,
     //  1. *libclang_rt.asan-static.a -> -static.a
     //  2. *libclang_rt.asan.a.syms -> .a.syms
@@ -123,12 +132,11 @@ private:
     //  1. *libclang_rt.asan-static.a -> -static.a -> -static
     //  2. *libclang_rt.asan.a.syms -> .a.syms -> ""
     StringRef before_suffix = suffix.substr(0, pos);
-    if (before_suffix.endswith("-x86_64")) {
+    if (before_suffix.endswith(ARCH_SUFFIX)) {
       result += suffix;
     } else {
       result += before_suffix;
-      /// TODO: decouple x86_64
-      result += "-x86_64";
+      result += ARCH_SUFFIX;
       result += suffix.substr(pos);
     }
     return result;
@@ -192,7 +200,7 @@ private:
     // In this option, we should add xxx_static.a manually.
     if (shouldHasStaticRt) {
       shouldHasStaticRt = false;
-      saved_args.push_back(replaced_prefix + "_static-x86_64.a");
+      saved_args.push_back(replaced_prefix + "_static" + ARCH_SUFFIX + ".a");
       NewCmdArgs.push_back(PreRt.data());
       NewCmdArgs.push_back(saved_args.back().c_str());
       NewCmdArgs.push_back(PostRt.data());

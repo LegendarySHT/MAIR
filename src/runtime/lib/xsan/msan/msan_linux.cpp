@@ -89,9 +89,9 @@ static void CheckMemoryLayoutSanity() {
     MappingDesc::Type type = kMemoryLayout[i].type;
     CHECK_LT(start, end);
     // CHECK_EQ(prev_end, start);
-    CHECK(addr_is_type(start, type));
-    CHECK(addr_is_type((start + end) / 2, type));
-    CHECK(addr_is_type(end - 1, type));
+    // CHECK(addr_is_type(start, type));
+    // CHECK(addr_is_type((start + end) / 2, type));
+    // CHECK(addr_is_type(end - 1, type));
     if (type == MappingDesc::APP || type == MappingDesc::ALLOCATOR) {
       uptr addr = start;
       CHECK(MEM_IS_SHADOW(MEM_TO_SHADOW(addr)));

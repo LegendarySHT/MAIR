@@ -119,3 +119,6 @@ endif()
 if (WIN32)
   set(ALL_ORC_SUPPORTED_ARCH ${X86_64})
 endif()
+
+# Now we only support x86_64 and arm64
+set(ALL_XSAN_SUPPORTED_ARCH ${X86_64} ${ARM64})

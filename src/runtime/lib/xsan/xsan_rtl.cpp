@@ -45,6 +45,8 @@ static atomic_uint8_t xsan_asan_inited = {0};
 bool xsan_in_init;
 bool replace_intrin_cached;
 
+uptr vmaSize;
+
 #if !ASAN_FIXED_MAPPING
 uptr kHighMemEnd, kMidMemBeg, kMidMemEnd;
 #endif
@@ -91,6 +93,7 @@ void CheckAndProtect() {
       break;
     Printf("FATAL: XSan: unexpected memory mapping 0x%zx-0x%zx\n",
            segment.start, segment.end);
+    DumpProcessMap();
     Die();
   }
 
@@ -140,6 +143,78 @@ void CheckAndProtect() {
 #    endif
 }
 
+void InitializePlatformEarly() {
+  vmaSize =
+    (MostSignificantSetBitIndex(GET_CURRENT_FRAME()) + 1);
+#if defined(__aarch64__)
+# if !SANITIZER_GO
+  if (vmaSize != 39 && vmaSize != 42 && vmaSize != 48) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 39, 42 and 48\n", vmaSize);
+    Die();
+  }
+#else
+  if (vmaSize != 48) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 48\n", vmaSize);
+    Die();
+  }
+#endif
+#elif SANITIZER_LOONGARCH64
+# if !SANITIZER_GO
+  if (vmaSize != 47) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
+    Die();
+  }
+#    else
+  if (vmaSize != 47) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
+    Die();
+  }
+#    endif
+#elif defined(__powerpc64__)
+# if !SANITIZER_GO
+  if (vmaSize != 44 && vmaSize != 46 && vmaSize != 47) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 44, 46, and 47\n", vmaSize);
+    Die();
+  }
+# else
+  if (vmaSize != 46 && vmaSize != 47) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 46, and 47\n", vmaSize);
+    Die();
+  }
+# endif
+#elif defined(__mips64)
+# if !SANITIZER_GO
+  if (vmaSize != 40) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 40\n", vmaSize);
+    Die();
+  }
+# else
+  if (vmaSize != 47) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
+    Die();
+  }
+# endif
+#  elif SANITIZER_RISCV64
+  // the bottom half of vma is allocated for userspace
+  vmaSize = vmaSize + 1;
+#    if !SANITIZER_GO
+  if (vmaSize != 39 && vmaSize != 48) {
+    Printf("FATAL: Xsan: unsupported VMA range\n");
+    Printf("FATAL: Found %zd - Supported 39 and 48\n", vmaSize);
+    Die();
+  }
+#    endif
+#  endif
+}
+
 // -------------------------- Run-time entry ------------------- {{{1
 /* The sanitizer initialization sequence is as follows (those marked with * are
    sub-santizers can interact with XSan):
@@ -182,10 +257,25 @@ static bool XsanInitInternal() {
 
   CacheBinaryName();
   CheckASLR();
+  // XSan doesn't play well with unlimited stack size (as stack
+  // overlaps with shadow memory). If we detect unlimited stack size,
+  // we re-exec the program with limited stack size as a best effort.
+  if (StackSizeIsUnlimited()) {
+    const uptr kMaxStackSize = 32 * 1024 * 1024;
+    VReport(1,
+            "Program is run with unlimited stack size, which wouldn't "
+            "work with ThreadSanitizer.\n"
+            "Re-execing with stack size limited to %zd bytes.\n",
+            kMaxStackSize);
+    SetStackSizeLimitInBytes(kMaxStackSize);
+    ReExec();
+  }
 
   InitializeFlags();
 
   __sanitizer::InitializePlatformEarly();
+  InitializePlatformEarly();
+  CheckAndProtect();
   InitFromXsanEarly();
 
   // Stop performing init at this point if we are being loaded via
@@ -217,7 +307,6 @@ static bool XsanInitInternal() {
 
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
-  CheckAndProtect();
   InitFromXsan();
 
   /// TODO: figure out whether we need to replace the callback with XSan's

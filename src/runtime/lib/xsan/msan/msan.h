@@ -34,6 +34,14 @@
 namespace __msan {
 
 using MappingDesc = ::__xsan::MsanMappingDesc;
+#define MEM_TO_SHADOW(mem) ::__msan::MemToShadow(mem)
+#define SHADOW_TO_ORIGIN(mem) ::__msan::ShadowToOrigin(mem)
+#define MEM_TO_ORIGIN(mem) ::__msan::MemToOrigin(mem)
+
+// some architecture has different layouts depending on the VMA size, which can
+// only be determined at runtime.
+extern const __xsan::MsanMappingDesc *kMemoryLayout;
+extern uptr kMemoryLayoutSize;
 
 // Note: MappingDesc::ALLOCATOR entries are only used to check for memory
 // layout compatibility. The actual allocation settings are in
@@ -71,23 +79,23 @@ const MappingDesc kMemoryLayout[] = {
 //   maximum ASLR region for 48-bit VMA) but it is too hard to fit in
 //   the larger app/shadow/origin regions.
 // - 0x0e00000000000-0x1000000000000: 48-bits libraries segments
-const MappingDesc kMemoryLayout[] = {
-    {0X0000000000000, 0X0100000000000, MappingDesc::APP, "app-10-13"},
-    {0X0100000000000, 0X0200000000000, MappingDesc::SHADOW, "shadow-14"},
-    {0X0200000000000, 0X0300000000000, MappingDesc::INVALID, "invalid"},
-    {0X0300000000000, 0X0400000000000, MappingDesc::ORIGIN, "origin-14"},
-    {0X0400000000000, 0X0600000000000, MappingDesc::SHADOW, "shadow-15"},
-    {0X0600000000000, 0X0800000000000, MappingDesc::ORIGIN, "origin-15"},
-    {0X0800000000000, 0X0A00000000000, MappingDesc::INVALID, "invalid"},
-    {0X0A00000000000, 0X0B00000000000, MappingDesc::APP, "app-14"},
-    {0X0B00000000000, 0X0C00000000000, MappingDesc::SHADOW, "shadow-10-13"},
-    {0X0C00000000000, 0X0D00000000000, MappingDesc::INVALID, "invalid"},
-    {0X0D00000000000, 0X0E00000000000, MappingDesc::ORIGIN, "origin-10-13"},
-    {0x0E00000000000, 0x0E40000000000, MappingDesc::ALLOCATOR, "allocator"},
-    {0X0E40000000000, 0X1000000000000, MappingDesc::APP, "app-15"},
-};
-# define MEM_TO_SHADOW(mem) ((uptr)mem ^ 0xB00000000000ULL)
-# define SHADOW_TO_ORIGIN(shadow) (((uptr)(shadow)) + 0x200000000000ULL)
+// const MappingDesc kMemoryLayout[] = {
+//     {0X0000000000000, 0X0100000000000, MappingDesc::APP, "app-10-13"},
+//     {0X0100000000000, 0X0200000000000, MappingDesc::SHADOW, "shadow-14"},
+//     {0X0200000000000, 0X0300000000000, MappingDesc::INVALID, "invalid"},
+//     {0X0300000000000, 0X0400000000000, MappingDesc::ORIGIN, "origin-14"},
+//     {0X0400000000000, 0X0600000000000, MappingDesc::SHADOW, "shadow-15"},
+//     {0X0600000000000, 0X0800000000000, MappingDesc::ORIGIN, "origin-15"},
+//     {0X0800000000000, 0X0A00000000000, MappingDesc::INVALID, "invalid"},
+//     {0X0A00000000000, 0X0B00000000000, MappingDesc::APP, "app-14"},
+//     {0X0B00000000000, 0X0C00000000000, MappingDesc::SHADOW, "shadow-10-13"},
+//     {0X0C00000000000, 0X0D00000000000, MappingDesc::INVALID, "invalid"},
+//     {0X0D00000000000, 0X0E00000000000, MappingDesc::ORIGIN, "origin-10-13"},
+//     {0x0E00000000000, 0x0E40000000000, MappingDesc::ALLOCATOR, "allocator"},
+//     {0X0E40000000000, 0X1000000000000, MappingDesc::APP, "app-15"},
+// };
+// # define MEM_TO_SHADOW(mem) ((uptr)mem ^ 0xB00000000000ULL)
+// # define SHADOW_TO_ORIGIN(shadow) (((uptr)(shadow)) + 0x200000000000ULL)
 
 #elif SANITIZER_LINUX && SANITIZER_LOONGARCH64
 // LoongArch64 maps:
@@ -194,11 +202,6 @@ const MappingDesc kMemoryLayout[] = {
 
 #elif SANITIZER_NETBSD || (SANITIZER_LINUX && SANITIZER_WORDSIZE == 64)
 
-static constexpr auto(&kMemoryLayout) =
-    __xsan::Mapping48AddressSpace::kMsanMemoryLayout;
-#define MEM_TO_SHADOW(mem) ::__msan::MemToShadow(mem)
-#define SHADOW_TO_ORIGIN(mem) ::__msan::ShadowToOrigin(mem)
-
 // All of the following configurations are supported.
 // ASLR disabled: main executable and DSOs at 0x555550000000
 // PIE and ASLR: main executable and DSOs at 0x7f0000000000
@@ -225,31 +228,35 @@ static constexpr auto(&kMemoryLayout) =
 #error "Unsupported platform"
 #endif
 
-const uptr kMemoryLayoutSize = sizeof(kMemoryLayout) / sizeof(kMemoryLayout[0]);
+// const uptr kMemoryLayoutSize = sizeof(kMemoryLayout) / sizeof(kMemoryLayout[0]);
 
-#define MEM_TO_ORIGIN(mem) (SHADOW_TO_ORIGIN(MEM_TO_SHADOW((mem))))
+// #define MEM_TO_ORIGIN(mem) (SHADOW_TO_ORIGIN(MEM_TO_SHADOW((mem))))
 
-#ifndef __clang__
-__attribute__((optimize("unroll-loops")))
-#endif
-inline bool
-addr_is_type(uptr addr, int mapping_types) {
-// It is critical for performance that this loop is unrolled (because then it is
-// simplified into just a few constant comparisons).
-#ifdef __clang__
-#pragma unroll
-#endif
-  for (unsigned i = 0; i < kMemoryLayoutSize; ++i)
-    if ((kMemoryLayout[i].type & mapping_types) &&
-        addr >= kMemoryLayout[i].start && addr < kMemoryLayout[i].end)
-      return true;
-  return false;
-}
+// #ifndef __clang__
+// __attribute__((optimize("unroll-loops")))
+// #endif
+// inline bool
+// addr_is_type(uptr addr, int mapping_types) {
+// // It is critical for performance that this loop is unrolled (because then it is
+// // simplified into just a few constant comparisons).
+// #ifdef __clang__
+// #pragma unroll
+// #endif
+//   for (unsigned i = 0; i < kMemoryLayoutSize; ++i)
+//     if ((kMemoryLayout[i].type & mapping_types) &&
+//         addr >= kMemoryLayout[i].start && addr < kMemoryLayout[i].end)
+//       return true;
+//   return false;
+// }
 
-#define MEM_IS_APP(mem) \
-  (addr_is_type((uptr)(mem), MappingDesc::APP | MappingDesc::ALLOCATOR))
-#define MEM_IS_SHADOW(mem) addr_is_type((uptr)(mem), MappingDesc::SHADOW)
-#define MEM_IS_ORIGIN(mem) addr_is_type((uptr)(mem), MappingDesc::ORIGIN)
+// Those checks are done by XSan now.
+// #define MEM_IS_APP(mem) \
+//   (addr_is_type((uptr)(mem), MappingDesc::APP | MappingDesc::ALLOCATOR))
+// #define MEM_IS_SHADOW(mem) addr_is_type((uptr)(mem), MappingDesc::SHADOW)
+// #define MEM_IS_ORIGIN(mem) addr_is_type((uptr)(mem), MappingDesc::ORIGIN)
+#define MEM_IS_APP(mem) ::__xsan::IsAppMem(mem)
+#define MEM_IS_SHADOW(mem) true
+#define MEM_IS_ORIGIN(mem) true
 
 // These constants must be kept in sync with the ones in MemorySanitizer.cpp.
 const int kMsanParamTlsSize = 800;

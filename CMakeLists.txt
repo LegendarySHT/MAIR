@@ -152,10 +152,6 @@ else()
   set(LLVM_THIRD_PARTY_DIR ${LLVM_PATH}/third-party)
 endif()
 
-# Now we only support x86_64
-set(XSAN_SUPPORTED_ARCH ${X86_64})
-message_green("XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
-
 # ------------------------ Configure XSan build/install/package ------------------------
 include(XsanBuildInstallPack)
 # ---------------------------------------------------------------------------------------

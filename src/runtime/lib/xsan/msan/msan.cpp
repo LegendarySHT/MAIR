@@ -780,12 +780,26 @@ SANITIZER_INTERFACE_WEAK_DEF(const char *, __msan_default_options, void) {
 
 namespace __msan {
 
+const __xsan::MsanMappingDesc *kMemoryLayout;
+uptr kMemoryLayoutSize;
+
+XSAN_MAP_FUNC_VOID(decltype(kMemoryLayout), MemoryLayout) {
+  return MAP_FIELD(kMsanMemoryLayout);
+}
+
+XSAN_MAP_FUNC_VOID(uptr, MemoryLayoutSize) {
+  return sizeof(MAP_FIELD(kMsanMemoryLayout)) /
+         sizeof(MAP_FIELD(kMsanMemoryLayout[0]));
+}
+
 void MsanInitFromXsan() {
+  kMemoryLayout = MemoryLayout();
+  kMemoryLayoutSize = MemoryLayoutSize();
+
   // CHECK(!msan_init_is_running);
   // if (msan_inited) return;
   // msan_init_is_running = 1;
   // SanitizerToolName = "MemorySanitizer";
-  __xsan::ScopedSanitizerToolName tool_name("MemorySanitizer");
 
   // AvoidCVE_2016_2143();
 

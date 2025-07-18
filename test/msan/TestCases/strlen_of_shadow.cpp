@@ -30,7 +30,11 @@ const char *mem_to_shadow(const char *p) {
 #elif defined(__s390x__)
   return (char *)(((uintptr_t)p & ~0xC00000000000ULL) + 0x080000000000ULL);
 #elif defined(__aarch64__)
-  return (char *)((uintptr_t)p ^ 0xB00000000000ULL);
+  if (const char *use_xsan_rt = getenv("USE_XSAN_RT");
+      use_xsan_rt && *use_xsan_rt)
+    return (char *)((uintptr_t)p ^ 0x600000000000ULL);
+  else
+    return (char *)((uintptr_t)p ^ 0xB00000000000ULL);
 #endif
 }
 

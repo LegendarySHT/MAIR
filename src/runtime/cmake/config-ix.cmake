@@ -686,6 +686,9 @@ if(APPLE)
   list_intersect(ORC_SUPPORTED_ARCH
     ALL_ORC_SUPPORTED_ARCH
     SANITIZER_COMMON_SUPPORTED_ARCH)
+  list_intersect(XSAN_SUPPORTED_ARCH
+    ALL_XSAN_SUPPORTED_ARCH
+    SANITIZER_COMMON_SUPPORTED_ARCH)
 
 else()
   # Architectures supported by compiler-rt libraries.
@@ -721,7 +724,10 @@ else()
   filter_available_targets(GWP_ASAN_SUPPORTED_ARCH ${ALL_GWP_ASAN_SUPPORTED_ARCH})
   filter_available_targets(NSAN_SUPPORTED_ARCH ${ALL_NSAN_SUPPORTED_ARCH})
   filter_available_targets(ORC_SUPPORTED_ARCH ${ALL_ORC_SUPPORTED_ARCH})
+  filter_available_targets(XSAN_SUPPORTED_ARCH ${ALL_XSAN_SUPPORTED_ARCH})
 endif()
+
+message_green("XSAN_SUPPORTED_ARCH: ${XSAN_SUPPORTED_ARCH}")
 
 if (MSVC)
   # Allow setting clang-cl's /winsysroot flag.

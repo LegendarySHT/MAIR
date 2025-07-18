@@ -258,22 +258,58 @@ struct MappingAarch64_42 {
 };
 
 struct MappingAarch64_48 {
-  static constexpr const uptr kLoAppMemBeg = 0x0000000001000ull;
-  static constexpr const uptr kLoAppMemEnd = 0x0000200000000ull;
-  static constexpr const uptr kTsanShadowBeg = 0x0001000000000ull;
-  static constexpr const uptr kTsanShadowEnd = 0x0002000000000ull;
-  static constexpr const uptr kTsanMetaShadowBeg = 0x0005000000000ull;
-  static constexpr const uptr kTsanMetaShadowEnd = 0x0006000000000ull;
-  static constexpr const uptr kMidAppMemBeg = 0x0aaaa00000000ull;
-  static constexpr const uptr kMidAppMemEnd = 0x0aaaf00000000ull;
-  static constexpr const uptr kHeapMemBeg = 0x0ffff00000000ull;
-  static constexpr const uptr kHeapMemEnd = 0x0ffff00000000ull;
-  static constexpr const uptr kHiAppMemBeg = 0x0ffff00000000ull;
-  static constexpr const uptr kHiAppMemEnd = 0x1000000000000ull;
-  static constexpr const uptr kTsanShadowMsk = 0x0fff800000000ull;
-  static constexpr const uptr kTsanShadowXor = 0x0000800000000ull;
-  static constexpr const uptr kTsanShadowAdd = 0x0000000000000ull;
-  static constexpr const uptr kVdsoBeg = 0xffff000000000ull;
+  // Keep same with MappingAarch64_39 since ASan allocator needs to know the
+  // heap memory range at compile time.
+  static constexpr uptr kHeapMemBeg    = 0x0f20000000000ull;
+  static constexpr uptr kHeapMemEnd    = 0x0f40000000000ull;
+  
+  static constexpr uptr kLoAppMemBeg   = 0x0000000000000ull;
+  static constexpr uptr kLoAppMemEnd   = 0x0000ffffff000ull;
+  static constexpr uptr kMidAppMemBeg  = 0x0aaaa00000000ull;
+  static constexpr uptr kMidAppMemEnd  = 0x0ac0000000000ull;
+  static constexpr uptr kHiAppMemBeg   = 0x0fc0000000000ull;
+  static constexpr uptr kHiAppMemEnd   = 0x1000000000000ull;
+  static constexpr uptr kVdsoBeg       = 0xffff000000000ull;
+
+  /// TSan's Shadow & MetaInfo Shadow parameters
+  static constexpr uptr kTsanShadowAdd = 0x0000000000000ull;
+  static constexpr uptr kTsanShadowBeg = 0x0255400000000ull;
+  static constexpr uptr kTsanShadowEnd = 0x0380000000000ull;
+  static constexpr uptr kTsanMetaShadowBeg = 0x0380000000000ull;
+  static constexpr uptr kTsanMetaShadowEnd = 0x0400000000000ull;
+  static constexpr uptr kTsanShadowMsk = 0x0f00000000000ull;
+  static constexpr uptr kTsanShadowXor = 0x0180000000000ull;
+
+  /// ASan's Shadow parameters
+  static constexpr const uptr kAsanShadowOffset = 0x0000001000000000ull;
+  static constexpr const uptr kAsanShadowScale = 3;
+
+  /// MSan's Shadow parameters
+  static constexpr uptr kMSanShadowXor = 0x0600000000000ull;
+  static constexpr uptr kMSanShadowAdd = 0x0040000000000ull;
+
+  static constexpr uptr kMSanLoShadowBeg   = 0x0600000000000ull;
+  static constexpr uptr kMSanLoShadowEnd   = 0x0610000000000ull;
+  static constexpr uptr kMSanMidShadowBeg  = 0x0ca0000000000ull;
+  static constexpr uptr kMSanMidShadowEnd  = 0x0cc0000000000ull;
+  static constexpr uptr kMSanHiShadowBeg   = 0x09c0000000000ull;
+  static constexpr uptr kMSanHiShadowEnd   = 0x0a00000000000ull;
+  static constexpr uptr kMSanHeapShadowBeg = 0x0920000000000ull;
+  static constexpr uptr kMSanHeapShadowEnd = 0x0940000000000ull;
+  static constexpr MsanMappingDesc kMsanMemoryLayout[] = {
+    {kLoAppMemBeg,  kLoAppMemEnd,  MsanMappingDesc::APP, "app-1"},
+    {kMidAppMemBeg, kMidAppMemEnd, MsanMappingDesc::APP, "app-2"},
+    {kHiAppMemBeg,  kHiAppMemEnd,  MsanMappingDesc::APP, "app-3"},
+    {kHeapMemBeg,   kHeapMemEnd,   MsanMappingDesc::ALLOCATOR, "allocator"},
+    {kMSanLoShadowBeg,   kMSanLoShadowEnd,   MsanMappingDesc::SHADOW, "shadow-1"},
+    {kMSanMidShadowBeg,  kMSanMidShadowEnd,  MsanMappingDesc::SHADOW, "shadow-2"},
+    {kMSanHiShadowBeg,   kMSanHiShadowEnd,   MsanMappingDesc::SHADOW, "shadow-3"},
+    {kMSanHeapShadowBeg, kMSanHeapShadowEnd, MsanMappingDesc::SHADOW, "shadow-allocator"},
+    {kMSanLoShadowBeg   + kMSanShadowAdd, kMSanLoShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-1"},
+    {kMSanMidShadowBeg  + kMSanShadowAdd, kMSanMidShadowEnd  + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-2"},
+    {kMSanHiShadowBeg   + kMSanShadowAdd, kMSanHiShadowEnd   + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-3"},
+    {kMSanHeapShadowBeg + kMSanShadowAdd, kMSanHeapShadowEnd + kMSanShadowAdd, MsanMappingDesc::ORIGIN, "origin-allocator"},
+  };
 };
 
 /*
@@ -639,10 +675,10 @@ ALWAYS_INLINE auto SelectMapping(Args... args) {
   return Func::template Apply<Mapping48AddressSpace>(args...);
 #  elif defined(__aarch64__)
   switch (vmaSize) {
-    case 39:
-      return Func::template Apply<MappingAarch64_39>(args...);
-    case 42:
-      return Func::template Apply<MappingAarch64_42>(args...);
+    // case 39:
+    //   return Func::template Apply<MappingAarch64_39>(args...);
+    // case 42:
+    //   return Func::template Apply<MappingAarch64_42>(args...);
     case 48:
       return Func::template Apply<MappingAarch64_48>(args...);
   }

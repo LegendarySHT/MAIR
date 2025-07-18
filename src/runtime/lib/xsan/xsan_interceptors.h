@@ -94,7 +94,7 @@ void InitializePlatformInterceptors();
       (!SANITIZER_WINDOWS || (defined(__MINGW32__) && defined(__i386__)))
 #    define XSAN_INTERCEPT___CXA_THROW 1
 #    define XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION 1
-#    if defined(_GLIBCXX_SJLJ_EXCEPTIONS) || (SANITIZER_IOS && defined(__xrm__))
+#    if defined(_GLIBCXX_SJLJ_EXCEPTIONS) || (SANITIZER_IOS && defined(__arm__))
 #      define XSAN_INTERCEPT__UNWIND_SJLJ_RAISEEXCEPTION 1
 #    else
 #      define XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION 1
@@ -139,7 +139,7 @@ void InitializePlatformInterceptors();
 #  endif
 
 #  if SANITIZER_LINUX &&                                                \
-      (defined(__xrm__) || defined(__xarch64__) || defined(__i386__) || \
+      (defined(__arm__) || defined(__aarch64__) || defined(__i386__) || \
        defined(__x86_64__) || SANITIZER_RISCV64 || SANITIZER_LOONGARCH64)
 #    define XSAN_INTERCEPT_VFORK 1
 #  else
