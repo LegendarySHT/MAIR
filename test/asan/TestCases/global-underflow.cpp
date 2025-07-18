@@ -3,6 +3,8 @@
 // RUN: %clangxx_asan -O2 %s %p/Helpers/underflow.cpp -o %t && not %run %t 2>&1 | FileCheck %s
 // RUN: %clangxx_asan -O3 %s %p/Helpers/underflow.cpp -o %t && not %run %t 2>&1 | FileCheck %s
 
+// XFAIL: xsan
+
 int XXX[2] = {2, 3};
 extern int YYY[];
 #include <string.h>

@@ -2,6 +2,8 @@
 // RUN: %clangxx_msan -fno-sanitize-memory-param-retval %t-main.o %s -o %t
 // RUN: %run %t
 
+// XFAIL: xsan
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

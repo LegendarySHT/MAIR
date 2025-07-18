@@ -63,6 +63,7 @@ clang_tsan_cflags = (
     + ["-I%s" % tsan_incdir]
 )
 if "-xsan" in clang_tsan_cflags:
+    config.available_features.add("xsan")
     # Let XSan's stack trace format be the same with TSan's.
     config.environment['XSAN_IN_TSAN_TEST'] = '1'
     # Forbids some ASan's options to pass TSan's testcases

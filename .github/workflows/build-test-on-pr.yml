@@ -8,66 +8,59 @@ on:
     branches:
       - dev-xsan
       - 'users/**'
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   lit-test:
-    runs-on: ubuntu-22.04
     timeout-minutes: 30
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
     if: github.repository == 'Camsyn/XSan'
     strategy:
       fail-fast: false
       matrix:
-        # Specify the version of clang/LLVM to build.
-        # Currently, we only support LLVM 15.
+        os_type: [ubuntu-22.04]
+        build_type: [Debug, Release]
         version: [15]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number }}-${{ matrix.os_type }}-${{ matrix.build_type }}-${{ matrix.version }}
+      cancel-in-progress: true
+    runs-on: ${{ matrix.os_type }}
     steps:
       - name: Checkout code
         # uses: actions/checkout@v4
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install dependencies (Linux)
-        run: |
-          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy main"
-          sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-15 main"
-          # Workaround for issue https://github.com/llvm/llvm-project/issues/133861
-          sudo ln -s /usr/lib/llvm-${{ matrix.version }}/lib /usr/lib/lib
-          sudo ln -s /usr/lib/llvm-${{ matrix.version }}/include /usr/lib/include
-          sudo apt-get update
-          sudo apt-get install ninja-build clang-${{ matrix.version }} llvm-${{ matrix.version }}-dev libclang-${{ matrix.version }}-dev
-
       - name: Build XSan
+        uses: ./.github/workflows/build
+        with:
+          build_type: ${{ matrix.build_type }}
+          llvm_version: ${{ matrix.version }}
+          extra_cmake_args: '-DXSAN_ENABLE_LIT_TESTS=ON'
+
+      - name: Export environment variables
         run: |
-          mkdir build && cd build
-          cmake -G Ninja \
-              -DCMAKE_BUILD_TYPE=Debug \
-              -DLLVM_DIR=/usr/lib/llvm-${{ matrix.version }}/lib/cmake/llvm \
-              -DClang_DIR=/usr/lib/llvm-${{ matrix.version }}/lib/cmake/clang \
-              -DCMAKE_CXX_COMPILER=clang++-${{ matrix.version }} \
-              -DCMAKE_C_COMPILER=clang-${{ matrix.version }} \
-              ..
-          cmake --build . -j
+          echo "X_CC=clang-${{ matrix.version }}" >> $GITHUB_ENV
+          echo "X_CXX=clang++-${{ matrix.version }}" >> $GITHUB_ENV
 
       - name: Run ASan LIT tests
+        id: check-asan
+        if: always()
         run: |
-          cd build
-          cmake --build . --target check-asan
+          cmake --build build --target check-asan
 
       - name: Run TSan LIT tests
+        id: check-tsan
+        if: always()
         run: |
-          cd build
-          cmake --build . --target check-tsan
+          cmake --build build --target check-tsan
 
       - name: Run MSan LIT tests
+        id: check-msan
+        if: always()
         run: |
-          cd build
-          cmake --build . --target check-msan
+          cmake --build build --target check-msan
 
       - name: Run UBSan LIT tests
+        id: check-ubsan
+        if: always()
         run: |
-          cd build
-          cmake --build . --target check-ubsan
-
+          cmake --build build --target check-ubsan

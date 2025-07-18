@@ -1,0 +1,53 @@
+name: Build Action
+description: This action pulls and builds the XSan project.
+
+inputs:
+  build_type:
+    required: false
+    type: choice
+    options:
+      - Release
+      - Debug
+      - RelWithDebInfo
+    default: Release
+
+  llvm_version:
+    required: false
+    type: string
+    default: '15'
+
+  extra_cmake_args:
+    required: false
+    type: string
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy main"
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-15 main"
+        # Workaround for issue https://github.com/llvm/llvm-project/issues/133861
+        sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/lib /usr/lib/lib
+        sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/include /usr/lib/include
+        sudo apt-get update
+        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev
+
+    - name: Build XSan
+      shell: bash
+      run: |
+        PLATFORM_EXTRA_ARGS=""
+        if [ "$(uname -m)" != "x86_64" ]; then
+          PLATFORM_EXTRA_ARGS="-DCOMPILER_RT_TEST_COMPILER=${{ github.workspace }}/build/xclang"
+        fi
+        cmake -S . -B build -G Ninja \
+             -DCMAKE_BUILD_TYPE=${{ inputs.build_type }} \
+             -DLLVM_DIR=/usr/lib/llvm-${{ inputs.llvm_version }}/lib/cmake/llvm \
+             -DClang_DIR=/usr/lib/llvm-${{ inputs.llvm_version }}/lib/cmake/clang \
+             -DCMAKE_CXX_COMPILER=clang++-${{ inputs.llvm_version }} \
+             -DCMAKE_C_COMPILER=clang-${{ inputs.llvm_version }} \
+             $PLATFORM_EXTRA_ARGS \
+             ${{ inputs.extra_cmake_args }}
+        cmake --build build -j

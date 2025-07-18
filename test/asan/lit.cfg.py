@@ -70,6 +70,7 @@ clang_asan_static_cflags = (
     + target_cflags
 )
 if "-xsan" in clang_asan_static_cflags:
+    config.available_features.add("xsan")
     # Disable TSan's report in ASan's test pipeline.
     config.environment['TSAN_OPTIONS'] = "report_bugs=0"
     # Disable MSan's report in ASan's test pipeline.

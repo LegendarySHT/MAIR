@@ -1,5 +1,5 @@
 # A workflow to build XSan automatically.
-name: Build
+name: Build on Push
 
 on:
   workflow_dispatch:
@@ -11,9 +11,22 @@ on:
 jobs:
   build:
     if: github.repository_owner == 'Camsyn'
-    name: Build
-    uses: Camsyn/XSan/.github/workflows/build.yml@dev-xsan
-    with:
-      require_build_artifacts: false
-      build_type: Debug
-      os_list: '["ubuntu-22.04"]'
+    strategy:
+      fail-fast: false
+      matrix:
+        os_type: [ubuntu-22.04]
+        version: [15]
+    concurrency:
+      group: ${{ github.ref }}-${{ matrix.os_type }}-${{ matrix.version }}
+      cancel-in-progress: true
+    runs-on: ${{ matrix.os_type }}
+    steps:
+      - name: Checkout code
+        # uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build XSan
+        uses: ./.github/workflows/build
+        with:
+          build_type: Debug
+          llvm_version: ${{ matrix.version }}

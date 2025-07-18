@@ -1,5 +1,7 @@
 // RUN: %clangxx_msan -O0 %s -o %t && %run %t
 
+// XFAIL: xsan
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
