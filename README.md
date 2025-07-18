@@ -1,6 +1,6 @@
 # XSan Project README
 
-[![Build](https://github.com/Camsyn/XSan/actions/workflows/build.yml/badge.svg)](https://github.com/Camsyn/XSan/actions/workflows/build.yml)
+[![Build](https://github.com/Camsyn/XSan/actions/workflows/build-release-on-push.yml/badge.svg)](https://github.com/Camsyn/XSan/actions/workflows/build-release-on-push.yml)
 
 ## Introduction
 

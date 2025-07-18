@@ -1,0 +1,60 @@
+# A workflow to build XSan automatically.
+name: Build on Push
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev-xsan
+      - 'users/**'
+
+jobs:
+  # Add a conditional check task to ensure that the release is only triggered when a bump PR is merged
+  gatekeeper:
+    runs-on: ubuntu-22.04
+    outputs:
+      triggered: ${{ steps.check_commit.outputs.triggered }}
+    steps:
+      - name: Check Commit Message
+        id: check_commit
+        run: |
+          # Check if the commit message is a bump PR
+          COMMIT_MSG='${{ github.event.head_commit.message }}'
+          if [[ "$COMMIT_MSG" == "chore: Bump to version"* ]]; then
+            echo "Bump PR merged. Triggering release."
+            echo "triggered=true" >> $GITHUB_OUTPUT
+          else
+            echo "Not a bump PR. Skipping release."
+            echo "triggered=false" >> $GITHUB_OUTPUT
+          fi
+  build:
+    needs: [gatekeeper]
+    if: github.repository_owner == 'Camsyn' && needs.gatekeeper.outputs.triggered == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        os_type: [ubuntu-22.04]
+        version: [15]
+    concurrency:
+      group: ${{ github.ref }}-${{ matrix.os_type }}-${{ matrix.version }}
+      cancel-in-progress: true
+    runs-on: ${{ matrix.os_type }}
+    steps:
+      - name: Checkout code
+        # uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build XSan
+        uses: ./.github/workflows/build
+        with:
+          build_type: Debug
+          llvm_version: ${{ matrix.version }}
+  release:
+    permissions:
+      contents: write
+    needs: [gatekeeper]
+    if: needs.gatekeeper.outputs.triggered == 'true'
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    uses: Camsyn/XSan/.github/workflows/release.yml@dev-xsan

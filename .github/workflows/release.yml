@@ -32,11 +32,11 @@ jobs:
         cp -r XSan-*.tar.gz XSan-*.zip version.txt artifacts/
    
     - name: Display structure of downloaded files
-      run: ls -R artifacts
+      run: ls -R build/artifacts
 
     - name: Read version from file
       id: get_version
-      run: echo "RELEASE_VERSION=$(cat artifacts/version.txt | tr -d '\n\r')" >> $GITHUB_ENV
+      run: echo "RELEASE_VERSION=$(cat build/artifacts/version.txt | tr -d '\n\r')" >> $GITHUB_ENV
 
     - name: Release
       uses: softprops/action-gh-release@v2
@@ -47,4 +47,4 @@ jobs:
         body: |
           Official release for version ${{ env.RELEASE_VERSION }}.
           See attached assets for details.
-        files: artifacts/XSan-*-Linux*
+        files: build/artifacts/XSan-*-Linux*
