@@ -1,0 +1,34 @@
+name: Build and Create Release
+
+on:
+  push:
+    branches:
+      - 'dev-xsan'
+
+permissions:
+  contents: write # Need to create GitHub Release and Git Tag
+
+jobs:
+  # Add a conditional check task to ensure that the release is only triggered when a bump PR is merged
+  gatekeeper:
+    runs-on: ubuntu-latest
+    outputs:
+      triggered: ${{ steps.check_commit.outputs.triggered }}
+    steps:
+      - name: Check Commit Message
+        id: check_commit
+        run: |
+          # 检查最新的 commit message 是否以 "chore: bump version to" 开头
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [[ "$COMMIT_MSG" == "chore: bump version to"* ]]; then
+            echo "Bump PR merged. Triggering release."
+            echo "triggered=true" >> $GITHUB_OUTPUT
+          else
+            echo "Not a bump PR. Skipping release."
+            echo "triggered=false" >> $GITHUB_OUTPUT
+          fi
+
+  release:
+    needs: [gatekeeper]
+    if: needs.gatekeeper.outputs.triggered == 'true'
+    uses: Camsyn/XSan/.github/workflows/release.yml@dev-xsan

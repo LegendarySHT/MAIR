@@ -1,0 +1,109 @@
+name: Prepare Release on Milestone Closure
+
+on:
+  milestone:
+    types: [closed]
+
+permissions: write-all
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: "Get Version from Milestone Title"
+        id: get_version
+        run: |
+          # Extract version from milestone title
+          VERSION="${{ github.event.milestone.title }}"
+          echo "Milestone version: $VERSION"
+          # Validate version format is X.Y.Z
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Milestone title '${VERSION}' is not a valid semantic version. Skipping."
+            exit 0 # Exit normally, without error
+          fi
+          # Split version number
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          echo "major=${MAJOR}" >> $GITHUB_OUTPUT
+          echo "minor=${MINOR}" >> $GITHUB_OUTPUT
+          echo "patch=${PATCH}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Update CMakeLists.txt Version
+        # Only run if the version is successfully parsed
+        if: steps.get_version.outputs.version
+        run: |
+          # Update the version number in CMakeLists.txt using sed
+          sed -i "s/set(PROJECT_VERSION_MAJOR .*)/set(PROJECT_VERSION_MAJOR ${MAJOR})/g" CMakeLists.txt
+          sed -i "s/set(PROJECT_VERSION_MINOR .*)/set(PROJECT_VERSION_MINOR ${MINOR})/g" CMakeLists.txt
+          sed -i "s/set(PROJECT_VERSION_PATCH .*)/set(PROJECT_VERSION_PATCH ${PATCH})/g" CMakeLists.txt
+        env:
+          MAJOR: ${{ steps.get_version.outputs.major }}
+          MINOR: ${{ steps.get_version.outputs.minor }}
+          PATCH: ${{ steps.get_version.outputs.patch }}
+
+      - name: Generate Release Notes
+        if: steps.get_version.outputs.version
+        uses: docker://decathlon/release-notes-generator-action:2.0.1
+        id: release_notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTPUT_FOLDER: docs/release_notes # Output Release Notes to specific folder
+          USE_MILESTONE_TITLE: "true"
+
+      - name: Create Pull Request
+        if: steps.get_version.outputs.version
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ steps.get_version.outputs.version }}"
+          title: "chore: Bump to version ${{ steps.get_version.outputs.version }}"
+          body: |
+            This PR was automatically generated after closing milestone `${{ steps.get_version.outputs.version }}`.
+
+            ## Release Notes
+            ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+          branch: "release/v${{ steps.get_version.outputs.version }}"
+          base: "dev-xsan"
+          labels: "release"
+
+      - name: Create Milestone
+        if: steps.get_version.outputs.version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAJOR: ${{ steps.get_version.outputs.major }}
+          MINOR: ${{ steps.get_version.outputs.minor }}
+          PATCH: ${{ steps.get_version.outputs.patch }}
+        run: |
+          set -e
+          # Calculate the next version number
+          NEXT_MAJOR=$((MAJOR + 1))
+          NEXT_MINOR=$((MINOR + 1))
+          NEXT_PATCH=$((PATCH + 1))
+
+          # List of milestones to check/create
+          MILESTONES=(
+            "${NEXT_MAJOR}.0.0"
+            "${MAJOR}.0.1"
+            "${MAJOR}.1.0"
+            "${MAJOR}.${NEXT_MINOR}.0"
+            "${MAJOR}.${MINOR}.1"
+            "${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          )
+
+          # Get all existing milestone names
+          EXISTING=$(gh api repos/${{ github.repository }}/milestones --paginate --jq '.[].title')
+
+          for M in "${MILESTONES[@]}"; do
+            if echo "$EXISTING" | grep -Fxq "$M"; then
+              echo "Milestone $M already exists, skipping."
+            else
+              echo "Milestone $M does not exist, creating..."
+              gh api repos/${{ github.repository }}/milestones -f title="$M" -f state="open"
+            fi
+          done
+        shell: bash

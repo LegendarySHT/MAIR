@@ -1,0 +1,73 @@
+name: Assign PR to Milestone on Label
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read       # Need to read file content (CMakeLists.txt)
+  pull-requests: write # Need to modify PR (add milestone)
+
+jobs:
+  add-to-milestone:
+    # Only run when the label is major, minor, or patch
+    if: >
+      github.event.label.name == 'major' ||
+      github.event.label.name == 'minor' ||
+      github.event.label.name == 'patch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Code
+        uses: actions/checkout@v4
+        with:
+          # 检出 PR 的 HEAD commit
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Parse Version from CMakeLists.txt
+        id: parse_version
+        run: |
+          # Use '|| :' to prevent grep from returning a non-zero exit code when no match is found
+          MAJOR=$(grep -oP 'set\(PROJECT_VERSION_MAJOR\s+\K\d+' CMakeLists.txt || :)
+          MINOR=$(grep -oP 'set\(PROJECT_VERSION_MINOR\s+\K\d+' CMakeLists.txt || :)
+          PATCH=$(grep -oP 'set\(PROJECT_VERSION_PATCH\s+\K\d+' CMakeLists.txt || :)
+
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]; then
+            echo "Error: Could not parse version from CMakeLists.txt"
+            exit 1
+          fi
+
+          echo "major=$MAJOR" >> $GITHUB_OUTPUT
+          echo "minor=$MINOR" >> $GITHUB_OUTPUT
+          echo "patch=$PATCH" >> $GITHUB_OUTPUT
+
+      - name: Calculate Next Milestone Version
+        id: calculate_milestone
+        run: |
+          # 根据触发的标签计算下一个里程碑的版本号
+          LABEL_NAME="${{ github.event.label.name }}"
+          MAJOR="${{ steps.parse_version.outputs.major }}"
+          MINOR="${{ steps.parse_version.outputs.minor }}"
+          PATCH="${{ steps.parse_version.outputs.patch }}"
+
+          if [ "$LABEL_NAME" == "major" ]; then
+            NEXT_MAJOR=$((MAJOR + 1))
+            MILESTONE_VERSION="${NEXT_MAJOR}.0.0"
+          elif [ "$LABEL_NAME" == "minor" ]; then
+            NEXT_MINOR=$((MINOR + 1))
+            MILESTONE_VERSION="${MAJOR}.${NEXT_MINOR}.0"
+          elif [ "$LABEL_NAME" == "patch" ]; then
+            NEXT_PATCH=$((PATCH + 1))
+            MILESTONE_VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          fi
+
+          echo "Calculated milestone: $MILESTONE_VERSION"
+          echo "milestone=$MILESTONE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set Milestone for PR
+        uses: hustcer/milestone-action@v2
+        with:
+          action: bind-pr   # `bind-pr` is the default action
+          milestone: ${{ steps.calculate_milestone.outputs.milestone }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
