@@ -20,8 +20,10 @@ jobs:
       - name: Checkout PR Code
         uses: actions/checkout@v4
         with:
-          # 检出 PR 的 HEAD commit
-          ref: ${{ github.event.pull_request.head.sha }}
+          # 检出 main 分支
+          ref: dev-xsan
+          # # 检出 PR 的 HEAD commit
+          # ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Parse Version from CMakeLists.txt
         id: parse_version
