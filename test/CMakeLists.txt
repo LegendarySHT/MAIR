@@ -18,6 +18,11 @@ list(INSERT CMAKE_MODULE_PATH 0
   "${CMAKE_CURRENT_SOURCE_DIR}/cmake"
 )
 
+# Some tests rely on profile, e.g., asan_and_llvm_coverage_test.cpp
+if(COMPILER_RT_BUILD_PROFILE AND COMPILER_RT_HAS_PROFILE)
+  list(APPEND SANITIZER_COMMON_LIT_TEST_DEPS profile)
+endif()
+
 # When ANDROID, we build tests with the host compiler (i.e. CMAKE_C_COMPILER),
 # and run tests with tools from the host toolchain.
 if(NOT ANDROID)
@@ -53,7 +58,12 @@ macro(get_bits_for_arch arch bits)
 endmacro()
 
 set(XSAN_TEST_DEPS ${SANITIZER_COMMON_LIT_TEST_DEPS})
-list(APPEND XSAN_TEST_DEPS asan tsan ubsan xclang)
+# testing XSan depends on targets XSanInstPass, xsan, compiler
+# If you want to test original sanitizers, as the test does not 
+# depend on the original sanitizers, you should run
+#     cmake --build build -j 
+# to build all targets.
+list(APPEND XSAN_TEST_DEPS XSanInstPass xsan compiler)
 set(XSAN_DYNAMIC_TEST_DEPS ${XSAN_TEST_DEPS})
 
 ## TODO: support different architectures

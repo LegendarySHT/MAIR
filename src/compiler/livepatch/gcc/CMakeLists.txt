@@ -16,6 +16,7 @@ add_library(gcc-patch MODULE
     gcc.cpp
     ../utils/PatchHelper.cpp
 )
+add_dependencies(livepatch gcc-patch)
 
 target_link_libraries(gcc-patch PRIVATE dl)
 

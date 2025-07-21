@@ -2,8 +2,11 @@ include_directories(include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 configure_file(config_compile.h.in config_compile.h)
 
+add_custom_target(compiler)
+
 # ################ For clang_wrapper.c #################
 add_executable(xclang clang_wrapper.c)
+add_dependencies(compiler xclang)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # Suppress warning: `u8* to char*`, which is common in clang_wrapper.c
@@ -21,6 +24,7 @@ add_custom_command(TARGET xclang POST_BUILD
 
 # ################ For gcc_wrapper.c  #################
 add_executable(xgcc gcc_wrapper.c)
+add_dependencies(compiler xgcc)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # Suppress warning: `u8* to char*`, which is common in gcc_wrapper.c

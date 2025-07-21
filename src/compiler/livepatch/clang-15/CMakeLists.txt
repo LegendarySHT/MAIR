@@ -22,6 +22,7 @@ add_library(clang-patch MODULE
     SanitizerArgs.cpp
     ../utils/PatchHelper.cpp
 )
+add_dependencies(livepatch clang-patch)
 
 target_link_libraries(clang-patch PRIVATE dl)
 

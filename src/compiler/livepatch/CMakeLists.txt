@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+add_custom_target(livepatch)
+add_dependencies(compiler livepatch)
+
 # For "util/PatchHelper.h"
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
