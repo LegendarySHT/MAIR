@@ -137,6 +137,10 @@ ReplacedAtomicExtra MetaDataExtra<ReplacedAtomicExtra>::unpack(MDNode *MD) {
 
 // --------------- MetaDataHelper Specializations --------------------
 
+/// Explicit Specialization
+// template class MetaDataHelper<UBSanInstMeta>;
+/// Explicit Declaration
+// template<> class MetaDataHelper<UBSanInstMeta>;
 #define INSTANTIATE_META_DATA_HELPER(...)                                      \
   template class MetaDataHelperBase<__VA_ARGS__>;                              \
   template class MetaDataHelper<__VA_ARGS__>;

@@ -1,8 +1,9 @@
 // RUN: rm -rf %t-dir
 // RUN: mkdir %t-dir
-
-// RUN: %clangxx_tsan -O1 %s -DLIB -fPIC -fno-sanitize=thread -shared -o %t-dir/libignore_lib3.so
-// RUN: %clangxx_tsan -O1 %s %link_libcxx_tsan -o %t-dir/executable
+/// - `-fno-sanitize=memory`: This test uses libstdc++/libc++ without MSan's instrumentation,
+///                           and thus MSan would report FPs.
+// RUN: %clangxx_tsan -fno-sanitize=memory -O1 %s -DLIB -fPIC -fno-sanitize=thread -shared -o %t-dir/libignore_lib3.so
+// RUN: %clangxx_tsan -fno-sanitize=memory -O1 %s %link_libcxx_tsan -o %t-dir/executable
 // RUN: %env_tsan_opts=suppressions='%s.supp':verbosity=1 %run %t-dir/executable 2>&1 | FileCheck %s
 
 // Tests that unloading of a library matched against called_from_lib suppression

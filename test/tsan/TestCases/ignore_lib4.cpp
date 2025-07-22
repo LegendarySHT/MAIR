@@ -1,8 +1,9 @@
 // RUN: rm -rf %t-dir
 // RUN: mkdir %t-dir
-
-// RUN: %clangxx_tsan -O1 %s -DLIB -fPIC -shared -o %t-dir/libignore_lib4.so
-// RUN: %clangxx_tsan -O1 %s %link_libcxx_tsan -o %t-dir/executable
+/// - `-fno-sanitize=memory`: This test uses libstdc++/libc++ without MSan's instrumentation,
+///                           and thus MSan would report FPs.
+// RUN: %clangxx_tsan -fno-sanitize=memory -O1 %s -DLIB -fPIC -shared -o %t-dir/libignore_lib4.so
+// RUN: %clangxx_tsan -fno-sanitize=memory -O1 %s %link_libcxx_tsan -o %t-dir/executable
 // RUN: echo "called_from_lib:libignore_lib4.so" > %t-dir/executable.supp
 // RUN: %env_tsan_opts=suppressions='%t-dir/executable.supp' %run %t-dir/executable 2>&1 | FileCheck %s
 

@@ -1,5 +1,7 @@
-// RUN: %clangxx_tsan -O1 %s -DBUILD_SO -fPIC -shared -o %t-so.so
-// RUN: %clangxx_tsan -O1 %s %link_libcxx_tsan -o %t && %run %t 2>&1 | FileCheck %s
+/// - `-fno-sanitize=memory`: This test uses libstdc++/libc++ without MSan's instrumentation,
+///                           and thus MSan would report FPs.
+// RUN: %clangxx_tsan -fno-sanitize=memory -O1 %s -DBUILD_SO -fPIC -shared -o %t-so.so
+// RUN: %clangxx_tsan -fno-sanitize=memory -O1 %s %link_libcxx_tsan -o %t && %run %t 2>&1 | FileCheck %s
 
 // A test for loading a dynamic library with static TLS.
 // Such static TLS is a hack that allows a dynamic library to have faster TLS,
