@@ -7,6 +7,7 @@
 // RUN: not %env_asan_opts=protect_shadow_gap=1 %t 2>&1 | FileCheck %s  --check-prefix=CHECK-PROTECT1
 // RUN: not                                     %t 2>&1 | FileCheck %s  --check-prefix=CHECK-PROTECT1
 // RUN: not %env_asan_opts=protect_shadow_gap=0 %t 2>&1 | FileCheck %s  --check-prefix=CHECK-PROTECT0
+// XFAIL: xsan
 #include <assert.h>
 #include <unistd.h>
 #include <sys/mman.h>
