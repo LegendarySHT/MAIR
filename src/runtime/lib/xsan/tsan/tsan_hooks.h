@@ -52,12 +52,15 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
     __xsan::ScopedSanitizerToolName tool_name(name);
     __tsan::TsanInitFromXsanLate();
   }
-  ALWAYS_INLINE static __sanitizer::ArrayRef<__xsan::NamedRange>
-  NeededMapRanges() {
-    static __xsan::NamedRange map_ranges[] = {
-        {{TsanShadowBeg(), TsanShadowEnd()}, "tsan shadow"},
-        {{TsanMetaBeg(), TsanMetaEnd()}, "tsan meta"},
-    };
+  ALWAYS_INLINE static ArrayRef<__xsan::NamedRange> NeededMapRanges() {
+    static bool initialized = false;
+    static __xsan::NamedRange map_ranges[2];
+    if (!initialized) {
+      // caller is thread safe, so we do not use atomic_bool
+      initialized = true;
+      map_ranges[0] = {{TsanShadowBeg(), TsanShadowEnd()}, "tsan shadow"};
+      map_ranges[1] = {{TsanMetaBeg(), TsanMetaEnd()}, "tsan meta"};
+    }
     return map_ranges;
   }
 

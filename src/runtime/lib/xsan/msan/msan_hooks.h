@@ -45,17 +45,21 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
     msan_init_is_running = 0;
     msan_inited = 1;
   }
-  ALWAYS_INLINE static __sanitizer::ArrayRef<__xsan::NamedRange> NeededMapRanges() {
-    static __xsan::NamedRange map_ranges[] = {
-        {{LoShadowBeg(), LoShadowEnd()}, "msan shadow low"},
-        {{MidShadowBeg(), MidShadowEnd()}, "msan shadow mid"},
-        {{HiShadowBeg(), HiShadowEnd()}, "msan shadow high"},
-        {{HeapShadowBeg(), HeapShadowEnd()}, "msan shadow heap"},
-        {{LoOriginBeg(), LoOriginEnd()}, "msan origin low"},
-        {{MidOriginBeg(), MidOriginEnd()}, "msan origin mid"},
-        {{HiOriginBeg(), HiOriginEnd()}, "msan origin high"},
-        {{HeapOriginBeg(), HeapOriginEnd()}, "msan origin heap"},
-    };
+  ALWAYS_INLINE static ArrayRef<__xsan::NamedRange> NeededMapRanges() {
+    static bool initialized = false;
+    static __xsan::NamedRange map_ranges[8];
+    if (!initialized) {
+      // caller is thread safe, so we do not use atomic_bool
+      initialized = true;
+      map_ranges[0] = {{LoShadowBeg(), LoShadowEnd()}, "msan shadow low"};
+      map_ranges[1] = {{MidShadowBeg(), MidShadowEnd()}, "msan shadow mid"};
+      map_ranges[2] = {{HiShadowBeg(), HiShadowEnd()}, "msan shadow high"};
+      map_ranges[3] = {{HeapShadowBeg(), HeapShadowEnd()}, "msan shadow heap"};
+      map_ranges[4] = {{LoOriginBeg(), LoOriginEnd()}, "msan origin low"};
+      map_ranges[5] = {{MidOriginBeg(), MidOriginEnd()}, "msan origin mid"};
+      map_ranges[6] = {{HiOriginBeg(), HiOriginEnd()}, "msan origin high"};
+      map_ranges[7] = {{HeapOriginBeg(), HeapOriginEnd()}, "msan origin heap"};
+    }
     return map_ranges;
   }
 
