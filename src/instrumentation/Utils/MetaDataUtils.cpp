@@ -8,9 +8,6 @@ namespace __xsan {
 // ---------------------- MetaDataHelper -------------------------
 
 template <typename MetaT, typename InstT>
-unsigned MetaDataHelperBase<MetaT, InstT>::ID = 0;
-
-template <typename MetaT, typename InstT>
 void MetaDataHelper<MetaT, InstT, false>::set(InstT &I) {
   // We cannot use func-local static var to init the Ctx, as it might differ for
   // different Modules.

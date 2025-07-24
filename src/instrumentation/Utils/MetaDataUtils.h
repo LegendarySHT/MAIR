@@ -49,6 +49,9 @@ protected:
   static unsigned ID;
 };
 
+template <typename MetaT, typename InstT>
+unsigned MetaDataHelperBase<MetaT, InstT>::ID = 0;
+
 template <typename MetaT, typename InstT = llvm::Instruction,
           bool HasExtra = HasMetaDataExtra<MetaT>::value,
           typename = std::enable_if_t<IsMetaData<MetaT>::value>>
