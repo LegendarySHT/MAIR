@@ -1011,6 +1011,10 @@ void LoopMopInstrumenter::instrument() {
   case LoopOptLeval::NoOpt:
     return;
   }
+  auto PA = llvm::PreservedAnalyses::all();
+  // abandon PDT as we cannot hot-update it in `SplitBlock*`.
+  PA.abandon<PostDominatorTreeAnalysis>();
+  FAM.invalidate(F, PA);
 }
 SmallVectorImpl<LoopMopInstrumenter::LoopMop> &
 LoopMopInstrumenter::getLoopMopCandidates() {
@@ -1367,7 +1371,10 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
       // a critical edge, which requires |succ(pred)| > 1 or |pred(succ)| > 1.
 
       // Update ExitBlock
-      ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, &PDT, &LI,
+      // This optimization splits block without update PDT, causing PDT cannot
+      // be updated correctly in the following splitKnownCriticalEdge. 
+      // Hence, we set PDT to nullptr here.
+      ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, nullptr, &LI,
                                          &MSSAU, "xsan.loop.exit");
       LoopChanged = true;
     }
@@ -1514,10 +1521,11 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
         // a critical edge, which requires |succ(pred)| > 1 or |pred(succ)| > 1.
 
         // Update ExitBlock
-        // This optimization splits block without update PDT, causing PDT cannot be updated correctly
-        // in the following splitKnownCriticalEdge. Hence, we set PDT to nullptr here.
-        ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, nullptr, &LI,
-                                           &MSSAU, "xsan.loop.exit");
+        // This optimization splits block without update PDT, causing PDT cannot
+        // be updated correctly in the following splitKnownCriticalEdge.
+        // Hence, we set PDT to nullptr here.
+        ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, nullptr,
+                                           &LI, &MSSAU, "xsan.loop.exit");
 
         LoopChanged = true;
       }
