@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "utils/PatchHelper.h"
+#include "xsan_common.h"
 
 using namespace clang;
 using namespace clang::driver;
@@ -256,7 +257,8 @@ bool SanitizerArgs::needsUbsanRt() const {
   // Rt All of these include ubsan.
   if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
       needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||
-      (needsScudoRt() && !requiresMinimalRuntime()) || isXsanEnabled())
+      (needsScudoRt() && !requiresMinimalRuntime()) ||
+      (isXsanEnabled() && getSanType() != UBSan))
     return false;
 
   return (Sanitizers.Mask & NeedsUbsanRt & ~TrapSanitizers.Mask) ||
