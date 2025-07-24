@@ -2119,10 +2119,10 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   void visit(Instruction &I) {
     // if (auto Data = __xsan::ReplacedAlloca::get(I); Data /* && !Data->Arg */)
     //   return visitAllocaInst(I);
-    if (auto *MC = dyn_cast<MemCpyInst>(&I); MC && __xsan::CopyArgs::is(*MC)) {
-      CpyReplacedArgsList.push_back({cast<Instruction>(MC->getRawDest()), MC});
-      return;
-    }
+    // if (auto *MC = dyn_cast<MemCpyInst>(&I); MC && __xsan::CopyArgs::is(*MC)) {
+    //   CpyReplacedArgsList.push_back({cast<Instruction>(MC->getRawDest()), MC});
+    //   return;
+    // }
     if (auto Data = __xsan::ReplacedAtomic::get(I))
       return visitReplacedAtomicInst(I, Data.value());
     if (visitUBSanReplacedInst(I))
