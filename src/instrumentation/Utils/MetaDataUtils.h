@@ -39,7 +39,11 @@ struct HasMetaDataExtra<MetaT, std::void_t<typename MetaT::Extra>>
 template <typename MetaT, typename InstT = llvm::Instruction>
 class MetaDataHelperBase {
 public:
-  static bool is(const InstT &I);
+  static bool is(const InstT &I) { return ID && I.hasMetadata(ID); }
+  static void drop(InstT &I) {
+    if (ID)
+      I.setMetadata(ID, nullptr);
+  }
 
 protected:
   static unsigned ID;
@@ -57,6 +61,7 @@ class MetaDataHelper<MetaT, InstT, false>
 
 public:
   using MetaDataHelperBase<MetaT, InstT>::is;
+  using MetaDataHelperBase<MetaT, InstT>::drop;
 
   static void set(InstT &I);
 };
@@ -68,6 +73,7 @@ class MetaDataHelper<MetaT, InstT, true>
 
 public:
   using MetaDataHelperBase<MetaT, InstT>::is;
+  using MetaDataHelperBase<MetaT, InstT>::drop;
   using Extra = typename MetaT::Extra;
 
   static llvm::Optional<Extra> get(const InstT &I);
@@ -87,7 +93,8 @@ struct DelegateToXSanMeta {
 struct ReplacedAllocaExtra {
   size_t Len;
   llvm::Align Align;
-  llvm::Argument *Arg; // valid for replaced argument
+  /// `Argument *Arg` is invalid, if required, use param idx instead.
+  /// Argument *Arg;
 };
 
 struct ReplacedAllocaMeta : MetaDataExtra<ReplacedAllocaExtra> {
@@ -121,12 +128,30 @@ struct UBSanInstMeta {
   static constexpr char Name[] = "xsan.ubsan";
 };
 
+// ---------------------- NoSanitize --------------------------------
+
+struct NoSanitizeMeta {
+  static constexpr char Name[] = "nosanitize";
+};
+
 // --------------- MetaDataHelper Specializations --------------------
+
+/// Specializations for nosanitize
+template <> class MetaDataHelper<NoSanitizeMeta> {
+  static constexpr unsigned ID = llvm::LLVMContext::MD_nosanitize;
+
+public:
+  static bool is(const llvm::Instruction &I) { return I.hasMetadata(ID); }
+  static void drop(llvm::Instruction &I) { I.setMetadata(ID, nullptr); }
+  static void set(llvm::Instruction &I) {
+    I.setMetadata(ID, llvm::MDNode::get(I.getContext(), llvm::None));
+  }
+};
 
 using DelegateToXSan = MetaDataHelper<DelegateToXSanMeta>;
 using ReplacedAlloca = MetaDataHelper<ReplacedAllocaMeta>;
 using CopyArgs = MetaDataHelper<CopyArgsMeta, llvm::MemCpyInst>;
 using ReplacedAtomic = MetaDataHelper<ReplacedAtomicMeta>;
 using UBSanInst = MetaDataHelper<UBSanInstMeta>;
-
+using NoSanitize = MetaDataHelper<NoSanitizeMeta>;
 } // namespace __xsan

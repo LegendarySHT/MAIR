@@ -11,11 +11,6 @@ template <typename MetaT, typename InstT>
 unsigned MetaDataHelperBase<MetaT, InstT>::ID = 0;
 
 template <typename MetaT, typename InstT>
-bool MetaDataHelperBase<MetaT, InstT>::is(const InstT &I) {
-  return ID && I.hasMetadata(ID);
-}
-
-template <typename MetaT, typename InstT>
 void MetaDataHelper<MetaT, InstT, false>::set(InstT &I) {
   // We cannot use func-local static var to init the Ctx, as it might differ for
   // different Modules.
@@ -69,8 +64,9 @@ MetaDataExtra<ReplacedAllocaExtra>::pack(LLVMContext &Ctx,
 
   Metadata *LenMetadata = ConstantAsMetadata::get(LenConst);
   Metadata *AlignMetadata = ConstantAsMetadata::get(AlignConst);
-  Metadata *ArgMetadata = Data.Arg ? ValueAsMetadata::get(Data.Arg) : nullptr;
-  return MDNode::get(Ctx, {LenMetadata, AlignMetadata, ArgMetadata});
+  // Metadata *ArgMetadata = Data.Arg ? ValueAsMetadata::get(Data.Arg) :
+  // nullptr;
+  return MDNode::get(Ctx, {LenMetadata, AlignMetadata});
 }
 
 template <>
@@ -87,11 +83,11 @@ ReplacedAllocaExtra MetaDataExtra<ReplacedAllocaExtra>::unpack(MDNode *MD) {
   ConstantInt *AlignConstInt = cast<ConstantInt>(AlignConstMD->getValue());
   Data.Align = AlignConstInt->getAlignValue();
 
-  Metadata *ArgMD = MD->getOperand(2).get();
-  if (auto *ValMD = ArgMD ? dyn_cast<ValueAsMetadata>(ArgMD) : nullptr)
-    Data.Arg = cast<Argument>(ValMD->getValue());
-  else
-    Data.Arg = nullptr;
+  // Metadata *ArgMD = MD->getOperand(2).get();
+  // if (auto *ValMD = ArgMD ? dyn_cast<ValueAsMetadata>(ArgMD) : nullptr)
+  //   Data.Arg = cast<Argument>(ValMD->getValue());
+  // else
+  //   Data.Arg = nullptr;
 
   return Data;
 }

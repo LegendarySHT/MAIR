@@ -1252,7 +1252,8 @@ Value *AddressSanitizer::memToShadow(Value *Shadow, IRBuilder<> &IRB) {
 
 // Instrument memset/memmove/memcpy
 void AddressSanitizer::instrumentMemIntrinsic(MemIntrinsic *MI) {
-  __xsan::InstrumentationIRBuilder IRB(MI);
+  /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+  IRBuilder<> IRB(MI);
   if (isa<MemTransferInst>(MI)) {
     IRB.CreateCall(
         isa<MemMoveInst>(MI) ? AsanMemmove : AsanMemcpy,
@@ -1671,8 +1672,11 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
     // path is rarely taken. This seems to be the case for SPEC benchmarks.
     Instruction *CheckTerm = SplitBlockAndInsertIfThen(
         Cmp, InsertBefore, false, MDBuilder(*C).createBranchWeights(1, 100000));
+    __xsan::NoSanitize::set(
+        *cast<Instruction>(Cmp->getUniqueUndroppableUser()));
     assert(cast<BranchInst>(CheckTerm)->isUnconditional());
     BasicBlock *NextBB = CheckTerm->getSuccessor(0);
+    __xsan::NoSanitize::set(*CheckTerm);
     IRB.SetInsertPoint(CheckTerm);
     Value *Cmp2 = createSlowPathCmp(IRB, AddrLong, ShadowValue, TypeSize);
     if (Recover) {
@@ -1682,11 +1686,14 @@ void AddressSanitizer::instrumentAddress(Instruction *OrigIns,
         BasicBlock::Create(*C, "", NextBB->getParent(), NextBB);
       CrashTerm = new UnreachableInst(*C, CrashBlock);
       BranchInst *NewTerm = BranchInst::Create(CrashBlock, NextBB, Cmp2);
+      __xsan::NoSanitize::set(*NewTerm);
       ReplaceInstWithInst(CheckTerm, NewTerm);
     }
   } else {
     CrashTerm = SplitBlockAndInsertIfThen(Cmp, InsertBefore, !Recover);
   }
+
+  __xsan::NoSanitize::set(*CrashTerm);
 
   Instruction *Crash = generateCrashCode(CrashTerm, AddrLong, IsWrite,
                                          AccessSizeIndex, SizeArgument, Exp);
@@ -2980,7 +2987,17 @@ void FunctionStackPoisoner::copyArgsPassedByValToAllocas() {
     CopyInsertPoint = CopyInsertPoint->getNextNode();
     assert(CopyInsertPoint);
   }
-  __xsan::InstrumentationIRBuilder IRB(CopyInsertPoint);
+  /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+  /// replacement.
+  /// void foo(Foo *arg) {
+  ///   use(arg);
+  /// }
+  /// -->
+  /// void foo(Foo *arg) {
+  ///   Foo newFoo = *arg;
+  ///   use(&newFoo);
+  /// }
+  IRBuilder<> IRB(CopyInsertPoint);
   const DataLayout &DL = F.getParent()->getDataLayout();
   for (Argument &Arg : F.args()) {
     if (Arg.hasByValAttr()) {
@@ -3000,7 +3017,7 @@ void FunctionStackPoisoner::copyArgsPassedByValToAllocas() {
           IRB.CreateMemCpy(AI, Alignment, &Arg, Alignment, AllocSize));
 
       __xsan::CopyArgs::set(*MC);
-      __xsan::ReplacedAlloca::set(*AI, {AllocSize, Alignment, &Arg});
+      __xsan::ReplacedAlloca::set(*AI, {AllocSize, Alignment});
     }
   }
 }
@@ -3242,7 +3259,11 @@ void FunctionStackPoisoner::processStaticAllocas() {
           Constant::getNullValue(IRB.getInt32Ty()));
       Instruction *Term =
           SplitBlockAndInsertIfThen(UseAfterReturnIsEnabled, InsBefore, false);
-      __xsan::InstrumentationIRBuilder IRBIf(Term);
+      __xsan::NoSanitize::set(*cast<Instruction>(
+          UseAfterReturnIsEnabled->getUniqueUndroppableUser()));
+      /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+      /// replacement.
+      IRBuilder<> IRBIf(Term);
       StackMallocIdx = StackMallocSizeClass(LocalStackSize);
       assert(StackMallocIdx <= kMaxAsanStackMallocSizeClass);
       Value *FakeStackValue =
@@ -3256,6 +3277,7 @@ void FunctionStackPoisoner::processStaticAllocas() {
       // void *FakeStack = __asan_stack_malloc_N(LocalStackSize);
       // void *LocalStackBase = (FakeStack) ? FakeStack :
       //                        alloca(LocalStackSize);
+      auto Scoper = IRB.scopedNotTagNoSanitize();
       StackMallocIdx = StackMallocSizeClass(LocalStackSize);
       FakeStack = IRB.CreateCall(AsanStackMallocFunc[StackMallocIdx],
                                  ConstantInt::get(IntptrTy, LocalStackSize));
@@ -3264,17 +3286,20 @@ void FunctionStackPoisoner::processStaticAllocas() {
         IRB.CreateICmpEQ(FakeStack, Constant::getNullValue(IntptrTy));
     Instruction *Term =
         SplitBlockAndInsertIfThen(NoFakeStack, InsBefore, false);
-    __xsan::InstrumentationIRBuilder IRBIf(Term);
+    __xsan::NoSanitize::set(
+        *cast<Instruction>(NoFakeStack->getUniqueUndroppableUser()));
+    IRBuilder<> IRBIf(Term);
     Value *AllocaValue =
         DoDynamicAlloca ? createAllocaForLayout(IRBIf, L, true) : StaticAlloca;
-
     IRB.SetInsertPoint(InsBefore);
     LocalStackBase = createPHI(IRB, NoFakeStack, AllocaValue, Term, FakeStack);
+    __xsan::NoSanitize::drop(*cast<Instruction>(LocalStackBase));
     IRB.CreateStore(LocalStackBase, LocalStackBaseAlloca);
     DIExprFlags |= DIExpression::DerefBefore;
   } else {
     // void *FakeStack = nullptr;
     // void *LocalStackBase = alloca(LocalStackSize);
+    auto Scoper = IRB.scopedNotTagNoSanitize();
     FakeStack = ConstantInt::get(IntptrTy, 0);
     LocalStackBase =
         DoDynamicAlloca ? createAllocaForLayout(IRB, L, true) : StaticAlloca;
@@ -3292,20 +3317,26 @@ void FunctionStackPoisoner::processStaticAllocas() {
          "Variable descriptions relative to ASan stack base will be dropped");
 
   // Replace Alloca instructions with base+offset.
-  for (const auto &Desc : SVD) {
-    AllocaInst *AI = Desc.AI;
-    replaceDbgDeclare(AI, LocalStackBaseAllocaPtr, DIB, DIExprFlags,
-                      Desc.Offset);
-    Value *NewAllocaPtr = IRB.CreateIntToPtr(
-        IRB.CreateAdd(LocalStackBase, ConstantInt::get(IntptrTy, Desc.Offset)),
-        AI->getType());
-    AI->replaceAllUsesWith(NewAllocaPtr);
-    NewAllocaPtr->takeName(AI);
-    if (MDNode *MD = __xsan::ReplacedAlloca::getMD(*AI)) {
-      __xsan::ReplacedAlloca::setMD(*cast<Instruction>(NewAllocaPtr), MD);
-    } else {
-      __xsan::ReplacedAlloca::set(*cast<Instruction>(NewAllocaPtr),
-                                  {Desc.Size, Align(Desc.Alignment), nullptr});
+  {
+    /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+    /// replacement.
+    auto Scoper = IRB.scopedNotTagNoSanitize();
+    for (const auto &Desc : SVD) {
+      AllocaInst *AI = Desc.AI;
+      replaceDbgDeclare(AI, LocalStackBaseAllocaPtr, DIB, DIExprFlags,
+                        Desc.Offset);
+      Value *NewAllocaPtr = IRB.CreateIntToPtr(
+          IRB.CreateAdd(LocalStackBase,
+                        ConstantInt::get(IntptrTy, Desc.Offset)),
+          AI->getType());
+      AI->replaceAllUsesWith(NewAllocaPtr);
+      NewAllocaPtr->takeName(AI);
+      if (MDNode *MD = __xsan::ReplacedAlloca::getMD(*AI)) {
+        __xsan::ReplacedAlloca::setMD(*cast<Instruction>(NewAllocaPtr), MD);
+      } else {
+        __xsan::ReplacedAlloca::set(*cast<Instruction>(NewAllocaPtr),
+                                    {Desc.Size, Align(Desc.Alignment)});
+      }
     }
   }
 
@@ -3472,6 +3503,10 @@ void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
 
   Value *NewSize = IRB.CreateAdd(OldSize, AdditionalChunkSize);
 
+  /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+  /// replacement.
+  auto Scoper = IRB.scopedNotTagNoSanitize();
+
   // Insert new alloca with new NewSize and Alignment params.
   AllocaInst *NewAlloca = IRB.CreateAlloca(IRB.getInt8Ty(), NewSize);
   NewAlloca->setAlignment(Alignment);
@@ -3482,11 +3517,15 @@ void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
                     ConstantInt::get(IntptrTy, Alignment.value()));
 
   // Insert __asan_alloca_poison call for new created alloca.
-  IRB.CreateCall(AsanAllocaPoisonFunc, {NewAddress, OldSize});
+  __xsan::NoSanitize::set(
+      *IRB.CreateCall(AsanAllocaPoisonFunc, {NewAddress, OldSize}));
 
   // Store the last alloca's address to DynamicAllocaLayout. We'll need this
   // for unpoisoning stuff.
-  IRB.CreateStore(IRB.CreatePtrToInt(NewAlloca, IntptrTy), DynamicAllocaLayout);
+  auto *NewAllocUptr = IRB.CreatePtrToInt(NewAlloca, IntptrTy);
+  /// NewAlloca is not a constant, so the cast must be an IR instruction.
+  __xsan::NoSanitize::set(*cast<Instruction>(NewAllocUptr));
+  __xsan::NoSanitize::set(*IRB.CreateStore(NewAllocUptr, DynamicAllocaLayout));
 
   Value *NewAddressPtr = IRB.CreateIntToPtr(NewAddress, AI->getType());
 

@@ -83,6 +83,8 @@ struct DefaultHooks {
   ALWAYS_INLINE static void OnXsanFreeHook(uptr ptr, uptr size,
                                            BufferedStackTrace *stack) {}
   ALWAYS_INLINE static void OnXsanAllocFreeTailHook(uptr pc) {}
+  // ASan replaces allocs with fake stack frames, so we need to track them.
+  // E.g., MSan needs to poison the fake stack frames.
   ALWAYS_INLINE static void OnFakeStackAlloc(uptr addr, uptr size) {}
   ALWAYS_INLINE static void OnFakeStackFree(uptr addr, uptr size) {}
   ALWAYS_INLINE static void OnFakeStackDestory(uptr addr, uptr size) {}

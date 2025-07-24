@@ -1779,8 +1779,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       if (I->getMetadata(LLVMContext::MD_nosanitize) && !Data &&
           !llvm::is_contained(RealArithResults, I))
         return getCleanShadow(V);
-      if (Data && Data->Arg)
-        return getReplacedArgsShadow(I, Data.value());
+      // if (Data && Data->Arg)
+      //   return getReplacedArgsShadow(I, Data.value());
       // For instructions the shadow is already stored in the map.
       Value *Shadow = ShadowMap[V];
       if (!Shadow) {
@@ -1885,97 +1885,101 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     return getCleanShadow(V);
   }
 
-  Value *getReplacedArgsShadow(Instruction *I,
-                               const __xsan::ReplacedAlloca::Extra &Data) {
-    // For arguments we compute the shadow on demand and store it in the map.
-    Value *&ShadowPtr = ShadowMap[I];
-    if (ShadowPtr)
-      return ShadowPtr;
-    Function *F = Data.Arg->getParent();
-    auto *It = find_if(CpyReplacedArgsList,
-                       [I](decltype(CpyReplacedArgsList)::const_reference E) {
-                         return E.first == I;
-                       });
-    assert(It != CpyReplacedArgsList.end() &&
-           "memcpy inserted by ASan should be visit before this");
-    NextNodeIRBuilder EntryIRB(It->second);
-    unsigned ArgOffset = 0;
-    const DataLayout &DL = F->getParent()->getDataLayout();
-    for (auto &FArg : F->args()) {
-      if (!FArg.getType()->isSized()) {
-        LLVM_DEBUG(dbgs() << "Arg is not sized\n");
-        continue;
-      }
+  /// TODO: remove this function
+  // Value *getReplacedArgsShadow(Instruction *I,
+  //                              const __xsan::ReplacedAlloca::Extra &Data) {
+  //   // For arguments we compute the shadow on demand and store it in the map.
+  //   Value *&ShadowPtr = ShadowMap[I];
+  //   if (ShadowPtr)
+  //     return ShadowPtr;
+  //   Function *F = Data.Arg->getParent();
+  //   auto *It = find_if(CpyReplacedArgsList,
+  //                      [I](decltype(CpyReplacedArgsList)::const_reference E)
+  //                      {
+  //                        return E.first == I;
+  //                      });
+  //   assert(It != CpyReplacedArgsList.end() &&
+  //          "memcpy inserted by ASan should be visit before this");
+  //   NextNodeIRBuilder EntryIRB(It->second);
+  //   unsigned ArgOffset = 0;
+  //   const DataLayout &DL = F->getParent()->getDataLayout();
+  //   for (auto &FArg : F->args()) {
+  //     if (!FArg.getType()->isSized()) {
+  //       LLVM_DEBUG(dbgs() << "Arg is not sized\n");
+  //       continue;
+  //     }
 
-      unsigned Size = FArg.hasByValAttr()
-                          ? DL.getTypeAllocSize(FArg.getParamByValType())
-                          : DL.getTypeAllocSize(FArg.getType());
+  //     unsigned Size = FArg.hasByValAttr()
+  //                         ? DL.getTypeAllocSize(FArg.getParamByValType())
+  //                         : DL.getTypeAllocSize(FArg.getType());
 
-      if (Data.Arg == &FArg) {
-        bool Overflow = ArgOffset + Size > kParamTLSSize;
-        if (FArg.hasByValAttr()) {
-          // ByVal pointer itself has clean shadow. We copy the actual
-          // argument shadow to the underlying memory.
-          // Figure out maximal valid memcpy alignment.
-          const Align ArgAlign = DL.getValueOrABITypeAlignment(
-              MaybeAlign(FArg.getParamAlignment()), FArg.getParamByValType());
-          Value *CpShadowPtr, *CpOriginPtr;
-          std::tie(CpShadowPtr, CpOriginPtr) =
-              getShadowOriginPtr(I, EntryIRB, EntryIRB.getInt8Ty(), ArgAlign,
-                                 /*isStore*/ true);
-          if (!PropagateShadow || Overflow) {
-            // ParamTLS overflow.
-            EntryIRB.CreateMemSet(CpShadowPtr,
-                                  Constant::getNullValue(EntryIRB.getInt8Ty()),
-                                  Size, ArgAlign);
-          } else {
-            Value *Base = getShadowPtrForArgument(&FArg, EntryIRB, ArgOffset);
-            const Align CopyAlign = std::min(ArgAlign, kShadowTLSAlignment);
-            Value *Cpy = EntryIRB.CreateMemCpy(CpShadowPtr, CopyAlign, Base,
-                                               CopyAlign, Size);
-            LLVM_DEBUG(dbgs() << "  ByValCpy: " << *Cpy << "\n");
-            (void)Cpy;
+  //     if (Data.Arg == &FArg) {
+  //       bool Overflow = ArgOffset + Size > kParamTLSSize;
+  //       if (FArg.hasByValAttr()) {
+  //         // ByVal pointer itself has clean shadow. We copy the actual
+  //         // argument shadow to the underlying memory.
+  //         // Figure out maximal valid memcpy alignment.
+  //         const Align ArgAlign = DL.getValueOrABITypeAlignment(
+  //             MaybeAlign(FArg.getParamAlignment()),
+  //             FArg.getParamByValType());
+  //         Value *CpShadowPtr, *CpOriginPtr;
+  //         std::tie(CpShadowPtr, CpOriginPtr) =
+  //             getShadowOriginPtr(I, EntryIRB, EntryIRB.getInt8Ty(), ArgAlign,
+  //                                /*isStore*/ true);
+  //         if (!PropagateShadow || Overflow) {
+  //           // ParamTLS overflow.
+  //           EntryIRB.CreateMemSet(CpShadowPtr,
+  //                                 Constant::getNullValue(EntryIRB.getInt8Ty()),
+  //                                 Size, ArgAlign);
+  //         } else {
+  //           Value *Base = getShadowPtrForArgument(&FArg, EntryIRB,
+  //           ArgOffset); const Align CopyAlign = std::min(ArgAlign,
+  //           kShadowTLSAlignment); Value *Cpy =
+  //           EntryIRB.CreateMemCpy(CpShadowPtr, CopyAlign, Base,
+  //                                              CopyAlign, Size);
+  //           LLVM_DEBUG(dbgs() << "  ByValCpy: " << *Cpy << "\n");
+  //           (void)Cpy;
 
-            if (MS.TrackOrigins) {
-              Value *OriginPtr =
-                  getOriginPtrForArgument(&FArg, EntryIRB, ArgOffset);
-              // FIXME: OriginSize should be:
-              // alignTo(V % kMinOriginAlignment + Size, kMinOriginAlignment)
-              unsigned OriginSize = alignTo(Size, kMinOriginAlignment);
-              EntryIRB.CreateMemCpy(
-                  CpOriginPtr,
-                  /* by getShadowOriginPtr */ kMinOriginAlignment, OriginPtr,
-                  /* by origin_tls[ArgOffset] */ kMinOriginAlignment,
-                  OriginSize);
-            }
-          }
-        }
+  //           if (MS.TrackOrigins) {
+  //             Value *OriginPtr =
+  //                 getOriginPtrForArgument(&FArg, EntryIRB, ArgOffset);
+  //             // FIXME: OriginSize should be:
+  //             // alignTo(V % kMinOriginAlignment + Size, kMinOriginAlignment)
+  //             unsigned OriginSize = alignTo(Size, kMinOriginAlignment);
+  //             EntryIRB.CreateMemCpy(
+  //                 CpOriginPtr,
+  //                 /* by getShadowOriginPtr */ kMinOriginAlignment, OriginPtr,
+  //                 /* by origin_tls[ArgOffset] */ kMinOriginAlignment,
+  //                 OriginSize);
+  //           }
+  //         }
+  //       }
 
-        if (!PropagateShadow || Overflow || FArg.hasByValAttr() ||
-            (MS.EagerChecks && FArg.hasAttribute(Attribute::NoUndef))) {
-          ShadowPtr = getCleanShadow(I);
-          setOrigin(I, getCleanOrigin());
-        } else {
-          // Shadow over TLS
-          Value *Base = getShadowPtrForArgument(&FArg, EntryIRB, ArgOffset);
-          ShadowPtr = EntryIRB.CreateAlignedLoad(getShadowTy(&FArg), Base,
-                                                 kShadowTLSAlignment);
-          if (MS.TrackOrigins) {
-            Value *OriginPtr =
-                getOriginPtrForArgument(&FArg, EntryIRB, ArgOffset);
-            setOrigin(I, EntryIRB.CreateLoad(MS.OriginTy, OriginPtr));
-          }
-        }
-        LLVM_DEBUG(dbgs() << "  ARG:    " << FArg << " ==> " << *ShadowPtr
-                          << "\n");
-        break;
-      }
+  //       if (!PropagateShadow || Overflow || FArg.hasByValAttr() ||
+  //           (MS.EagerChecks && FArg.hasAttribute(Attribute::NoUndef))) {
+  //         ShadowPtr = getCleanShadow(I);
+  //         setOrigin(I, getCleanOrigin());
+  //       } else {
+  //         // Shadow over TLS
+  //         Value *Base = getShadowPtrForArgument(&FArg, EntryIRB, ArgOffset);
+  //         ShadowPtr = EntryIRB.CreateAlignedLoad(getShadowTy(&FArg), Base,
+  //                                                kShadowTLSAlignment);
+  //         if (MS.TrackOrigins) {
+  //           Value *OriginPtr =
+  //               getOriginPtrForArgument(&FArg, EntryIRB, ArgOffset);
+  //           setOrigin(I, EntryIRB.CreateLoad(MS.OriginTy, OriginPtr));
+  //         }
+  //       }
+  //       LLVM_DEBUG(dbgs() << "  ARG:    " << FArg << " ==> " << *ShadowPtr
+  //                         << "\n");
+  //       break;
+  //     }
 
-      ArgOffset += alignTo(Size, kShadowTLSAlignment);
-    }
-    assert(ShadowPtr && "Could not find shadow for an argument");
-    return ShadowPtr;
-  }
+  //     ArgOffset += alignTo(Size, kShadowTLSAlignment);
+  //   }
+  //   assert(ShadowPtr && "Could not find shadow for an argument");
+  //   return ShadowPtr;
+  // }
 
   /// Get the shadow for i-th argument of the instruction I.
   Value *getShadow(Instruction *I, int i) {
@@ -2113,8 +2117,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   // ------------------- Visitors.
   using InstVisitor<MemorySanitizerVisitor>::visit;
   void visit(Instruction &I) {
-    if (auto Data = __xsan::ReplacedAlloca::get(I); Data && !Data->Arg)
-      return visitAllocaInst(I);
+    // if (auto Data = __xsan::ReplacedAlloca::get(I); Data /* && !Data->Arg */)
+    //   return visitAllocaInst(I);
     if (auto *MC = dyn_cast<MemCpyInst>(&I); MC && __xsan::CopyArgs::is(*MC)) {
       CpyReplacedArgsList.push_back({cast<Instruction>(MC->getRawDest()), MC});
       return;
@@ -2856,7 +2860,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   /// Similar situation exists for memcpy and memset.
   void visitMemMoveInst(MemMoveInst &I) {
     getShadow(I.getArgOperand(1)); // Ensure shadow initialized
-    InstrumentationIRBuilder IRB(&I);
+    /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+    IRBuilder<> IRB(&I);
     IRB.CreateCall(
         MS.MemmoveFn,
         {IRB.CreatePointerCast(I.getArgOperand(0), IRB.getInt8PtrTy()),
@@ -2871,7 +2876,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
   // alignment.
   void visitMemCpyInst(MemCpyInst &I) {
     getShadow(I.getArgOperand(1)); // Ensure shadow initialized
-    InstrumentationIRBuilder IRB(&I);
+    /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+    IRBuilder<> IRB(&I);
     IRB.CreateCall(
         MS.MemcpyFn,
         {IRB.CreatePointerCast(I.getArgOperand(0), IRB.getInt8PtrTy()),
@@ -2882,7 +2888,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
 
   // Same as memcpy.
   void visitMemSetInst(MemSetInst &I) {
-    InstrumentationIRBuilder IRB(&I);
+    /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+    IRBuilder<> IRB(&I);
     IRB.CreateCall(
         MS.MemsetFn,
         {IRB.CreatePointerCast(I.getArgOperand(0), IRB.getInt8PtrTy()),

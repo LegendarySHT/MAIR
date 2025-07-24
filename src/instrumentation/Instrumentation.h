@@ -33,6 +33,43 @@ bool checkIfAlreadyInstrumented(Module &M, StringRef Flag);
 
 // Use to ensure the inserted instrumentation has a !nosanitize metadata.
 struct InstrumentationIRBuilder : public IRBuilder<> {
+private:
+  static void ensureNoSanitize(IRBuilder<> &IRB) {
+    // Because `AddOrRemoveMetadataToCopy` is private, we can only use it by the
+    // delegation of `CollectMetadataToCopy`.
+    // Therefore, we create a temporary instruction with the desired !nosanitize
+    // metadata.
+    static llvm::ReturnInst *I = [&IRB]() {
+      auto *I = llvm::ReturnInst::Create(IRB.getContext());
+      I->setMetadata(LLVMContext::MD_nosanitize,
+                     MDNode::get(I->getContext(), None));
+      return I;
+    }();
+    // Every instructions created by this IRBuilder will have this metadata.
+    IRB.CollectMetadataToCopy(I, {LLVMContext::MD_nosanitize});
+    // AddOrRemoveMetadataToCopy(MD_nosanitize, MDNode::get(Context, None));
+  }
+
+  static void resetEnsureNoSanitize(IRBuilder<> &IRB) {
+    // Because `AddOrRemoveMetadataToCopy` is private, we can only use it by the
+    // delegation of `CollectMetadataToCopy`.
+    // Therefore, we create a temporary instruction with the desired !nosanitize
+    // metadata.
+    static llvm::ReturnInst *I = llvm::ReturnInst::Create(IRB.getContext());
+    // Every instructions created by this IRBuilder will have this metadata.
+    IRB.CollectMetadataToCopy(I, {LLVMContext::MD_nosanitize});
+    // AddOrRemoveMetadataToCopy(MD_nosanitize, nullptr);
+  }
+
+  struct ScopedNotTagNoSanitize {
+    IRBuilder<> &IRB;
+    ScopedNotTagNoSanitize(IRBuilder<> &IRB) : IRB(IRB) {
+      resetEnsureNoSanitize(IRB);
+    }
+    ~ScopedNotTagNoSanitize() { ensureNoSanitize(IRB); }
+  };
+
+public:
   static void ensureDebugInfo(IRBuilder<> &IRB, const Function &F) {
     if (IRB.getCurrentDebugLocation())
       return;
@@ -44,23 +81,6 @@ struct InstrumentationIRBuilder : public IRBuilder<> {
     if (IRB.getCurrentDebugLocation())
       return;
     IRB.SetCurrentDebugLocation(I.getDebugLoc());
-  }
-
-  static void ensureNoSanitize(IRBuilder<> &IRB) {
-    // Because `AddOrRemoveMetadataToCopy` is private, we can only use it by the
-    // delegation of `CollectMetadataToCopy`.
-    // Therefore, we create a temporary instruction with the desired !nosanitize
-    // metadata.
-    llvm::ReturnInst *I = llvm::ReturnInst::Create(IRB.getContext());
-    I->setMetadata(LLVMContext::MD_nosanitize,
-                   MDNode::get(I->getContext(), None));
-    // Every instructions created by this IRBuilder will have this metadata.
-    IRB.CollectMetadataToCopy(I, {LLVMContext::MD_nosanitize});
-    // this->AddOrRemoveMetadataToCopy(LLVMContext::MD_nosanitize,MDNode::get(Context,
-    // None));
-
-    // We don't need the temporary instruction anymore.
-    delete I;
   }
 
   explicit InstrumentationIRBuilder(LLVMContext &C) : IRBuilder<>(C) {
@@ -76,6 +96,10 @@ struct InstrumentationIRBuilder : public IRBuilder<> {
       : IRBuilder<>(TheBB, IP) {
     ensureDebugInfo(*this, *TheBB->getParent());
     ensureNoSanitize(*this);
+  }
+
+  ScopedNotTagNoSanitize scopedNotTagNoSanitize() {
+    return ScopedNotTagNoSanitize(*this);
   }
 };
 

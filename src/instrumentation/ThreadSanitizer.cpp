@@ -725,7 +725,8 @@ static ConstantInt *createOrdering(IRBuilder<> *IRB, AtomicOrdering ord) {
 // replaced back with intrinsics. If that becomes wrong at some point,
 // we will need to call e.g. __tsan_memset to avoid the intrinsics.
 bool ThreadSanitizer::instrumentMemIntrinsic(Instruction *I) {
-  __xsan::InstrumentationIRBuilder IRB(I);
+  /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+  IRBuilder<> IRB(I);
   if (MemSetInst *M = dyn_cast<MemSetInst>(I)) {
     IRB.CreateCall(
         MemsetFn,
@@ -753,7 +754,8 @@ bool ThreadSanitizer::instrumentMemIntrinsic(Instruction *I) {
 // http://www.hpl.hp.com/personal/Hans_Boehm/c++mm/
 
 bool ThreadSanitizer::instrumentAtomic(Instruction *I, const DataLayout &DL) {
-  __xsan::InstrumentationIRBuilder IRB(I);
+  /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
+  IRBuilder<> IRB(I);
   if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
     Value *Addr = LI->getPointerOperand();
     Type *OrigTy = LI->getType();
