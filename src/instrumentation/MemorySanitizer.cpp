@@ -1775,12 +1775,10 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     if (Instruction *I = dyn_cast<Instruction>(V)) {
       if (!PropagateShadow)
         return getCleanShadow(V);
-      auto Data = __xsan::ReplacedAlloca::get(*I);
-      if (I->getMetadata(LLVMContext::MD_nosanitize) && !Data &&
+      if (I->getMetadata(LLVMContext::MD_nosanitize) &&
+          !__xsan::isReplacedInst(*I) &&
           !llvm::is_contained(RealArithResults, I))
         return getCleanShadow(V);
-      // if (Data && Data->Arg)
-      //   return getReplacedArgsShadow(I, Data.value());
       // For instructions the shadow is already stored in the map.
       Value *Shadow = ShadowMap[V];
       if (!Shadow) {

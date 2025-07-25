@@ -157,4 +157,11 @@ using CopyArgs = MetaDataHelper<CopyArgsMeta, llvm::MemCpyInst>;
 using ReplacedAtomic = MetaDataHelper<ReplacedAtomicMeta>;
 using UBSanInst = MetaDataHelper<UBSanInstMeta>;
 using NoSanitize = MetaDataHelper<NoSanitizeMeta>;
+
+/// ---------------------- Util Functions ----------------------------
+
+static inline bool isReplacedInst(const llvm::Instruction &I) {
+  return ReplacedAlloca::is(I) || ReplacedAtomic::is(I);
+}
+
 } // namespace __xsan
