@@ -19,6 +19,16 @@ template <typename MetaT>
 struct IsMetaData<MetaT, std::void_t<decltype(MetaT::Name)>> : std::true_type {
 };
 
+// If the type has an associated member 'DataMap', return true; Otherwise,
+// return false.
+template <typename MetaT, typename = void>
+struct UseDataMap : std::false_type {};
+template <typename MetaT>
+struct UseDataMap<MetaT, std::void_t<decltype(MetaT::DataMap)>>
+    : std::true_type {};
+
+// ---------------------- MetaData ----------------------------
+
 template <typename ExtraT> struct MetaDataExtra {
   using Extra = ExtraT;
   static llvm::MDNode *pack(llvm::LLVMContext &Ctx, const ExtraT &Data);

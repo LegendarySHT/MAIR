@@ -3,6 +3,7 @@
 #include <llvm/IR/InstrTypes.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Metadata.h>
+#include <mutex>
 
 using namespace llvm;
 
@@ -28,7 +29,10 @@ auto MetaDataHelper<MetaT, InstT, true>::get(const InstT &I)
   MDNode *MD;
   if (!ID || !(MD = I.getMetadata(ID)))
     return llvm::None;
-  return MetaDataExtra<Extra>::unpack(MD);
+  if constexpr (UseDataMap<MetaT>::value)
+    return MetaT::DataMap.lookup(&I);
+  else
+    return MetaDataExtra<Extra>::unpack(MD);
 }
 
 template <typename MetaT, typename InstT>
@@ -38,7 +42,29 @@ void MetaDataHelper<MetaT, InstT, true>::set(InstT &I, const Extra &Data) {
   llvm::LLVMContext &Ctx = I.getContext();
   if (!ID)
     ID = Ctx.getMDKindID(MetaT::Name);
-  I.setMetadata(ID, MetaDataExtra<Extra>::pack(Ctx, Data));
+  MDNode *MD;
+  if constexpr (UseDataMap<MetaT>::value) {
+    /// Thread-safe
+    static std::mutex Mutex;
+    // If the type has an associated member 'DataMap', we use it to store the
+    // data.
+    {
+      // Only lock the write, because read must be after write.
+      std::lock_guard<std::mutex> Lock(Mutex);
+      MetaT::DataMap[&I] = Data;
+    }
+    MD = llvm::MDNode::get(Ctx, llvm::None);
+  } else {
+    // Otherwise, we use MDNode to store the data.
+    MD = MetaDataExtra<Extra>::pack(Ctx, Data);
+  }
+  I.setMetadata(ID, MD);
+}
+
+template <typename MetaT, typename InstT>
+void MetaDataHelper<MetaT, InstT, true>::clear() {
+  if constexpr (UseDataMap<MetaT>::value)
+    MetaT::DataMap.clear();
 }
 
 template <typename MetaT, typename InstT>
