@@ -1,5 +1,8 @@
 #include "MetaDataUtils.h"
-#include "llvm/IR/Instruction.h"
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/InstrTypes.h>
+#include <llvm/IR/Instruction.h>
+#include <llvm/IR/Metadata.h>
 
 using namespace llvm;
 
@@ -47,6 +50,22 @@ template <typename MetaT, typename InstT>
 void MetaDataHelper<MetaT, InstT, true>::setMD(InstT &I, MDNode *MD) {
   if (ID)
     I.setMetadata(ID, MD);
+}
+
+// ---------------------- Operand Bundle Helper -------------------------
+
+template <typename MetaT, typename InstT, typename Enabler>
+llvm::OperandBundleDef
+OperandBundleHelper<MetaT, InstT, Enabler>::getBundle(const Extra &I) {
+  return OperandBundleDef(MetaT::Name, pack(I.getContext(), I));
+}
+
+template <typename MetaT, typename CallT, typename Enabler>
+llvm::Optional<typename MetaT::Extra>
+OperandBundleHelper<MetaT, CallT, Enabler>::get(const CallT &I) {
+  if (auto *Bundle = I.getOperandBundle(MetaT::Name))
+    return unpack(*Bundle);
+  return llvm::None;
 }
 
 // ---------------------- Replaced Alloca -------------------------
