@@ -136,42 +136,8 @@ ReplacedAllocaExtra MetaDataExtra<ReplacedAllocaExtra>::unpack(MDNode *MD) {
 
 // ---------------------- Replaced Atomic -------------------------
 
-template <>
-MDNode *
-MetaDataExtra<ReplacedAtomicExtra>::pack(LLVMContext &Ctx,
-                                         const ReplacedAtomicExtra &Data) {
-  Metadata *TypeMetadata = ConstantAsMetadata::get(
-      ConstantInt::get(Type::getInt32Ty(Ctx), static_cast<int>(Data.Type)));
-  Metadata *AddrMetadata = ValueAsMetadata::get(Data.Addr);
-  Metadata *ValMetadata = Data.Val ? ValueAsMetadata::get(Data.Val) : nullptr;
-  Metadata *AlignMetadata = ConstantAsMetadata::get(ConstantInt::get(
-      Type::getInt32Ty(Ctx), Data.Align ? Data.Align->value() : 0));
-
-  return MDNode::get(Ctx,
-                     {TypeMetadata, AddrMetadata, ValMetadata, AlignMetadata});
-}
-
-template <>
-ReplacedAtomicExtra MetaDataExtra<ReplacedAtomicExtra>::unpack(MDNode *MD) {
-  ReplacedAtomicExtra Data;
-
-  Metadata *TypeMD = MD->getOperand(0).get();
-  Data.Type = static_cast<ReplacedAtomicExtra::AtomicType>(
-      cast<ConstantInt>(cast<ConstantAsMetadata>(TypeMD)->getValue())
-          ->getZExtValue());
-
-  Metadata *AddrMD = MD->getOperand(1).get();
-  Data.Addr = cast<ValueAsMetadata>(AddrMD)->getValue();
-
-  Metadata *ValMD = MD->getOperand(2).get();
-  Data.Val = ValMD ? cast<ValueAsMetadata>(ValMD)->getValue() : nullptr;
-
-  Metadata *AlignMD = MD->getOperand(3).get();
-  Data.Align = cast<ConstantInt>(cast<ConstantAsMetadata>(AlignMD)->getValue())
-                   ->getMaybeAlignValue();
-
-  return Data;
-}
+llvm::DenseMap<llvm::Instruction *, ReplacedAtomicExtra>
+    ReplacedAtomicMeta::DataMap;
 
 // --------------- MetaDataHelper Specializations --------------------
 
@@ -183,10 +149,16 @@ ReplacedAtomicExtra MetaDataExtra<ReplacedAtomicExtra>::unpack(MDNode *MD) {
   template class MetaDataHelperBase<__VA_ARGS__>;                              \
   template class MetaDataHelper<__VA_ARGS__>;
 
+#define INSTANTIATE_OPERAND_BUNDLE_HELPER(...)                                 \
+  template class OperandBundleHelper<__VA_ARGS__>;
+
 INSTANTIATE_META_DATA_HELPER(DelegateToXSanMeta)
 INSTANTIATE_META_DATA_HELPER(ReplacedAllocaMeta)
 INSTANTIATE_META_DATA_HELPER(CopyArgsMeta, llvm::MemCpyInst)
 INSTANTIATE_META_DATA_HELPER(ReplacedAtomicMeta)
 INSTANTIATE_META_DATA_HELPER(UBSanInstMeta)
+
+#undef INSTANTIATE_META_DATA_HELPER
+#undef INSTANTIATE_OPERAND_BUNDLE_HELPER
 
 } // namespace __xsan

@@ -2226,15 +2226,14 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
       Value *ShadowPtr = nullptr, *OriginPtr = nullptr;
       if (PropagateShadow) {
         std::tie(ShadowPtr, OriginPtr) = getShadowOriginPtr(
-            Data.Addr, IRB, ShadowTy, Data.Align, /*isStore*/ false);
+            Data.getAddr(), IRB, ShadowTy, Data.Align, /*isStore*/ false);
         setShadow(&I, IRB.CreateAlignedLoad(ShadowTy, ShadowPtr, Data.Align,
                                             "_msld"));
       } else {
         setShadow(&I, getCleanShadow(&I));
       }
-
       if (ClCheckAccessAddress)
-        insertShadowCheck(Data.Addr, &I);
+        insertShadowCheck(Data.getAddr(), &I);
 
       if (MS.TrackOrigins) {
         if (PropagateShadow) {
@@ -2250,13 +2249,13 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     }
     case AtomicType::Store: {
       InstrumentationIRBuilder IRB(&I);
-      Value *Shadow = getCleanShadow(Data.Val);
+      Value *Shadow = getCleanShadow(Data.getVal());
       Value *ShadowPtr, *OriginPtr;
       Type *ShadowTy = Shadow->getType();
       const Align OriginAlignment =
           std::max(kMinOriginAlignment, Data.Align.value());
       std::tie(ShadowPtr, OriginPtr) = getShadowOriginPtr(
-          Data.Addr, IRB, ShadowTy, Data.Align, /*isStore*/ true);
+          Data.getAddr(), IRB, ShadowTy, Data.Align, /*isStore*/ true);
 
       StoreInst *NewSI = IRB.CreateAlignedStore(Shadow, ShadowPtr, Data.Align);
       LLVM_DEBUG(dbgs() << "  STORE: " << *NewSI << "\n");
@@ -2266,21 +2265,21 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     case AtomicType::RMW:
     case AtomicType::CAS: {
       InstrumentationIRBuilder IRB(&I);
-      Value *ShadowPtr =
-          getShadowOriginPtr(Data.Addr, IRB, Data.Val->getType(), Align(1),
-                             /*isStore*/ true)
-              .first;
+      Value *ShadowPtr = getShadowOriginPtr(Data.getAddr(), IRB,
+                                            Data.getVal()->getType(), Align(1),
+                                            /*isStore*/ true)
+                             .first;
 
       if (ClCheckAccessAddress)
-        insertShadowCheck(Data.Addr, &I);
+        insertShadowCheck(Data.getAddr(), &I);
 
       // Only test the conditional argument of cmpxchg instruction.
       // The other argument can potentially be uninitialized, but we can not
       // detect this situation reliably without possible false positives.
       if (Data.Type == AtomicType::CAS)
-        insertShadowCheck(Data.Val, &I);
+        insertShadowCheck(Data.getVal(), &I);
 
-      IRB.CreateStore(getCleanShadow(Data.Val), ShadowPtr);
+      IRB.CreateStore(getCleanShadow(Data.getVal()), ShadowPtr);
 
       setShadow(&I, getCleanShadow(&I));
       setOrigin(&I, getCleanOrigin());
