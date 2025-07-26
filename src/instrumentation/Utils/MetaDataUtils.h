@@ -174,32 +174,9 @@ struct ReplacedAtomicExtra {
   enum AtomicType { Load, Store, RMW, CAS };
 
   AtomicType Type;
+  const llvm::Use *AddrUse;
+  const llvm::Use *ValUse;
   llvm::MaybeAlign Align; // valid for load/store
-
-  ReplacedAtomicExtra(AtomicType Type, llvm::CallBase &Call,
-                      unsigned AddrIdx, unsigned ValIdx,
-                      llvm::MaybeAlign Align)
-      : Type(Type), Call(&Call), AddrIdx(AddrIdx), ValIdx(ValIdx), Align(Align) {
-  }
-  ReplacedAtomicExtra(AtomicType Type, llvm::CallBase &Call, unsigned AddrIdx,
-                      llvm::MaybeAlign Align)
-      : ReplacedAtomicExtra(Type, Call, AddrIdx, 0, Align) {}
-  ReplacedAtomicExtra(const ReplacedAtomicExtra &) = default;
-  ReplacedAtomicExtra(ReplacedAtomicExtra &&) = default;
-  ReplacedAtomicExtra &operator=(const ReplacedAtomicExtra &) = default;
-  ReplacedAtomicExtra &operator=(ReplacedAtomicExtra &&) = default;
-  ReplacedAtomicExtra() = default;
-
-  llvm::Value *getAddr() const { return Call->getArgOperand(AddrIdx); }
-  // is written val for store/rmw, is compare val for cas
-  llvm::Value *getVal() const { return Call->getArgOperand(ValIdx); }
-
-private:
-  /// We cannot store Addr/Val directly, as they are unstable, might be
-  /// replaced.
-  llvm::CallBase *Call;
-  unsigned AddrIdx;
-  unsigned ValIdx;
 };
 
 struct ReplacedAtomicMeta : MetaDataExtra<ReplacedAtomicExtra> {
