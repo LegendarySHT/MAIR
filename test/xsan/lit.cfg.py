@@ -30,9 +30,6 @@ if config.host_os == "Darwin" and config.apple_platform == "osx":
     default_xsan_opts += ["detect_leaks=1"]
 
 default_xsan_opts_str = ':'.join(default_xsan_opts)
-# Disable TSan's report in ASan's test pipeline.
-config.environment['TSAN_OPTIONS'] = "report_bugs=0"
-config.environment['XSAN_IN_ASAN_TEST'] = "1"
 if default_xsan_opts_str:
     config.environment["ASAN_OPTIONS"] = default_xsan_opts_str
     default_xsan_opts_str += ":"
