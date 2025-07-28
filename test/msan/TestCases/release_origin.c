@@ -1,6 +1,9 @@
-// RUN: %clang_msan -fsanitize-memory-track-origins=0 -O0 %s -o %t && env ASAN_OPTIONS=quarantine_size_mb=0:thread_local_quarantine_size_kb=0 MSAN_OPTIONS=soft_rss_limit_mb=28:verbosity=1:allocator_may_return_null=1 %run %t 2>&1 | FileCheck %s -implicit-check-not="soft rss limit" -check-prefixes=CHECK,NOORIG
-// RUN: %clang_msan -fsanitize-memory-track-origins=2 -O0 %s -o %t && env ASAN_OPTIONS=quarantine_size_mb=0:thread_local_quarantine_size_kb=0 MSAN_OPTIONS=soft_rss_limit_mb=46:verbosity=1:allocator_may_return_null=1 %run %t 2>&1 | FileCheck %s -implicit-check-not="soft rss limit" -check-prefixes=CHECK,ORIGIN
-
+// Fixed RSS Overhead: MSan: 4MB, ASan: 1 MB, TSan: 13MB (10 MB for ctx_placeholder)
+// Original RSS limit : 18 / 36 MB  --> New RSS limit : 32 / 50 MB
+// However, to let -msan pass this test too, we choose to disable TSan,
+// and update the RSS limit to 20 / 38 MB.
+// RUN: %clang_msan -fno-sanitize=thread -fsanitize-memory-track-origins=0 -O0 %s -o %t && env ASAN_OPTIONS=quarantine_size_mb=0:thread_local_quarantine_size_kb=0 MSAN_OPTIONS=soft_rss_limit_mb=20:verbosity=1:allocator_may_return_null=1 %run %t 2>&1 | FileCheck %s -implicit-check-not="soft rss limit" -check-prefixes=CHECK,NOORIG
+// RUN: %clang_msan -fno-sanitize=thread -fsanitize-memory-track-origins=2 -O0 %s -o %t && env ASAN_OPTIONS=quarantine_size_mb=0:thread_local_quarantine_size_kb=0 MSAN_OPTIONS=soft_rss_limit_mb=38:verbosity=1:allocator_may_return_null=1 %run %t 2>&1 | FileCheck %s -implicit-check-not="soft rss limit" -check-prefixes=CHECK,ORIGIN
 #include <assert.h>
 #include <sanitizer/allocator_interface.h>
 #include <stdio.h>
