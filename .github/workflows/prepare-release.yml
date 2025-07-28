@@ -8,6 +8,7 @@ permissions: write-all
 
 jobs:
   create-release-pr:
+    if: ${{ github.event.milestone.closed_issues == github.event.milestone.open_issues + github.event.milestone.closed_issues && github.event.milestone.closed_issues > 0 }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
