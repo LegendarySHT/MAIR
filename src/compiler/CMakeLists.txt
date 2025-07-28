@@ -11,6 +11,7 @@ add_dependencies(compiler xclang)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # Suppress warning: `u8* to char*`, which is common in clang_wrapper.c
   target_compile_options(xclang PRIVATE -Wno-pointer-sign)
+  target_compile_definitions(xclang PRIVATE ${XSAN_DEFINITIONS_TO_ADD})
 endif()
 
 # Set output directory
@@ -29,6 +30,7 @@ add_dependencies(compiler xgcc)
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # Suppress warning: `u8* to char*`, which is common in gcc_wrapper.c
   target_compile_options(xgcc PRIVATE -Wno-pointer-sign)
+  target_compile_definitions(xgcc PRIVATE ${XSAN_DEFINITIONS_TO_ADD})
 endif()
 
 set_target_properties(xgcc

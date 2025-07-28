@@ -36,6 +36,8 @@ endif()
 # Now, define options and add definitions in a loop for each sanitizer
 # The option() command will respect values loaded from the included config file,
 # or use the default OFF value if not set in the config file.
+# Now we only use in compiler.
+set(XSAN_DEFINITIONS_TO_ADD "")
 foreach(san IN LISTS XSAN_SANITIZERS)
   # Construct the variable name for the option (e.g., XSAN_CONTAINS_TSAN)
   set(SANITIZER_OPTION_VAR "XSAN_CONTAINS_${san}")
@@ -59,7 +61,7 @@ foreach(san IN LISTS XSAN_SANITIZERS)
     message(STATUS "Defining preprocessor macro -D${SANITIZER_OPTION_VAR}=0")
   endif()
 
-  add_definitions(-D${SANITIZER_OPTION_VAR}=${MACRO_VALUE})
+  list(APPEND XSAN_DEFINITIONS_TO_ADD "-D${SANITIZER_OPTION_VAR}=${MACRO_VALUE}")
 endforeach()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
