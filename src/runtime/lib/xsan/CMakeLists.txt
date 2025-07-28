@@ -411,20 +411,17 @@ if(NOT APPLE)
     # message(STATUS "XSAN_WRAPPED_SYMBOLS_LIST: ${XSAN_WRAPPED_SYMBOLS_LIST}")
 
     # Add the following task as a custom target:
-    #   Generate wrapped symbols file, which contains all symbols that need to be
-    #   wrapped by _wrap=<symbol> linker option.
-    # TODO: When supporting more combinations, we need to rename the file name
-
-    set(target_name "generate_wrap_symbols_${comb_suffix}")
-    set(output_file "${XSAN_DATA_DIR}/xsan_${comb_suffix}/xsan_wrapped_symbols.txt")
-    set(output_dir "${XSAN_DATA_DIR}/xsan_${comb_suffix}")
-    string(REGEX REPLACE "_asan" "" symlink_dir "${output_dir}")
+    # Generate wrapped symbols file, which contains all symbols that need to be
+    # wrapped by _wrap=<symbol> linker option.
+    set(wrap_symbol_target "generate_wrap_symbols_${comb_suffix}")
+    set(wrap_symbol_target_outdir "${XSAN_DATA_DIR}/xsan_${comb_suffix}")
     create_wrap_symbols_target(
-      ${target_name}
-      OUT ${output_file}
+      ${wrap_symbol_target}
+      OUT "${wrap_symbol_target_outdir}/xsan_wrapped_symbols.txt"
       IN ${XSAN_WRAPPED_SYMBOLS_LIST}
     )
-    set(XSAN_COMMON_DEPS ${target_name})
+
+    set(XSAN_COMMON_DEPS ${wrap_symbol_target})
     set(XSAN_LINK_FLAGS
       ${XSAN_COMMON_LINK_FLAGS}
       "-Wl,@${output_file}"
@@ -463,6 +460,8 @@ if(NOT APPLE)
           DEPS ${XSAN_COMMON_DEPS}
           PARENT_TARGET xsan-${comb_suffix})
     endif()
+
+    # Generate *.syms for non-hidden symbols exports in DSO compilation
     foreach(arch ${XSAN_SUPPORTED_ARCH})
       if(SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
         add_sanitizer_rt_symbols(${libname}
@@ -475,15 +474,41 @@ if(NOT APPLE)
           ${libname}-${arch}-symbols
           ${libname}_cxx-${arch}-symbols)
       endif()
+    endforeach()
 
-      # Set output directory for static libraries.
-      set(output_dir "${CMAKE_BINARY_DIR}/lib/linux/xsan_${comb_suffix}")
-      string(REGEX REPLACE "_asan" "" symlink_dir "${output_dir}")
-      set(target_name "clang_rt.xsan_${comb_suffix}-${arch}")
+    # ------ Generate SymLinks ---------
+
+    # TODO: Currently, the implementation of XSan RTL heavily depends on the
+    # functionality of ASan RTL, so the component of ASan cannot be removed.
+    # Therefore, we symlink the 'ASan-free' RTL to the ASan version, and
+    # leave the real removal of ASan RTL for future implementation.
+    string(REGEX REPLACE "_asan" "" wrap_symbol_target_symlink_dir
+      "${wrap_symbol_target_outdir}")
+
+    # SymLink: share/xsan_*  ->  share/xsan_asan_*
+    add_post_build_relative_directory_symlink(
+      TRIGGER_TARGET ${wrap_symbol_target}
+      SOURCE_DIR ${wrap_symbol_target_outdir}
+      LINK_PATH ${wrap_symbol_target_symlink_dir}
+    )
+      
+    foreach(arch ${XSAN_SUPPORTED_ARCH})
+      get_compiler_rt_output_dir(${arch} libdir_${libname})
+      # SymLink: lib/*/xsan_* -> lib/*/xsan_asan_*
+      string(REGEX REPLACE "_asan" "" symlibdir_${libname} "${libdir_${libname}}")
       add_post_build_relative_directory_symlink(
-        TRIGGER_TARGET  ${target_name}
-        SOURCE_DIR  ${output_dir}
-        LINK_PATH  ${symlink_dir}
+        TRIGGER_TARGET  xsan-${comb_suffix}
+        SOURCE_DIR      ${libdir_${libname}}
+        LINK_PATH       ${symlibdir_${libname}}
+      )
+
+      # Set symbol link for clang_rt.xsan-preinit.
+      # SymLink:   lib/*/xsan*/libclang_rt.xsan-preinit.a 
+      #         -> lib/*/libclang_rt.xsan-preinit.a
+      add_post_build_relative_target_symlink(
+        TRIGGER_TARGET    xsan-${comb_suffix}
+        SOURCE_TARGET     clang_rt.xsan-preinit-${arch}
+        DESTINATION_DIR   ${libdir_${libname}}
       )
     endforeach()
   endforeach()
@@ -598,16 +623,6 @@ if(NOT APPLE)
                   ${VERSION_SCRIPT_FLAG}
         LINK_LIBS ${XSAN_LINK_LIBS_LIST}
         PARENT_TARGET xsan-${comb_suffix})
-
-      # Set output directory for static libraries.
-      set(output_dir "${CMAKE_BINARY_DIR}/lib/linux/xsan_${comb_suffix}")  
-          
-      # Set symbol link for clang_rt.xsan-preinit.    
-      add_post_build_relative_target_symlink(
-        TRIGGER_TARGET    clang_rt.xsan_${comb_suffix}-${arch}
-        SOURCE_TARGET     clang_rt.xsan-preinit-${arch}
-        DESTINATION_DIR   ${output_dir}
-      )
     endforeach()
   endforeach()
 endif()
