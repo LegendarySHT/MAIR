@@ -53,12 +53,14 @@ jobs:
         id: release_notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUTPUT_FOLDER: docs/release_notes # Output Release Notes to specific folder
+          OUTPUT_FOLDER: release_notes # Output Release Notes to specific folder
           USE_MILESTONE_TITLE: "true"
 
       - name: Fix file permissions
         if: steps.get_version.outputs.version
-        run: sudo chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE
+        run: |
+          cp release_notes/${{ steps.get_version.outputs.version }}.md docs/release_notes/
+          sudo chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE
 
       - name: Create Pull Request
         if: steps.get_version.outputs.version
