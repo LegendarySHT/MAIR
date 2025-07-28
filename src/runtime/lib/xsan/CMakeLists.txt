@@ -1,3 +1,81 @@
+function(_parse_xsan_comb target_name prefix comb suffix)
+  # Check target_name is like .*clang_rt.xsan_<comb>-.*
+  # E.g., output_dir_clang_rt.xsan_asan_tsan-cxx-x86_64
+  string(REGEX MATCH "^(.*clang_rt\\.)(xsan(_[a-z]san)+)(.*)$" 
+        _match "${target_name}")
+
+  if(_match)
+    set(${prefix} "${CMAKE_MATCH_1}" PARENT_SCOPE)
+    set(${comb} "${CMAKE_MATCH_2}" PARENT_SCOPE)
+    set(${suffix} "${CMAKE_MATCH_4}" PARENT_SCOPE)
+  else()
+    set(${prefix} "" PARENT_SCOPE)
+    set(${comb} "" PARENT_SCOPE)
+    set(${suffix} "" PARENT_SCOPE)
+  endif()
+endfunction()
+
+# Override `get_compiler_rt_output_dir`@CompilerRTUtils.cmake only in this file,
+# and rewrite XSan RT's output directory to ${compiler_rt_output_dir}/xsan-${comb}
+# E.g., lib/x86_64-unknown-linux-gnu -> lib/x86_64-unknown-linux-gnu/xsan-asan-msan-tsan
+function(get_compiler_rt_output_dir arch output_dir)
+  if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
+    get_compiler_rt_target(${arch} target)
+    set(_xsan_output_dir ${COMPILER_RT_OUTPUT_LIBRARY_DIR}/${target})
+  else()
+    set(_xsan_output_dir ${COMPILER_RT_OUTPUT_LIBRARY_DIR})
+  endif()
+
+
+  _parse_xsan_comb("${output_dir}" _prefix _comb _suffix)
+
+  if(DEFINED _comb AND _comb)
+    # Add sub-directory <comb> to output_dir
+    set(_xsan_output_dir "${_xsan_output_dir}/${_comb}")
+  endif()
+
+  set(${output_dir} ${_xsan_output_dir} PARENT_SCOPE)
+endfunction()
+
+function(get_compiler_rt_install_dir arch install_dir)
+  if(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR AND NOT APPLE)
+    get_compiler_rt_target(${arch} target)
+    set(_xsan_install_dir ${COMPILER_RT_INSTALL_LIBRARY_DIR}/${target})
+  else()
+    set(_xsan_install_dir ${COMPILER_RT_INSTALL_LIBRARY_DIR})
+  endif()
+
+  _parse_xsan_comb("${install_dir}" _prefix _comb _suffix)
+
+  if(DEFINED _comb AND _comb)
+    # Add sub-directory <comb> to output_dir
+    set(_xsan_install_dir "${_xsan_install_dir}/${_comb}")
+  endif()
+
+  set(${install_dir} ${_xsan_install_dir} PARENT_SCOPE)
+endfunction()
+
+function(add_xsan_runtime name type)
+  add_compiler_rt_runtime(${name} ${type} ${ARGN})
+  foreach(arch ${XSAN_SUPPORTED_ARCH})
+    if(type STREQUAL "STATIC")
+      set(libname "${name}-${arch}")
+      set_output_name(output_name_${libname} ${name} ${arch})
+    else()
+      set(libname "${name}-dynamic-${arch}")
+    endif()
+    # Obtain OUTPUT_NAME
+    get_target_property(_output_name ${libname} OUTPUT_NAME)
+    _parse_xsan_comb("${_output_name}" _prefix _comb _suffix)
+    # Remove comb from output_name
+    # E.g., libclang_rt.xsan_asan_msan-x86_64.a -> libclang_rt.xsan-x86_64.a
+    set(_output_name "${_prefix}xsan${_suffix}")
+    set_target_properties(${libname} PROPERTIES
+        OUTPUT_NAME ${_output_name}
+        FOLDER "Compiler-RT/Runtimes")
+  endforeach()
+endfunction()
+
 ########## Set the sources for the XSan runtime library ##########
 
 # Build for the XSan runtime support library.
@@ -245,7 +323,7 @@ if(NOT APPLE)
     RTLSanCommon
     RTUbsan)
 
-  # Generate common libraries. (preinit)
+  #---------- Generate common libraries. (preinit) ----------
   if (NOT WIN32)
     add_compiler_rt_runtime(clang_rt.xsan-preinit
         STATIC
@@ -255,6 +333,8 @@ if(NOT APPLE)
         LINK_FLAGS ${XSAN_COMMON_LINK_FLAGS}
         PARENT_TARGET xsan)
   endif()
+
+  #----------- Generate RTL related to each XSan combination ----------
 
   # TODO: Support power set
   set(XSAN_STATIC_RTL_COMB ${XSAN_DELEGATED_SANITIZERS})
@@ -279,6 +359,10 @@ if(NOT APPLE)
     set(XSAN_WRAPPED_SYMBOLS_LIST)
     string(REPLACE "XSAN_SUBSET_" "" comb_suffix ${comb})
     string(TOLOWER "${comb_suffix}" comb_suffix)
+
+    add_compiler_rt_component(xsan-${comb_suffix})
+    add_dependencies(xsan xsan-${comb_suffix})
+
     # Collect XSAN_CONTAINS_XXX of this combination
     create_xsan_combination_definitions(
         ${comb}        
@@ -346,18 +430,11 @@ if(NOT APPLE)
       "-Wl,@${output_file}"
     )
 
-    # TODO: Currently, the implementation of XSan RTL heavily depends on the
-    # functionality of ASan RTL, so the component of ASan cannot be removed.
-    # Therefore, we symlink the 'ASan-free' RTL to the ASan version, and
-    # leave the real removal of ASan RTL for future implementation.
-    add_post_build_relative_directory_symlink(
-      TRIGGER_TARGET  ${target_name}
-      SOURCE_DIR      ${output_dir}
-      LINK_PATH       ${symlink_dir}
-    )
+    set(libname "clang_rt.xsan_${comb_suffix}")
+
     # Generate combinations of sanitizers. (main lib, cxx, static)
     if (NOT WIN32)
-      add_compiler_rt_runtime(clang_rt.xsan_${comb_suffix}
+      add_xsan_runtime(${libname}
           STATIC
           ARCHS ${XSAN_SUPPORTED_ARCH}
           OBJECT_LIBS RTXsan_preinit
@@ -366,59 +443,42 @@ if(NOT APPLE)
           CFLAGS ${XSAN_CFLAGS_LIST}
           LINK_FLAGS ${XSAN_LINK_FLAGS}
           DEPS ${XSAN_COMMON_DEPS}
-          PARENT_TARGET xsan)
+          PARENT_TARGET xsan-${comb_suffix})
 
-      add_compiler_rt_runtime(clang_rt.xsan_${comb_suffix}_cxx
+      add_xsan_runtime(${libname}_cxx
           STATIC
           ARCHS ${XSAN_SUPPORTED_ARCH}
           OBJECT_LIBS ${XSAN_CXX_OBJ_LIST}
                       RTUbsan_cxx
           CFLAGS ${XSAN_CFLAGS}
           LINK_FLAGS ${XSAN_COMMON_LINK_FLAGS}
-          PARENT_TARGET xsan)
+          PARENT_TARGET xsan-${comb_suffix})
 
-      add_compiler_rt_runtime(clang_rt.xsan_${comb_suffix}_static
+      add_xsan_runtime(${libname}_static
           STATIC
           ARCHS ${XSAN_SUPPORTED_ARCH}
           OBJECT_LIBS ${XSAN_STATIC_OBJ_LIST}
           CFLAGS ${XSAN_CFLAGS_LIST}
           LINK_FLAGS ${XSAN_LINK_FLAGS}
           DEPS ${XSAN_COMMON_DEPS}
-          PARENT_TARGET xsan)
+          PARENT_TARGET xsan-${comb_suffix})
     endif()
     foreach(arch ${XSAN_SUPPORTED_ARCH})
       if(SANITIZER_USE_SYMBOLS AND NOT ${arch} STREQUAL "i386")
-        add_sanitizer_rt_symbols(clang_rt.xsan_${comb_suffix}
+        add_sanitizer_rt_symbols(${libname}
           ARCHS ${arch}
           EXTRA xsan.syms.extra)
-        add_sanitizer_rt_symbols(clang_rt.xsan_${comb_suffix}_cxx
+        add_sanitizer_rt_symbols(${libname}_cxx
           ARCHS ${arch}
           EXTRA xsan.syms.extra)
-        add_dependencies(xsan clang_rt.xsan_${comb_suffix}-${arch}-symbols
-          clang_rt.xsan_${comb_suffix}_cxx-${arch}-symbols)
+        add_dependencies(${target_comb}
+          ${libname}-${arch}-symbols
+          ${libname}_cxx-${arch}-symbols)
       endif()
 
       # Set output directory for static libraries.
       set(output_dir "${CMAKE_BINARY_DIR}/lib/linux/xsan_${comb_suffix}")
       string(REGEX REPLACE "_asan" "" symlink_dir "${output_dir}")
-      set_target_properties(
-          clang_rt.xsan_${comb_suffix}-${arch}
-        PROPERTIES
-          ARCHIVE_OUTPUT_DIRECTORY "${output_dir}"
-          OUTPUT_NAME "clang_rt.xsan-${arch}"
-      )
-      set_target_properties(
-          clang_rt.xsan_${comb_suffix}_cxx-${arch}
-        PROPERTIES
-          ARCHIVE_OUTPUT_DIRECTORY "${output_dir}"
-          OUTPUT_NAME "clang_rt.xsan_cxx-${arch}"
-      )
-      set_target_properties(
-          clang_rt.xsan_${comb_suffix}_static-${arch}
-        PROPERTIES
-          ARCHIVE_OUTPUT_DIRECTORY "${output_dir}"
-          OUTPUT_NAME "clang_rt.xsan_static-${arch}"
-      )
       set(target_name "clang_rt.xsan_${comb_suffix}-${arch}")
       add_post_build_relative_directory_symlink(
         TRIGGER_TARGET  ${target_name}
@@ -497,7 +557,9 @@ if(NOT APPLE)
         if(WIN32)
           set(SANITIZER_RT_VERSION_LIST_LIBS clang_rt.xsan_${comb_suffix}-${arch})
         else()
-          set(SANITIZER_RT_VERSION_LIST_LIBS clang_rt.xsan_${comb_suffix}-${arch} clang_rt.xsan_${comb_suffix}_cxx-${arch})
+          set(SANITIZER_RT_VERSION_LIST_LIBS
+            ${libname}-${arch}
+            ${libname}_cxx-${arch})
         endif()
         add_sanitizer_rt_version_list(clang_rt.xsan_${comb_suffix}-dynamic-${arch}
                                       LIBS ${SANITIZER_RT_VERSION_LIST_LIBS}
@@ -518,7 +580,7 @@ if(NOT APPLE)
       endif()
 
       # Generate combinations of sanitizers. (dynamic)
-      add_compiler_rt_runtime(clang_rt.xsan_${comb_suffix}
+      add_xsan_runtime(${libname}
         SHARED
         ARCHS ${arch}
         OBJECT_LIBS ${XSAN_COMMON_RUNTIME_OBJECT_LIBS}
@@ -535,15 +597,10 @@ if(NOT APPLE)
         LINK_FLAGS ${XSAN_DYNAMIC_LINK_FLAGS}
                   ${VERSION_SCRIPT_FLAG}
         LINK_LIBS ${XSAN_LINK_LIBS_LIST}
-        PARENT_TARGET xsan)
+        PARENT_TARGET xsan-${comb_suffix})
 
       # Set output directory for static libraries.
       set(output_dir "${CMAKE_BINARY_DIR}/lib/linux/xsan_${comb_suffix}")  
-      set_target_properties(
-          clang_rt.xsan_${comb_suffix}-dynamic-${arch} 
-        PROPERTIES
-          LIBRARY_OUTPUT_DIRECTORY "${output_dir}" 
-          OUTPUT_NAME "clang_rt.xsan-${arch}")
           
       # Set symbol link for clang_rt.xsan-preinit.    
       add_post_build_relative_target_symlink(
