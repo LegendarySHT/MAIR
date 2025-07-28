@@ -18,7 +18,9 @@ jobs:
       fail-fast: false
       matrix:
         os_type: [ubuntu-22.04]
-        build_type: [Debug, Release]
+        # Do not check Release build to save the CI budget
+        build_type: [Debug]
+        # build_type: [Debug, Release]
         version: [15]
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}-${{ matrix.os_type }}-${{ matrix.build_type }}-${{ matrix.version }}
