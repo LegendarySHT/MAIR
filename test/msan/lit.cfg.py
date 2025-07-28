@@ -14,6 +14,7 @@ clang_msan_cflags = (
         # "-fsanitize=memory",
         # "-msan",
         "-xsan",
+        # "-fno-sanitize=thread",
         "-mno-omit-leaf-frame-pointer",
         "-fno-omit-frame-pointer",
         "-fno-optimize-sibling-calls",

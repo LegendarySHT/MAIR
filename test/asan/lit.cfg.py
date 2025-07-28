@@ -61,6 +61,8 @@ clang_asan_static_cflags = (
         # "-fsanitize=address",
         # "-asan",
         "-xsan",
+        # "-fno-sanitize=thread",
+        # "-fno-sanitize=memory",
         "-fsanitize-recover=memory",
         "-mno-omit-leaf-frame-pointer",
         "-fno-omit-frame-pointer",

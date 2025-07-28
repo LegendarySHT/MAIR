@@ -54,7 +54,8 @@ clang_tsan_cflags = (
         # "-fsanitize=thread", 
         # "-tsan",
         "-xsan",
-        '-fsanitize-recover=memory',
+        # "-fno-sanitize=memory",
+        "-fsanitize-recover=memory",
         "-Wall",
     ]
     + [config.target_cflags]
