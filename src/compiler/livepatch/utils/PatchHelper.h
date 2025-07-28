@@ -29,6 +29,7 @@ const std::vector<ROSegment> &getSelfModuleROSegments();
 void memcpy_forcibly(void *dst, const void *src, size_t n,
                      bool is_dst_exec = false);
 
+std::string getXsanCombName(const std::bitset<NumSanitizerTypes> &xsan_mask);
 std::filesystem::path getThisPatchDsoPath();
 std::filesystem::path getXsanAbsPath(std::string_view rel_path);
 // Get the executable path of the current process.

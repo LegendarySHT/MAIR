@@ -313,6 +313,7 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
       [TSan] = XSAN_CONTAINS_TSAN,
       [MSan] = XSAN_CONTAINS_MSAN,
       [UBSan] = XSAN_CONTAINS_UBSAN,
+      [XSan] = 1,
   };
 
   static const char *const option_names[] = {[ASan] = "-asan",
@@ -525,6 +526,16 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   }
 }
 
+static u8 *get_xsan_combination_suffix(const XsanOption *opt) {
+  if (!has(opt, XSan)) {
+    return alloc_printf("");
+  }
+  const char *asan_suffix = has(opt, ASan) ? "_asan" : "";
+  const char *msan_suffix = has(opt, MSan) ? "_msan" : "";
+  const char *tsan_suffix = has(opt, TSan) ? "_tsan" : "";
+  return alloc_printf("xsan%s%s%s", asan_suffix, msan_suffix, tsan_suffix);
+}
+
 static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   // clang's live patch `add_wrap_link_option` in CommonArgs.cpp take over
   // Symbol wrapped, However, gcc's live patch implements but does not use
@@ -536,7 +547,8 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   // Use Linker Response File to include lots of -wrap=<symbol> options in one
   // file.
   cc_params[cc_par_cnt++] =
-      alloc_printf("-Wl,@%s/share/xsan_wrapped_symbols.txt", obj_path);
+      alloc_printf("-Wl,@%s/share/%s/xsan_wrapped_symbols.txt", obj_path,
+                   get_xsan_combination_suffix(&xsan_options));
 }
 
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
@@ -581,9 +593,12 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
 
   if (needs_shared_rt &&
       (sanTy == ASan || sanTy == TSan || sanTy == UBSan || sanTy == XSan)) {
-    cc_params[cc_par_cnt++] = alloc_printf("-Wl,-rpath,%s/lib/linux", obj_path);
     cc_params[cc_par_cnt++] =
-        alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.so", obj_path, san);
+        alloc_printf("-Wl,-rpath,%s/lib/linux/%s", obj_path,
+                     get_xsan_combination_suffix(&xsan_options));
+    cc_params[cc_par_cnt++] =
+        alloc_printf("%s/lib/linux/%s/libclang_rt.%s-x86_64.so", obj_path,
+                     get_xsan_combination_suffix(&xsan_options), san);
   }
 
   /**
@@ -613,11 +628,13 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
           HelperStaticRuntimes.push_back("asan-preinit");
       */
       cc_params[cc_par_cnt++] = alloc_printf(
-          "%s/lib/linux/libclang_rt.%s-preinit-x86_64.a", obj_path, san);
+          "%s/lib/linux/%s/libclang_rt.%s-preinit-x86_64.a", obj_path,
+          get_xsan_combination_suffix(&xsan_options), san);
     }
     // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
-    cc_params[cc_par_cnt++] = alloc_printf(
-        "%s/lib/linux/libclang_rt.%s_static-x86_64.a", obj_path, san);
+    cc_params[cc_par_cnt++] =
+        alloc_printf("%s/lib/linux/%s/libclang_rt.%s_static-x86_64.a", obj_path,
+                     get_xsan_combination_suffix(&xsan_options), san);
     // Deativate the effect of `--whole-archive`, i.e., only link symbols in
     // demands.
     cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
@@ -635,22 +652,24 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
   cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
   // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
   cc_params[cc_par_cnt++] =
-      alloc_printf("%s/lib/linux/libclang_rt.%s-x86_64.a", obj_path, san);
+      alloc_printf("%s/lib/linux/%s/libclang_rt.%s-x86_64.a", obj_path,
+                   get_xsan_combination_suffix(&xsan_options), san);
   if (is_cxx) {
     cc_params[cc_par_cnt++] =
-        alloc_printf("%s/lib/linux/libclang_rt.%s_cxx-x86_64.a", obj_path, san);
+        alloc_printf("%s/lib/linux/%s/libclang_rt.%s_cxx-x86_64.a", obj_path,
+                     get_xsan_combination_suffix(&xsan_options), san);
   }
   // Deativate the effect of `--whole-archive`, i.e., only link symbols in
   // demands.
   cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
   // Customize the exported symbols
   cc_params[cc_par_cnt++] = alloc_printf(
-      "-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s-x86_64.a.syms", obj_path,
-      san);
+      "-Wl,--dynamic-list=%s/lib/linux/%s/libclang_rt.%s-x86_64.a.syms",
+      obj_path, get_xsan_combination_suffix(&xsan_options), san);
   if (is_cxx) {
     cc_params[cc_par_cnt++] = alloc_printf(
-        "-Wl,--dynamic-list=%s/lib/linux/libclang_rt.%s_cxx-x86_64.a.syms",
-        obj_path, san);
+        "-Wl,--dynamic-list=%s/lib/linux/%s/libclang_rt.%s_cxx-x86_64.a.syms",
+        obj_path, get_xsan_combination_suffix(&xsan_options), san);
   }
   // If not using livepatch, we might need to link some libraries manually.
   // At least for clang, we should.

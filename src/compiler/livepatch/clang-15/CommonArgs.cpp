@@ -58,7 +58,9 @@ namespace {
 
 static void add_rpath(ArgStringList &CmdArgs) {
   static const std::string rPathOpt =
-      "-rpath=" + getXsanAbsPath(XSAN_LINUX_LIB_DIR).generic_string();
+      "-rpath=" +
+      getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" + getXsanCombName(getXsanMask()))
+          .generic_string();
   CmdArgs.push_back(rPathOpt.c_str());
 }
 
@@ -70,7 +72,9 @@ public:
       : Args(Args), replace(getXsanMask().any()),
         shouldHasStaticRt(getSanType() == XSan || getSanType() == ASan),
         /// TODO: decouple linux here
-        replaced_prefix(getXsanAbsPath(XSAN_LINUX_LIB_DIR "/libclang_rt.")) {
+        replaced_prefix(getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" +
+                                       getXsanCombName(getXsanMask()) +
+                                       "/libclang_rt.")) {
     if (getSanType() == SanNone || replaced_prefix.empty())
       return;
 
@@ -230,8 +234,10 @@ static void add_wrap_link_option(ArgStringList &CmdArgs) {
     return;
   }
   static const std::string WrapSymbolLinkOpt =
-      "@" + getXsanAbsPath(XSAN_SHARE_DIR "/xsan_wrapped_symbols.txt")
-                .generic_string();
+      "@" +
+      (getXsanAbsPath(XSAN_SHARE_DIR "/" + getXsanCombName(getXsanMask())) /
+       "xsan_wrapped_symbols.txt")
+          .generic_string();
   CmdArgs.push_back(WrapSymbolLinkOpt.c_str());
 }
 

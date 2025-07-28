@@ -536,7 +536,9 @@ public:
             "from XSan seems meaningless for GCC.");
     }
     if (sanTy == XSan) {
-      xsan_rt_prefix = getXsanAbsPath(XSAN_LINUX_LIB_DIR "/libclang_rt.xsan");
+      xsan_rt_prefix =
+          getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" +
+                         getXsanCombName(getXsanMask()) + "/libclang_rt.xsan");
     } else if (sanTy == ASan) {
       xsan_rt_prefix = getXsanAbsPath(XSAN_LINUX_LIB_DIR "/libclang_rt.asan");
     } else if (sanTy == TSan) {
@@ -640,14 +642,18 @@ private:
   }
   void add_rpath() {
     static const std::string rPathOpt =
-        " -rpath=" + getXsanAbsPath(XSAN_LINUX_LIB_DIR).generic_string();
+        "-rpath=" +
+        getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" + getXsanCombName(getXsanMask()))
+            .generic_string();
     comp.append(rPathOpt);
   }
 
   void add_wrap_link_option() {
     static const std::string WrapSymbolLinkOpt =
-        " @" + getXsanAbsPath(XSAN_SHARE_DIR "/xsan_wrapped_symbols.txt")
-                   .generic_string();
+        "@" +
+        (getXsanAbsPath(XSAN_SHARE_DIR "/" + getXsanCombName(getXsanMask())) /
+         "xsan_wrapped_symbols.txt")
+            .generic_string();
     comp.append(WrapSymbolLinkOpt);
   }
 

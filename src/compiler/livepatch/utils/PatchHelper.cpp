@@ -173,6 +173,21 @@ fs::path getXsanAbsPath(std::string_view rel_path) {
   return abs_path;
 }
 
+std::string getXsanCombName(const std::bitset<NumSanitizerTypes> &xsan_mask) {
+  if (getSanType() == XSan) {
+    std::string xsan_comb_name = "xsan";
+    if (xsan_mask.test(ASan))
+      xsan_comb_name += "_asan";
+    if (xsan_mask.test(MSan))
+      xsan_comb_name += "_msan";
+    if (xsan_mask.test(TSan))
+      xsan_comb_name += "_tsan";
+    return xsan_comb_name;
+  } else {
+    return "";
+  }
+}
+
 static const char *getMangledName(void *SymAddr) {
   Dl_info Info;
   if (!dladdr(SymAddr, &Info)) {
