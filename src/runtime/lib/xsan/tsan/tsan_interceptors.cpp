@@ -1962,6 +1962,7 @@ static void CallUserSignalHandler(ThreadState *thr, bool sync, bool acquire,
                          : (uptr)sigactions[sig].handler;
   if (pc != sig_dfl && pc != sig_ign) {
     ::__xsan::XsanFuncScope<::__xsan::ScopedFunc::signal> scope;
+    (void)scope;
     if (sigactions[sig].sa_flags & SA_SIGINFO) {
       ::__xsan::CommonUnpoisonParam(3);
       ::__xsan::InitRange(nullptr, info, sizeof(__sanitizer_sigaction));

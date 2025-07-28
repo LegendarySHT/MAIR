@@ -6,6 +6,7 @@
 #include "tsan_interceptors_common.inc"
 #include "tsan_interface.h"
 #include "tsan_rtl.h"
+#include "xsan_hooks.h"
 #include "xsan_internal.h"
 #include "xsan_thread.h"
 
@@ -190,11 +191,46 @@ void TsanHooks::DestroyThread(Thread &thread) {
 // ---------- Synchronization and File-Related Hooks ------------------------
 void TsanHooks::AfterMmap(const Context &ctx, void *res, uptr size, int fd) {
   if (fd > 0)
-    FdAccess(ctx.thr_, ctx.pc_, fd);
+    __tsan::FdAccess(ctx.thr_, ctx.pc_, fd);
   MemoryRangeImitateWriteOrResetRange(ctx.thr_, ctx.pc_, (uptr)res, size);
 }
 void TsanHooks::BeforeMunmap(const Context &ctx, void *addr, uptr size) {
   UnmapShadow(ctx.thr_, (uptr)addr, size);
+}
+
+static bool IsAppNotRodata(uptr addr) {
+  return IsAppMem(addr) && *MemToShadow(addr) != Shadow::kRodata;
+}
+typedef int (*dl_iterate_phdr_cb_t)(__sanitizer_dl_phdr_info *info, SIZE_T size,
+                                    void *data);
+
+struct dl_iterate_phdr_data {
+  dl_iterate_phdr_cb_t cb;
+  void *data;
+  void *ctx;
+};
+
+void TsanHooks::BeforeDlIteratePhdrCallback(const Context &ctx,
+                                            __sanitizer_dl_phdr_info &info,
+                                            SIZE_T size) {
+  // dlopen/dlclose allocate/free dynamic-linker-internal memory, which is later
+  // accessible in dl_iterate_phdr callback. But we don't see synchronization
+  // inside of dynamic linker, so we "unpoison" it here in order to not
+  // produce false reports. Ignoring malloc/free in dlopen/dlclose is not enough
+  // because some libc functions call __libc_dlopen.
+  if (__tsan::IsAppNotRodata((uptr)info.dlpi_name))
+    MemoryResetRange(ctx.thr_, ctx.pc_, (uptr)info.dlpi_name,
+                     internal_strlen(info.dlpi_name));
+}
+
+void TsanHooks::AfterDlIteratePhdrCallback(const Context &ctx,
+                                           __sanitizer_dl_phdr_info &info,
+                                           SIZE_T size) {
+  // Perform the check one more time in case info->dlpi_name was overwritten
+  // by user callback.
+  if (__tsan::IsAppNotRodata((uptr)info.dlpi_name))
+    MemoryResetRange(ctx.thr_, ctx.pc_, (uptr)info.dlpi_name,
+                     internal_strlen(info.dlpi_name));
 }
 
 // ---------- xsan_interface-Related Hooks ----------------

@@ -231,7 +231,26 @@ ALWAYS_INLINE void BeforeMunmap(const XsanInterceptorContext &ctx, void *addr,
     return;
   XSAN_HOOKS_EXEC(BeforeMunmap, ctx.xsan_ctx, addr, size);
 }
-
+ALWAYS_INLINE void FdAccess(const XsanInterceptorContext &ctx, int fd) {
+  XSAN_HOOKS_EXEC(FdAccess, ctx.xsan_ctx, fd);
+}
+ALWAYS_INLINE void FdPipeCreate(const XsanInterceptorContext &ctx, int fd0,
+                                int fd1) {
+  XSAN_HOOKS_EXEC(FdPipeCreate, ctx.xsan_ctx, fd0, fd1);
+}
+ALWAYS_INLINE void FdAcquire(const XsanInterceptorContext &ctx, int fd) {
+  XSAN_HOOKS_EXEC(FdAcquire, ctx.xsan_ctx, fd);
+}
+ALWAYS_INLINE void BeforeDlIteratePhdrCallback(
+    const XsanInterceptorContext &ctx, __sanitizer_dl_phdr_info &info,
+    SIZE_T size) {
+  XSAN_HOOKS_EXEC(BeforeDlIteratePhdrCallback, ctx.xsan_ctx, info, size);
+}
+ALWAYS_INLINE void AfterDlIteratePhdrCallback(const XsanInterceptorContext &ctx,
+                                              __sanitizer_dl_phdr_info &info,
+                                              SIZE_T size) {
+  XSAN_HOOKS_EXEC(AfterDlIteratePhdrCallback, ctx.xsan_ctx, info, size);
+}
 /// To implement macro COMMON_INTERCEPTOR_HANDLE_VFORK in *vfork.S
 extern "C" void __xsan_vfork_parent_after(void *sp);
 /// Used to lock before fork

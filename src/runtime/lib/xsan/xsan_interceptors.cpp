@@ -241,6 +241,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)                \
     XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__);               \
     __xsan::XsanFuncScope<__xsan::ScopedFunc::common> func_scope; \
+    (void)func_scope;                                             \
     do {                                                          \
       if constexpr (SANITIZER_APPLE) {                            \
         if (UNLIKELY(!XsanInited()))                              \
@@ -253,6 +254,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)       \
     XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__);     \
     __xsan::XsanFuncScope<__xsan::ScopedFunc::common> func_scope; \
+    (void)func_scope;                                             \
     do {                                                          \
       XsanInitFromRtl();                                          \
     } while (false)
@@ -442,7 +444,7 @@ static int munmap_interceptor(void *ctx, Munmap real_munmap, void *addr,
 #  define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 
 #  include <sanitizer_common/sanitizer_common_interceptors.inc>
-#  if !XSAN_CONTAINS_TSAN
+#  if !XSAN_CONTAINS_TSAN && !XSAN_CONTAINS_MSAN
 #    define SIGNAL_INTERCEPTOR_ENTER() \
       do {                             \
         __xsan::XsanInitFromRtl();     \
@@ -529,6 +531,7 @@ INTERCEPTOR(int, getaddrinfo, char *node, char *service,
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, getaddrinfo, node, service, hints, out);
   __xsan::XsanFuncScope<__xsan::ScopedFunc::getaddrinfo> func_scope;
+  (void)func_scope;
   if (node)
     COMMON_INTERCEPTOR_READ_RANGE(ctx, node, internal_strlen(node) + 1);
   if (service)
@@ -1057,6 +1060,7 @@ INTERCEPTOR(char *, strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
   __xsan::XsanFuncScope<__xsan::ScopedFunc::strdup> func_scope;
+  (void)func_scope;
   if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
   uptr length = internal_strlen(s);
@@ -1230,11 +1234,8 @@ INTERCEPTOR(int, gettimeofday, void *tv, void *tz) {
 INTERCEPTOR(int, fstat, int fd, void *buf) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, fstat, fd, buf);
-  /// TODO: Offer a unified interface
   if (fd > 0) {
-    const __tsan::TsanContext &tsan_ctx =
-        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+    FdAccess(*(XsanInterceptorContext *)ctx, fd);
   }
   int res = REAL(fstat)(fd, buf);
   if (!res)
@@ -1247,11 +1248,8 @@ INTERCEPTOR(int, fstat, int fd, void *buf) {
 INTERCEPTOR(int, fstat64, int fd, void *buf) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, fstat64, fd, buf);
-  /// TODO: Offer a unified interface
   if (fd > 0) {
-    const __tsan::TsanContext &tsan_ctx =
-        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+    FdAccess(*(XsanInterceptorContext *)ctx, fd);
   }
   int res = REAL(fstat64)(fd, buf);
   if (!res)
@@ -1264,11 +1262,8 @@ INTERCEPTOR(int, fstat64, int fd, void *buf) {
 INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, __fxstat, version, fd, buf);
-  /// TODO: Offer a unified interface
   if (fd > 0) {
-    const __tsan::TsanContext &tsan_ctx =
-        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+    FdAccess(*(XsanInterceptorContext *)ctx, fd);
   }
   int res = REAL(__fxstat)(version, fd, buf);
   if (!res)
@@ -1281,11 +1276,8 @@ INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
 INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, __fxstat64, version, fd, buf);
-  /// TODO: Offer a unified interface
   if (fd > 0) {
-    const __tsan::TsanContext &tsan_ctx =
-        ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, fd);
+    FdAccess(*(XsanInterceptorContext *)ctx, fd);
   }
   int res = REAL(__fxstat64)(version, fd, buf);
   if (!res)
@@ -1300,11 +1292,8 @@ INTERCEPTOR(int, pipe, int pipefd[2]) {
   int res = REAL(pipe)(pipefd);
   if (res == 0) {
     XSAN_INIT_RANGE(ctx, pipefd, sizeof(int[2]));
-    /// TODO: Offer a unified interface
     if (pipefd[0] >= 0 && pipefd[1] >= 0) {
-      const __tsan::TsanContext &tsan_ctx =
-          ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-      __tsan::FdPipeCreate(tsan_ctx.thr_, tsan_ctx.pc_, pipefd[0], pipefd[1]);
+      FdPipeCreate(*(XsanInterceptorContext *)ctx, pipefd[0], pipefd[1]);
     }
   }
   return res;
@@ -1316,11 +1305,8 @@ INTERCEPTOR(int, pipe2, int *pipefd, int flags) {
   int res = REAL(pipe2)(pipefd, flags);
   if (res == 0) {
     XSAN_INIT_RANGE(ctx, pipefd, sizeof(int[2]));
-    /// TODO: Offer a unified interface
     if (pipefd[0] >= 0 && pipefd[1] >= 0) {
-      const __tsan::TsanContext &tsan_ctx =
-          ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-      __tsan::FdPipeCreate(tsan_ctx.thr_, tsan_ctx.pc_, pipefd[0], pipefd[1]);
+      FdPipeCreate(*(XsanInterceptorContext *)ctx, pipefd[0], pipefd[1]);
     }
   }
   return res;
@@ -1332,11 +1318,8 @@ INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int sv[2]) {
   int res = REAL(socketpair)(domain, type, protocol, sv);
   if (res == 0) {
     XSAN_INIT_RANGE(ctx, sv, sizeof(int[2]));
-    /// TODO: Offer a unified interface
     if (sv[0] >= 0 && sv[1] >= 0) {
-      const __tsan::TsanContext &tsan_ctx =
-          ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
-      __tsan::FdPipeCreate(tsan_ctx.thr_, tsan_ctx.pc_, sv[0], sv[1]);
+      FdPipeCreate(*(XsanInterceptorContext *)ctx, sv[0], sv[1]);
     }
   }
   return res;
@@ -1346,16 +1329,14 @@ INTERCEPTOR(int, socketpair, int domain, int type, int protocol, int sv[2]) {
 INTERCEPTOR(int, epoll_wait, int epfd, void *ev, int cnt, int timeout) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, epoll_wait, epfd, ev, cnt, timeout);
-  /// TODO: Offer a unified interface
-  const __tsan::TsanContext &tsan_ctx =
-      ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+  const XsanInterceptorContext &xsan_ctx_ = *(XsanInterceptorContext *)ctx;
   if (epfd >= 0)
-    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+    FdAccess(xsan_ctx_, epfd);
   int res = COMMON_INTERCEPTOR_BLOCK_REAL(epoll_wait)(epfd, ev, cnt, timeout);
   if (res > 0) {
     XSAN_INIT_RANGE(ctx, ev, (uptr)__sanitizer::struct_epoll_event_sz * res);
     if (epfd >= 0)
-      __tsan::FdAcquire(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+      FdAcquire(xsan_ctx_, epfd);
   }
   return res;
 }
@@ -1364,17 +1345,15 @@ INTERCEPTOR(int, epoll_pwait, int epfd, void *ev, int cnt, int timeout,
             void *sigmask) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, epoll_pwait, epfd, ev, cnt, timeout, sigmask);
-  /// TODO: Offer a unified interface
-  const __tsan::TsanContext &tsan_ctx =
-      ((XsanInterceptorContext *)ctx)->xsan_ctx.tsan;
+  const XsanInterceptorContext &xsan_ctx_ = *(XsanInterceptorContext *)ctx;
   if (epfd >= 0)
-    __tsan::FdAccess(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+    FdAccess(xsan_ctx_, epfd);
   int res = COMMON_INTERCEPTOR_BLOCK_REAL(epoll_pwait)(epfd, ev, cnt, timeout,
                                                        sigmask);
   if (res > 0) {
     XSAN_INIT_RANGE(ctx, ev, (uptr)__sanitizer::struct_epoll_event_sz * res);
     if (epfd >= 0)
-      __tsan::FdAcquire(tsan_ctx.thr_, tsan_ctx.pc_, epfd);
+      FdAcquire(xsan_ctx_, epfd);
   }
   return res;
 }
@@ -1552,27 +1531,14 @@ struct dl_iterate_phdr_data {
   void *ctx;
 };
 
-namespace __tsan {
-static bool IsAppNotRodata(uptr addr) {
-  return IsAppMem(addr) && *MemToShadow(addr) != Shadow::kRodata;
-}
-}  // namespace __tsan
-
 static int dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
                               void *data) {
   dl_iterate_phdr_data *cbdata = (dl_iterate_phdr_data *)data;
   /// TODO: Offer a unified interface
-  const __tsan::TsanContext &tsan_ctx =
-      ((XsanInterceptorContext *)cbdata->ctx)->xsan_ctx.tsan;
-  // dlopen/dlclose allocate/free dynamic-linker-internal memory, which is later
-  // accessible in dl_iterate_phdr callback. But we don't see synchronization
-  // inside of dynamic linker, so we "unpoison" it here in order to not
-  // produce false reports. Ignoring malloc/free in dlopen/dlclose is not enough
-  // because some libc functions call __libc_dlopen.
-  if (info && __tsan::IsAppNotRodata((uptr)info->dlpi_name))
-    MemoryResetRange(tsan_ctx.thr_, tsan_ctx.pc_, (uptr)info->dlpi_name,
-                     internal_strlen(info->dlpi_name));
+  const XsanInterceptorContext &xsan_ctx_ =
+      *(XsanInterceptorContext *)cbdata->ctx;
   if (info) {
+    BeforeDlIteratePhdrCallback(xsan_ctx_, *info, size);
     XSAN_INIT_RANGE(cbdata->ctx, info, size);
     if (info->dlpi_phdr && info->dlpi_phnum)
       XSAN_INIT_RANGE(cbdata->ctx, info->dlpi_phdr,
@@ -1582,11 +1548,9 @@ static int dl_iterate_phdr_cb(__sanitizer_dl_phdr_info *info, SIZE_T size,
                       internal_strlen(info->dlpi_name) + 1);
   }
   int res = cbdata->cb(info, size, cbdata->data);
-  // Perform the check one more time in case info->dlpi_name was overwritten
-  // by user callback.
-  if (info && __tsan::IsAppNotRodata((uptr)info->dlpi_name))
-    MemoryResetRange(tsan_ctx.thr_, tsan_ctx.pc_, (uptr)info->dlpi_name,
-                     internal_strlen(info->dlpi_name));
+  if (info) {
+    AfterDlIteratePhdrCallback(xsan_ctx_, *info, size);
+  }
   return res;
 }
 
@@ -1639,7 +1603,7 @@ void InitializeXsanInterceptors() {
 
   InitializePlatformInterceptors();
   InitializeCommonInterceptors();
-#  if !XSAN_CONTAINS_TSAN
+#  if !XSAN_CONTAINS_TSAN && !XSAN_CONTAINS_MSAN
   InitializeSignalInterceptors();
 #  endif
   // Intercept str* functions.

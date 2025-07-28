@@ -3,6 +3,7 @@
 #include "../xsan_attribute.h"
 #include "../xsan_hooks_default.h"
 #include "../xsan_hooks_types.h"
+#include "sanitizer_common/sanitizer_platform_limits_posix.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "tsan_interface_xsan.h"
 
@@ -20,6 +21,10 @@ struct TsanThread {
   __tsan::ThreadState *tsan_thread = nullptr;
   uptr tid = 0;
 };
+
+void FdAccess(ThreadState *thr, uptr pc, int fd);
+void FdPipeCreate(ThreadState *thr, uptr pc, int rfd, int wfd);
+void FdAcquire(ThreadState *thr, uptr pc, int fd);
 
 template <bool is_read>
 PSEUDO_MACRO void AccessMemoryRange(const TsanContext *ctx, const void *_offset,
@@ -100,6 +105,25 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   // ---------- Synchronization and File-Related Hooks ------------------------
   static void AfterMmap(const Context &ctx, void *res, uptr size, int fd);
   static void BeforeMunmap(const Context &ctx, void *addr, uptr size);
+
+  static void FdAccess(const Context &ctx, int fd) {
+    __tsan::FdAccess(ctx.thr_, ctx.pc_, fd);
+  }
+
+  static void FdPipeCreate(const Context &ctx, int fd0, int fd1) {
+    __tsan::FdPipeCreate(ctx.thr_, ctx.pc_, fd0, fd1);
+  }
+
+  static void FdAcquire(const Context &ctx, int fd) {
+    __tsan::FdAcquire(ctx.thr_, ctx.pc_, fd);
+  }
+
+  static void BeforeDlIteratePhdrCallback(const Context &ctx,
+                                          __sanitizer_dl_phdr_info &info,
+                                          SIZE_T size);
+  static void AfterDlIteratePhdrCallback(const Context &ctx,
+                                         __sanitizer_dl_phdr_info &info,
+                                         SIZE_T size);
   /// TSan may spawn a background thread to recycle resource in pthread_create.
   /// What's more, TSan does not support starting new threads after
   /// multi-threaded fork.

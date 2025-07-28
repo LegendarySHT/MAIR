@@ -7,9 +7,11 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "interception/interception.h"
 #include "sanitizer_common/sanitizer_array_ref.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
+#include "sanitizer_common/sanitizer_platform_limits_posix.h"
 #include "xsan_attribute.h"
 #include "xsan_hooks_types.h"
 
@@ -215,6 +217,14 @@ struct DefaultHooks {
                                       int fd) {}
   ALWAYS_INLINE static void BeforeMunmap(const Context &ctx, void *addr,
                                          uptr size) {}
+  ALWAYS_INLINE static void FdAccess(const Context &ctx, int fd) {}
+  ALWAYS_INLINE static void FdPipeCreate(const Context &ctx, int fd0, int fd1) {
+  }
+  ALWAYS_INLINE static void FdAcquire(const Context &ctx, int fd) {}
+  ALWAYS_INLINE static void BeforeDlIteratePhdrCallback(
+      const Context &ctx, __sanitizer_dl_phdr_info &info, SIZE_T size) {}
+  ALWAYS_INLINE static void AfterDlIteratePhdrCallback(
+      const Context &ctx, __sanitizer_dl_phdr_info &info, SIZE_T size) {}
   // ---------- End of Synchronization and File-Related Hooks ----------------
 
   // ---------- Func to use special scope ------------------------
