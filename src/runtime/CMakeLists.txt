@@ -7,9 +7,20 @@ cmake_minimum_required(VERSION 3.20.0)
 set(LLVM_SUBPROJECT_TITLE "Compiler-RT")
 # We build runtime standalone but not adhere monorepo building, so we need to set this variable to true.
 set(COMPILER_RT_STANDALONE_BUILD TRUE)
+
+# LLVM_MAIN_SRC_DIR is set in the following `load_llvm_config`,
+# should have not enter the branch and set COMPILER_RT_INCLUDE_TESTS to ON
+# However, in the scenario of quick re-cmake (e.g., cmake triggerred by make),
+# cmake will load the CMakeCache.txt and set LLVM_MAIN_SRC_DIR at beginning of the build,
+# and thus further set COMPILER_RT_INCLUDE_TESTS to ON, which is not what we want.
+# XSan doesn't support unit tests by now, so we set COMPILER_RT_INCLUDE_TESTS to OFF to 
+# avoid the error of unittest building.
+
 # Turn on the option to build tests if LLVM_MAIN_SRC_DIR is set
 if(DEFINED LLVM_MAIN_SRC_DIR)
-  set(COMPILER_RT_INCLUDE_TESTS ON)
+  # We don't support unit tests for XSan by now
+  # TODO: Support unit tests for XSan
+  # set(COMPILER_RT_INCLUDE_TESTS ON)
 endif()
 
 if(NOT DEFINED LLVM_COMMON_CMAKE_UTILS)

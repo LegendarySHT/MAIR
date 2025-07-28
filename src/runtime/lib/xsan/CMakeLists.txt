@@ -562,10 +562,6 @@ endif()
 append_list_if(MSVC "LINKER:/DEBUG;LINKER:/OPT:NOICF" XSAN_DYNAMIC_LINK_FLAGS)
 
 
-set(XSAN_TEST_LIST)
-append_list_if(True XSAN_ASAN_SOURCES XSAN_TEST_LIST)
-message_green("XSAN_TEST_LIST: ${XSAN_TEST_LIST}")
-
 ################### Set the LINK LIBS for the XSan shared runtime library ##########
 set(TSAN_DYNAMIC_LINK_LIBS
   ${COMPILER_RT_UNWINDER_LINK_LIBS}
