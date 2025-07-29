@@ -73,7 +73,7 @@ INTERCEPTOR(void *, calloc, uptr nmemb, uptr size) {
     return InternalCalloc(size, size);
   if (DlsymAlloc::Use())
     return DlsymAlloc::Callocate(nmemb, size);
-  __xsan::XsanFuncScope<__xsan::ScopedFunc::calloc> func_scope;
+  FUNC_SCOPE(calloc);
   SCOPED_XSAN_INTERCEPTOR_MALLOC(calloc, nmemb, size);
   return xsan_calloc(nmemb, size, &stack);
 }

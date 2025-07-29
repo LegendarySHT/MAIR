@@ -294,3 +294,7 @@ bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
   XsanInterceptorContext _ctx = {#func, xsan_ctx};       \
   ctx = (void *)&_ctx;                                   \
   (void)ctx;
+
+#define FUNC_SCOPE(func)                                      \
+  __xsan::XsanFuncScope<__xsan::ScopedFunc::func> func_scope; \
+  (void)func_scope

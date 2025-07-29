@@ -238,25 +238,23 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
     XSAN_COMMON_WRITE_RANGE(ctx, ptr, size)
 #  define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size) \
     XSAN_COMMON_READ_RANGE(ctx, ptr, size)
-#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)                \
-    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__);               \
-    __xsan::XsanFuncScope<__xsan::ScopedFunc::common> func_scope; \
-    (void)func_scope;                                             \
-    do {                                                          \
-      if constexpr (SANITIZER_APPLE) {                            \
-        if (UNLIKELY(!XsanInited()))                              \
-          return REAL(func)(__VA_ARGS__);                         \
-      } else {                                                    \
-        if (!TryXsanInitFromRtl())                                \
-          return REAL(func)(__VA_ARGS__);                         \
-      }                                                           \
+#  define COMMON_INTERCEPTOR_ENTER(ctx, func, ...)  \
+    XSAN_INTERCEPTOR_ENTER(ctx, func, __VA_ARGS__); \
+    FUNC_SCOPE(common);                             \
+    do {                                            \
+      if constexpr (SANITIZER_APPLE) {              \
+        if (UNLIKELY(!XsanInited()))                \
+          return REAL(func)(__VA_ARGS__);           \
+      } else {                                      \
+        if (!TryXsanInitFromRtl())                  \
+          return REAL(func)(__VA_ARGS__);           \
+      }                                             \
     } while (false)
-#  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)       \
-    XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__);     \
-    __xsan::XsanFuncScope<__xsan::ScopedFunc::common> func_scope; \
-    (void)func_scope;                                             \
-    do {                                                          \
-      XsanInitFromRtl();                                          \
+#  define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...)   \
+    XSAN_INTERCEPTOR_ENTER_NO_IGNORE(ctx, func, __VA_ARGS__); \
+    FUNC_SCOPE(common);                                       \
+    do {                                                      \
+      XsanInitFromRtl();                                      \
     } while (false)
 #  define COMMON_INTERCEPTOR_INITIALIZE_RANGE(ptr, size) \
     XSAN_INIT_RANGE(nullptr, ptr, size)
@@ -530,8 +528,7 @@ INTERCEPTOR(int, getaddrinfo, char *node, char *service,
             struct __sanitizer_addrinfo **out) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, getaddrinfo, node, service, hints, out);
-  __xsan::XsanFuncScope<__xsan::ScopedFunc::getaddrinfo> func_scope;
-  (void)func_scope;
+  FUNC_SCOPE(getaddrinfo);
   if (node)
     COMMON_INTERCEPTOR_READ_RANGE(ctx, node, internal_strlen(node) + 1);
   if (service)
@@ -1059,8 +1056,7 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
 INTERCEPTOR(char *, strdup, const char *s) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strdup, s);
-  __xsan::XsanFuncScope<__xsan::ScopedFunc::strdup> func_scope;
-  (void)func_scope;
+  FUNC_SCOPE(strdup);
   if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
   uptr length = internal_strlen(s);
