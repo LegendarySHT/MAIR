@@ -5,7 +5,7 @@
 // the new/delete interceptors as "weak" using those workarounds as well.
 // UNSUPPORTED: target={{.*windows.*}}
 
-// RUN: %clangxx %s -o %t -fsanitize=address -shared-libsan && not %run %t 2>&1 | FileCheck %s
+// RUN: %clangxx %s -o %t -xsan -fno-sanitize=memory -shared-libsan && not %run %t 2>&1 | FileCheck %s
 
 #include <cstdio>
 #include <cstdlib>
