@@ -73,33 +73,43 @@ function(generate_wrap_symbols)
     endif()
 endfunction()
 
+# Build a target to generate wrapped symbols file.
+# The output directory is ${XSAN_DATA_DIR}
 function(create_wrap_symbols_target TARGET_NAME)
     # Use cmake_parse_arguments to parse named arguments
     cmake_parse_arguments(GWS
-        ""        # No options
-        "OUT"     # Sole value option (OUT)
-        "IN"      # Multiple value option (IN)
-        ${ARGN}   # Remaining arguments
+        "" # No options
+        "NAME;OUT_SUBDIR" # Sole value options (provide together)
+        "IN" # Multiple value option (IN)
+        ${ARGN} # Remaining arguments
     )
+
+    if(NOT GWS_NAME)
+        message(FATAL_ERROR "create_wrap_symbols_target: NAME parameter is required,"
+            " which means the name of the wrapped symbols file.")
+    endif()
+
     # Check if OUT parameter is provided
-    if(NOT GWS_OUT)
-        message(FATAL_ERROR "generate_wrap_symbols: OUT parameter is required.")
+    if(NOT GWS_OUT_SUBDIR)
+        message(FATAL_ERROR "create_wrap_symbols_target: OUT_SUBDIR parameter is required,"
+            " which means the subdirectory of $\{XSAN_DATA_DIR\} to create the wrapped symbols file.")
     endif()
 
     # Check if IN parameter is provided
     if(NOT GWS_IN)
-        message(FATAL_ERROR "generate_wrap_symbols: IN parameter is required.")
+        message(FATAL_ERROR "create_wrap_symbols_target: IN parameter is required,"
+            " which means the list of wrapped symbols files of sub-sanitizers.")
     endif()
 
-    set(out_file "${GWS_OUT}")
+    set(out_file "${XSAN_DATA_DIR}/${GWS_OUT_SUBDIR}/${GWS_NAME}")
     set(in_files "${GWS_IN}")
 
     # # Create target to generate wrapped symbols file
     # add_custom_target(generate_wrap_symbols ALL
-    #     # Add output file
-    #     COMMAND ${CMAKE_COMMAND} -DOUT="${out_file}" -DIN="${in_files}" -P "${THIS_FILE}"
-    #     COMMENT "Generating wrapped symbols file ${output_file}"
-    #     DEPENDS ${in_files}  # input_files are dependencies of the target
+    # # Add output file
+    # COMMAND ${CMAKE_COMMAND} -DOUT="${out_file}" -DIN="${in_files}" -P "${THIS_FILE}"
+    # COMMENT "Generating wrapped symbols file ${output_file}"
+    # DEPENDS ${in_files}  # input_files are dependencies of the target
     # )
 
     # Define a custom command to generate the output file
@@ -107,13 +117,11 @@ function(create_wrap_symbols_target TARGET_NAME)
         OUTPUT ${out_file}
         COMMAND ${CMAKE_COMMAND} -DOUT=${out_file} -DIN="${in_files}" -P "${THIS_FILE}"
         COMMENT "Generating wrapped symbols file ${out_file}"
-        DEPENDS ${in_files}  # Input files as dependencies
+        DEPENDS ${in_files} # Input files as dependencies
     )
     add_custom_target(${TARGET_NAME} ALL
         DEPENDS ${out_file}
     )
-
-    message_green("TARGET_NAME: ${TARGET_NAME}")
 
     set(${TARGET_NAME} ${TARGET_NAME} PARENT_SCOPE)
 
@@ -127,7 +135,7 @@ function(create_wrap_symbols_target TARGET_NAME)
 
     # Install the wrapped symbols file to ${XSAN_INSTALL_DATADIR}
     install(FILES ${out_file}
-        DESTINATION ${XSAN_INSTALL_DATADIR}
+        DESTINATION ${XSAN_INSTALL_DATADIR}/${GWS_OUT_SUBDIR}
         COMPONENT resource
     )
 endfunction()

@@ -334,7 +334,7 @@ if(NOT APPLE)
         PARENT_TARGET xsan)
   endif()
 
-  #----------- Generate RTL related to each XSan combination ----------
+  # ----------- Generate RTL related to each XSan combination ----------
 
   # TODO: Support power set
   set(XSAN_STATIC_RTL_COMB ${XSAN_DELEGATED_SANITIZERS})
@@ -360,8 +360,9 @@ if(NOT APPLE)
     string(REPLACE "XSAN_SUBSET_" "" comb_suffix ${comb})
     string(TOLOWER "${comb_suffix}" comb_suffix)
 
-    add_compiler_rt_component(xsan-${comb_suffix})
-    add_dependencies(xsan xsan-${comb_suffix})
+    set(target_comb "xsan_${comb_suffix}")
+    add_compiler_rt_component(${target_comb})
+    add_dependencies(xsan ${target_comb})
 
     # Collect XSAN_CONTAINS_XXX of this combination
     create_xsan_combination_definitions(
@@ -414,10 +415,10 @@ if(NOT APPLE)
     # Generate wrapped symbols file, which contains all symbols that need to be
     # wrapped by _wrap=<symbol> linker option.
     set(wrap_symbol_target "generate_wrap_symbols_${comb_suffix}")
-    set(wrap_symbol_target_outdir "${XSAN_DATA_DIR}/xsan_${comb_suffix}")
     create_wrap_symbols_target(
       ${wrap_symbol_target}
-      OUT "${wrap_symbol_target_outdir}/xsan_wrapped_symbols.txt"
+      NAME "xsan_wrapped_symbols.txt"
+      OUT_SUBDIR "${target_comb}"
       IN ${XSAN_WRAPPED_SYMBOLS_LIST}
     )
 
@@ -427,7 +428,7 @@ if(NOT APPLE)
       "-Wl,@${output_file}"
     )
 
-    set(libname "clang_rt.xsan_${comb_suffix}")
+    set(libname "clang_rt.${target_comb}")
 
     # Generate combinations of sanitizers. (main lib, cxx, static)
     if (NOT WIN32)
@@ -440,7 +441,7 @@ if(NOT APPLE)
           CFLAGS ${XSAN_CFLAGS_LIST}
           LINK_FLAGS ${XSAN_LINK_FLAGS}
           DEPS ${XSAN_COMMON_DEPS}
-          PARENT_TARGET xsan-${comb_suffix})
+          PARENT_TARGET ${target_comb})
 
       add_xsan_runtime(${libname}_cxx
           STATIC
@@ -449,7 +450,7 @@ if(NOT APPLE)
                       RTUbsan_cxx
           CFLAGS ${XSAN_CFLAGS}
           LINK_FLAGS ${XSAN_COMMON_LINK_FLAGS}
-          PARENT_TARGET xsan-${comb_suffix})
+          PARENT_TARGET ${target_comb})
 
       add_xsan_runtime(${libname}_static
           STATIC
@@ -458,7 +459,7 @@ if(NOT APPLE)
           CFLAGS ${XSAN_CFLAGS_LIST}
           LINK_FLAGS ${XSAN_LINK_FLAGS}
           DEPS ${XSAN_COMMON_DEPS}
-          PARENT_TARGET xsan-${comb_suffix})
+          PARENT_TARGET ${target_comb})
     endif()
 
     # Generate *.syms for non-hidden symbols exports in DSO compilation
@@ -476,39 +477,46 @@ if(NOT APPLE)
       endif()
     endforeach()
 
-    # ------ Generate SymLinks ---------
+    # ----------------- Generate/Install SymLinks -----------------
 
     # TODO: Currently, the implementation of XSan RTL heavily depends on the
     # functionality of ASan RTL, so the component of ASan cannot be removed.
     # Therefore, we symlink the 'ASan-free' RTL to the ASan version, and
     # leave the real removal of ASan RTL for future implementation.
-    string(REGEX REPLACE "_asan" "" wrap_symbol_target_symlink_dir
-      "${wrap_symbol_target_outdir}")
+    string(REGEX REPLACE "_asan" "" symlink_comb "${target_comb}")
 
-    # SymLink: share/xsan_*  ->  share/xsan_asan_*
-    add_post_build_relative_directory_symlink(
+    # output and install SymLink: share/xsan_*  ->  share/xsan_asan_*
+    add_symlink(
       TRIGGER_TARGET ${wrap_symbol_target}
-      SOURCE_DIR ${wrap_symbol_target_outdir}
-      LINK_PATH ${wrap_symbol_target_symlink_dir}
+      SOURCE ${target_comb}
+      LINK_NAME ${symlink_comb}
+      OUT_DIR ${XSAN_DATA_DIR}
+      INSTALL_DIR ${XSAN_INSTALL_DATADIR}
     )
-      
+
     foreach(arch ${XSAN_SUPPORTED_ARCH})
-      get_compiler_rt_output_dir(${arch} libdir_${libname})
-      # SymLink: lib/*/xsan_* -> lib/*/xsan_asan_*
-      string(REGEX REPLACE "_asan" "" symlibdir_${libname} "${libdir_${libname}}")
-      add_post_build_relative_directory_symlink(
-        TRIGGER_TARGET  xsan-${comb_suffix}
-        SOURCE_DIR      ${libdir_${libname}}
-        LINK_PATH       ${symlibdir_${libname}}
+      # Get output directory, considering the combination
+      get_compiler_rt_output_dir(${arch} out_dir)
+
+      # Get install directory, not considering the combination
+      get_compiler_rt_install_dir(${arch} install_dir)
+
+      # output and install SymLink: lib/*/xsan_* -> lib/*/xsan_asan_*
+      add_symlink(
+        TRIGGER_TARGET ${target_comb}
+        SOURCE ${target_comb}
+        LINK_NAME ${symlink_comb}
+        OUT_DIR ${out_dir}
+        INSTALL_DIR ${install_dir}
       )
 
       # Set symbol link for clang_rt.xsan-preinit.
-      # SymLink:   lib/*/xsan*/libclang_rt.xsan-preinit.a 
+      # SymLink:   lib/*/xsan*/libclang_rt.xsan-preinit.a
       #         -> lib/*/libclang_rt.xsan-preinit.a
-      add_post_build_relative_target_symlink(
-        TRIGGER_TARGET    xsan-${comb_suffix}
-        SOURCE_TARGET     clang_rt.xsan-preinit-${arch}
-        DESTINATION_DIR   ${libdir_${libname}}
+      add_target_symlink(
+        SOURCE_TARGET clang_rt.xsan-preinit-${arch}
+        REL_DEST_DIR ${target_comb}
+        INSTALL_DIR ${install_dir}
       )
     endforeach()
   endforeach()
@@ -523,6 +531,7 @@ if(NOT APPLE)
     set(obj_san_list ${${comb}} Xsan)
     string(REPLACE "XSAN_SUBSET_" "" comb_suffix ${comb})
     string(TOLOWER "${comb_suffix}" comb_suffix)
+    set(target_comb "xsan_${comb_suffix}")
     # Collect XSAN_CONTAINS_XXX of this combination
     create_xsan_combination_definitions(
         ${comb}        
@@ -570,27 +579,29 @@ if(NOT APPLE)
 
     # TODO: generate the wrapped symbols file when it doesn't exist.
 
-    set(output_file "${XSAN_DATA_DIR}/xsan_${comb_suffix}/xsan_wrapped_symbols.txt")
+    set(output_file "${XSAN_DATA_DIR}/${target_comb}/xsan_wrapped_symbols.txt")
     set(XSAN_DYNAMIC_LINK_FLAGS
       ${XSAN_COMMON_DYNAMIC_LINK_FLAGS}
       "-Wl,@${output_file}"
     )
 
+    set(libname "clang_rt.${target_comb}")
+
     ################ Dump the extern symbols in dynamic libraries ###############
     foreach(arch ${XSAN_SUPPORTED_ARCH})
       if (COMPILER_RT_HAS_VERSION_SCRIPT)
         if(WIN32)
-          set(SANITIZER_RT_VERSION_LIST_LIBS clang_rt.xsan_${comb_suffix}-${arch})
+          set(SANITIZER_RT_VERSION_LIST_LIBS ${libname}-${arch})
         else()
           set(SANITIZER_RT_VERSION_LIST_LIBS
             ${libname}-${arch}
             ${libname}_cxx-${arch})
         endif()
-        add_sanitizer_rt_version_list(clang_rt.xsan_${comb_suffix}-dynamic-${arch}
+        add_sanitizer_rt_version_list(${libname}-dynamic-${arch}
                                       LIBS ${SANITIZER_RT_VERSION_LIST_LIBS}
                                       EXTRA xsan.syms.extra)
         set(VERSION_SCRIPT_FLAG
-          -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/clang_rt.xsan_${comb_suffix}-dynamic-${arch}.vers)
+          -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/${libname}-dynamic-${arch}.vers)
         # The Solaris 11.4 linker supports a subset of GNU ld version scripts,
         # but requires a special option to enable it.
         if (COMPILER_RT_HAS_GNU_VERSION_SCRIPT_COMPAT)
@@ -599,7 +610,7 @@ if(NOT APPLE)
         set_property(SOURCE
           ${CMAKE_CURRENT_BINARY_DIR}/dummy.cpp
           APPEND PROPERTY
-          OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/clang_rt.xsan_${comb_suffix}-dynamic-${arch}.vers)
+          OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${libname}-dynamic-${arch}.vers)
       else()
         set(VERSION_SCRIPT_FLAG)
       endif()
@@ -622,7 +633,7 @@ if(NOT APPLE)
         LINK_FLAGS ${XSAN_DYNAMIC_LINK_FLAGS}
                   ${VERSION_SCRIPT_FLAG}
         LINK_LIBS ${XSAN_LINK_LIBS_LIST}
-        PARENT_TARGET xsan-${comb_suffix})
+        PARENT_TARGET ${target_comb})
     endforeach()
   endforeach()
 endif()
