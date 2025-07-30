@@ -45,11 +45,13 @@
 #define XSAN_CONTAINS_MSAN 0
 #endif
 
-static const u8 **cc_params;      /* Parameters passed to the real CC  */
-static u32 cc_par_cnt = 1;        /* Param count, including argv0      */
-static u8 *obj_path;              /* Path to runtime libraries         */
-static u8 support_dso_inject = 0; /* Support for DSO injection         */
+#define XSAN_HOST_ARCH_RT_DIR XSAN_RUNTIME_DIR "/" XSAN_HOST_TRIPLE
 
+static const u8 **cc_params;          /* Parameters passed to the real CC  */
+static u32 cc_par_cnt = 1;            /* Param count, including argv0      */
+static const u8 *obj_path;            /* Path to runtime libraries         */
+static u8 support_dso_inject = 0;     /* Support for DSO injection         */
+static const u8 *xsan_comb_name = ""; /* combination name, e.g., xsan_asan */
 static XsanOption xsan_options;
 static XsanOption xsan_recover_options;
 
@@ -82,11 +84,11 @@ static void clear(XsanOption *opt, enum SanitizerType sanTy) {
   opt->mask &= (sanTy == XSan) ? 0 : ~((u64)1 << sanTy);
 }
 
-static u8 has(XsanOption *opt, enum SanitizerType sanTy) {
+static u8 has(const XsanOption *opt, enum SanitizerType sanTy) {
   return (opt->mask & (((u64)1 << sanTy))) != 0;
 }
 
-static u8 has_any(XsanOption *opt) {
+static u8 has_any(const XsanOption *opt) {
   return (opt->mask & ~(((u64)1 << XSan) | ((u64)1 << SanNone))) != 0;
 }
 
@@ -119,12 +121,12 @@ static u8 whether_to_support_dso_injection(const char *arg) {
   1. if obj_path is already set we look there first
   2. then we check the $XSAN_PATH environment variable location if set
   3. then we check /proc (on Linux, etc.) to find the real executable path.
-    a) We also check ../lib/linux here.
+    a) We also check ../" XSAN_HOST_ARCH_RT_DIR " here.
   4. next we check argv[0] if it has path information and use it
-    a) we also check ../lib/linux
+    a) we also check ../" XSAN_HOST_ARCH_RT_DIR "
   5. if 4. failed we check /proc (only Linux, Android, NetBSD, DragonFly, and
      FreeBSD with procfs)
-    a) and check here in ../lib/linux too
+    a) and check here in ../" XSAN_HOST_ARCH_RT_DIR " too
   6. we look into the XSAN_PATH define (usually /usr/local/lib/afl)
   7. we finally try the current directory
 
@@ -163,10 +165,10 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
       }
       ck_free(tmp);
 
-      // Search in ../lib/linux relative to the executable
-      tmp = alloc_printf("%s/../lib/linux/%s", real_path, obj);
+      // Search in ../" XSAN_HOST_ARCH_RT_DIR " relative to the executable
+      tmp = alloc_printf("%s/../" XSAN_HOST_ARCH_RT_DIR "/%s", real_path, obj);
       if (!access(tmp, R_OK)) {
-        obj_path = alloc_printf("%s/../lib/linux", real_path);
+        obj_path = alloc_printf("%s/../" XSAN_HOST_ARCH_RT_DIR "", real_path);
         return tmp;
       }
       ck_free(tmp);
@@ -191,9 +193,9 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
       }
 
       ck_free(tmp);
-      tmp = alloc_printf("%s/../lib/linux/%s", dir, obj);
+      tmp = alloc_printf("%s/../" XSAN_HOST_ARCH_RT_DIR "/%s", dir, obj);
       if (!access(tmp, R_OK)) {
-        u8 *dir2 = alloc_printf("%s/../lib/linux", dir);
+        u8 *dir2 = alloc_printf("%s/../" XSAN_HOST_ARCH_RT_DIR "", dir);
         obj_path = dir2;
         ck_free(dir);
         return tmp;
@@ -236,9 +238,11 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
               return tmp;
             }
             ck_free(tmp);
-            tmp = alloc_printf("%s/../lib/linux/%s", exepath, obj);
+            tmp = alloc_printf("%s/../" XSAN_HOST_ARCH_RT_DIR "/%s", exepath,
+                               obj);
             if (!access(tmp, R_OK)) {
-              u8 *dir = alloc_printf("%s/../lib/linux/", exepath);
+              u8 *dir =
+                  alloc_printf("%s/../" XSAN_HOST_ARCH_RT_DIR "/", exepath);
               obj_path = dir;
               return tmp;
             }
@@ -272,11 +276,16 @@ static u8 *find_object(u8 *obj, u8 *argv0) {
 
 static void find_obj(u8 *argv0) {
 
-  obj_path = find_object("", argv0);
-
-  if (!obj_path) {
+  u8 *_obj_path = find_object("", argv0);
+  if (!_obj_path || !_obj_path[0]) {
     FATAL("Unable to find object path. Please set XSAN_PATH");
   }
+  // If obj_path is not empty and ends with '/', remove the trailing '/'.
+  size_t len = strlen(_obj_path);
+  if (len > 0 && _obj_path[len - 1] == '/') {
+    _obj_path[len - 1] = '\0';
+  }
+  obj_path = _obj_path;
 }
 
 static u8 handle_x_option(const u8 *const *arg, u8 *asm_as_source) {
@@ -433,6 +442,16 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
   return xsanTy;
 }
 
+static u8 *get_xsan_comb_name(const XsanOption *opt) {
+  if (!has(opt, XSan)) {
+    return alloc_printf("");
+  }
+  const char *asan_suffix = has(opt, ASan) ? "_asan" : "";
+  const char *msan_suffix = has(opt, MSan) ? "_msan" : "";
+  const char *tsan_suffix = has(opt, TSan) ? "_tsan" : "";
+  return alloc_printf("xsan%s%s%s", asan_suffix, msan_suffix, tsan_suffix);
+}
+
 static void init_sanitizer_setting(enum SanitizerType sanTy) {
   u8 *str_options;
   switch (sanTy) {
@@ -441,7 +460,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   case MSan:
   case UBSan:
   case XSan:
-    /// TODO: support unmodified clang
+    xsan_comb_name = get_xsan_comb_name(&xsan_options);
     // Use env var to control clang only perform frontend
     // transformation for sanitizers.
     str_options = alloc_printf("%llu", xsan_options.mask);
@@ -526,16 +545,6 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   }
 }
 
-static u8 *get_xsan_combination_suffix(const XsanOption *opt) {
-  if (!has(opt, XSan)) {
-    return alloc_printf("");
-  }
-  const char *asan_suffix = has(opt, ASan) ? "_asan" : "";
-  const char *msan_suffix = has(opt, MSan) ? "_msan" : "";
-  const char *tsan_suffix = has(opt, TSan) ? "_tsan" : "";
-  return alloc_printf("xsan%s%s%s", asan_suffix, msan_suffix, tsan_suffix);
-}
-
 static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   // clang's live patch `add_wrap_link_option` in CommonArgs.cpp take over
   // Symbol wrapped, However, gcc's live patch implements but does not use
@@ -547,8 +556,8 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   // Use Linker Response File to include lots of -wrap=<symbol> options in one
   // file.
   cc_params[cc_par_cnt++] =
-      alloc_printf("-Wl,@%s/share/%s/xsan_wrapped_symbols.txt", obj_path,
-                   get_xsan_combination_suffix(&xsan_options));
+      alloc_printf("-Wl,@%s/" XSAN_SHARE_DIR "/%s/xsan_wrapped_symbols.txt",
+                   obj_path, xsan_comb_name);
 }
 
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
@@ -593,12 +602,11 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
 
   if (needs_shared_rt &&
       (sanTy == ASan || sanTy == TSan || sanTy == UBSan || sanTy == XSan)) {
+    cc_params[cc_par_cnt++] = alloc_printf(
+        "-Wl,-rpath,%s/" XSAN_HOST_ARCH_RT_DIR "/%s", obj_path, xsan_comb_name);
     cc_params[cc_par_cnt++] =
-        alloc_printf("-Wl,-rpath,%s/lib/linux/%s", obj_path,
-                     get_xsan_combination_suffix(&xsan_options));
-    cc_params[cc_par_cnt++] =
-        alloc_printf("%s/lib/linux/%s/libclang_rt.%s-x86_64.so", obj_path,
-                     get_xsan_combination_suffix(&xsan_options), san);
+        alloc_printf("%s/" XSAN_HOST_ARCH_RT_DIR "/%s/libclang_rt.%s.so",
+                     obj_path, xsan_comb_name, san);
   }
 
   /**
@@ -627,14 +635,13 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
         if (!Args.hasArg(options::OPT_shared) && !TC.getTriple().isAndroid())
           HelperStaticRuntimes.push_back("asan-preinit");
       */
-      cc_params[cc_par_cnt++] = alloc_printf(
-          "%s/lib/linux/%s/libclang_rt.%s-preinit-x86_64.a", obj_path,
-          get_xsan_combination_suffix(&xsan_options), san);
+      cc_params[cc_par_cnt++] = alloc_printf("%s/" XSAN_HOST_ARCH_RT_DIR
+                                             "/%s/libclang_rt.%s-preinit.a",
+                                             obj_path, xsan_comb_name, san);
     }
-    // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
     cc_params[cc_par_cnt++] =
-        alloc_printf("%s/lib/linux/%s/libclang_rt.%s_static-x86_64.a", obj_path,
-                     get_xsan_combination_suffix(&xsan_options), san);
+        alloc_printf("%s/" XSAN_HOST_ARCH_RT_DIR "/%s/libclang_rt.%s_static.a",
+                     obj_path, xsan_comb_name, san);
     // Deativate the effect of `--whole-archive`, i.e., only link symbols in
     // demands.
     cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
@@ -650,26 +657,27 @@ static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
 
   // Link all contents in *.a, rather than only link symbols in demands.
   cc_params[cc_par_cnt++] = "-Wl,--whole-archive";
-  // TODO: eliminate "linux" in path, and do not hard-coded embed x86_64
   cc_params[cc_par_cnt++] =
-      alloc_printf("%s/lib/linux/%s/libclang_rt.%s-x86_64.a", obj_path,
-                   get_xsan_combination_suffix(&xsan_options), san);
+      alloc_printf("%s/" XSAN_HOST_ARCH_RT_DIR "/%s/libclang_rt.%s.a", obj_path,
+                   xsan_comb_name, san);
   if (is_cxx) {
     cc_params[cc_par_cnt++] =
-        alloc_printf("%s/lib/linux/%s/libclang_rt.%s_cxx-x86_64.a", obj_path,
-                     get_xsan_combination_suffix(&xsan_options), san);
+        alloc_printf("%s/" XSAN_HOST_ARCH_RT_DIR "/%s/libclang_rt.%s_cxx.a",
+                     obj_path, xsan_comb_name, san);
   }
   // Deativate the effect of `--whole-archive`, i.e., only link symbols in
   // demands.
   cc_params[cc_par_cnt++] = "-Wl,--no-whole-archive";
   // Customize the exported symbols
-  cc_params[cc_par_cnt++] = alloc_printf(
-      "-Wl,--dynamic-list=%s/lib/linux/%s/libclang_rt.%s-x86_64.a.syms",
-      obj_path, get_xsan_combination_suffix(&xsan_options), san);
+  cc_params[cc_par_cnt++] =
+      alloc_printf("-Wl,--dynamic-list=%s/" XSAN_HOST_ARCH_RT_DIR
+                   "/%s/libclang_rt.%s.a.syms",
+                   obj_path, xsan_comb_name, san);
   if (is_cxx) {
-    cc_params[cc_par_cnt++] = alloc_printf(
-        "-Wl,--dynamic-list=%s/lib/linux/%s/libclang_rt.%s_cxx-x86_64.a.syms",
-        obj_path, get_xsan_combination_suffix(&xsan_options), san);
+    cc_params[cc_par_cnt++] =
+        alloc_printf("-Wl,--dynamic-list=%s/" XSAN_HOST_ARCH_RT_DIR
+                     "/%s/libclang_rt.%s_cxx.a.syms",
+                     obj_path, xsan_comb_name, san);
   }
   // If not using livepatch, we might need to link some libraries manually.
   // At least for clang, we should.

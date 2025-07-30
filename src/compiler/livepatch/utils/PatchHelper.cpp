@@ -3,6 +3,7 @@
 #include <elf.h>
 #include <filesystem>
 #include <link.h>
+#include <llvm/Support/Host.h>
 #include <llvm/Support/Memory.h>
 #include <llvm/Support/Process.h>
 #include <optional>
@@ -110,18 +111,15 @@ bool isPatchingProc(const char *proc_name) {
   if (pos == std::string::npos) {
     return false;
   }
-  
   // Check if there is a letter character before proc_name.
   if (pos > 0 && std::isalpha(pname[pos - 1])) {
     return false;
   }
-  
   // Check if there is a letter character after proc_name.
   size_t after_pos = pos + strlen(proc_name);
   if (after_pos < pname.length() && std::isalpha(pname[after_pos])) {
     return false;
   }
-  
   return true;
 }
 
@@ -171,6 +169,17 @@ fs::path getXsanAbsPath(std::string_view rel_path) {
 
   // xsan_base_dir has value, and EnvVarBaseDir is not empty.
   return abs_path;
+}
+
+fs::path getXsanArchRtDir(std::string_view triple) {
+  static std::string default_triple = llvm::sys::getProcessTriple();
+  // If triple is empty, we should speculate the triple from the current
+  // process.
+  if (triple.empty()) {
+    triple = default_triple;
+  }
+  return getXsanAbsPath(XSAN_RUNTIME_DIR "/") / triple /
+         getXsanCombName(getXsanMask());
 }
 
 std::string getXsanCombName(const std::bitset<NumSanitizerTypes> &xsan_mask) {

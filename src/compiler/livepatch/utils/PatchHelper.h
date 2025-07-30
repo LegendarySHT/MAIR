@@ -32,6 +32,7 @@ void memcpy_forcibly(void *dst, const void *src, size_t n,
 std::string getXsanCombName(const std::bitset<NumSanitizerTypes> &xsan_mask);
 std::filesystem::path getThisPatchDsoPath();
 std::filesystem::path getXsanAbsPath(std::string_view rel_path);
+std::filesystem::path getXsanArchRtDir(std::string_view triple = "");
 // Get the executable path of the current process.
 std::filesystem::path getSelfPath();
 // Return true if the executable file is PIE
@@ -178,7 +179,6 @@ protected:
       typename XsanInterceptorFunctorBase<DeriveTy, void *>::ScopedCall;
 };
 
-
 // Common function pointers (e.g., Ret (*)(Args...))
 template <typename DeriveTy, typename Ret, typename... Args>
 class XsanInterceptorFunctor<DeriveTy, Ret (*)(Args...)>
@@ -205,8 +205,7 @@ protected:
                                           Ret (*)(Args..., ...)>::ScopedCall;
 
 public:
-  template <typename... CallArgs>
-  Ret operator()(CallArgs&&... args) {
+  template <typename... CallArgs> Ret operator()(CallArgs &&...args) {
     // Note: we can't do parameter number check here, must ensure that the
     // caller passes the correct parameters to the real function.
     ScopedCall Scoper(this);

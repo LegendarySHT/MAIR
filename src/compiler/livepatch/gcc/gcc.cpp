@@ -536,13 +536,11 @@ public:
             "from XSan seems meaningless for GCC.");
     }
     if (sanTy == XSan) {
-      xsan_rt_prefix =
-          getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" +
-                         getXsanCombName(getXsanMask()) + "/libclang_rt.xsan");
+      xsan_rt_prefix = getXsanArchRtDir() / "libclang_rt.xsan";
     } else if (sanTy == ASan) {
-      xsan_rt_prefix = getXsanAbsPath(XSAN_LINUX_LIB_DIR "/libclang_rt.asan");
+      xsan_rt_prefix = getXsanArchRtDir() / "libclang_rt.asan";
     } else if (sanTy == TSan) {
-      xsan_rt_prefix = getXsanAbsPath(XSAN_LINUX_LIB_DIR "/libclang_rt.tsan");
+      xsan_rt_prefix = getXsanArchRtDir() / "libclang_rt.tsan";
     } else {
       // Nothing to do
       return;
@@ -642,9 +640,7 @@ private:
   }
   void add_rpath() {
     static const std::string rPathOpt =
-        "-rpath=" +
-        getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" + getXsanCombName(getXsanMask()))
-            .generic_string();
+        "-rpath=" + getXsanArchRtDir().generic_string();
     comp.append(rPathOpt);
   }
 

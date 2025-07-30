@@ -16,14 +16,6 @@
 #include "utils/PatchHelper.h"
 #include "xsan_common.h"
 
-#if defined(__aarch64__) || defined(__arm64__)
-#define ARCH_SUFFIX "-aarch64"
-#elif defined(__x86_64__)
-#define ARCH_SUFFIX "-x86_64"
-#else
-#define ARCH_SUFFIX "" 
-#endif
-
 namespace clang {
 namespace driver {
 namespace tools {
@@ -56,36 +48,31 @@ static llvm::SmallVector<std::string, 8> saved_args;
 
 namespace {
 
-static void add_rpath(ArgStringList &CmdArgs) {
-  static const std::string rPathOpt =
-      "-rpath=" +
-      getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" + getXsanCombName(getXsanMask()))
-          .generic_string();
-  CmdArgs.push_back(rPathOpt.c_str());
-}
-
 class HackedSanitizersRtRewriter {
   using StringRef = llvm::StringRef;
 
 public:
-  HackedSanitizersRtRewriter(ArgStringList &Args)
+  HackedSanitizersRtRewriter(ArgStringList &Args, const ToolChain &TC)
       : Args(Args), replace(getXsanMask().any()),
         shouldHasStaticRt(getSanType() == XSan || getSanType() == ASan),
-        /// TODO: decouple linux here
-        replaced_prefix(getXsanAbsPath(XSAN_LINUX_LIB_DIR "/" +
-                                       getXsanCombName(getXsanMask()) +
-                                       "/libclang_rt.")) {
-    if (getSanType() == SanNone || replaced_prefix.empty())
+        XsanRtDir(getXsanArchRtDir(TC.getTriple().str())),
+        PrefixToReplace(XsanRtDir / "libclang_rt."), TC(TC) {
+    if (getSanType() == SanNone || PrefixToReplace.empty())
       return;
 
     StringRef sanName = hacked_san_names[getSanType()];
-    replaced_prefix += sanName;
+    PrefixToReplace += sanName;
 
     generate_new_args();
     doSwap();
   }
 
 private:
+  void add_rpath(ArgStringList &CmdArgs) const {
+    static const std::string rPathOpt = "-rpath=" + XsanRtDir.generic_string();
+    CmdArgs.push_back(rPathOpt.c_str());
+  }
+
   /// Match arg with *libclang_rt.<san>*.
   /// Return the position of the successful match + size of the pattern
   /// libclang_rt.<san>.
@@ -112,11 +99,6 @@ private:
     if (!pos_suffix.has_value())
       return std::nullopt;
     size_t pos = pos_suffix.value();
-    // Initialize the new RT as <XSan-Path>/lib/linux/libclang_rt.<san>
-    std::string result = replaced_prefix;
-    /// TODO: use the same output structure as clang, i.e.,
-    /// lib/x86_64-unknown-linux-gnu/libclang_rt.xsan.a or
-    /// lib/aarch64-unknown-linux-gnu/libclang_rt.xsan.a
     // Get the suffix, e.g.,
     //  1. *libclang_rt.asan-static.a -> -static.a
     //  2. *libclang_rt.asan.a.syms -> .a.syms
@@ -133,17 +115,9 @@ private:
     }
     if (pos == StringRef::npos)
       return std::nullopt;
-    //  1. *libclang_rt.asan-static.a -> -static.a -> -static
-    //  2. *libclang_rt.asan.a.syms -> .a.syms -> ""
-    StringRef before_suffix = suffix.substr(0, pos);
-    if (before_suffix.endswith(ARCH_SUFFIX)) {
-      result += suffix;
-    } else {
-      result += before_suffix;
-      result += ARCH_SUFFIX;
-      result += suffix.substr(pos);
-    }
-    return result;
+    // Initialize the new RT as
+    // <XSan-Path>/lib/<triple>/libclang_rt.<san><suffix>
+    return PrefixToReplace + suffix.str();
   }
 
   /// Eat one arg, return false if the next arg should be skipped.
@@ -204,7 +178,7 @@ private:
     // In this option, we should add xxx_static.a manually.
     if (shouldHasStaticRt) {
       shouldHasStaticRt = false;
-      saved_args.push_back(replaced_prefix + "_static" + ARCH_SUFFIX + ".a");
+      saved_args.push_back(PrefixToReplace + "_static" + ".a");
       NewCmdArgs.push_back(PreRt.data());
       NewCmdArgs.push_back(saved_args.back().c_str());
       NewCmdArgs.push_back(PostRt.data());
@@ -222,11 +196,13 @@ private:
   bool replace;
   mutable bool shouldHasStaticRt;
 
-  std::string replaced_prefix;
+  const std::filesystem::path XsanRtDir;
+  std::string PrefixToReplace;
   ArgStringList &Args;
 
   mutable llvm::StringSet<> SeenRts;
   mutable ArgStringList NewCmdArgs;
+  const ToolChain &TC;
 };
 
 static void add_wrap_link_option(ArgStringList &CmdArgs) {
@@ -252,7 +228,7 @@ bool tools::addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
                                  ArgStringList &CmdArgs) {
   bool result = Interceptor(TC, Args, CmdArgs);
   if (isXsanEnabled()) {
-    HackedSanitizersRtRewriter Rewriter(CmdArgs);
+    HackedSanitizersRtRewriter Rewriter(CmdArgs, TC);
     add_wrap_link_option(CmdArgs);
   }
   return result;

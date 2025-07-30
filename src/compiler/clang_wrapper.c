@@ -444,7 +444,7 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
    */
   cc_params[cc_par_cnt++] = "-fno-discard-value-names";
 
-  san_pass = alloc_printf("%s/pass/%s", obj_path, san_pass);
+  san_pass = alloc_printf("%s/" XSAN_PASS_DIR "/%s", obj_path, san_pass);
 
   /*
     From this issue https://github.com/llvm/llvm-project/issues/56137
