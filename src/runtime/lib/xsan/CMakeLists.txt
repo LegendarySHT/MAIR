@@ -26,12 +26,15 @@ function(get_compiler_rt_output_dir arch output_dir)
     set(_xsan_output_dir ${COMPILER_RT_OUTPUT_LIBRARY_DIR})
   endif()
 
-
-  _parse_xsan_comb("${output_dir}" _prefix _comb _suffix)
-
-  if(DEFINED _comb AND _comb)
-    # Add sub-directory <comb> to output_dir
-    set(_xsan_output_dir "${_xsan_output_dir}/${_comb}")
+  if (DEFINED target_comb AND target_comb)
+    set(_xsan_output_dir "${_xsan_output_dir}/${target_comb}")
+  else()
+    _parse_xsan_comb("${output_dir}" _prefix _comb _suffix)
+  
+    if(DEFINED _comb AND _comb)
+      # Add sub-directory <comb> to output_dir
+      set(_xsan_output_dir "${_xsan_output_dir}/${_comb}")
+    endif()
   endif()
 
   set(${output_dir} ${_xsan_output_dir} PARENT_SCOPE)
@@ -45,11 +48,15 @@ function(get_compiler_rt_install_dir arch install_dir)
     set(_xsan_install_dir ${COMPILER_RT_INSTALL_LIBRARY_DIR})
   endif()
 
-  _parse_xsan_comb("${install_dir}" _prefix _comb _suffix)
+  if(DEFINED target_comb AND target_comb)
+    set(_xsan_install_dir "${_xsan_install_dir}/${target_comb}")
+  else()
+    _parse_xsan_comb("${install_dir}" _prefix _comb _suffix)
 
-  if(DEFINED _comb AND _comb)
-    # Add sub-directory <comb> to output_dir
-    set(_xsan_install_dir "${_xsan_install_dir}/${_comb}")
+    if(DEFINED _comb AND _comb)
+      # Add sub-directory <comb> to output_dir
+      set(_xsan_install_dir "${_xsan_install_dir}/${_comb}")
+    endif()
   endif()
 
   set(${install_dir} ${_xsan_install_dir} PARENT_SCOPE)
@@ -647,3 +654,8 @@ if(EXISTS ${CONFIG_FILE_PATH})
 else()
   message(STATUS "Configuration file not found, can not auto-generate the xsan_hooks_gen.h file.")
 endif()
+
+# Unset target_comb variable to avoid conflicts in other sanitizers
+# Because our overrided `get_compiler_rt_install_dir`/`get_compiler_rt_output_dir`
+# will use this variable to control whether to add sub-directory <comb>.
+unset(target_comb)
