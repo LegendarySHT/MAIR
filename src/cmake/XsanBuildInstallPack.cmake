@@ -2,7 +2,7 @@
 include(GNUInstallDirs)
 
 set(XSAN_DEFAULT_TARGET_TRIPLE ${LLVM_TARGET_TRIPLE} CACHE STRING
-  "Default triple for which XSan will be built.")
+    "Default triple for which XSan will be built.")
 
 # ------------------------ Vars  ---------------------------------
 set(XSAN_BIN_DIR ".")
@@ -35,6 +35,7 @@ set(COMPILER_RT_INSTALL_PATH "${XSAN_INSTALL_DIR}" CACHE PATH
 )
 set(XSAN_INSTALL_BINDIR ${XSAN_INSTALL_DIR}/${XSAN_BIN_DIR} CACHE PATH "Installation path for bin")
 set(XSAN_INSTALL_LIBDIR ${XSAN_INSTALL_DIR}/${XSAN_LIB_DIR} CACHE PATH "Installation path for lib")
+set(XSAN_INSTALL_RUNTIME_DIR ${XSAN_INSTALL_DIR}/${XSAN_RUNTIME_DIR} CACHE PATH "Installation path for runtime")
 set(XSAN_INSTALL_PATCHDIR ${XSAN_INSTALL_DIR}/${XSAN_PATCH_DIR} CACHE PATH "Installation path for livepatch")
 set(XSAN_INSTALL_PASSDIR ${XSAN_INSTALL_DIR}/${XSAN_PASS_DIR} CACHE PATH "Installation path for pass")
 set(XSAN_INSTALL_DATADIR ${XSAN_INSTALL_DIR}/${XSAN_DATA_DIR} CACHE PATH "Installation path for resource")
