@@ -1,6 +1,9 @@
 # Introduce GNUInstallDirs module, automatically add install directories.
 include(GNUInstallDirs)
 
+set(XSAN_DEFAULT_TARGET_TRIPLE ${LLVM_TARGET_TRIPLE} CACHE STRING
+  "Default triple for which XSan will be built.")
+
 # ------------------------ Vars  ---------------------------------
 set(XSAN_BIN_DIR ".")
 set(XSAN_LIB_DIR ".")

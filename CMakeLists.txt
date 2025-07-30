@@ -162,6 +162,14 @@ include(XsanBuildInstallPack)
 set(XSAN_COMMON_LIT_CONFIGURE_PATH
   ${CMAKE_BINARY_DIR}/test/lit.common.configured)
 
+
+foreach(arch ${ALL_XSAN_SUPPORTED_ARCH})
+  get_triple(${arch} XSAN_${arch}_TRIPLE)
+  message_green("XSAN_${arch}_TRIPLE: ${XSAN_${arch}_TRIPLE}")
+endforeach()
+
+set(XSAN_HOST_TRIPLE ${XSAN_${CMAKE_HOST_SYSTEM_PROCESSOR}_TRIPLE})
+
 add_subdirectory(src)
 
 # Now this directory is added from /src/runtime/test/CMakeLists.txt,

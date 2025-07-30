@@ -21,4 +21,15 @@
 #define XSAN_CLANG_DSO_PATCH XSAN_PATCH_DIR "/" XSAN_CLANG_DSO_PATCH_FILE
 #define XSAN_GCC_DSO_PATCH_FILE "libgcc-patch.so"
 #define XSAN_GCC_DSO_PATCH XSAN_PATCH_DIR "/" XSAN_GCC_DSO_PATCH_FILE
+
+
+#define XSAN_HOST_TRIPLE "@XSAN_HOST_TRIPLE@"
+#define XSAN_x86_64_TRIPLE "@XSAN_x86_64_TRIPLE@"
+#define XSAN_aarch64_TRIPLE "@XSAN_aarch64_TRIPLE@"
+#define XSAN_arm_TRIPLE "@XSAN_arm_TRIPLE@"
+#define XSAN_armhf_TRIPLE "@XSAN_armhf_TRIPLE@"
+#define XSAN_armv6m_TRIPLE "@XSAN_armv6m_TRIPLE@"
+#define XSAN_mips_TRIPLE "@XSAN_mips_TRIPLE@"
+#define XSAN_mipsel_TRIPLE "@XSAN_mipsel_TRIPLE@"
+
 #endif // _COMPILER_CONFIG_H
