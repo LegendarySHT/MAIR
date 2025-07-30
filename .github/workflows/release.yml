@@ -22,6 +22,7 @@ jobs:
       with:
         build_type: Release
         llvm_version: '15'
+        extra_cmake_args: -DSYSTEM_NAME_TO_PACK=x86_64-ubuntu-22.04
 
     - name: Archive Artifacts
       run: |
