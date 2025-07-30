@@ -27,7 +27,6 @@ jobs:
       run: |
         cd build
         cmake --build . --target package
-        cmake --build . --target package_source
         mkdir -p artifacts
         cp -r XSan-*.tar.gz XSan-*.zip version.txt artifacts/
    
@@ -47,4 +46,4 @@ jobs:
         body: |
           Official release for version ${{ env.RELEASE_VERSION }}.
           See attached assets for details.
-        files: build/artifacts/XSan-*-Linux*
+        files: build/artifacts/XSan-*
