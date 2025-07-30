@@ -502,11 +502,17 @@ if(NOT APPLE)
     )
 
     foreach(arch ${XSAN_SUPPORTED_ARCH})
+
+      set(_target_comb ${target_comb})
+      unset(target_comb)
+
       # Get output directory, considering the combination
       get_compiler_rt_output_dir(${arch} out_dir)
 
       # Get install directory, not considering the combination
       get_compiler_rt_install_dir(${arch} install_dir)
+
+      set(target_comb ${_target_comb})
 
       # output and install SymLink: lib/*/xsan_* -> lib/*/xsan_asan_*
       add_symlink(
