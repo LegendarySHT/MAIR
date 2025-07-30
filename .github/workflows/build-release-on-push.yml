@@ -20,7 +20,7 @@ jobs:
         run: |
           # Check if the commit message is a bump PR
           COMMIT_MSG='${{ github.event.head_commit.message }}'
-          if [[ "$COMMIT_MSG" == "chore: Bump to version"* ]]; then
+          if [[ "$COMMIT_MSG" == "chore: bump to version"* ]]; then
             echo "Bump PR merged. Triggering release."
             echo "triggered=true" >> $GITHUB_OUTPUT
           else

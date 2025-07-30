@@ -68,7 +68,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: bump version to ${{ steps.get_version.outputs.version }}"
-          title: "chore: Bump to version ${{ steps.get_version.outputs.version }}"
+          title: "chore: bump to version ${{ steps.get_version.outputs.version }}"
           body: |
             This PR was automatically generated after closing milestone `${{ steps.get_version.outputs.version }}`.
 
