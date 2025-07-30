@@ -8,6 +8,13 @@ set(LLVM_SUBPROJECT_TITLE "Compiler-RT")
 # We build runtime standalone but not adhere monorepo building, so we need to set this variable to true.
 set(COMPILER_RT_STANDALONE_BUILD TRUE)
 
+# Let runtime built as lib/x86_64-unknown-linux-gnu/*libclang_rt* instead of 
+#                      lib/linux/*libclang_rt*-x86_64*
+# See `get_compiler_rt_output_dir` and  `add_compiler_rt_runtime` for details.
+if (NOT DEFINED LLVM_ENABLE_PER_TARGET_RUNTIME_DIR)
+  set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR ON)
+endif()
+
 # LLVM_MAIN_SRC_DIR is set in the following `load_llvm_config`,
 # should have not enter the branch and set COMPILER_RT_INCLUDE_TESTS to ON
 # However, in the scenario of quick re-cmake (e.g., cmake triggerred by make),
