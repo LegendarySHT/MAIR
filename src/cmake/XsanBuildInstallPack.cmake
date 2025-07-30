@@ -2,19 +2,20 @@
 include(GNUInstallDirs)
 
 # ------------------------ Vars  ---------------------------------
-set(XSAN_REL_BIN_DIR ".")
-set(XSAN_REL_LIB_DIR ".")
-set(XSAN_REL_PATCH_DIR "patch")
-set(XSAN_REL_DATA_DIR "${CMAKE_INSTALL_DATADIR}")
-set(XSAN_REL_PASS_DIR "pass")
+set(XSAN_BIN_DIR ".")
+set(XSAN_LIB_DIR ".")
+set(XSAN_PATCH_DIR "patch")
+set(XSAN_PASS_DIR "pass")
+set(XSAN_RUNTIME_DIR "lib")
+set(XSAN_DATA_DIR "${CMAKE_INSTALL_DATADIR}")
 
 # ------------------------ Vars for build ------------------------
-# set(XSAN_BIN_DIR "${CMAKE_BINARY_DIR}/${XSAN_REL_BIN_DIR}")
-cmake_path(SET XSAN_BIN_DIR NORMALIZE  "${CMAKE_BINARY_DIR}/${XSAN_REL_BIN_DIR}")
-cmake_path(SET XSAN_LIB_DIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_REL_LIB_DIR}")
-cmake_path(SET XSAN_PATCH_DIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_REL_PATCH_DIR}")
-cmake_path(SET XSAN_DATA_DIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_REL_DATA_DIR}")
-cmake_path(SET XSAN_PASS_DIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_REL_PASS_DIR}")
+# set(XSAN_OUTPUT_BINDIR "${CMAKE_BINARY_DIR}/${XSAN_BIN_DIR}")
+cmake_path(SET XSAN_OUTPUT_BINDIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_BIN_DIR}")
+cmake_path(SET XSAN_OUTPUT_LIBDIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_LIB_DIR}")
+cmake_path(SET XSAN_OUTPUT_PATCHDIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_PATCH_DIR}")
+cmake_path(SET XSAN_OUTPUT_DATADIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_DATA_DIR}")
+cmake_path(SET XSAN_OUTPUT_PASSDIR NORMALIZE "${CMAKE_BINARY_DIR}/${XSAN_PASS_DIR}")
 
 # ------------------------ Vars for install ------------------------
 # The whole XSan is installed to ${XSAN_INSTALL_DIR}, to preserve the designated directory structure.
@@ -29,11 +30,11 @@ set(COMPILER_RT_INSTALL_PATH "${XSAN_INSTALL_DIR}" CACHE PATH
     "Prefix for directories where built compiler-rt artifacts should be installed."
     FORCE # Use FORCE to override the default value in base-config-ix.cmake
 )
-set(XSAN_INSTALL_BINDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_BIN_DIR} CACHE PATH "Installation path for bin")
-set(XSAN_INSTALL_LIBDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_LIB_DIR} CACHE PATH "Installation path for lib")
-set(XSAN_INSTALL_PATCHDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_PATCH_DIR} CACHE PATH "Installation path for livepatch")
-set(XSAN_INSTALL_PASSDIR ${XSAN_INSTALL_DIR}/${XSAN_REL_PASS_DIR} CACHE PATH "Installation path for pass")
-set(XSAN_INSTALL_DATADIR ${XSAN_INSTALL_DIR}/${XSAN_REL_DATA_DIR} CACHE PATH "Installation path for resource")
+set(XSAN_INSTALL_BINDIR ${XSAN_INSTALL_DIR}/${XSAN_BIN_DIR} CACHE PATH "Installation path for bin")
+set(XSAN_INSTALL_LIBDIR ${XSAN_INSTALL_DIR}/${XSAN_LIB_DIR} CACHE PATH "Installation path for lib")
+set(XSAN_INSTALL_PATCHDIR ${XSAN_INSTALL_DIR}/${XSAN_PATCH_DIR} CACHE PATH "Installation path for livepatch")
+set(XSAN_INSTALL_PASSDIR ${XSAN_INSTALL_DIR}/${XSAN_PASS_DIR} CACHE PATH "Installation path for pass")
+set(XSAN_INSTALL_DATADIR ${XSAN_INSTALL_DIR}/${XSAN_DATA_DIR} CACHE PATH "Installation path for resource")
 
 # ## Template for install(TARGETS|FILES|DIRECTORY)
 # install(TARGETS ${name}
@@ -74,12 +75,13 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
 set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+
 # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 set(CPACK_RESOURCE_FILE_README "${CMAKE_SOURCE_DIR}/README.md" CACHE STRING "The README file of the package.")
 execute_process(
-  COMMAND ${CMAKE_C_COMPILER} -dumpmachine
-  OUTPUT_VARIABLE TARGET_TRIPLE
-  OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND ${CMAKE_C_COMPILER} -dumpmachine
+    OUTPUT_VARIABLE TARGET_TRIPLE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 set(CPACK_SYSTEM_NAME "${TARGET_TRIPLE}")
 

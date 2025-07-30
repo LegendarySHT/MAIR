@@ -74,7 +74,7 @@ set_target_properties(ASanInstPass
   XSanInstPass
   TestPass
   PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY "${XSAN_PASS_DIR}"
+  LIBRARY_OUTPUT_DIRECTORY "${XSAN_OUTPUT_PASSDIR}"
 )
 
 install(TARGETS ASanInstPass TSanInstPass CovSanInstPass MSanInstPass XSanInstPass

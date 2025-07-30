@@ -61,7 +61,7 @@ endif()
 
 set_target_properties(clang-patch
     PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${XSAN_PATCH_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${XSAN_OUTPUT_PATCHDIR}"
 )
 
 install(TARGETS clang-patch

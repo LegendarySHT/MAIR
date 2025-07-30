@@ -17,14 +17,14 @@ endif()
 # Set output directory
 set_target_properties(xclang
   PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${XSAN_BIN_DIR}"
+  RUNTIME_OUTPUT_DIRECTORY "${XSAN_OUTPUT_BINDIR}"
 )
 
 add_symlink(
   TRIGGER_TARGET xclang
   SOURCE xclang
   LINK_NAME xclang++
-  OUT_DIR ${XSAN_BIN_DIR}
+  OUT_DIR ${XSAN_OUTPUT_BINDIR}
   INSTALL_DIR ${XSAN_INSTALL_BINDIR}
 )
 
@@ -40,14 +40,14 @@ endif()
 
 set_target_properties(xgcc
   PROPERTIES
-  RUNTIME_OUTPUT_DIRECTORY "${XSAN_BIN_DIR}"
+  RUNTIME_OUTPUT_DIRECTORY "${XSAN_OUTPUT_BINDIR}"
 )
 
 add_symlink(
   TRIGGER_TARGET xgcc
   SOURCE xgcc
   LINK_NAME xg++
-  OUT_DIR ${XSAN_BIN_DIR}
+  OUT_DIR ${XSAN_OUTPUT_BINDIR}
   INSTALL_DIR ${XSAN_INSTALL_BINDIR}
 )
 

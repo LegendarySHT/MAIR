@@ -490,7 +490,7 @@ if(NOT APPLE)
       TRIGGER_TARGET ${wrap_symbol_target}
       SOURCE ${target_comb}
       LINK_NAME ${symlink_comb}
-      OUT_DIR ${XSAN_DATA_DIR}
+      OUT_DIR ${XSAN_OUTPUT_DATADIR}
       INSTALL_DIR ${XSAN_INSTALL_DATADIR}
     )
 
@@ -579,7 +579,7 @@ if(NOT APPLE)
 
     # TODO: generate the wrapped symbols file when it doesn't exist.
 
-    set(output_file "${XSAN_DATA_DIR}/${target_comb}/xsan_wrapped_symbols.txt")
+    set(output_file "${XSAN_OUTPUT_DATADIR}/${target_comb}/xsan_wrapped_symbols.txt")
     set(XSAN_DYNAMIC_LINK_FLAGS
       ${XSAN_COMMON_DYNAMIC_LINK_FLAGS}
       "-Wl,@${output_file}"

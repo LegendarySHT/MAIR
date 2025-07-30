@@ -74,7 +74,7 @@ function(generate_wrap_symbols)
 endfunction()
 
 # Build a target to generate wrapped symbols file.
-# The output directory is ${XSAN_DATA_DIR}
+# The output directory is ${XSAN_OUTPUT_DATADIR}
 function(create_wrap_symbols_target TARGET_NAME)
     # Use cmake_parse_arguments to parse named arguments
     cmake_parse_arguments(GWS
@@ -92,7 +92,7 @@ function(create_wrap_symbols_target TARGET_NAME)
     # Check if OUT parameter is provided
     if(NOT GWS_OUT_SUBDIR)
         message(FATAL_ERROR "create_wrap_symbols_target: OUT_SUBDIR parameter is required,"
-            " which means the subdirectory of $\{XSAN_DATA_DIR\} to create the wrapped symbols file.")
+            " which means the subdirectory of $\{XSAN_OUTPUT_DATADIR\} to create the wrapped symbols file.")
     endif()
 
     # Check if IN parameter is provided
@@ -101,7 +101,7 @@ function(create_wrap_symbols_target TARGET_NAME)
             " which means the list of wrapped symbols files of sub-sanitizers.")
     endif()
 
-    set(out_file "${XSAN_DATA_DIR}/${GWS_OUT_SUBDIR}/${GWS_NAME}")
+    set(out_file "${XSAN_OUTPUT_DATADIR}/${GWS_OUT_SUBDIR}/${GWS_NAME}")
     set(in_files "${GWS_IN}")
 
     # # Create target to generate wrapped symbols file

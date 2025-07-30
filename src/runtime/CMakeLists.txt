@@ -50,7 +50,7 @@ endif()
 #   )
 
 ############ Change the output/install directories #############
-set(COMPILER_RT_OUTPUT_DIR ${XSAN_LIB_DIR} CACHE PATH
+set(COMPILER_RT_OUTPUT_DIR ${XSAN_OUTPUT_LIBDIR} CACHE PATH
 "Path where built compiler-rt libraries should be stored.")
 set(COMPILER_RT_LIBRARY_OUTPUT_DIR ${COMPILER_RT_OUTPUT_DIR})
 set(COMPILER_RT_LIBRARY_INSTALL_DIR ${XSAN_INSTALL_LIBDIR})
