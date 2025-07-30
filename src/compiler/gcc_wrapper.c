@@ -125,7 +125,7 @@ static void edit_params(u32 argc, const char **argv) {
   u8 only_lib = 0, needs_shared_rt = 1;
   const u8 *name;
   enum SanitizerType xsanTy = SanNone;
-  u8 is_cxx = 0;
+  u8 is_cxx;
   int dump_active = 0;
 
   cc_params = ck_alloc((argc + 128) * sizeof(u8 *));
@@ -142,6 +142,7 @@ static void edit_params(u32 argc, const char **argv) {
     u8 *alt_cxx = getenv("X_CXX");
     cc_params[0] = alt_cxx ? alt_cxx : (u8 *)"g++";
   } else {
+    is_cxx = 0;
     u8 *alt_cc = getenv("X_CC");
     cc_params[0] = alt_cc ? alt_cc : (u8 *)"gcc";
   }

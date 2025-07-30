@@ -452,6 +452,14 @@ static u8 *get_xsan_comb_name(const XsanOption *opt) {
   return alloc_printf("xsan%s%s%s", asan_suffix, msan_suffix, tsan_suffix);
 }
 
+static void append_env_var(const char *key, const char *value) {
+  const char *old_value = getenv(key);
+  const char *new_value = (old_value != NULL)
+                              ? (char *)alloc_printf("%s:%s", old_value, value)
+                              : value;
+  setenv(key, new_value, 1);
+}
+
 static void init_sanitizer_setting(enum SanitizerType sanTy) {
   u8 *str_options;
   switch (sanTy) {
@@ -529,13 +537,8 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
 
     support_dso_inject = whether_to_support_dso_injection(cc_params[0]);
     if (support_dso_inject) {
-      const char *ld_preload = getenv("LD_PRELOAD");
       const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
-      const char *new_ld_preload =
-          (ld_preload != NULL)
-              ? (char *)alloc_printf("%s:%s", ld_preload, dso_path)
-              : dso_path;
-      setenv("LD_PRELOAD", new_ld_preload, 1);
+      append_env_var("LD_PRELOAD", dso_path);
       setenv("XSAN_BASE_DIR", obj_path, 1);
     }
     break;

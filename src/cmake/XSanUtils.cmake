@@ -193,7 +193,6 @@ function(install_symlink)
     set(FULL_WORK_DIR \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${ARGS_WORK_DIR}\")
 
     message(STATUS \"Installing symlink: ${ARGS_WORK_DIR}/${ARGS_LINK_NAME} -> ${TARGET_PATH}\")
-    message(STATUS \"full_dest_dir: \${FULL_WORK_DIR}\")
     if(NOT EXISTS \"\${FULL_WORK_DIR}\")
       file(MAKE_DIRECTORY \"\${FULL_WORK_DIR}\")
     endif()
