@@ -156,6 +156,7 @@ function(import_subsan output_prefix)
     tsan_fd.cpp
     tsan_flags.cpp
     tsan_init.cpp
+    tsan_interceptors_memintrinsics.cpp
     tsan_mman.cpp
     tsan_rtl_extra.cpp
     tsan_rtl_thread.cpp
