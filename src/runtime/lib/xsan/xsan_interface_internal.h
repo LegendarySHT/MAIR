@@ -20,4 +20,13 @@ SANITIZER_INTERFACE_ATTRIBUTE void __xsan_handle_no_return();
 
 SANITIZER_INTERFACE_ATTRIBUTE
 const char *__xsan_default_options();
+
+// This macro set visibility to default (i.e., not hidden), which export the
+// external symbol to other module.
+SANITIZER_INTERFACE_ATTRIBUTE
+void *__xsan_memcpy(void *dest, const void *src, uptr count);
+SANITIZER_INTERFACE_ATTRIBUTE
+void *__xsan_memset(void *dest, int ch, uptr count);
+SANITIZER_INTERFACE_ATTRIBUTE
+void *__xsan_memmove(void *dest, const void *src, uptr count);
 }
