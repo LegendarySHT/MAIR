@@ -139,8 +139,11 @@ public:
   static bool is(const CallT &I) {
     return I.getOperandBundle(MetaT::Name) != nullptr;
   }
-  static llvm::OperandBundleDef getBundle(const Extra &I);
+  static llvm::OperandBundleDef getBundle(const Extra &Data);
   static llvm::Optional<Extra> get(const CallT &I);
+  // We cannot add a new operand bundle to CallBase, so we need to replace the
+  // call instruction with a new one.
+  static llvm::CallBase *replaceCallWithExtra(CallT &I, const Extra &Data);
 };
 
 // ---------------------- Delegated to XSan -------------------------

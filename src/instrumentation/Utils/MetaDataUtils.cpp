@@ -82,8 +82,8 @@ void MetaDataHelper<MetaT, InstT, true>::setMD(InstT &I, MDNode *MD) {
 
 template <typename MetaT, typename InstT, typename Enabler>
 llvm::OperandBundleDef
-OperandBundleHelper<MetaT, InstT, Enabler>::getBundle(const Extra &I) {
-  return OperandBundleDef(MetaT::Name, pack(I.getContext(), I));
+OperandBundleHelper<MetaT, InstT, Enabler>::getBundle(const Extra &Data) {
+  return OperandBundleDef(MetaT::Name, pack(Data.getContext(), Data));
 }
 
 template <typename MetaT, typename CallT, typename Enabler>
@@ -92,6 +92,18 @@ OperandBundleHelper<MetaT, CallT, Enabler>::get(const CallT &I) {
   if (auto *Bundle = I.getOperandBundle(MetaT::Name))
     return unpack(*Bundle);
   return llvm::None;
+}
+
+template <typename MetaT, typename CallT, typename Enabler>
+llvm::CallBase *
+OperandBundleHelper<MetaT, CallT, Enabler>::replaceCallWithExtra(
+    CallT &I, const Extra &Data) {
+  OperandBundleDef OB = getBundle(Data);
+  CallBase *NewCall = CallBase::addOperandBundle(&I, -1, OB, &I);
+  NewCall->copyMetadata(I);
+  I.replaceAllUsesWith(NewCall);
+  I.eraseFromParent();
+  return NewCall;
 }
 
 // ---------------------- Replaced Alloca -------------------------
