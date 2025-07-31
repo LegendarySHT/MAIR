@@ -63,6 +63,7 @@ function(import_subsan output_prefix)
     # orig/tsan_fd.cpp
     # orig/tsan_flags.cpp
     orig/tsan_ignoreset.cpp
+    # orig/tsan_interceptors_memintrinsics.cpp
     # orig/tsan_interceptors_posix.cpp
     orig/tsan_interface.cpp
     orig/tsan_interface_ann.cpp
