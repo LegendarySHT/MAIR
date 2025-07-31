@@ -91,6 +91,7 @@ function(import_subsan output_prefix)
     asan_rtl.cpp
     asan_stack.cpp
     asan_thread.cpp
+    # asan_interceptors_memintrinsics.cpp
     ${ASAN_SOURCES}
   )
 
