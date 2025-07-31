@@ -254,6 +254,12 @@ struct DefaultHooks {
   PSEUDO_MACRO static void MoveRange(const Context *ctx, const void *dst,
                                      const void *src, uptr size,
                                      BufferedStackTrace &stack) {}
+  // Some function manipulate two ranges and not allowed to overlap, e.g.,
+  // strcat, strncat, etc.
+  // ASan can use this hook to check if the two ranges overlap.
+  PSEUDO_MACRO static void OnTwoRangesOverlap(const char *offset1, uptr size1,
+                                              const char *offset2, uptr size2,
+                                              const char *func_name) {}
   /// TODO: whether 'ctx' is needed, some places use nullptr now:
   // 1. 'mallinfo' in 'xsan_malloc_linux.cpp'
   // 2. 'XSAN_COMMON_INIT_RANGE' in 'xsan_interceptors_memintrinsics.h'

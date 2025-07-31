@@ -4,8 +4,6 @@
 
 #include "xsan_interceptors_memintrinsics.h"
 
-#include "asan/orig/asan_report.h"
-#include "asan/orig/asan_suppressions.h"
 #include "xsan_interceptors.h"
 #include "xsan_stack.h"
 

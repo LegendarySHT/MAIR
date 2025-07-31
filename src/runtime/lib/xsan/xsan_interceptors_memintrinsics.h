@@ -13,23 +13,22 @@ DECLARE_REAL(void *, memset, void *block, int c, SIZE_T size)
 
 namespace __xsan {
 
-#define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2)       \
-  do {                                                                         \
-    const char *offset1 = (const char *)_offset1;                              \
-    const char *offset2 = (const char *)_offset2;                              \
-    if (UNLIKELY(                                                              \
-            __asan::AsanRangesOverlap_(offset1, length1, offset2, length2))) { \
-      UNINITIALIZED BufferedStackTrace stack;                                  \
-      GetStackTraceFatalHere(stack);                                           \
-      bool suppressed = __asan::IsInterceptorSuppressed(name);                 \
-      if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {          \
-        suppressed = __asan::IsStackTraceSuppressed(&stack);                   \
-      }                                                                        \
-      if (!suppressed) {                                                       \
-        __asan::ReportStringFunctionMemoryRangesOverlap(                       \
-            name, offset1, length1, offset2, length2, &stack);                 \
-      }                                                                        \
-    }                                                                          \
+// Behavior of functions like "memcpy" or "strcpy" is undefined
+// if memory intervals overlap. We report error in this case.
+// Macro is used to avoid creation of new frames.
+static inline bool XsanRangesOverlap(const char *offset1, uptr length1,
+                                     const char *offset2, uptr length2) {
+  return !((offset1 + length1 <= offset2) || (offset2 + length2 <= offset1));
+}
+
+#define CHECK_RANGES_OVERLAP(name, _offset1, length1, _offset2, length2)      \
+  do {                                                                        \
+    const char *offset1 = (const char *)_offset1;                             \
+    const char *offset2 = (const char *)_offset2;                             \
+    if (UNLIKELY(                                                             \
+            __xsan::XsanRangesOverlap(offset1, length1, offset2, length2))) { \
+      __xsan::OnTwoRangesOverlap(offset1, length1, offset2, length2, name);   \
+    }                                                                         \
   } while (0)
 
 #define XSAN_READ_RANGE(ctx, offset, size)    \

@@ -85,7 +85,7 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
   };
 
   static void vfork_parent_after_handle_sp(void *sp) {
-    /// ASan will reset the shadow of [stk_bot, sp] to 0, 
+    /// ASan will reset the shadow of [stk_bot, sp] to 0,
     /// eliminating the impact of the vfork child process.
     __asan_handle_vfork(sp);
   }
@@ -154,6 +154,20 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
                                                       uptr size,
                                                       const char *func_name) {
     AccessMemoryRange(&ctx, (uptr)offset, size, false, func_name);
+  }
+  PSEUDO_MACRO static void OnTwoRangesOverlap(const char *offset1, uptr size1,
+                                              const char *offset2, uptr size2,
+                                              const char *func_name) {
+    UNINITIALIZED BufferedStackTrace stack;
+    __xsan::GetStackTraceFatalHere(stack);
+    bool suppressed = __asan::IsInterceptorSuppressed(func_name);
+    if (!suppressed && __asan::HaveStackTraceBasedSuppressions()) {
+      suppressed = __asan::IsStackTraceSuppressed(&stack);
+    }
+    if (!suppressed) {
+      __asan::ReportStringFunctionMemoryRangesOverlap(func_name, offset1, size1,
+                                                      offset2, size2, &stack);
+    }
   }
   // ---------- xsan_interface-Related Hooks ----------------
   template <s32 ReadSize>

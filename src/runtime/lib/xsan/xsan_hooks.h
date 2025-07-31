@@ -40,7 +40,9 @@ struct XsanInterceptorContext {
 };
 
 // ---------------------- Hook for other Sanitizers -------------------
-ALWAYS_INLINE void InitFromXsanVeryEarly() { XSAN_HOOKS_EXEC(InitFromXsanVeryEarly); }
+ALWAYS_INLINE void InitFromXsanVeryEarly() {
+  XSAN_HOOKS_EXEC(InitFromXsanVeryEarly);
+}
 ALWAYS_INLINE void InitFromXsanEarly() { XSAN_HOOKS_EXEC(InitFromXsanEarly); }
 ALWAYS_INLINE void InitFromXsan() { XSAN_HOOKS_EXEC(InitFromXsan); }
 ALWAYS_INLINE void InitFromXsanLate() { XSAN_HOOKS_EXEC(InitFromXsanLate); }
@@ -328,6 +330,15 @@ PSEUDO_MACRO void MoveRange(void *_ctx, const void *dst, const void *src,
   XSAN_HOOKS_EXEC(MoveRange, XsanContext::Ptr{ctx ? &ctx->xsan_ctx : nullptr},
                   dst, src, size, stack);
 }
+// Hook on function call related to TWO ranges.
+// ASan can use this hook to check if the two ranges overlap.
+PSEUDO_MACRO void OnTwoRangesOverlap(const char *offset1, uptr size1,
+                                     const char *offset2, uptr size2,
+                                     const char *func_name) {
+  XSAN_HOOKS_EXEC(OnTwoRangesOverlap, offset1, size1, offset2, size2,
+                  func_name);
+}
+
 /// TODO: whether 'ctx' is needed, some places use nullptr now:
 // 1. 'mallinfo' in 'xsan_malloc_linux.cpp'
 // 2. 'XSAN_COMMON_INIT_RANGE' in 'xsan_interceptors_memintrinsics.h'

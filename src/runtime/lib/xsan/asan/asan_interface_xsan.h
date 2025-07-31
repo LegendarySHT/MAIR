@@ -65,14 +65,6 @@ static inline bool AsanQuickCheckForUnpoisonedRegion_(uptr beg, uptr size) {
   return !shadow;
 }
 
-// Behavior of functions like "memcpy" or "strcpy" is undefined
-// if memory intervals overlap. We report error in this case.
-// Macro is used to avoid creation of new frames.
-static inline bool AsanRangesOverlap_(const char *offset1, uptr length1,
-                                      const char *offset2, uptr length2) {
-  return !((offset1 + length1 <= offset2) || (offset2 + length2 <= offset1));
-}
-
 void PoisonShadow(uptr addr, uptr size, u8 value);
 
 bool IsInterceptorSuppressed(const char *interceptor_name);
@@ -82,7 +74,10 @@ void ReportGenericError(uptr pc, uptr bp, uptr sp, uptr addr, bool is_write,
                         uptr access_size, u32 exp, bool fatal);
 void ReportStringFunctionSizeOverflow(uptr offset, uptr size,
                                       BufferedStackTrace *stack);
-
+void ReportStringFunctionMemoryRangesOverlap(const char *function,
+                                             const char *offset1, uptr length1,
+                                             const char *offset2, uptr length2,
+                                             BufferedStackTrace *stack);
 void InitializeFlags();
 void ValidateFlags();
 void SetCommonFlags(CommonFlags &cf);
