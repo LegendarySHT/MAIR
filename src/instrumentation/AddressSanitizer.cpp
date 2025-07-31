@@ -3235,8 +3235,12 @@ void FunctionStackPoisoner::processStaticAllocas() {
   DoDynamicAlloca &= !HasInlineAsm && !HasReturnsTwiceCall;
   DoStackMalloc &= !HasInlineAsm && !HasReturnsTwiceCall;
 
-  Value *StaticAlloca =
-      DoDynamicAlloca ? nullptr : createAllocaForLayout(IRB, L, false);
+  Value *StaticAlloca;
+  {
+    auto Scoper = IRB.scopedNotTagNoSanitize();
+    StaticAlloca =
+        DoDynamicAlloca ? nullptr : createAllocaForLayout(IRB, L, false);
+  }
 
   Value *FakeStack;
   Value *LocalStackBase;
@@ -3261,9 +3265,10 @@ void FunctionStackPoisoner::processStaticAllocas() {
           SplitBlockAndInsertIfThen(UseAfterReturnIsEnabled, InsBefore, false);
       __xsan::NoSanitize::set(*cast<Instruction>(
           UseAfterReturnIsEnabled->getUniqueUndroppableUser()));
-      /// Should NOT tag with nosanitize, as here is a user-sematic equivalent
-      /// replacement.
-      IRBuilder<> IRBIf(Term);
+      /// Although here is a user-sematic equivalent replacement, other
+      /// sanitizers could not instrument the callee (i.e.,
+      /// __asan_stack_malloc_N), so we need to tag with nosanitize.
+      __xsan::InstrumentationIRBuilder IRBIf(Term);
       StackMallocIdx = StackMallocSizeClass(LocalStackSize);
       assert(StackMallocIdx <= kMaxAsanStackMallocSizeClass);
       Value *FakeStackValue =
@@ -3277,7 +3282,9 @@ void FunctionStackPoisoner::processStaticAllocas() {
       // void *FakeStack = __asan_stack_malloc_N(LocalStackSize);
       // void *LocalStackBase = (FakeStack) ? FakeStack :
       //                        alloca(LocalStackSize);
-      auto Scoper = IRB.scopedNotTagNoSanitize();
+      /// Although here is a user-sematic equivalent replacement, other
+      /// sanitizers could not instrument the callee (i.e.,
+      /// __asan_stack_malloc_N), so we need to tag with nosanitize.
       StackMallocIdx = StackMallocSizeClass(LocalStackSize);
       FakeStack = IRB.CreateCall(AsanStackMallocFunc[StackMallocIdx],
                                  ConstantInt::get(IntptrTy, LocalStackSize));
