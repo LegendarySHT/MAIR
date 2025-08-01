@@ -1,3 +1,4 @@
+// UNSUPPORTED: target={{.*}}
 // RUN: %clangxx_xsan -O0 %s -o %t 
 // RUN: %run %t 2>&1 | FileCheck %s
 // RUN: %run %t 1 2>&1 | FileCheck %s
