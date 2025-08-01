@@ -9,6 +9,14 @@
 #include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 
+// ------------------ MSan TLS --------------------
+// static constexpr int kMsanParamTlsSize = 800;
+#define MSAN_PARAM_TLS_SIZE 800
+extern THREADLOCAL u64 __msan_param_tls[MSAN_PARAM_TLS_SIZE / sizeof(u64)];
+extern THREADLOCAL u32
+    __msan_param_origin_tls[MSAN_PARAM_TLS_SIZE / sizeof(u32)];
+#undef MSAN_PARAM_TLS_SIZE
+
 extern "C" {
 
 void __msan_unaligned_load2(uptr p);
@@ -79,6 +87,8 @@ void MoveShadowAndOrigin(const void *dst, const void *src, uptr size,
                          StackTrace *stack);
 void PrintWarningWithOrigin(uptr pc, uptr bp, u32 origin);
 void UnpoisonParam(uptr n);
+void SetShadow(const void *ptr, uptr size, u8 value);
+void SetOrigin(const void *dst, uptr size, u32 origin);
 
 // ------------------- Interceptor Scope -------------------
 

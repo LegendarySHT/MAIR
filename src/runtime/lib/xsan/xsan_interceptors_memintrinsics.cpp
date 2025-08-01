@@ -89,20 +89,28 @@ extern "C" {
 void *__xsan_memcpy(void *dst, const void *src, uptr size) {
   void *ctx;
 #  if PLATFORM_HAS_DIFFERENT_MEMCPY_AND_MEMMOVE
-  COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, dst, src, size);
+  XSAN_INTERCEPTOR_ENTER(ctx, memcpy, dst, src, size);
+  FUNC_SCOPE(xsan_memintrinsic);
+  XSAN_MEMCPY_IMPL(ctx, dst, src, size);
 #  else
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
+  XSAN_INTERCEPTOR_ENTER(ctx, memmove, dst, src, size);
+  FUNC_SCOPE(xsan_memintrinsic);
+  XSAN_MEMMOVE_IMPL(ctx, dst, src, size);
 #  endif
 }
 
 void *__xsan_memset(void *dst, int c, uptr size) {
   void *ctx;
-  COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, dst, c, size);
+  XSAN_INTERCEPTOR_ENTER(ctx, memset, dst, c, size);
+  FUNC_SCOPE(xsan_memintrinsic);
+  XSAN_MEMSET_IMPL(ctx, dst, c, size);
 }
 
 void *__xsan_memmove(void *dst, const void *src, uptr size) {
   void *ctx;
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
+  XSAN_INTERCEPTOR_ENTER(ctx, memmove, dst, src, size);
+  FUNC_SCOPE(xsan_memintrinsic);
+  XSAN_MEMMOVE_IMPL(ctx, dst, src, size);
 }
 }
 

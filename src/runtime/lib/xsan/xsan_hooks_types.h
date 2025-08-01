@@ -86,6 +86,8 @@ enum class ScopedFunc {
   strdup,
   common,
   signal,
+  // __xsan_memset/__xsan_memcpy/__xsan_memmove
+  xsan_memintrinsic,
 };
 
 // -------------------------- Hooks Checks --------------------------

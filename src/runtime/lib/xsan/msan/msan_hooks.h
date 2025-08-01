@@ -27,6 +27,27 @@ PSEUDO_MACRO static void CheckUnpoisoned(const void *_x, uptr n,
   }
 }
 
+PSEUDO_MACRO static void CheckMemIntrinsicSizeParam() {
+  // in __xsan_mem*, check whether the third param (i.e., size_t size) is
+  // initialized
+  SIZE_T shadow;
+  u32 origin = __msan_get_track_origins() ? __msan_param_origin_tls[4] : 0;
+
+  if constexpr (sizeof(SIZE_T) == 8) {
+    shadow = __msan_param_tls[2];
+    __msan_maybe_warning_8(shadow, origin);
+  } else {
+    internal_memcpy(&shadow, &__msan_param_tls[2], sizeof(SIZE_T));
+    if constexpr (sizeof(SIZE_T) == 4) {
+      __msan_maybe_warning_4(shadow, origin);
+    } else if constexpr (sizeof(SIZE_T) == 2) {
+      __msan_maybe_warning_2(shadow, origin);
+    } else if constexpr (sizeof(SIZE_T) == 1) {
+      __msan_maybe_warning_1(shadow, origin);
+    }
+  }
+}
+
 struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
   using Context = MsanContext;
   using Thread = MsanThread;
@@ -137,7 +158,24 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
   }
   PSEUDO_MACRO static void InitRange(const Context *ctx, const void *offset,
                                      uptr size) {
-    __msan_unpoison(offset, size);
+    if (FuncScope<__xsan::ScopedFunc::xsan_memintrinsic>::
+            in_xsan_memintrinsic_scope) {
+      // in __xsan_memset, use the second param as the value to be set
+      u8 shadow;
+      internal_memcpy(&shadow, &__msan_param_tls[1], sizeof(u8));
+      if (!shadow) {
+        __msan_unpoison(offset, size);
+      } else {
+        __msan::SetShadow(offset, size, shadow);
+        if (__msan_get_track_origins()) {
+          // the same offset as the shadow in __msan_param_tls
+          u32 origin = __msan_param_origin_tls[2];
+          __msan::SetOrigin(offset, size, origin);
+        }
+      }
+    } else {
+      __msan_unpoison(offset, size);
+    }
   }
   PSEUDO_MACRO static void CommonReadRange(const Context *ctx,
                                            const void *offset, uptr size,
@@ -211,6 +249,18 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
   template <>
   struct FuncScope<__xsan::ScopedFunc::getaddrinfo> {
     FuncScope<__xsan::ScopedFunc::common> common_scope;
+  };
+
+  template <>
+  struct FuncScope<__xsan::ScopedFunc::xsan_memintrinsic> {
+    THREADLOCAL static int in_xsan_memintrinsic_scope;
+    PSEUDO_MACRO FuncScope() {
+      in_xsan_memintrinsic_scope++;
+      // For user's memcpy/memmove/memset, we should verify the initialization of
+      // the size param
+      CheckMemIntrinsicSizeParam();
+    }
+    ~FuncScope() { in_xsan_memintrinsic_scope--; }
   };
 };
 

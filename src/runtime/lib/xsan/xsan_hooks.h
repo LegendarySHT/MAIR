@@ -289,6 +289,10 @@ ALWAYS_INLINE int RequireStackTracesSize() {
 template <ScopedFunc func>
 struct XsanFuncScope {
   XSAN_HOOKS_DEFINE_VAR(FuncScope<func>)
+
+  // To eliminate the stack frame when reporting error in the constructor.
+  PSEUDO_MACRO XsanFuncScope() {}
+  PSEUDO_MACRO ~XsanFuncScope() {}
 };
 
 ALWAYS_INLINE void InitializeInterceptors() {

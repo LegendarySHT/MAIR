@@ -123,6 +123,9 @@ THREADLOCAL int
 
 THREADLOCAL int MsanHooks::FuncScope<__xsan::ScopedFunc::common>::saved_scope;
 
+THREADLOCAL int MsanHooks::FuncScope<
+    __xsan::ScopedFunc::xsan_memintrinsic>::in_xsan_memintrinsic_scope = 0;
+
 MsanHooks::FuncScope<__xsan::ScopedFunc::signal>::FuncScope() {
   if (MsanThread *t = GetCurrentThread())
     t->EnterSignalHandler();
