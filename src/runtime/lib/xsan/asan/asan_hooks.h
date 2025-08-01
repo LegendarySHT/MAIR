@@ -170,13 +170,13 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
     }
   }
   // ---------- xsan_interface-Related Hooks ----------------
-  template <s32 ReadSize>
+  template <u32 ReadSize>
   static void __xsan_unaligned_read(uptr p);
-  template <s32 WriteSize>
+  template <u32 WriteSize>
   static void __xsan_unaligned_write(uptr p);
-  template <s32 ReadSize>
+  template <u32 ReadSize>
   static void __xsan_read(uptr p);
-  template <s32 WriteSize>
+  template <u32 WriteSize>
   static void __xsan_write(uptr p);
 };
 

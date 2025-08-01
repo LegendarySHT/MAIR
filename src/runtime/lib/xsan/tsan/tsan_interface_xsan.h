@@ -46,4 +46,9 @@ void atfork_child();
 void ThreadIgnoreBegin(ThreadState *thr, uptr pc);
 void ThreadIgnoreEnd(ThreadState *thr);
 
+// Related to fd access
+void FdAccess(ThreadState *thr, uptr pc, int fd);
+void FdPipeCreate(ThreadState *thr, uptr pc, int rfd, int wfd);
+void FdAcquire(ThreadState *thr, uptr pc, int fd);
+
 }  // namespace __tsan

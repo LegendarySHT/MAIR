@@ -294,13 +294,13 @@ struct DefaultHooks {
   // ---------- End of Generic Hooks in Interceptors ----------------
 
   // ---------- Xsan-Interface-Related Hooks ----------------
-  template <s32 ReadSize>
+  template <u32 ReadSize>
   ALWAYS_INLINE static void __xsan_unaligned_read(uptr p) {}
-  template <s32 WriteSize>
+  template <u32 WriteSize>
   ALWAYS_INLINE static void __xsan_unaligned_write(uptr p) {}
-  template <s32 ReadSize>
+  template <u32 ReadSize>
   ALWAYS_INLINE static void __xsan_read(uptr p) {}
-  template <s32 WriteSize>
+  template <u32 WriteSize>
   ALWAYS_INLINE static void __xsan_write(uptr p) {}
   // ---------- End of Xsan-Interface-Related Hooks ----------------
 };

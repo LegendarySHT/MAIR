@@ -12,10 +12,10 @@ using MsanContext = ::__xsan::DefaultContext<__xsan::XsanHooksSanitizer::Msan>;
 
 PSEUDO_MACRO static void CheckUnpoisoned(const void *_x, uptr n,
                                          const char *func_name) {
-  const char *x = (const char *)_x;
-  sptr offset = (sptr)__msan_test_shadow(x, n);
   if (__msan::IsInSymbolizerOrUnwider())
     return;
+  const char *x = (const char *)_x;
+  sptr offset = (sptr)__msan_test_shadow(x, n);
   if (offset >= 0 && __msan::flags()->report_umrs) {
     GET_CALLER_PC_BP;
     __msan::ReportUMRInsideAddressRange(func_name, x, n, offset);

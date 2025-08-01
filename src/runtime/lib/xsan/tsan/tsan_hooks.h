@@ -22,10 +22,6 @@ struct TsanThread {
   uptr tid = 0;
 };
 
-void FdAccess(ThreadState *thr, uptr pc, int fd);
-void FdPipeCreate(ThreadState *thr, uptr pc, int rfd, int wfd);
-void FdAcquire(ThreadState *thr, uptr pc, int fd);
-
 template <bool is_read>
 PSEUDO_MACRO void AccessMemoryRange(const TsanContext *ctx, const void *_offset,
                                     uptr size) {
@@ -236,13 +232,13 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
     AccessMemoryRange<false>(&ctx, offset, size);
   }
   // ---------- Xsan-Interface-Related Hooks ----------------
-  template <s32 ReadSize>
+  template <u32 ReadSize>
   static void __xsan_unaligned_read(uptr p);
-  template <s32 WriteSize>
+  template <u32 WriteSize>
   static void __xsan_unaligned_write(uptr p);
-  template <s32 ReadSize>
+  template <u32 ReadSize>
   static void __xsan_read(uptr p);
-  template <s32 WriteSize>
+  template <u32 WriteSize>
   static void __xsan_write(uptr p);
   // ---------- Func to use special scope ------------------------
   template <__xsan::ScopedFunc func>
