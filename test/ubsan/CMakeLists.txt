@@ -5,6 +5,9 @@ set(UBSAN_TEST_DEPS ${XSAN_TEST_DEPS})
 set(UBSAN_TEST_ARCH ${XSAN_TEST_ARCH})
 set(UBSAN_TEST_TARGET_CC ${XSAN_TEST_TARGET_CC})
 
+set(UBSAN_STANDALONE_TEST_DEPS ${XSAN_TEST_DEPS})
+set(UBSAN_STANDALONE_TESTSUITES)
+
 macro(add_ubsan_testsuite test_mode sanitizer arch lld thinlto)
   set(UBSAN_LIT_TEST_MODE "${test_mode}")
   set(CONFIG_NAME ${UBSAN_LIT_TEST_MODE})
@@ -26,6 +29,10 @@ macro(add_ubsan_testsuite test_mode sanitizer arch lld thinlto)
     ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME}/lit.site.cfg.py)
   list(APPEND UBSAN_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME})
   list(APPEND UBSAN_TEST_DEPS ${sanitizer})
+  if (${sanitizer} STREQUAL "ubsan")
+    list(APPEND UBSAN_STANDALONE_TESTSUITES ${CMAKE_CURRENT_BINARY_DIR}/${CONFIG_NAME})
+    list(APPEND UBSAN_STANDALONE_TEST_DEPS ubsan)
+  endif()
 endmacro()
 
 macro(add_ubsan_testsuites test_mode sanitizer arch)
@@ -51,22 +58,22 @@ foreach(arch ${UBSAN_TEST_ARCH})
   add_ubsan_testsuites("Standalone" ubsan ${arch})
 
   # Disable ASan-UBSan/TSan-UBSan/MSan-UBSan, as they are irrelevant to XSan.
-  # if(COMPILER_RT_HAS_ASAN AND ";${ASAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
-  #   # TODO(wwchrome): Re-enable ubsan for asan win 64-bit when ready.
-  #   # Disable ubsan with AddressSanitizer tests for Windows 64-bit,
-  #   # 64-bit Solaris/x86 and 64-bit SPARC.
-  #   if((NOT (OS_NAME MATCHES "Windows" AND CMAKE_SIZEOF_VOID_P EQUAL 8)) AND
-  #      (NOT (OS_NAME MATCHES "SunOS" AND ${arch} MATCHES x86_64)) AND
-  #      (NOT ${arch} MATCHES sparcv9))
-  #     add_ubsan_testsuites("AddressSanitizer" asan ${arch})
-  #   endif()
-  # endif()
-  # if(COMPILER_RT_HAS_MSAN AND ";${MSAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
-  #   add_ubsan_testsuites("MemorySanitizer" msan ${arch})
-  # endif()
-  # if(COMPILER_RT_HAS_TSAN AND ";${TSAN_SUPPORTED_ARCH};" MATCHES ";${arch};" AND NOT ANDROID)
-  #   add_ubsan_testsuites("ThreadSanitizer" tsan ${arch})
-  # endif()
+  if(COMPILER_RT_HAS_ASAN AND ";${ASAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
+    # TODO(wwchrome): Re-enable ubsan for asan win 64-bit when ready.
+    # Disable ubsan with AddressSanitizer tests for Windows 64-bit,
+    # 64-bit Solaris/x86 and 64-bit SPARC.
+    if((NOT (OS_NAME MATCHES "Windows" AND CMAKE_SIZEOF_VOID_P EQUAL 8)) AND
+       (NOT (OS_NAME MATCHES "SunOS" AND ${arch} MATCHES x86_64)) AND
+       (NOT ${arch} MATCHES sparcv9))
+      add_ubsan_testsuites("AddressSanitizer" asan ${arch})
+    endif()
+  endif()
+  if(COMPILER_RT_HAS_MSAN AND ";${MSAN_SUPPORTED_ARCH};" MATCHES ";${arch};")
+    add_ubsan_testsuites("MemorySanitizer" msan ${arch})
+  endif()
+  if(COMPILER_RT_HAS_TSAN AND ";${TSAN_SUPPORTED_ARCH};" MATCHES ";${arch};" AND NOT ANDROID)
+    add_ubsan_testsuites("ThreadSanitizer" tsan ${arch})
+  endif()
 endforeach()
 
 macro(add_ubsan_device_testsuite test_mode sanitizer platform arch)
@@ -136,6 +143,11 @@ endif()
 add_lit_testsuite(check-ubsan "Running UndefinedBehaviorSanitizer tests"
   ${UBSAN_TESTSUITES}
   DEPENDS ${UBSAN_TEST_DEPS})
+
+add_lit_testsuite(check-ubsan-only "Running Standalone UndefinedBehaviorSanitizer tests"
+  ${UBSAN_STANDALONE_TESTSUITES}
+  DEPENDS ${UBSAN_STANDALONE_TEST_DEPS})
+
 list(APPEND XSAN_LIT_TEST_TARGETS check-ubsan)
 set(XSAN_LIT_TEST_TARGETS "${XSAN_LIT_TEST_TARGETS}" PARENT_SCOPE)
 

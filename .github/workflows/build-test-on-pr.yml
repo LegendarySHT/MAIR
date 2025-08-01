@@ -62,7 +62,7 @@ jobs:
           cmake --build build --target check-msan
 
       - name: Run UBSan LIT tests
-        id: check-ubsan
+        id: check-ubsan-only
         if: always()
         run: |
-          cmake --build build --target check-ubsan
+          cmake --build build --target check-ubsan-only
