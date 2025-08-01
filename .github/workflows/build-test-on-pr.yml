@@ -66,3 +66,9 @@ jobs:
         if: always()
         run: |
           cmake --build build --target check-ubsan-only
+
+      - name: Run XSan LIT tests
+        id: check-xsan
+        if: always()
+        run: |
+          cmake --build build --target check-xsan
