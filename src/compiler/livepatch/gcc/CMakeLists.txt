@@ -33,6 +33,8 @@ if(LLVM_LINK_LLVM_DYLIB)
 else()
     # libLLVMSupport.a (installed) or libLLVMSupport.so (self-built)
     target_link_libraries(gcc-patch PRIVATE LLVMSupport)
+    # Please refer to to $LLVM_DIR/lib/cmake/llvm/LLVMExports.cmake
+    # to see the imported targets of LLVM.
     get_target_property(_llvmsupport_type LLVMSupport TYPE)
 
     # If LLVMSupport is a shared library, user might get the error when using livepatch for gcc,

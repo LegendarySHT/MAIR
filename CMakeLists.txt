@@ -112,23 +112,24 @@ message_green("C++ compiler: ${CMAKE_CXX_COMPILER}")
 set(CMAKE_C_STANDARD 17 CACHE STRING "C standard to conform to")
 set(CMAKE_C_STANDARD_REQUIRED YES)
 
-# LLVM 15 requires C++14, but we only compile the runtime and instrumentation
-# supprot C++17
+# Exactly, LLVM 15 just requires C++14, but we need to compile the runtime and instrumentation
+# that requires C++17.
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
 
-# add_definitions(${LLVM_DEFINITIONS})
-# include_directories(${LLVM_INCLUDE_DIRS})
-# link_directories(${LLVM_LIBRARY_DIRS})
-find_program(LLD_PATH lld)
+include(CheckLinkerFlag)
+set(FUSE_LD_LLD_FLAG "-fuse-ld=lld")
+message(STATUS "Checking if CXX compiler supports ${FUSE_LD_LLD_FLAG}")
+check_linker_flag(CXX "${FUSE_LD_LLD_FLAG}" CXX_SUPPORT_LLD)
 
 # Preferring lld linker over system linker
-if(LLD_PATH)
-  message(STATUS "Found lld and use it as linker: ${LLD_PATH}")
-
+if(CXX_SUPPORT_LLD)
+  message_green("CC supports ${FUSE_LD_LLD_FLAG}, use lld as linker")
   # Fix dynsym corruption issue in libclang_rt.tsan.so
-  set(CMAKE_LINKER ${LLD_PATH} CACHE STRING "Linker" FORCE)
+  # NOTE: CMAKE_LINKER is useless to control the linker as follows:
+  #     https://gitlab.kitware.com/cmake/cmake/-/issues/24990
+  # If we want to use lld to link *.o to *.so, we should use LINKER_FLAGS
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fuse-ld=lld")
 else()
