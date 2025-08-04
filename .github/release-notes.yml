@@ -3,7 +3,7 @@ changelog:
     - title: ":star: Major Features"
       labels: [ "major" ]
     - title: ":chart_with_upwards_trend: Minor Features"
-      labels: [ "feat", "minor", ]
+      labels: [ "feat", "minor" ]
     - title: ":beetle: Bug Fixes"
       labels: [ "bug", "fix", "patch" ]
     # - title: ":hammer_and_wrench: Dependency Upgrade"
