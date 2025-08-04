@@ -58,9 +58,14 @@ jobs:
 
       - name: Fix file permissions
         if: steps.get_version.outputs.version
+        id: read_notes
         run: |
           cp release_notes/${{ steps.get_version.outputs.version }}.md docs/release_notes/
           sudo chown -R $(id -u):$(id -g) $GITHUB_WORKSPACE
+          # Use special syntax to set up multi-line output
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat docs/release_notes/${{ steps.get_version.outputs.version }}.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request
         if: steps.get_version.outputs.version
@@ -70,10 +75,9 @@ jobs:
           commit-message: "chore: bump version to ${{ steps.get_version.outputs.version }}"
           title: "chore: bump to version ${{ steps.get_version.outputs.version }}"
           body: |
-            This PR was automatically generated after closing milestone `${{ steps.get_version.outputs.version }}`.
+            This PR was automatically generated after closing milestone [${{ github.event.milestone.title }}](${{ github.event.milestone.html_url }})
 
-            ## Release Notes
-            ${{ steps.release_notes.outputs.RELEASE_NOTES }}
+            ${{ steps.read_notes.outputs.notes }}
           branch: "release/v${{ steps.get_version.outputs.version }}"
           base: "dev-xsan"
           labels: "release"
