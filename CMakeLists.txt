@@ -12,6 +12,7 @@ set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT
 
 file(WRITE "${CMAKE_BINARY_DIR}/version.txt" "${PROJECT_VERSION}\n")
 
+# Cmake will check compilers in `project(...)`
 project(xsan VERSION ${PROJECT_VERSION})
 
 # To compile *.S in runtime
@@ -22,6 +23,21 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
 # Reading the configuration file.
 set(CONFIG_FILE_PATH "${CMAKE_SOURCE_DIR}/xsan_config.cmake")
+
+# To find *.cmake
+list(INSERT CMAKE_MODULE_PATH 0
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake/Modules"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
+)
+
+
+include(XSanUtils) # introduce message_green()... function
+# This include also performs `find_package(LLVM REQUIRED CONFIG)`
+include(ConfigLLVMCompiler) # ensure we use clang-15 and LLVM-15 to build XSan
+include(AllSupportedArchDefs)
+
 
 if(EXISTS ${CONFIG_FILE_PATH})
   include(${CONFIG_FILE_PATH})
@@ -89,19 +105,8 @@ Learn more about these options in our documentation at https://llvm.org/docs/CMa
 ")
 endif()
 
-find_program(CLANG_C_COMPILER clang)
-
-if(CLANG_C_COMPILER)
-  set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE STRING "C compiler" FORCE)
-  set(CMAKE_CXX_COMPILER ${CLANG_C_COMPILER}++ CACHE STRING "C++ compiler" FORCE)
-
-  message(STATUS "Clang found and set as default compiler: ${CLANG_C_COMPILER}")
-else()
-  message(WARNING "Clang not found, use system default compiler (cc).")
-endif()
-
-message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
-message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+message_green("C compiler: ${CMAKE_C_COMPILER}")
+message_green("C++ compiler: ${CMAKE_CXX_COMPILER}")
 
 # Set C standard to C17
 set(CMAKE_C_STANDARD 17 CACHE STRING "C standard to conform to")
@@ -112,9 +117,6 @@ set(CMAKE_C_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 
-# Load LLVMConfig.cmake. If this fails, consider setting `LLVM_DIR` to point
-# to your LLVM installation's `lib/cmake/llvm` directory.
-find_package(LLVM REQUIRED CONFIG)
 
 # add_definitions(${LLVM_DEFINITIONS})
 # include_directories(${LLVM_INCLUDE_DIRS})
@@ -132,17 +134,6 @@ if(LLD_PATH)
 else()
   message(WARNING "lld not found, use system default linker (ld).")
 endif()
-
-# To find *.cmake
-list(INSERT CMAKE_MODULE_PATH 0
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/cmake/Modules"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/cmake/Modules"
-)
-
-include(XSanUtils) # introduce message_green()... function
-include(AllSupportedArchDefs)
 
 # Notify user to specify the LLVM_PATH, otherwise we cannot
 # enable the full support of XSAN.
