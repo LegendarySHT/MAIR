@@ -19,9 +19,9 @@ def get_required_attr(config, attr_name):
     return attr_value
 
 # Setup config name.
-config.name = "AddressSanitizer" + config.name_suffix
+config.name = "XSanitizer" + config.name_suffix
 
-# Platform-specific default ASAN_OPTIONS for lit tests.
+# Platform-specific default XSAN_OPTIONS for lit tests.
 default_xsan_opts = list(config.default_sanitizer_opts)
 
 # On Darwin, leak checking is not enabled by default. Enable on macOS
@@ -31,10 +31,10 @@ if config.host_os == "Darwin" and config.apple_platform == "osx":
 
 default_xsan_opts_str = ':'.join(default_xsan_opts)
 if default_xsan_opts_str:
-    config.environment["ASAN_OPTIONS"] = default_xsan_opts_str
+    config.environment["XSAN_OPTIONS"] = default_xsan_opts_str
     default_xsan_opts_str += ":"
 config.substitutions.append(
-    ("%env_xsan_opts=", "env ASAN_OPTIONS=" + default_xsan_opts_str)
+    ("%env_xsan_opts=", "env XSAN_OPTIONS=" + default_xsan_opts_str)
 )
 
 # Setup source root.
