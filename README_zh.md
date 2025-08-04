@@ -111,6 +111,12 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
 2. 构建 XSan：
 
+   > 注意：我们需要 `clang-15` 来编译构建 XSan，可以通过以下手段之一实现
+   > - 更改环境变量: 
+   >   `export CC=/path/to/clang-15; export CXX=/path/to/clang++-15`
+   > - 修改cmake参数：
+   >   `cmake -DCMAKE_C_COMPILER=/path/to/clang-15 -DCMAKE_CXX_COMPILER=/path/to/clang++-15 ...`
+
    * **调试模式**（用于开发和调试）：
 
    ```bash
@@ -129,12 +135,16 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
    > 如有 Ninja，也可以使用 `cmake -G Ninja ... && ninja` 来构建
 
-3. 运行测试（**注意：需在 Release 模式下构建后运行**）：
+3. 运行测试：
+
+   > 注意：ASan有5个测试用例在Debug模式下可能会 Unexpected Pass，请忽略. 
+   > 如果以非sudo权限运行测试，部分测试用例也会失败，请甄别。
 
    ```bash
    cd /path/to/xsan/build
    make check-all     # 运行所有测试
    make check-asan    # 仅运行 ASan 测试
+   make check-msan    # 仅运行 MSan 测试
    make check-ubsan   # 仅运行 UBSan 测试
    make check-tsan    # 仅运行 TSan 测试
    ```

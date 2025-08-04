@@ -98,6 +98,13 @@ Sanitizers that are not considered:
     > cd /path/to/xsan; git checkout dev-xsan
     > ```
 2. Build XSan.
+
+   > Note: we require `clang-15` to compile/build XSan, which could be set up via
+   > - Set environment variables: 
+   >   `export CC=/path/to/clang-15; export CXX=/path/to/clang++-15`
+   > - Or set cmake parameters:
+   >   `cmake -DCMAKE_C_COMPILER=/path/to/clang-15 -DCMAKE_CXX_COMPILER=/path/to/clang++-15 ...`
+
     - Debug mode: use to develop and debug the project.
     ```shell
     cd /path/to/xsan; mkdir build; cd build
@@ -113,11 +120,16 @@ Sanitizers that are not considered:
 
     > If you have Ninja installed, you can also build with `cmake -G Ninja ... && ninja`
 
-3. Test the XSan (NOTE THAT you need to compile XSan in RELEASE mode).
+3. Test the XSan.
+
+    > Note: ASan has 5 test cases that may Unexpected Pass in Debug mode, please ignore them.
+    > If you run the tests with non-sudo permissions, some test cases may also fail, please distinguish.
+
     ```shell
     cd /path/to/xsan/build
     make check-all # check all the test cases
     make check-asan # check the ASan test cases
+    make check-msan # check the MSan test cases
     make check-ubsan # check the UBSan test cases
     make check-tsan # check the TSan test cases
     ```
