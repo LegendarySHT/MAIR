@@ -93,6 +93,9 @@ static void InitializeDefaultFlags() {
   RegisterCommonFlags(&ubsan_parser);
 #endif
 
+  // Initialize sanitizer flags first, as they may override XSan flags.
+  InitializeSanitizerFlags();
+
   // Override from ASan compile definition.
   const char *xsan_compile_def = MaybeUseXsanDefaultOptionsCompileDefinition();
   xsan_parser.ParseString(xsan_compile_def);
@@ -112,7 +115,6 @@ static void InitializeDefaultFlags() {
   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
 #endif
 
-  InitializeSanitizerFlags();
   InitializeCommonFlags();
 
   // Flag validation:

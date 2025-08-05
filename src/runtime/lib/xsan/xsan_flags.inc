@@ -10,6 +10,10 @@
 // XSAN_FLAG(Type, Name, DefaultValue, Description)
 // See COMMON_FLAG in sanitizer_flags.inc for more details.
 
+XSAN_FLAG(
+    bool, replace_str, true,
+    "If set, uses custom wrappers and replacements for libc string functions "
+    "to find more errors.")
 XSAN_FLAG(bool, replace_intrin, true,
           "If set, uses custom wrappers for memset/memcpy/memmove intrinsics.")
 

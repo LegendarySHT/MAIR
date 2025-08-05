@@ -70,22 +70,27 @@ static void DisplayHelpMessages(FlagParser *parser) {
   }
 }
 
+static void OverrideXsanFlags() {
+  __xsan::flags()->replace_str = flags()->replace_str;
+  __xsan::flags()->replace_intrin = flags()->replace_intrin;
+}
+
 static void InitializeDefaultFlags() {
   Flags *f = flags();
   FlagParser asan_parser;
 
-// Set the default values and prepare for parsing ASan and common flags.
-//   SetCommonFlagsDefaults();
-//   {
-//     CommonFlags cf;
-//     cf.CopyFrom(*common_flags());
-//     cf.detect_leaks = cf.detect_leaks && CAN_SANITIZE_LEAKS;
-//     cf.external_symbolizer_path = GetEnv("ASAN_SYMBOLIZER_PATH");
-//     cf.malloc_context_size = kDefaultMallocContextSize;
-//     cf.intercept_tls_get_addr = true;
-//     cf.exitcode = 1;
-//     OverrideCommonFlags(cf);
-//   }
+  // Set the default values and prepare for parsing ASan and common flags.
+  //   SetCommonFlagsDefaults();
+  //   {
+  //     CommonFlags cf;
+  //     cf.CopyFrom(*common_flags());
+  //     cf.detect_leaks = cf.detect_leaks && CAN_SANITIZE_LEAKS;
+  //     cf.external_symbolizer_path = GetEnv("ASAN_SYMBOLIZER_PATH");
+  //     cf.malloc_context_size = kDefaultMallocContextSize;
+  //     cf.intercept_tls_get_addr = true;
+  //     cf.exitcode = 1;
+  //     OverrideCommonFlags(cf);
+  //   }
   f->SetDefaults();
 
   RegisterAsanFlags(&asan_parser, f);
@@ -102,14 +107,14 @@ static void InitializeDefaultFlags() {
   RegisterCommonFlags(&lsan_parser);
 #endif
 
-// #if CAN_SANITIZE_UB
-//   __ubsan::Flags *uf = __ubsan::flags();
-//   uf->SetDefaults();
+  // #if CAN_SANITIZE_UB
+  //   __ubsan::Flags *uf = __ubsan::flags();
+  //   uf->SetDefaults();
 
-//   FlagParser ubsan_parser;
-//   __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
-//   RegisterCommonFlags(&ubsan_parser);
-// #endif
+  //   FlagParser ubsan_parser;
+  //   __ubsan::RegisterUbsanFlags(&ubsan_parser, uf);
+  //   RegisterCommonFlags(&ubsan_parser);
+  // #endif
 
   if (SANITIZER_APPLE) {
     // Support macOS MallocScribble and MallocPreScribble:
@@ -144,11 +149,12 @@ static void InitializeDefaultFlags() {
 #if CAN_SANITIZE_LEAKS
   lsan_parser.ParseStringFromEnv("LSAN_OPTIONS");
 #endif
-// #if CAN_SANITIZE_UB
-//   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
-// #endif
+  // #if CAN_SANITIZE_UB
+  //   ubsan_parser.ParseStringFromEnv("UBSAN_OPTIONS");
+  // #endif
 
-//   InitializeCommonFlags();
+  // InitializeCommonFlags();
+  OverrideXsanFlags();
 
   // TODO(samsonov): print all of the flags (ASan, LSan, common).
   DisplayHelpMessages(&asan_parser);

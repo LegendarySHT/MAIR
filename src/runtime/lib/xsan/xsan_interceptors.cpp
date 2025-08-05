@@ -1,6 +1,5 @@
 #include "xsan_interceptors.h"
 
-#include "asan/orig/asan_flags.h"
 #include "asan/orig/asan_poisoning.h"
 #include "lsan/lsan_common.h"
 
@@ -846,6 +845,7 @@ INTERCEPTOR(void, makecontext, struct ucontext_t *ucp, void (*func)(), int argc,
   SignContextStack(ucp);
 }
 
+/// TODO: adapt to TSan
 INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
   // --------------------- ASan part ----------------------------
   static bool reported_warning = false;
@@ -971,7 +971,7 @@ INTERCEPTOR(char *, strcat, char *to, const char *from) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strcat, to, from);
   XsanInitFromRtl();
-  if (__asan::flags()->replace_str) {
+  if (__xsan::flags()->replace_str) {
     uptr from_length = internal_strlen(from);
     XSAN_READ_RANGE(ctx, from, from_length + 1);
     XSAN_USE_STRING(ctx, from, from_length);
@@ -995,7 +995,7 @@ INTERCEPTOR(char *, strncat, char *to, const char *from, usize size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncat, to, from, size);
   XsanInitFromRtl();
-  if (__asan::flags()->replace_str) {
+  if (__xsan::flags()->replace_str) {
     uptr from_length = MaybeRealStrnlen(from, size);
     uptr copy_length = Min<uptr>(size, from_length + 1);
     XSAN_READ_RANGE(ctx, from, copy_length);
@@ -1026,7 +1026,7 @@ INTERCEPTOR(char *, strcpy, char *to, const char *from) {
       return REAL(strcpy)(to, from);
   }
 
-  if (__asan::flags()->replace_str) {
+  if (__xsan::flags()->replace_str) {
     uptr from_size = internal_strlen(from) + 1;
     CHECK_RANGES_OVERLAP("strcpy", to, from_size, from, from_size);
     XSAN_READ_RANGE(ctx, from, from_size);
@@ -1055,7 +1055,7 @@ INTERCEPTOR(char *, strdup, const char *s) {
   if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
   uptr length = internal_strlen(s);
-  if (__asan::flags()->replace_str) {
+  if (__xsan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
     XSAN_USE_STRING(ctx, s, length);
   }
@@ -1076,7 +1076,7 @@ INTERCEPTOR(char *, __strdup, const char *s) {
   if (UNLIKELY(!TryXsanInitFromRtl()))
     return internal_strdup(s);
   uptr length = internal_strlen(s);
-  if (__asan::flags()->replace_str) {
+  if (__xsan::flags()->replace_str) {
     XSAN_READ_RANGE(ctx, s, length + 1);
     XSAN_USE_STRING(ctx, s, length);
   }
@@ -1095,7 +1095,7 @@ INTERCEPTOR(char *, strncpy, char *to, const char *from, usize size) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, strncpy, to, from, size);
   XsanInitFromRtl();
-  if (__asan::flags()->replace_str) {
+  if (__xsan::flags()->replace_str) {
     uptr from_size = Min<uptr>(size, MaybeRealStrnlen(from, size) + 1);
     CHECK_RANGES_OVERLAP("strncpy", to, from_size, from, from_size);
     XSAN_READ_RANGE(ctx, from, from_size);
@@ -1110,7 +1110,7 @@ template <typename Fn>
 static ALWAYS_INLINE auto StrtolImpl(void *ctx, Fn real, const char *nptr,
                                      char **endptr, int base)
     -> decltype(real(nullptr, nullptr, 0)) {
-  if (!__asan::flags()->replace_str)
+  if (!__xsan::flags()->replace_str)
     return real(nptr, endptr, base);
   char *real_endptr;
   auto res = real(nptr, &real_endptr, base);
@@ -1165,7 +1165,7 @@ INTERCEPTOR(int, atoi, const char *nptr) {
   if (SANITIZER_APPLE && UNLIKELY(!XsanInited()))
     return REAL(atoi)(nptr);
   XsanInitFromRtl();
-  if (!__asan::flags()->replace_str) {
+  if (!__xsan::flags()->replace_str) {
     return REAL(atoi)(nptr);
   }
   char *real_endptr;
@@ -1185,7 +1185,7 @@ INTERCEPTOR(long, atol, const char *nptr) {
   if (SANITIZER_APPLE && UNLIKELY(!XsanInited()))
     return REAL(atol)(nptr);
   XsanInitFromRtl();
-  if (!__asan::flags()->replace_str) {
+  if (!__xsan::flags()->replace_str) {
     return REAL(atol)(nptr);
   }
   char *real_endptr;
@@ -1199,7 +1199,7 @@ INTERCEPTOR(long long, atoll, const char *nptr) {
   void *ctx;
   XSAN_INTERCEPTOR_ENTER(ctx, atoll, nptr);
   XsanInitFromRtl();
-  if (!__asan::flags()->replace_str) {
+  if (!__xsan::flags()->replace_str) {
     return REAL(atoll)(nptr);
   }
   char *real_endptr;
