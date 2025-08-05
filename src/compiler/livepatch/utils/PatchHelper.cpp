@@ -20,7 +20,7 @@ namespace fs = std::filesystem;
 // Lazy initialization for XsanEnabled
 bool isXsanEnabled() {
   static const bool enabled =
-      llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
+      llvm::sys::Process::GetEnv("XSAN_COMPILE_MASK").hasValue();
   return enabled;
 }
 
@@ -28,7 +28,7 @@ bool isXsanEnabled() {
 const std::string &getStrMask() {
   static const std::string val =
       isXsanEnabled()
-          ? llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").getValue()
+          ? llvm::sys::Process::GetEnv("XSAN_COMPILE_MASK").getValue()
           : "";
   return val;
 }

@@ -472,7 +472,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     // Use env var to control clang only perform frontend
     // transformation for sanitizers.
     str_options = alloc_printf("%llu", xsan_options.mask);
-    setenv("XSAN_ONLY_FRONTEND", str_options, 1);
+    setenv("XSAN_COMPILE_MASK", str_options, 1);
 
     // Reuse the frontend code relevant to sanitizer
     if (has(&xsan_options, ASan)) {
@@ -539,6 +539,8 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
     if (support_dso_inject) {
       const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
       append_env_var("LD_PRELOAD", dso_path);
+      /// TODO: this var can be removed, as livepatch could self-detect the
+      /// base dir.
       setenv("XSAN_BASE_DIR", obj_path, 1);
     }
     break;

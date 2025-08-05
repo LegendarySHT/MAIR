@@ -6,8 +6,8 @@
 
 
 if echo "$1" | grep -q -E "(gcc|g\+\+)"; then
-  # Check whether it contains string "XSAN_ONLY_FRONTEND"
-  if strings "$(which $1)" | grep -q "XSAN_ONLY_FRONTEND"; then
+  # Check whether it contains string "XSAN_COMPILE_MASK"
+  if strings "$(which $1)" | grep -q "XSAN_COMPILE_MASK"; then
     # If so, we have patch the gcc with manual patch.
     exit 1
   else

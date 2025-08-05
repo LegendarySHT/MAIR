@@ -27,7 +27,7 @@ index 1b29b1151224..2820907f10f2 100644
  
    bool needsMemProfRt() const { return NeedsMemProfRt; }
 -  bool needsAsanRt() const { return Sanitizers.has(SanitizerKind::Address); }
-+  // MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
++  // MODIFIED: check env var XSAN_COMPILE_MASK to stop linking Sanitizer Rt
 +  bool needsAsanRt() const {
 +    return !isXsanEnabled() && Sanitizers.has(SanitizerKind::Address);
 +  }
@@ -39,12 +39,12 @@ index 1b29b1151224..2820907f10f2 100644
    }
 -  bool needsTsanRt() const { return Sanitizers.has(SanitizerKind::Thread); }
 -  bool needsMsanRt() const { return Sanitizers.has(SanitizerKind::Memory); }
-+  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
++  // XSAN-MODIFIED: check env var XSAN_COMPILE_MASK to stop linking Sanitizer
 +  // Rt
 +  bool needsTsanRt() const {
 +    return !isXsanEnabled() && Sanitizers.has(SanitizerKind::Thread);
 +  }
-+  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
++  // XSAN-MODIFIED: check env var XSAN_COMPILE_MASK to stop linking Sanitizer
 +  // Rt
 +  bool needsMsanRt() const {
 +    return !isXsanEnabled() && Sanitizers.has(SanitizerKind::Memory);
@@ -68,8 +68,8 @@ index 7c4e35634e5d..9d05070f13d3 100644
                            const LangOptions &LangOpts, PassBuilder &PB) {
    PB.registerOptimizerLastEPCallback([&](ModulePassManager &MPM,
                                           OptimizationLevel Level) {
-+    // XSAN-MODIFIED: add env check "XSAN_ONLY_FRONTEND" to forbid sanitizer passes
-+    bool isXsanEnabled = llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
++    // XSAN-MODIFIED: add env check "XSAN_COMPILE_MASK" to forbid sanitizer passes
++    bool isXsanEnabled = llvm::sys::Process::GetEnv("XSAN_COMPILE_MASK").hasValue();
 +
      if (CodeGenOpts.hasSanitizeCoverage()) {
        auto SancovOpts = getSancovOptsFromCGOpts(CodeGenOpts);
@@ -116,7 +116,7 @@ index 68fe90c7a69d..bf5ca210e4da 100644
  }
  
  bool SanitizerArgs::needsUbsanRt() const {
-+  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
++  // XSAN-MODIFIED: check env var XSAN_COMPILE_MASK to stop linking Sanitizer Rt
    // All of these include ubsan.
    if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
        needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||
@@ -130,7 +130,7 @@ index 68fe90c7a69d..bf5ca210e4da 100644
                                  // Used to deduplicate diagnostics.
    SanitizerMask Kinds;
 +
-+  XsanEnabled = llvm::sys::Process::GetEnv("XSAN_ONLY_FRONTEND").hasValue();
++  XsanEnabled = llvm::sys::Process::GetEnv("XSAN_COMPILE_MASK").hasValue();
 +
    const SanitizerMask Supported = setGroupBits(TC.getSupportedSanitizers());
  

@@ -253,7 +253,7 @@ static SanitizerMask parseSanitizeTrapArgs(const Driver &D,
 }
 
 bool SanitizerArgs::needsUbsanRt() const {
-  // XSAN-MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer
+  // XSAN-MODIFIED: check env var XSAN_COMPILE_MASK to stop linking Sanitizer
   // Rt All of these include ubsan.
   if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
       needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||

@@ -6,8 +6,8 @@ index 410ba67a4..7cdd7628c 100644
    if (argc != 1)
      return NULL;
  
-+  // MODIFIED: check env var XSAN_ONLY_FRONTEND to stop linking Sanitizer Rt
-+  bool isXsanEnabled = (env.get ("XSAN_ONLY_FRONTEND") != NULL);
++  // MODIFIED: check env var XSAN_COMPILE_MASK to stop linking Sanitizer Rt
++  bool isXsanEnabled = (env.get ("XSAN_COMPILE_MASK") != NULL);
    if (strcmp (argv[0], "address") == 0)
 -    return (flag_sanitize & SANITIZE_USER_ADDRESS) ? "" : NULL;
 +    return (!isXsanEnabled && flag_sanitize & SANITIZE_USER_ADDRESS) ? "" : NULL;
@@ -31,7 +31,7 @@ index 6164d49fa..48eaf2b07 100644
  		location_t loc)
  {
 +  /* XSAN-MODIFIED: Check for Xsan frontend-only mode. */
-+  bool isXsanEnabled = (getenv ("XSAN_ONLY_FRONTEND") != NULL);
++  bool isXsanEnabled = (getenv ("XSAN_COMPILE_MASK") != NULL);
 +
    enum unwind_info_type ui_except;
  
