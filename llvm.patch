@@ -1,16 +1,8 @@
 diff --git a/clang/include/clang/Driver/SanitizerArgs.h b/clang/include/clang/Driver/SanitizerArgs.h
-index 1b29b1151224..2820907f10f2 100644
+index 1b29b1151224..13435b70e6d2 100644
 --- a/clang/include/clang/Driver/SanitizerArgs.h
 +++ b/clang/include/clang/Driver/SanitizerArgs.h
-@@ -12,6 +12,7 @@
- #include "clang/Driver/Types.h"
- #include "llvm/Option/Arg.h"
- #include "llvm/Option/ArgList.h"
-+#include "llvm/Support/Process.h"
- #include "llvm/Transforms/Instrumentation/AddressSanitizerOptions.h"
- #include <string>
- #include <vector>
-@@ -66,23 +67,38 @@ class SanitizerArgs {
+@@ -66,23 +66,38 @@ class SanitizerArgs {
  
    std::string MemtagMode;
  
@@ -53,7 +45,7 @@ index 1b29b1151224..2820907f10f2 100644
    bool needsLsanRt() const {
      return Sanitizers.has(SanitizerKind::Leak) &&
 diff --git a/clang/lib/CodeGen/BackendUtil.cpp b/clang/lib/CodeGen/BackendUtil.cpp
-index 7c4e35634e5d..9d05070f13d3 100644
+index 7c4e35634e5d..a361f1e06b58 100644
 --- a/clang/lib/CodeGen/BackendUtil.cpp
 +++ b/clang/lib/CodeGen/BackendUtil.cpp
 @@ -47,6 +47,7 @@
@@ -109,10 +101,18 @@ index 7c4e35634e5d..9d05070f13d3 100644
          MPM.addPass(HWAddressSanitizerPass(
              {CompileKernel, Recover,
 diff --git a/clang/lib/Driver/SanitizerArgs.cpp b/clang/lib/Driver/SanitizerArgs.cpp
-index 68fe90c7a69d..bf5ca210e4da 100644
+index 68fe90c7a69d..5348517aa550 100644
 --- a/clang/lib/Driver/SanitizerArgs.cpp
 +++ b/clang/lib/Driver/SanitizerArgs.cpp
-@@ -257,10 +257,11 @@ bool SanitizerArgs::needsFuzzerInterceptors() const {
+@@ -16,6 +16,7 @@
+ #include "llvm/ADT/StringSwitch.h"
+ #include "llvm/Support/AArch64TargetParser.h"
+ #include "llvm/Support/Path.h"
++#include "llvm/Support/Process.h"
+ #include "llvm/Support/SpecialCaseList.h"
+ #include "llvm/Support/TargetParser.h"
+ #include "llvm/Support/VirtualFileSystem.h"
+@@ -257,10 +258,11 @@ bool SanitizerArgs::needsFuzzerInterceptors() const {
  }
  
  bool SanitizerArgs::needsUbsanRt() const {
@@ -125,7 +125,7 @@ index 68fe90c7a69d..bf5ca210e4da 100644
      return false;
  
    return (Sanitizers.Mask & NeedsUbsanRt & ~TrapSanitizers.Mask) ||
-@@ -303,6 +304,9 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
+@@ -303,6 +305,9 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
    SanitizerMask DiagnosedKinds; // All Kinds we have diagnosed up to now.
                                  // Used to deduplicate diagnostics.
    SanitizerMask Kinds;
@@ -135,19 +135,17 @@ index 68fe90c7a69d..bf5ca210e4da 100644
    const SanitizerMask Supported = setGroupBits(TC.getSupportedSanitizers());
  
    CfiCrossDso = Args.hasFlag(options::OPT_fsanitize_cfi_cross_dso,
-@@ -503,6 +507,15 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
-                      SanitizerKind::Address | SanitizerKind::KernelAddress |
-                          SanitizerKind::HWAddress |
-                          SanitizerKind::KernelHWAddress)};
-+  // XSAN-MODIFIED: modify IncompatibleGroups
-+  if (isXsanEnabled()) {
-+    for (auto &G : IncompatibleGroups) {
-+      if (G.first == SanitizerKind::Address) {
-+        G.second &= ~SanitizerKind::Thread;
-+      }
-+    }
-+  }
-+
-   // Enable toolchain specific default sanitizers if not explicitly disabled.
-   SanitizerMask Default = TC.getDefaultSanitizers() & ~AllRemove;
+@@ -468,9 +473,10 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
+   }
  
+   std::pair<SanitizerMask, SanitizerMask> IncompatibleGroups[] = {
+-      std::make_pair(SanitizerKind::Address,
+-                     SanitizerKind::Thread | SanitizerKind::Memory),
+-      std::make_pair(SanitizerKind::Thread, SanitizerKind::Memory),
++      // XSAN-MODIFIED: modify IncompatibleGroups
++      // std::make_pair(SanitizerKind::Address,
++      //                SanitizerKind::Thread | SanitizerKind::Memory),
++      // std::make_pair(SanitizerKind::Thread, SanitizerKind::Memory),
+       std::make_pair(SanitizerKind::Leak,
+                      SanitizerKind::Thread | SanitizerKind::Memory),
+       std::make_pair(SanitizerKind::KernelAddress,
