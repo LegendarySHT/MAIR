@@ -95,7 +95,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    export PATH=$LLVM_DIR/bin:$PATH
    ```
 
-### 构建 / 安装 / 打包 XSan
+### 构建 / 测试 / 安装 / 打包 XSan
 
 1. 克隆 XSan 项目：
 
@@ -103,11 +103,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    git clone https://github.com/Camsyn/XSan.git /path/to/xsan
    ```
 
-   > 上述命令默认克隆 `main` 分支。如需开发分支，请执行：
-   >
-   > ```bash
-   > cd /path/to/xsan; git switch dev-xsan
-   > ```
+   > `dev-xsan` 分支为开发的主分支
 
 2. 构建 XSan：
 
@@ -137,8 +133,10 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
 3. 运行测试：
 
-   > 注意：ASan有5个测试用例在Debug模式下可能会 Unexpected Pass，请忽略. 
-   > 如果以非sudo权限运行测试，部分测试用例也会失败，请甄别。
+   > 注意：
+   >
+   > - ASan有5个测试用例在**Debug模式**下可能会 Unexpected Pass，请忽略. 
+   > - 如果以**非标准环境 (即非 Ubuntu + Docker) **运行测试，由于权限或API不支持等原因，部分测试用例可能也会失败，请甄别。
 
    ```bash
    cd /path/to/xsan/build
@@ -147,6 +145,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    make check-msan    # 仅运行 MSan 测试
    make check-ubsan   # 仅运行 UBSan 测试
    make check-tsan    # 仅运行 TSan 测试
+   make check-xsan    # 仅运行为 Xsan 单独设计的测试
    ```
 
 4. 使用 XSan（无需安装）：
@@ -157,6 +156,8 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    ```
 
 5. （可选）安装 XSan 到系统：
+
+   - 可通过 `cmake -DCMAKE_INSTALL_PREFIX=/path/to/install` 来自定义安装目录
 
    ```bash
    cd /path/to/xsan/build
@@ -186,25 +187,25 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
 `xclang` 只支持 clang-15，`xgcc`则支持多个gcc版本
 
-     - `xclang` 默认会使用 `clang` 来编译项目（需要配置 `PATH` 环境变量）, 请保证 `clang` 版本为 15
-     - 也可以在使用 `xclang` 之前通过设置环境变量来手动指定底层编译器
-      ```bash
-      export X_CC=/path/to/clang-15
-      export X_CXX=/path/to/clang++-15
-      ```
-     
-       - 若无 clang/LLVM-15 的环境，可以通过以下命令快速安装
-      ```bash
-      ubuntu_name=jammy # 根据你的 Ubuntu 版本选择, 此为 Ubuntu 22.04 的版本名
-      wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-      sudo add-apt-repository "deb http://apt.llvm.org/${ubuntu_name}/ llvm-toolchain-${ubuntu_name} main"
-      sudo add-apt-repository "deb http://apt.llvm.org/${ubuntu_name}/ llvm-toolchain-${ubuntu_name}-15 main"
-      # Workaround for issue https://github.com/llvm/llvm-project/issues/133861
-      sudo ln -s /usr/lib/llvm-15/lib /usr/lib/lib
-      sudo ln -s /usr/lib/llvm-15/include /usr/lib/include
-      sudo apt-get update
-      sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
-      ```
+- `xclang` 默认会使用 `clang` 来编译项目（需要配置 `PATH` 环境变量）, 请保证 `clang` 版本为 15
+- 也可以在使用 `xclang` 之前通过设置环境变量来手动指定底层编译器
+   ```bash
+   export X_CC=/path/to/clang-15
+   export X_CXX=/path/to/clang++-15
+   ```
+   
+- 若无 clang/LLVM-15 的环境，可以通过以下命令快速安装
+   ```bash
+   ubuntu_name=jammy # 根据你的 Ubuntu 版本选择, 此为 Ubuntu 22.04 的版本名
+   wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+   sudo add-apt-repository "deb http://apt.llvm.org/${ubuntu_name}/ llvm-toolchain-${ubuntu_name} main"
+   sudo add-apt-repository "deb http://apt.llvm.org/${ubuntu_name}/ llvm-toolchain-${ubuntu_name}-15 main"
+   # Workaround for issue https://github.com/llvm/llvm-project/issues/133861
+   sudo ln -s /usr/lib/llvm-15/lib /usr/lib/lib
+   sudo ln -s /usr/lib/llvm-15/include /usr/lib/include
+   sudo apt-get update
+   sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
+   ```
 
 ### 1. 查看编译器包装器的帮助信息：
 
@@ -221,10 +222,10 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
 * 若希望主动启用 XSan 支持的所有 Sanitizer，可使用以下方式：
 
-```bash
-xclang -xsan ...
-xgcc -xsan ...
-```
+    ```bash
+    xclang -xsan ...
+    xgcc -xsan ...
+    ```
 
 * 若你通过 `xclang` / `xgcc` 显式启用若干“互不兼容”的 Sanitizer，XSan 将自动接管并支持其组合，如下所示：
 
@@ -239,9 +240,10 @@ xgcc -xsan ...
    # clang -fsanitize=address,undefined
    xclang -fsanitize=address,undefined
    ```
-
-
-* 注意：ASan / TSan / MSan 彼此不兼容；UBSan 与所有其他 Sanitizer 均兼容，但会引入一定性能开销。
+   
+   
+   * 注意：ASan / TSan / MSan 彼此不兼容；UBSan 与所有其他 Sanitizer 均兼容，但会引入一定性能开销。
+   
 
 
 ---
@@ -258,15 +260,15 @@ xgcc -xsan ...
 
 * 可通过修改 `xsan_config.cmake` 中的选项控制启用状态：
 
-```cmake
-option(XSAN_CONTAINS_TSAN "Enable ThreadSanitizer (TSan) globally" ON)
-```
+    ```cmake
+    option(XSAN_CONTAINS_TSAN "Enable ThreadSanitizer (TSan) globally" ON)
+    ```
 
 * 或在执行 CMake 配置阶段传入构建选项：
 
-```bash
-cmake -DXSAN_CONTAINS_TSAN=OFF -DCMAKE_BUILD_TYPE=Release ..
-```
+    ```bash
+    cmake -DXSAN_CONTAINS_TSAN=OFF -DCMAKE_BUILD_TYPE=Release ..
+    ```
 
 **编译时配置（Compile time）：**
 
@@ -274,16 +276,16 @@ XSan 根据编译参数来选择需要进行的前端处理和插桩，如 `-fsa
 
 * 通过传入 `-fsanitize=` 选项显式启用对应的 Sanitizer：
 
-```bash
-xclang -fsanitize=address,thread,memory
-xgcc -fsanitize=address,thread
-```
+    ```bash
+    xclang -fsanitize=address,thread,memory
+    xgcc -fsanitize=address,thread
+    ```
 
 * 或者在使用 `-xsan` 启动默认配置的基础上，排除部分 Sanitizer，例如：
 
-```bash
-xclang -xsan -fno-sanitize=thread
-```
+    ```bash
+    xclang -xsan -fno-sanitize=thread
+    ```
 
 ### 4. 动态/静态运行时库支持
 

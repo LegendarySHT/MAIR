@@ -761,7 +761,11 @@ static void print_help() {
       "\nNotes:\n"
       "  - Use -fsanitize=<sanitizer> for LLVM's original sanitizers.\n"
       "  - Use -fno-sanitize=<sanitizer> to disable specific sanitizers.\n"
-      "  - These options are conflicting: -tsan, -asan, -xsan\n");
+      "  - These options are conflicting: -tsan, -asan,"
+#if WRAP_CLANG
+      " -msan,"
+#endif
+      " -xsan\n");
 #undef CC
 #undef DESC
 }
