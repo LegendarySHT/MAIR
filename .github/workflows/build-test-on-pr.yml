@@ -13,7 +13,10 @@ on:
 jobs:
   lit-test:
     timeout-minutes: 30
-    if: github.repository == 'Camsyn/XSan'
+    # If the PR has the NFC label, do not run the following actions
+    if: |
+      github.repository == 'Camsyn/XSan' &&
+      !contains(github.event.pull_request.labels.*.name, 'NFC')
     strategy:
       fail-fast: false
       matrix:
