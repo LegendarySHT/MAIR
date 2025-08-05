@@ -92,6 +92,7 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
 
   static void OnForkBefore();
   static void OnForkAfter(bool is_child);
+  static void BeforeDlopen(const char *filename, int flag);
   static void OnLongjmp(void *env, const char *fn_name, uptr pc) {
     __asan_handle_no_return();
   }

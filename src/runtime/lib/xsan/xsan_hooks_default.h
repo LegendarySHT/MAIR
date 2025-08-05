@@ -157,8 +157,12 @@ struct DefaultHooks {
   ALWAYS_INLINE static void vfork_parent_after_handle_sp(void *sp) {}
   ALWAYS_INLINE static void OnForkBefore() {}
   ALWAYS_INLINE static void OnForkAfter(bool is_child) {}
+
+  // Related to dlopen
+  ALWAYS_INLINE static void BeforeDlopen(const char *filename, int flag) {}
   ALWAYS_INLINE static void OnLibraryLoaded(const char *filename,
                                             void *handle) {}
+  // Related to dlclose
   ALWAYS_INLINE static void OnLibraryUnloaded() {}
   ALWAYS_INLINE static void OnLongjmp(void *env, const char *fn_name, uptr pc) {
   }

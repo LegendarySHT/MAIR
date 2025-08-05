@@ -261,6 +261,9 @@ ALWAYS_INLINE void OnForkBefore() { XSAN_HOOKS_EXEC(OnForkBefore); }
 ALWAYS_INLINE void OnForkAfter(bool is_child) {
   XSAN_HOOKS_EXEC(OnForkAfter, is_child);
 }
+ALWAYS_INLINE void BeforeDlopen(const char *filename, int flag) {
+  XSAN_HOOKS_EXEC(BeforeDlopen, filename, flag);
+}
 void OnLibraryLoaded(const char *filename, void *handle);
 void OnLibraryUnloaded();
 ALWAYS_INLINE void OnLongjmp(void *env, const char *fn_name, uptr pc) {

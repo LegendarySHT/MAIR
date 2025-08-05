@@ -1,10 +1,7 @@
 #include "xsan_interceptors.h"
 
 #include "asan/orig/asan_flags.h"
-#include "asan/orig/asan_internal.h"
 #include "asan/orig/asan_poisoning.h"
-#include "asan/orig/asan_report.h"
-#include "asan/orig/asan_suppressions.h"
 #include "lsan/lsan_common.h"
 
 #include "sanitizer_common/sanitizer_common.h"
@@ -223,10 +220,9 @@ static void finalize(void *arg) {
 DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, usize)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 
-
 #  define XSAN_BEFORE_DLOPEN(filename, flag) \
-    if (__asan::flags()->strict_init_order)  \
-      __asan::StopInitOrderChecking();
+    __xsan::BeforeDlopen(filename, flag);    \
+    CheckNoDeepBind(filename, flag);
 
 #  define COMMON_INTERCEPTOR_UNPOISON_PARAM(count) \
     XSAN_COMMON_UNPOISON_PARAM(count)
@@ -281,7 +277,6 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #  define COMMON_INTERCEPTOR_DLOPEN(filename, flag) \
     ({                                              \
       XSAN_BEFORE_DLOPEN(filename, flag);           \
-      CheckNoDeepBind(filename, flag);              \
       __xsan::ScopedIgnoreChecks ignore_checks;     \
       REAL(dlopen)(filename, flag);                 \
     })

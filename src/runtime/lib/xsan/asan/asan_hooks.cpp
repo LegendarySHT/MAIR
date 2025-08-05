@@ -62,7 +62,10 @@ AsanHooks::ScopedAtExitHandler::ScopedAtExitHandler(uptr pc, const void *ctx) {
 AsanHooks::ScopedAtExitHandler::~ScopedAtExitHandler() {}
 void AsanHooks::OnForkBefore() { __asan::OnForkBefore(); }
 void AsanHooks::OnForkAfter(bool is_child) { __asan::OnForkAfter(); }
-
+void AsanHooks::BeforeDlopen(const char *filename, int flag) {
+  if (__asan::flags()->strict_init_order)
+    __asan::StopInitOrderChecking();
+}
 // ---------- Thread-Related Hooks --------------------------
 auto AsanHooks::CreateMainThread() -> Thread {
   Thread thread;
