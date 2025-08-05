@@ -66,20 +66,20 @@ Sanitizers that are not considered:
 3. (Optional) Apply intrusive patches to the compilers.
     - **ONLY for the scenarios that XSan's livepatches do not work with your `clang`/`gcc`.**
     - XSan only provides patches for clang-15 and gcc-9.4. If you require support for other compiler versions, please refer to our patch files and apply the modifications manually.
-    - Patch the `clang-15` project with the modifications in the `llvm.patch` file.
+    - Patch the `clang-15` project with the modifications in the `llvm-15.0.7.patch` file.
         - Apply the patch file to the LLVM/Clang source code.
         ```shell
         git clone -b llvmorg-15.0.7 --depth 1 https://github.com/llvm/llvm-project.git /path/to/llvm-source
         cd /path/to/llvm-source
-        git apply /path/to/llvm.patch
+        git apply /path/to/llvm-15.0.7.patch
         ```
         - Build and install `clang-15` adhering to the guidelines of the compiler project.
-    - Patch the `gcc-9.4.0` project with the modifications in the `gcc.patch` file.
+    - Patch the `gcc-9.4.0` project with the modifications in the `gcc-9.4.patch` file.
         - Apply the patch file to the GCC source code.
         ```shell
         git clone --depth=1 --branch=releases/gcc-9.4.0 https://gcc.gnu.org/git/gcc.git /path/to/gcc-source
         cd /path/to/gcc-9.4.0-source
-        git apply /path/to/gcc.patch
+        git apply /path/to/gcc-9.4.patch
         ```
         * Build and install `gcc-9.4.0` adhering to the guidelines of the compiler project.
 4. Export the relevant environment variables to your dev env (e.g., in .bashrc).

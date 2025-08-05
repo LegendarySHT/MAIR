@@ -74,7 +74,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
      ```bash
      git clone -b llvmorg-15.0.7 --depth 1 https://github.com/llvm/llvm-project.git /path/to/llvm-source
      cd /path/to/llvm-source
-     git apply /path/to/llvm.patch
+     git apply /path/to/llvm-15.0.7.patch
      ```
 
      然后按 LLVM 官方指引构建并安装 clang。
@@ -83,7 +83,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
      ```bash
      git clone --depth=1 --branch=releases/gcc-9.4.0 https://gcc.gnu.org/git/gcc.git /path/to/gcc-source
      cd /path/to/gcc-9.4.0-source
-     git apply /path/to/gcc.patch
+     git apply /path/to/gcc-9.4.patch
      ```
 
      然后按 GCC 官方文档构建并安装。
