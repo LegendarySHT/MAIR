@@ -9,7 +9,6 @@
 /// all the references to these symbols.
 namespace __asan {
 
-void InitializeAsanInterceptors() {}
 void ReplaceSystemMalloc() {}
 
 }  // namespace __asan

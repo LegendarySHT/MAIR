@@ -128,6 +128,9 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
   static void AfterMmap(const Context &ctx, void *res, uptr size, int fd);
   static void BeforeMunmap(const Context &ctx, void *addr, uptr size);
   // ---------- Generic Hooks in Interceptors ----------------
+  ALWAYS_INLINE static void InitializeInterceptors() {
+    __asan::InitializeAsanInterceptors();
+  }
   PSEUDO_MACRO static void ReadRange(Context *ctx, const void *offset,
                                      uptr size, const char *func_name) {
     AccessMemoryRange(ctx, (uptr)offset, size, false, func_name);

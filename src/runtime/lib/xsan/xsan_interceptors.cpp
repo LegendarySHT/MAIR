@@ -917,39 +917,39 @@ INTERCEPTOR(void, siglongjmp, void *env, int val) {
 }
 #  endif
 
-#  if XSAN_INTERCEPT___CXA_THROW
-INTERCEPTOR(void, __cxa_throw, void *a, void *b, void *c) {
-  CHECK(REAL(__cxa_throw));
-  __xsan_handle_no_return();
-  REAL(__cxa_throw)(a, b, c);
-}
-#  endif
+// #  if XSAN_INTERCEPT___CXA_THROW
+// INTERCEPTOR(void, __cxa_throw, void *a, void *b, void *c) {
+//   CHECK(REAL(__cxa_throw));
+//   __xsan_handle_no_return();
+//   REAL(__cxa_throw)(a, b, c);
+// }
+// #  endif
 
-#  if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
-INTERCEPTOR(void, __cxa_rethrow_primary_exception, void *a) {
-  CHECK(REAL(__cxa_rethrow_primary_exception));
-  __xsan_handle_no_return();
-  REAL(__cxa_rethrow_primary_exception)(a);
-}
-#  endif
+// #  if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
+// INTERCEPTOR(void, __cxa_rethrow_primary_exception, void *a) {
+//   CHECK(REAL(__cxa_rethrow_primary_exception));
+//   __xsan_handle_no_return();
+//   REAL(__cxa_rethrow_primary_exception)(a);
+// }
+// #  endif
 
-#  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
-INTERCEPTOR(_Unwind_Reason_Code, _Unwind_RaiseException,
-            _Unwind_Exception *object) {
-  CHECK(REAL(_Unwind_RaiseException));
-  __xsan_handle_no_return();
-  return REAL(_Unwind_RaiseException)(object);
-}
-#  endif
+// #  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
+// INTERCEPTOR(_Unwind_Reason_Code, _Unwind_RaiseException,
+//             _Unwind_Exception *object) {
+//   CHECK(REAL(_Unwind_RaiseException));
+//   __xsan_handle_no_return();
+//   return REAL(_Unwind_RaiseException)(object);
+// }
+// #  endif
 
-#  if XSAN_INTERCEPT__SJLJ_UNWIND_RAISEEXCEPTION
-INTERCEPTOR(_Unwind_Reason_Code, _Unwind_SjLj_RaiseException,
-            _Unwind_Exception *object) {
-  CHECK(REAL(_Unwind_SjLj_RaiseException));
-  __xsan_handle_no_return();
-  return REAL(_Unwind_SjLj_RaiseException)(object);
-}
-#  endif
+// #  if XSAN_INTERCEPT__SJLJ_UNWIND_RAISEEXCEPTION
+// INTERCEPTOR(_Unwind_Reason_Code, _Unwind_SjLj_RaiseException,
+//             _Unwind_Exception *object) {
+//   CHECK(REAL(_Unwind_SjLj_RaiseException));
+//   __xsan_handle_no_return();
+//   return REAL(_Unwind_SjLj_RaiseException)(object);
+// }
+// #  endif
 
 #  if XSAN_INTERCEPT_INDEX
 #    if XSAN_USE_ALIAS_ATTRIBUTE_FOR_INDEX
@@ -1664,21 +1664,23 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(siglongjmp);
 #  endif
 
-  // Intercept exception handling functions.
-#  if XSAN_INTERCEPT___CXA_THROW
-  XSAN_INTERCEPT_FUNC(__cxa_throw);
-#  endif
-#  if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
-  XSAN_INTERCEPT_FUNC(__cxa_rethrow_primary_exception);
-#  endif
-  // Indirectly intercept std::rethrow_exception.
-#  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
-  XSAN_INTERCEPT_FUNC(_Unwind_RaiseException);
-#  endif
-  // Indirectly intercept std::rethrow_exception.
-#  if XSAN_INTERCEPT__UNWIND_SJLJ_RAISEEXCEPTION
-  XSAN_INTERCEPT_FUNC(_Unwind_SjLj_RaiseException);
-#  endif
+  /// These functions are only intercepted by ASan, and thus we move them to
+  /// asan_interceptors.cpp
+  //   // Intercept exception handling functions.
+  // #  if XSAN_INTERCEPT___CXA_THROW
+  //   XSAN_INTERCEPT_FUNC(__cxa_throw);
+  // #  endif
+  // #  if XSAN_INTERCEPT___CXA_RETHROW_PRIMARY_EXCEPTION
+  //   XSAN_INTERCEPT_FUNC(__cxa_rethrow_primary_exception);
+  // #  endif
+  //   // Indirectly intercept std::rethrow_exception.
+  // #  if XSAN_INTERCEPT__UNWIND_RAISEEXCEPTION
+  //   XSAN_INTERCEPT_FUNC(_Unwind_RaiseException);
+  // #  endif
+  //   // Indirectly intercept std::rethrow_exception.
+  // #  if XSAN_INTERCEPT__UNWIND_SJLJ_RAISEEXCEPTION
+  //   XSAN_INTERCEPT_FUNC(_Unwind_SjLj_RaiseException);
+  // #  endif
 
   // Intercept threading-related functions
 #  if XSAN_INTERCEPT_PTHREAD_CREATE

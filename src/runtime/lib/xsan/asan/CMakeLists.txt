@@ -88,7 +88,7 @@ function(import_subsan output_prefix)
     asan_flags.cpp
     asan_globals.cpp
     asan_interceptors_memintrinsics.cpp
-    # asan_interceptors.cpp
+    asan_interceptors.cpp
     asan_poisoning.cpp
     asan_rtl.cpp
     asan_stack.cpp

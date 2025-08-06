@@ -88,4 +88,5 @@ void AsanInitFromXsan();
 // Initialization after xsan_is_running = false;
 void AsanInitFromXsanLate();
 
+void InitializeAsanInterceptors();
 }  // namespace __asan
