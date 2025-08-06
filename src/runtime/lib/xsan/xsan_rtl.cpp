@@ -381,12 +381,12 @@ bool TryXsanInitFromRtl() {
 // ---------------------- Interface ---------------- {{{1
 using namespace __xsan;
 
-void NOINLINE __xsan_handle_no_return() {
-  if (UNLIKELY(!XsanInited()))
-    return;
+// void NOINLINE __xsan_handle_no_return() {
+//   if (UNLIKELY(!XsanInited()))
+//     return;
 
-  __asan_handle_no_return();
-}
+//   __asan_handle_no_return();
+// }
 
 // Initialize as requested from instrumented application code.
 void __xsan_init() { XsanInitFromRtl(); }
