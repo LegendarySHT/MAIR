@@ -2,6 +2,8 @@
 
 #include <pthread.h>
 
+/// TODO: decouple ASan and XSan
+#include "asan/asan_mapping.h"
 #include "asan/asan_thread.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"

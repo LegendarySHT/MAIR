@@ -16,7 +16,6 @@
 
 #include "../xsan_platform.h"
 #include "asan_flags.h"
-#include "asan_interceptors.h"
 #include "asan_internal.h"
 #include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_list.h"

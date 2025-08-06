@@ -13,16 +13,17 @@
 
 #include "asan_flags.h"
 
-#include "asan_activation.h"
+// #include "asan_activation.h"
 #include "asan_interface_internal.h"
+#include "asan_mapping.h"
 #include "asan_stack.h"
 #include "lsan/lsan_common.h"
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_flag_parser.h"
 #include "sanitizer_common/sanitizer_flags.h"
 #include "sanitizer_common/sanitizer_win_interception.h"
-#include "ubsan/ubsan_flags.h"
-#include "ubsan/ubsan_platform.h"
+// #include "ubsan/ubsan_flags.h"
+// #include "ubsan/ubsan_platform.h"
 
 namespace __asan {
 

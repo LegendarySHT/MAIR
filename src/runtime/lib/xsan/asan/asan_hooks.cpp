@@ -1,6 +1,7 @@
 #include "asan_hooks.h"
 
 #include "asan_interface_internal.h"
+#include "asan_mapping.h"
 #include "asan_thread.h"
 #include "lsan/lsan_common.h"
 

@@ -130,7 +130,7 @@ void InitializePlatformInterceptors();
 #    define XSAN_INTERCEPT___STRDUP 0
 #  endif
 
-#  if SANITIZER_GLIBC && ASAN_INTERCEPT_PTHREAD_CREATE
+#  if SANITIZER_GLIBC && XSAN_INTERCEPT_PTHREAD_CREATE
 #    define XSAN_INTERCEPT_TIMEDJOIN 1
 #    define XSAN_INTERCEPT_TRYJOIN 1
 #  else
@@ -189,12 +189,6 @@ DECLARE_REAL(char *, strstr, const char *s1, const char *s2)
 #    define XSAN_INTERCEPT_FUNC(name)
 #  endif  // SANITIZER_APPLE
 
-#  ifdef COMMON_INTERCEPT_FUNCTION
-/// TODO: Find a better way to avoid header file MACRO redefinitions.
-// xsan_interceptors.h -> tsan_interceptors.h -> tsan_rtl.h -> xsan_allocator.h
-// -> asan_allocator.h -> asan_interceptors.h -> THIS MACRO
-#    undef COMMON_INTERCEPT_FUNCTION
-#  endif
 #  define COMMON_INTERCEPT_FUNCTION(name) XSAN_INTERCEPT_FUNC(name)
 
 #endif  // !SANITIZER_FUCHSIA

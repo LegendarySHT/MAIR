@@ -2331,7 +2331,7 @@ void HandleRecvmsg(ThreadState *thr, uptr pc, __sanitizer_msghdr *msg) {
 
 /// We don't use tsan_interceptors_memintrinsics.cpp, therefore, this MACRO is
 /// not required to lift to header file.
-#define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
+// #define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver) \
   INTERCEPT_FUNCTION_VER(name, ver)
 #define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \

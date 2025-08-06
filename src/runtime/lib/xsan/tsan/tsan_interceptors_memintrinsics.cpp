@@ -12,6 +12,7 @@
 
 #define SANITIZER_COMMON_NO_REDEFINE_BUILTINS
 
+#include "interception/interception.h"
 #include "tsan_interceptors.h"
 #include "tsan_interface.h"
 

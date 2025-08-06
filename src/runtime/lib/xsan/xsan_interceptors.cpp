@@ -1603,7 +1603,7 @@ void InitializeXsanInterceptors() {
 
   XSAN_INTERCEPT_FUNC(atoi);
   XSAN_INTERCEPT_FUNC(atol);
-  ASAN_INTERCEPT_FUNC(atoll);
+  XSAN_INTERCEPT_FUNC(atoll);
   XSAN_INTERCEPT_FUNC(strtol);
   XSAN_INTERCEPT_FUNC(strtoll);
   XSAN_INTERCEPT_FUNC(wcslen);
@@ -1640,9 +1640,9 @@ void InitializeXsanInterceptors() {
   XSAN_INTERCEPT_FUNC(swapcontext);
   // See the makecontext interceptor above for an explanation.
 #    if SANITIZER_SOLARIS && defined(__sparc__)
-  ASAN_INTERCEPT_FUNC(__makecontext_v2);
+  XSAN_INTERCEPT_FUNC(__makecontext_v2);
 #    else
-  ASAN_INTERCEPT_FUNC(makecontext);
+  XSAN_INTERCEPT_FUNC(makecontext);
 #    endif
 #  endif
 #  if XSAN_INTERCEPT__LONGJMP
