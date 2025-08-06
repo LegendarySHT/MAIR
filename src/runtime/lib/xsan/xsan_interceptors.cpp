@@ -1,8 +1,6 @@
 #include "xsan_interceptors.h"
 
-#include "asan/orig/asan_poisoning.h"
 #include "lsan/lsan_common.h"
-
 #include "sanitizer_common/sanitizer_common.h"
 #include "sanitizer_common/sanitizer_errno.h"
 #include "sanitizer_common/sanitizer_internal_defs.h"
@@ -794,11 +792,12 @@ static void ClearShadowMemoryForContextStack(uptr stack, uptr ssize) {
   // Align to page size.
   uptr PageSize = GetPageSizeCached();
   uptr bottom = RoundDownTo(stack, PageSize);
-  if (!__asan::AddrIsInMem(bottom))
+  if (!__xsan::IsAppMem(bottom))
     return;
   ssize += stack - bottom;
   ssize = RoundUpTo(ssize, PageSize);
-  __asan::PoisonShadow(bottom, ssize, 0);
+  __xsan::ClearShadowMemoryForContextStack(reinterpret_cast<void *>(bottom),
+                                           ssize);
 }
 
 // Since Solaris 10/SPARC, ucp->uc_stack.ss_sp refers to the stack base address
@@ -845,13 +844,11 @@ INTERCEPTOR(void, makecontext, struct ucontext_t *ucp, void (*func)(), int argc,
   SignContextStack(ucp);
 }
 
-/// TODO: adapt to TSan
 INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
-  // --------------------- ASan part ----------------------------
   static bool reported_warning = false;
   if (!reported_warning) {
     Report(
-        "WARNING: ASan doesn't fully support makecontext/swapcontext "
+        "WARNING: XSan doesn't fully support makecontext/swapcontext "
         "functions and may produce false positives in some cases!\n");
     reported_warning = true;
   }
@@ -860,8 +857,6 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
   uptr stack, ssize;
   ReadContextStack(ucp, &stack, &ssize);
   ClearShadowMemoryForContextStack(stack, ssize);
-
-  // -----------------------------------------------------------
 
 #    if __has_attribute(__indirect_return__) && \
         (defined(__x86_64__) || defined(__i386__))
@@ -872,15 +867,11 @@ INTERCEPTOR(int, swapcontext, struct ucontext_t *oucp, struct ucontext_t *ucp) {
   int res = REAL(swapcontext)(oucp, ucp);
 #    endif
 
-  // --------------------- ASan part ----------------------------
-
   // swapcontext technically does not return, but program may swap context to
   // "oucp" later, that would look as if swapcontext() returned 0.
   // We need to clear shadow for ucp once again, as it may be in arbitrary
   // state.
   ClearShadowMemoryForContextStack(stack, ssize);
-
-  // -----------------------------------------------------------
 
   return res;
 }

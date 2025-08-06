@@ -96,6 +96,10 @@ struct AsanHooks : ::__xsan::DefaultHooks<AsanContext, AsanHooksThread> {
   static void OnLongjmp(void *env, const char *fn_name, uptr pc) {
     __asan_handle_no_return();
   }
+  ALWAYS_INLINE static void ClearShadowMemoryForContextStack(void *addr,
+                                                             uptr size) {
+    __asan::PoisonShadow(reinterpret_cast<uptr>(addr), size, 0);
+  }
   // ---------------------- Flags Registration Hooks ---------------
   ALWAYS_INLINE static void InitializeFlags() {
     __xsan::ScopedSanitizerToolName tool_name("AddressSanitizer");

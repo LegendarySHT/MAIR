@@ -166,6 +166,12 @@ struct DefaultHooks {
   ALWAYS_INLINE static void OnLibraryUnloaded() {}
   ALWAYS_INLINE static void OnLongjmp(void *env, const char *fn_name, uptr pc) {
   }
+
+  // Unpoison the related shadow of the range.
+  // Now only used for interceptor of swapcontext
+  // ASan and MSan require to clear their shadow, while TSan does not.
+  ALWAYS_INLINE static void ClearShadowMemoryForContextStack(void *addr,
+                                                             uptr size) {}
   // --------- End of Special Function Hooks ---------
 
   // ---------- Unwind-related Hooks ----------------

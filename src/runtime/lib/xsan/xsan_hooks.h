@@ -269,6 +269,9 @@ void OnLibraryUnloaded();
 ALWAYS_INLINE void OnLongjmp(void *env, const char *fn_name, uptr pc) {
   XSAN_HOOKS_EXEC(OnLongjmp, env, fn_name, pc);
 }
+ALWAYS_INLINE void ClearShadowMemoryForContextStack(void *addr, uptr size) {
+  XSAN_HOOKS_EXEC(ClearShadowMemoryForContextStack, addr, size);
+}
 
 ALWAYS_INLINE void OnEnterUnwind() { XSAN_HOOKS_EXEC(OnEnterUnwind); }
 ALWAYS_INLINE void OnExitUnwind() { XSAN_HOOKS_EXEC(OnExitUnwind); }

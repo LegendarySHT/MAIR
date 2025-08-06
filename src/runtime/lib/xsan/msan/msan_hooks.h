@@ -95,6 +95,10 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
   }
 
   static void OnLibraryLoaded(const char *filename, void *handle);
+  ALWAYS_INLINE static void ClearShadowMemoryForContextStack(void *addr,
+                                                             uptr size) {
+    __msan_unpoison(addr, size);
+  }
 
   ALWAYS_INLINE static void AtExit() { MsanAtExit(); }
 

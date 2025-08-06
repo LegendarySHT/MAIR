@@ -197,8 +197,8 @@ void RunHugeStack() {
 void handler(int sig) { CallNoReturn(); }
 
 int main(int argc, char **argv) {
-  // CHECK: WARNING: ASan doesn't fully support makecontext/swapcontext
-  // CHECK-NOT: ASan is ignoring requested __asan_handle_no_return
+  // CHECK: WARNING: {{ASan|XSan}} doesn't fully support makecontext/swapcontext
+  // CHECK-NOT: {{ASan|XSan}} is ignoring requested __asan_handle_no_return
   RunHugeStack();
 
   // set up a signal that will spam and trigger __asan_handle_no_return at
