@@ -31,6 +31,8 @@ class ScopedUnwinding {
 
 }  // namespace __xsan
 
+// Template pattern: sanitizer implements the UnwindImpl to customize the
+// stack unwinding.
 void __sanitizer::BufferedStackTrace::UnwindImpl(uptr pc, uptr bp,
                                                  void *context,
                                                  bool request_fast,

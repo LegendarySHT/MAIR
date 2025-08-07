@@ -28,8 +28,9 @@ using namespace __xsan;
 // ---------------------- State/Ignoration Management Hooks --------------------
 namespace __xsan {
 
-THREADLOCAL int xsan_in_intenal = 0;
-THREADLOCAL int is_in_symbolizer;
+THREADLOCAL int xsan_in_internal = 0;
+THREADLOCAL int is_in_symbolizer = 0;
+THREADLOCAL int xsan_in_unwind = 0;
 
 int get_exit_code(const void *ctx) {
   int exit_code = 0;

@@ -299,7 +299,8 @@ ScopedInterceptor::ScopedInterceptor(ThreadState *thr, const char *fname,
     in_blocking_func_ = true;
   }
   if (!thr_->is_inited) return;
-  if (!thr_->ignore_interceptors) FuncEntry(thr, pc);
+  if (!thr_->ignore_interceptors && !__xsan::IsInXsanInternal())
+    FuncEntry(thr, pc);
   DPrintf("#%d: intercept %s()\n", thr_->tid, fname);
   ignoring_ =
       !thr_->in_ignored_lib && (flags()->ignore_interceptors_accesses ||
@@ -312,7 +313,7 @@ ScopedInterceptor::~ScopedInterceptor() {
   DisableIgnores();
   if (UNLIKELY(in_blocking_func_))
     EnterBlockingFunc(thr_);
-  if (!thr_->ignore_interceptors) {
+  if (!thr_->ignore_interceptors && !__xsan::IsInXsanInternal()) {
     ProcessPendingSignals(thr_);
     FuncExit(thr_);
     CheckedMutex::CheckNoLocks();

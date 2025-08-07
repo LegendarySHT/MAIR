@@ -113,14 +113,12 @@ ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
 }
 
 bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
-  if (xsan_ignore_interceptors || !XsanInited()) {
+  if (xsan_ignore_interceptors || !XsanInited())
     return true;
-  }
   XsanThread *thread = __xsan::GetCurrentThread();
   return (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
          __xsan::ShouldSanitzerIgnoreInterceptors(xsan_ctx);
 }
-
 
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
 // between callback setup and callback execution.

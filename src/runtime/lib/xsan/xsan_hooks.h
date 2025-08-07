@@ -52,17 +52,6 @@ ALWAYS_INLINE void NeededMapRanges(Container &res) {
   XSAN_HOOKS_EXEC_EXTEND(res, NeededMapRanges);
 }
 
-/// Notifies Xsan that the current thread is entering an completely internal
-/// Xsan function, e.g., __asan_handle_no_return.
-/// In such cases, Xsan should not do sanity checks.
-/// Compared to ShouldIgnoreInterceptos(), this function ignores in_ignore_lib.
-extern THREADLOCAL int xsan_in_intenal;
-ALWAYS_INLINE bool IsInXsanInternal() { return xsan_in_intenal != 0; }
-class ScopedXsanInternal {
- public:
-  ALWAYS_INLINE ScopedXsanInternal() { xsan_in_intenal++; }
-  ALWAYS_INLINE ~ScopedXsanInternal() { xsan_in_intenal--; }
-};
 extern THREADLOCAL int is_in_symbolizer;
 ALWAYS_INLINE bool in_symbolizer() { return UNLIKELY(is_in_symbolizer > 0); }
 
@@ -76,9 +65,42 @@ ALWAYS_INLINE void ExitSymbolizer() {
   XSAN_HOOKS_EXEC(ExitSymbolizer);
 }
 
+extern THREADLOCAL int xsan_in_unwind;
+ALWAYS_INLINE void OnEnterUnwind() {
+  ++xsan_in_unwind;
+  XSAN_HOOKS_EXEC(OnEnterUnwind);
+}
+ALWAYS_INLINE void OnExitUnwind() {
+  --xsan_in_unwind;
+  XSAN_HOOKS_EXEC(OnExitUnwind);
+}
+ALWAYS_INLINE bool IsInUnwind() { return UNLIKELY(xsan_in_unwind > 0); }
+
+// If in symbolizer or unwinding, we are reporting errors, should not do
+// sanity checks and ignore interceptors.
+ALWAYS_INLINE bool IsInSymbolizerOrUnwind() {
+  return in_symbolizer() || IsInUnwind();
+}
+
+/// Notifies Xsan that the current thread is entering an completely internal
+/// Xsan function, e.g., __asan_handle_no_return.
+/// In such cases, Xsan should not do sanity checks.
+/// Compared to ShouldIgnoreInterceptos(), this function ignores in_ignore_lib.
+extern THREADLOCAL int xsan_in_internal;
+ALWAYS_INLINE bool IsInXsanInternal() {
+  return xsan_in_internal != 0 ||
+         /* If in symbolizer or unwind, we are also in Xsan internal */
+         IsInSymbolizerOrUnwind();
+}
+class ScopedXsanInternal {
+ public:
+  ALWAYS_INLINE ScopedXsanInternal() { xsan_in_internal++; }
+  ALWAYS_INLINE ~ScopedXsanInternal() { xsan_in_internal--; }
+};
+
 ALWAYS_INLINE bool ShouldSanitzerIgnoreInterceptors(
     const XsanContext &xsan_thr) {
-  /// Avoid sanity checks in XSan internal.
+  /// Avoid sanity checks in XSan internal or SymbolizerOrUnwind
   if (IsInXsanInternal())
     return true;
   bool should_ignore = false;
@@ -272,9 +294,6 @@ ALWAYS_INLINE void OnLongjmp(void *env, const char *fn_name, uptr pc) {
 ALWAYS_INLINE void ClearShadowMemoryForContextStack(void *addr, uptr size) {
   XSAN_HOOKS_EXEC(ClearShadowMemoryForContextStack, addr, size);
 }
-
-ALWAYS_INLINE void OnEnterUnwind() { XSAN_HOOKS_EXEC(OnEnterUnwind); }
-ALWAYS_INLINE void OnExitUnwind() { XSAN_HOOKS_EXEC(OnExitUnwind); }
 
 enum class XsanStackTraceType { copy };
 
