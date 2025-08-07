@@ -3,3 +3,4 @@ __tsan_init
 __msan_init
 _ZN11__sanitizer21ScopedErrorReportLock4LockEv
 _ZN11__sanitizer21ScopedErrorReportLock6UnlockEv
+_ZNK11__sanitizer10StackTrace5PrintEv

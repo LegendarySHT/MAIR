@@ -155,6 +155,7 @@ void OnLibraryUnloaded() {
   time to expose hooks before/after report:
     - __sanitizer::ScopedErrorReportLock::Lock()   : provides EnterReport() hook
     - __sanitizer::ScopedErrorReportLock::Unlock() : provides ExitReport() hook
+    - __sanitizer::StackTrace::Print() : might call Symbolizer, intercept it
 */
 
 /// __sanitizer::ScopedErrorReportLock::Lock()
@@ -167,4 +168,12 @@ XSAN_WRAPPER(void, _ZN11__sanitizer21ScopedErrorReportLock4LockEv, ) {
 XSAN_WRAPPER(void, _ZN11__sanitizer21ScopedErrorReportLock6UnlockEv, ) {
   XSAN_HOOKS_EXEC(ExitReport);
   XSAN_REAL(_ZN11__sanitizer21ScopedErrorReportLock6UnlockEv)();
+}
+
+/// __sanitizer::StackTrace::Print() const
+XSAN_WRAPPER(void, _ZNK11__sanitizer10StackTrace5PrintEv,
+             const StackTrace *self) {
+  __xsan::ScopedXsanInternal scope;
+  __xsan::ScopedIgnoreInterceptors ignore(true);
+  XSAN_REAL(_ZNK11__sanitizer10StackTrace5PrintEv)(self);
 }
