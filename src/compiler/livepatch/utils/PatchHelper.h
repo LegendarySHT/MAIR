@@ -12,6 +12,8 @@
 #include <type_traits>
 #include <vector>
 
+namespace __xsan {
+
 bool isXsanEnabled();
 const std::string &getStrMask();
 const std::bitset<XSan + 1> &getXsanMask();
@@ -304,3 +306,5 @@ private:
   std::atomic_bool Mutex;
   bool IsEnabled = false;
 };
+
+} // namespace __xsan

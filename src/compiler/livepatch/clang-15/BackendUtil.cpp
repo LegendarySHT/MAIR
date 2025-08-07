@@ -13,8 +13,8 @@
 using namespace clang;
 using namespace llvm;
 
-static XsanInterceptor Interceptor(&clang::EmitBackendOutput,
-                                   {"clang", "clang++"});
+static __xsan::XsanInterceptor Interceptor(&clang::EmitBackendOutput,
+                                           {"clang", "clang++"});
 
 void clang::EmitBackendOutput(DiagnosticsEngine &Diags,
                               const HeaderSearchOptions &HeaderOpts,
@@ -26,7 +26,7 @@ void clang::EmitBackendOutput(DiagnosticsEngine &Diags,
   static constexpr SanitizerMask HackedSanitizers =
       SanitizerKind::Memory | SanitizerKind::Address | SanitizerKind::Thread;
   LangOptions NewLangOpts = LOpts;
-  if (isXsanEnabled()) {
+  if (__xsan::isXsanEnabled()) {
     NewLangOpts.Sanitize.clear(HackedSanitizers);
   }
   Interceptor(Diags, HeaderOpts, CGOpts, TOpts, NewLangOpts, TDesc, M, Action,

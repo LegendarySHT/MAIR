@@ -14,7 +14,7 @@ Patch the error_at in diagnostic.c/diagnostic.cc in gcc.
 using location_t = unsigned int;
 
 void error_at(location_t loc, const char *gmsgid, ...);
-static XsanInterceptor
+static __xsan::XsanInterceptor
     Interceptor(&error_at,
                 /* In fact, cc1 is enough, our match is a match, just
                    to clarify the semantics, plus cc1plus */
@@ -84,10 +84,11 @@ void error_at(location_t loc, const char *gmsgid, ...) {
       "-fsanitize=%s",
       "incompatible",
   };
+  static bool isXsanEnabled = __xsan::isXsanEnabled();
   llvm::StringRef msg(gmsgid);
   auto contains = [&](const char *kw) { return msg.contains(kw); };
 
-  if (isXsanEnabled() && llvm::all_of(keywords, contains)) {
+  if (isXsanEnabled && llvm::all_of(keywords, contains)) {
     // When XSan is turned on, prevent errors from the front end
     // E.g., -fsanitize=address,thread will not raise any error.
     return;
@@ -96,7 +97,7 @@ void error_at(location_t loc, const char *gmsgid, ...) {
   va_list args;
 
   va_start(args, gmsgid);
-  if (isXsanEnabled() && llvm::all_of(fallback_keywords, contains) &&
+  if (isXsanEnabled && llvm::all_of(fallback_keywords, contains) &&
       2 == count_gcc_diag_specifiers(gmsgid, "s")) {
     // For GCC-12+
     va_list args_copy;

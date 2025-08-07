@@ -1,6 +1,8 @@
 #include "PatchHelper.h"
 #include "config_compile.h"
 
+using namespace __xsan;
+
 // These macros are defined in the CMakeLists.txt file
 #if HAS_LLVM_OBJECT
 #include "elf/ELFParserLLVM.h"

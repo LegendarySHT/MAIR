@@ -30,6 +30,8 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
+using namespace __xsan;
+
 static constexpr const std::array<llvm::StringRef, XSan + 1>
 gen_hacked_san_names() {
   std::array<llvm::StringRef, XSan + 1> result = {};

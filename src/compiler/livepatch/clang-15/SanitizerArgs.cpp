@@ -258,7 +258,7 @@ bool SanitizerArgs::needsUbsanRt() const {
   if (needsAsanRt() || needsMsanRt() || needsHwasanRt() || needsTsanRt() ||
       needsDfsanRt() || needsLsanRt() || needsCfiDiagRt() ||
       (needsScudoRt() && !requiresMinimalRuntime()) ||
-      (isXsanEnabled() && getSanType() != UBSan))
+      (__xsan::isXsanEnabled() && __xsan::getSanType() != UBSan))
     return false;
 
   return (Sanitizers.Mask & NeedsUbsanRt & ~TrapSanitizers.Mask) ||
@@ -445,11 +445,12 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
 
   std::pair<SanitizerMask, SanitizerMask> IncompatibleGroups[] = {
       std::make_pair(SanitizerKind::Address,
-                     isXsanEnabled()
+                     __xsan::isXsanEnabled()
                          ? SanitizerMask()
                          : SanitizerKind::Thread | SanitizerKind::Memory),
-      std::make_pair(SanitizerKind::Thread,
-                     isXsanEnabled() ? SanitizerMask() : SanitizerKind::Memory),
+      std::make_pair(SanitizerKind::Thread, __xsan::isXsanEnabled()
+                                                ? SanitizerMask()
+                                                : SanitizerKind::Memory),
       std::make_pair(SanitizerKind::Leak,
                      SanitizerKind::Thread | SanitizerKind::Memory),
       std::make_pair(SanitizerKind::KernelAddress,
@@ -1082,6 +1083,6 @@ std::string describeSanitizeArg(const llvm::opt::Arg *A, SanitizerMask Mask) {
   return "-fsanitize=" + Sanitizers;
 }
 
-static XsanInterceptor Interceptor(
+static __xsan::XsanInterceptor Interceptor(
     "_ZN5clang6driver13SanitizerArgsC2ERKNS0_9ToolChainERKN4llvm3opt7ArgListEb",
     {"clang", "clang++"});

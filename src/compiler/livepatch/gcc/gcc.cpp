@@ -129,6 +129,8 @@ The key components related to sanitizers are:
 #include <type_traits>
 #include <vector>
 
+using namespace __xsan;
+
 namespace {
 void *search_substr(const char *hay, size_t haylen, const char *needle,
                     size_t neelen) {

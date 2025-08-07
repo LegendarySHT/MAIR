@@ -17,6 +17,8 @@
 
 namespace fs = std::filesystem;
 
+namespace __xsan {
+
 // Lazy initialization for XsanEnabled
 bool isXsanEnabled() {
   static const bool enabled =
@@ -406,3 +408,4 @@ void *get_base_address() {
 }
 
 bool is_self_proc_pie() { return get_base_address() != (void *)0; }
+} // namespace __xsan

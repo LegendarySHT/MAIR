@@ -12,7 +12,9 @@ Hot patch to modify the sanitizer passes pipeline
 #include <utility>
 
 #include "utils/PatchHelper.h"
+
 using namespace llvm;
+using namespace __xsan;
 
 namespace {
 
