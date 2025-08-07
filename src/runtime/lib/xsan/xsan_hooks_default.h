@@ -72,6 +72,10 @@ struct DefaultHooks {
     return false;
   }
   ALWAYS_INLINE static bool ShouldIgnoreAllocFreeHook() { return false; }
+
+  // Related to sanitizer error reporting
+  ALWAYS_INLINE static void EnterReport() {}
+  ALWAYS_INLINE static void ExitReport() {}
   // ---------- End of State Management Hooks -----------------
 
   // ---------------------- Memory Management Hooks -------------------

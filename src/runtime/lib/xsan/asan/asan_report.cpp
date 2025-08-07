@@ -136,10 +136,6 @@ class ScopedInErrorReport {
   }
 
   ~ScopedInErrorReport() {
-    // There is high probability that interceptors will check-fail as well,
-    // on the other hand there is no sense in processing interceptors
-    // since we are going to die soon.
-    __xsan::ScopedIgnoreInterceptors ignore(true);
     if (halt_on_error_ && !__sanitizer_acquire_crash_state()) {
       asanThreadRegistry().Unlock();
       return;
@@ -219,11 +215,6 @@ class ScopedInErrorReport {
 ErrorDescription ScopedInErrorReport::current_error_(LINKER_INITIALIZED);
 
 void ReportDeadlySignal(const SignalContext &sig) {
-  // There is high probability that interceptors will check-fail as well,
-  // on the other hand there is no sense in processing interceptors
-  // since we are going to die soon.
-  __xsan::ScopedIgnoreInterceptors ignore(true);
-
   ScopedInErrorReport in_report(/*fatal*/ true);
   ErrorDeadlySignal error(GetCurrentTidOrInvalid(), sig);
   in_report.ReportError(error);

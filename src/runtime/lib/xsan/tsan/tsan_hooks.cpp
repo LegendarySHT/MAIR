@@ -22,6 +22,10 @@ bool TsanHooks::ShouldIgnoreAllocFreeHook() {
   return (ctx == 0 || !ctx->initialized || thr->ignore_interceptors);
 }
 
+void TsanHooks::EnterReport() { __tsan::cur_thread()->ignore_interceptors++; }
+
+void TsanHooks::ExitReport() { __tsan::cur_thread()->ignore_interceptors--; }
+
 Tid ThreadConsumeTid(ThreadState *thr, uptr pc, uptr uid);
 TsanHooks::ScopedPthreadJoin::ScopedPthreadJoin(const int &res,
                                                 const Context &ctx,

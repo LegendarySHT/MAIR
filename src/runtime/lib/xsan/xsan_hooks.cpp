@@ -145,3 +145,26 @@ void OnLibraryUnloaded() {
 }  // namespace __xsan
 
 // --------------- End of Special Function Hooks -----------------
+
+// --------------- Hooks of Report ---------------------------------------
+/*
+  Each sub-sanitizer defines its own Bug Report function, and it seems that
+  XSan cannot provide a hook for Bug Reports without modifying these functions.
+  Fortunately, almost all Sanitizer Bug Reports are protected by
+  __sanitizer::ScopedErrorReportLock, so we can intercept Lock/Unlock at link
+  time to expose hooks before/after report:
+    - __sanitizer::ScopedErrorReportLock::Lock()   : provides EnterReport() hook
+    - __sanitizer::ScopedErrorReportLock::Unlock() : provides ExitReport() hook
+*/
+
+/// __sanitizer::ScopedErrorReportLock::Lock()
+XSAN_WRAPPER(void, _ZN11__sanitizer21ScopedErrorReportLock4LockEv, ) {
+  XSAN_REAL(_ZN11__sanitizer21ScopedErrorReportLock4LockEv)();
+  XSAN_HOOKS_EXEC(EnterReport);
+}
+
+/// __sanitizer::ScopedErrorReportLock::Unlock()
+XSAN_WRAPPER(void, _ZN11__sanitizer21ScopedErrorReportLock6UnlockEv, ) {
+  XSAN_HOOKS_EXEC(ExitReport);
+  XSAN_REAL(_ZN11__sanitizer21ScopedErrorReportLock6UnlockEv)();
+}

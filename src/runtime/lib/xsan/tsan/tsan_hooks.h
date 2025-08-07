@@ -64,11 +64,21 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
     }
     return map_ranges;
   }
-
+  // ------------------ State-Related Hooks ----------------
   static void EnterSymbolizer() { __tsan::EnterSymbolizer(); }
   static void ExitSymbolizer() { __tsan::ExitSymbolizer(); }
   static bool ShouldIgnoreInterceptors(const Context &ctx);
   static bool ShouldIgnoreAllocFreeHook();
+  /*
+   Corresponding TSan's logic:
+
+   class ScopedReportBase {
+     ...
+     ScopedIgnoreInterceptors ignore_interceptors_;
+   };
+   */
+  static void EnterReport();
+  static void ExitReport();
 
   static void OnAllocatorUnmap(uptr p, uptr size);
   static void OnXsanAllocHook(uptr ptr, uptr size, BufferedStackTrace *stack);
