@@ -74,7 +74,7 @@ function(import_subsan output_prefix)
     # orig/asan_poisoning.cpp
     orig/asan_posix.cpp
     orig/asan_premap_shadow.cpp
-    # orig/asan_report.cpp
+    orig/asan_report.cpp
     # orig/asan_rtl.cpp
     orig/asan_shadow_setup.cpp
     # orig/asan_stack.cpp
@@ -100,7 +100,6 @@ function(import_subsan output_prefix)
     asan_allocator.cpp
     asan_fake_stack.cpp
     asan_hooks.cpp
-    asan_report.cpp
     asan_rtl_extra.cpp
   )
 
