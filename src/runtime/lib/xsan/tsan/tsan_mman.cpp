@@ -454,7 +454,7 @@ void TsanHooks::OnXsanAllocFreeTailHook(uptr pc) {
   __tsan::SignalUnsafeCall(__tsan::cur_thread(), pc);
 }
 
-void TsanHooks::OnFakeStackDestory(uptr addr, uptr size) {
+void TsanHooks::OnFakeStackDestroy(uptr addr, uptr size) {
   /// The 1st and 2nd arguments are ignored in MemoryResetRange.
   MemoryResetRange(nullptr, 0, addr, size);
 }

@@ -5,3 +5,4 @@ __msan_*
 __lsan_*
 __ubsan_*
 __sancov_*
+__wrap_*

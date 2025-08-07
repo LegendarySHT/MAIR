@@ -84,7 +84,7 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   static void OnXsanAllocHook(uptr ptr, uptr size, BufferedStackTrace *stack);
   static void OnXsanFreeHook(uptr ptr, uptr size, BufferedStackTrace *stack);
   static void OnXsanAllocFreeTailHook(uptr pc);
-  static void OnFakeStackDestory(uptr addr, uptr size);
+  static void OnFakeStackDestroy(uptr addr, uptr size);
   static void OnDtlsAlloc(uptr addr, uptr size);
   // ---------------------- Flags Registration Hooks ---------------
   ALWAYS_INLINE static void InitializeFlags() {

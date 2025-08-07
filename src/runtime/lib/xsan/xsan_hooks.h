@@ -132,8 +132,8 @@ ALWAYS_INLINE void OnFakeStackFree(uptr addr, uptr size) {
   XSAN_HOOKS_EXEC(OnFakeStackFree, addr, size);
 }
 
-ALWAYS_INLINE void OnFakeStackDestory(uptr addr, uptr size) {
-  XSAN_HOOKS_EXEC(OnFakeStackDestory, addr, size);
+ALWAYS_INLINE void OnFakeStackDestroy(uptr addr, uptr size) {
+  XSAN_HOOKS_EXEC(OnFakeStackDestroy, addr, size);
 }
 
 ALWAYS_INLINE void OnDtlsAlloc(uptr addr, uptr size) {

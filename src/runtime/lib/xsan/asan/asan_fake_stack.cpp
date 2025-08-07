@@ -15,8 +15,6 @@
 #include "asan_poisoning.h"
 #include "asan_thread.h"
 
-#include "../xsan_hooks.h"
-
 namespace __asan {
 
 static const u64 kMagic1 = kAsanStackAfterReturnMagic;
@@ -76,7 +74,6 @@ void FakeStack::Destroy(int tid) {
   }
   uptr size = RequiredSize(stack_size_log_);
   FlushUnneededASanShadowMemory(reinterpret_cast<uptr>(this), size);
-  ::__xsan::OnFakeStackDestory(reinterpret_cast<uptr>(this), size);
   UnmapOrDie(this, size);
 }
 
@@ -234,7 +231,6 @@ static ALWAYS_INLINE uptr OnMalloc(uptr class_id, uptr size) {
     return 0;  // Out of fake stack.
   uptr ptr = reinterpret_cast<uptr>(ff);
   SetShadow(ptr, size, class_id, 0);
-  ::__xsan::OnFakeStackAlloc(ptr, size);
   return ptr;
 }
 
@@ -248,14 +244,12 @@ static ALWAYS_INLINE uptr OnMallocAlways(uptr class_id, uptr size) {
     return 0;  // Out of fake stack.
   uptr ptr = reinterpret_cast<uptr>(ff);
   SetShadow(ptr, size, class_id, 0);
-  ::__xsan::OnFakeStackAlloc(ptr, size);
   return ptr;
 }
 
 static ALWAYS_INLINE void OnFree(uptr ptr, uptr class_id, uptr size) {
   FakeStack::Deallocate(ptr, class_id);
   SetShadow(ptr, size, class_id, kMagic8);
-  ::__xsan::OnFakeStackFree(ptr, size);
 }
 
 } // namespace __asan

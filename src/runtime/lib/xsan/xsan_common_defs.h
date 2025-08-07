@@ -25,6 +25,9 @@
 #define XSAN_DECLARE_REAL(ret_ty, f, ...) \
   extern "C" ret_ty XSAN_REAL(f)(__VA_ARGS__);
 
+#define XSAN_DECLARE_WRAPPER(ret_ty, f, ...) \
+  extern "C" ret_ty XSAN_WRAP(f)(__VA_ARGS__);
+
 #define XSAN_WRAPPER(ret_ty, f, ...)        \
   XSAN_DECLARE_REAL(ret_ty, f, __VA_ARGS__) \
   extern "C" ret_ty XSAN_WRAP(f)(__VA_ARGS__)

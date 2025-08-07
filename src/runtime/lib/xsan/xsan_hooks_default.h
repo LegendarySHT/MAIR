@@ -93,7 +93,7 @@ struct DefaultHooks {
   // E.g., MSan needs to poison the fake stack frames.
   ALWAYS_INLINE static void OnFakeStackAlloc(uptr addr, uptr size) {}
   ALWAYS_INLINE static void OnFakeStackFree(uptr addr, uptr size) {}
-  ALWAYS_INLINE static void OnFakeStackDestory(uptr addr, uptr size) {}
+  ALWAYS_INLINE static void OnFakeStackDestroy(uptr addr, uptr size) {}
   // 1. It must not process pending signals.
   //    Signal handlers may contain MOVDQA instruction (see below).
   // 2. It must be as simple as possible to not contain MOVDQA.
