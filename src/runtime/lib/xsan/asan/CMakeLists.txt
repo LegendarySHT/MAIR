@@ -58,7 +58,7 @@ function(import_subsan output_prefix)
     orig/asan_debugging.cpp
     orig/asan_descriptions.cpp
     orig/asan_errors.cpp
-    # orig/asan_fake_stack.cpp
+    orig/asan_fake_stack.cpp
     # orig/asan_flags.cpp
     orig/asan_fuchsia.cpp
     # orig/asan_globals.cpp
@@ -98,7 +98,6 @@ function(import_subsan output_prefix)
 
   set(ASAN_COND_SOURCES
     asan_allocator.cpp
-    asan_fake_stack.cpp
     asan_hooks.cpp
     asan_rtl_extra.cpp
   )
