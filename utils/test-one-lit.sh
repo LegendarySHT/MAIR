@@ -10,6 +10,7 @@
 XSAN_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 XSAN_BUILD_DIR=$XSAN_ROOT/build
 XSAN_TEST_DIR=$XSAN_BUILD_DIR/test
+XSAN_TEST_SRC_DIR=$XSAN_ROOT/test
 
 declare -A map
 map=(
@@ -34,6 +35,9 @@ if [ $# -eq 1 ]; then
     filename=$(basename "$file")
     # Find the first matching file in XSAN_TEST_DIR
     found_path=$(find "$XSAN_TEST_DIR" -type f -name "*$filename*" | head -n 1)
+    if [ -z "$found_path" ]; then
+        found_path=$(find "$XSAN_TEST_SRC_DIR" -type f -name "*$filename*" | head -n 1)
+    fi
     if [ -n "$found_path" ]; then
         # If found, try to match asan/msan/tsan/ubsan in the path
         for s in asan msan tsan ubsan xsan; do
