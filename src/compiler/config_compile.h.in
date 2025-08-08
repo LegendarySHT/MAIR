@@ -32,4 +32,6 @@
 #define XSAN_mips_TRIPLE "@XSAN_mips_TRIPLE@"
 #define XSAN_mipsel_TRIPLE "@XSAN_mipsel_TRIPLE@"
 
+#define XSAN_ENABLE_LIVEPATCH @XSAN_ENABLE_LIVEPATCH@
+
 #endif // _COMPILER_CONFIG_H

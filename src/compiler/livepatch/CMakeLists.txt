@@ -31,18 +31,3 @@ add_subdirectory(clang-15)
 # In theory, the hot patch of gcc does not limit the version of gcc
 add_subdirectory(gcc)
 
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/support_dso_injection.sh
-  ${XSAN_OUTPUT_PATCHDIR}/support_dso_injection.sh
-  @ONLY
-)
-
-install(FILES ${XSAN_OUTPUT_PATCHDIR}/support_dso_injection.sh
-  DESTINATION ${XSAN_INSTALL_PATCHDIR}
-  COMPONENT patch
-
-  PERMISSIONS # 755 permission: rwxr-xr-x
-  OWNER_READ OWNER_WRITE OWNER_EXECUTE
-  GROUP_READ GROUP_EXECUTE
-  WORLD_READ WORLD_EXECUTE
-)

@@ -1,3 +1,10 @@
+option(XSAN_USE_LIVEPATCH "Use livepatch feature" ON)
+if(${XSAN_USE_LIVEPATCH})
+  set(XSAN_ENABLE_LIVEPATCH 1 CACHE STRING "Enable livepatch feature")
+else()
+  set(XSAN_ENABLE_LIVEPATCH 0 CACHE STRING "Enable livepatch feature")
+endif()
+
 include_directories(include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 configure_file(config_compile.h.in config_compile.h)
@@ -91,5 +98,7 @@ foreach(EXE_NAME IN LISTS XSAN_EXECUTABLES)
   )
 endforeach()
 
-# ################ For HotPatch #################
-add_subdirectory(livepatch)
+# ################ For LivePatch #################
+if (${XSAN_USE_LIVEPATCH})
+  add_subdirectory(livepatch)
+endif()

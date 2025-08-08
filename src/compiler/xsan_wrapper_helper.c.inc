@@ -50,7 +50,6 @@
 static const u8 **cc_params;          /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1;            /* Param count, including argv0      */
 static const u8 *obj_path;            /* Path to runtime libraries         */
-static u8 support_dso_inject = 0;     /* Support for DSO injection         */
 static const u8 *xsan_comb_name = ""; /* combination name, e.g., xsan_asan */
 static XsanOption xsan_options;
 static XsanOption xsan_recover_options;
@@ -90,29 +89,6 @@ static u8 has(const XsanOption *opt, enum SanitizerType sanTy) {
 
 static u8 has_any(const XsanOption *opt) {
   return (opt->mask & ~(((u64)1 << XSan) | ((u64)1 << SanNone))) != 0;
-}
-
-static u8 whether_to_support_dso_injection(const char *arg) {
-  // Construct command string, and transmit the argument to the scripyt
-  const char *command =
-      alloc_printf("%s/" XSAN_SUPPORT_DSO_CHECKER " %s", obj_path, arg);
-
-  // Execute the command
-  int status = system(command);
-  if (status == -1) {
-    PFATAL("Cannot execute script to check whether to support DSO "
-           "injection:\n\t%s",
-           command);
-  }
-
-  // Check the return status
-  if (WIFEXITED(status)) {
-    ck_free((void *)command);
-    int exit_code = WEXITSTATUS(status);
-    return exit_code == 0;
-  } else {
-    PFATAL("Command %s terminated abnormally", command);
-  }
 }
 
 /*
@@ -535,14 +511,14 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
       }
     }
 
-    support_dso_inject = whether_to_support_dso_injection(cc_params[0]);
-    if (support_dso_inject) {
-      const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
-      append_env_var("LD_PRELOAD", dso_path);
-      /// TODO: this var can be removed, as livepatch could self-detect the
-      /// base dir.
-      setenv("XSAN_BASE_DIR", obj_path, 1);
-    }
+#if XSAN_ENABLE_LIVEPATCH
+    // Use livepatch if invasive patches are not applied.
+    const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
+    append_env_var("LD_PRELOAD", dso_path);
+    /// TODO: this var can be removed, as livepatch could self-detect the
+    /// base dir.
+    setenv("XSAN_BASE_DIR", obj_path, 1);
+#endif
     break;
   case SanNone:
   default:
@@ -555,7 +531,7 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   // Symbol wrapped, However, gcc's live patch implements but does not use
   // `add_wrap_link_option` in gcc.cpp, which is just for future usage. Please
   // refer to RoStrPatcher()@gcc.cpp for details.
-  if (sanTy != XSan || (support_dso_inject && !WRAP_GCC))
+  if (sanTy != XSan || (XSAN_ENABLE_LIVEPATCH && !WRAP_GCC))
     return;
 
   // Use Linker Response File to include lots of -wrap=<symbol> options in one
@@ -567,13 +543,13 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
 
 static void add_sanitizer_runtime(enum SanitizerType sanTy, u8 is_cxx,
                                   u8 is_dso, u8 needs_shared_rt) {
-  // If support_dso_inject is true, we don't need to add sanitizer runtime here.
-  // Runtime should be added in the DSO injector.
-  // clang's live patch `replaceSanitizerRt` in CommonArgs.cpp take over linked
-  // runtime libraries. However, gcc's live patch implements but does not use
-  // `add_runtime` in gcc.cpp, which is just for future usage. Please refer to
-  // RoStrPatcher()@gcc.cpp for details.
-  if (support_dso_inject && !WRAP_GCC) {
+  // If XSAN_ENABLE_LIVEPATCH is true, we don't need to add sanitizer runtime
+  // here. Runtime should be added in the DSO injector. clang's live patch
+  // `replaceSanitizerRt` in CommonArgs.cpp take over linked runtime libraries.
+  // However, gcc's live patch implements but does not use `add_runtime` in
+  // gcc.cpp, which is just for future usage.
+  // Please refer to RoStrPatcher()@gcc.cpp for details.
+  if (XSAN_USE_LIVEPATCH && !WRAP_GCC) {
     return;
   }
 
