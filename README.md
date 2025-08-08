@@ -84,7 +84,9 @@ Sanitizers that are not considered:
         * Build and install `gcc-9.4.0` adhering to the guidelines of the compiler project.
 4. Export the relevant environment variables to your dev env (e.g., in .bashrc).
     ```shell
-    export LLVM_DIR=/path/to/llvm-build
+    export LLVM_DIR=/path/to/llvm
+    # If you install clang-15 to other directory different from LLVM-15, you should set the Clang_DIR to the directory of clang-15.
+    export Clang_DIR=/path/to/clang
     export PATH=$LLVM_DIR/bin:$PATH
     ```
 ### Build/Test/Install/Archive XSan
@@ -102,6 +104,7 @@ Sanitizers that are not considered:
    >   `export CC=/path/to/clang-15; export CXX=/path/to/clang++-15`
    > - Or set cmake parameters:
    >   `cmake -DCMAKE_C_COMPILER=/path/to/clang-15 -DCMAKE_CXX_COMPILER=/path/to/clang++-15 ...`
+   > If you have >1 clang/LLVM versions, you should specify the version of clang/LLVM by setting the environment variable `Clang_DIR` and `LLVM_DIR` accordingly.
 
     - Debug mode: use to develop and debug the project.
     ```shell

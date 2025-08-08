@@ -9,7 +9,15 @@
 # - `addSanitizerRuntimes` : to replace the link options of sanitizer runtimes.
 # - `PassBuilder::build*Pipeline`:  (Optional) to reconstruct the pass pipeline.
 
-find_package(Clang REQUIRED CONFIG)
+# Find Clang only for obtaining its include directories
+# find_package(PackageName REQUIRED CONFIG) would search PackageNameConfig.cmake
+# We can define env var PackageName_DIR to specify the directory to search PackageNameConfig.cmake
+find_package(Clang REQUIRED CONFIG
+    # We use LLVM-15, so search the Clang-15 directly under the LLVM-15 directory.
+    # This HINTS could be overridden by env var Clang_DIR.
+    HINTS ${LLVM_BINARY_DIR}
+)
+
 
 include_directories(${CLANG_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -65,7 +73,7 @@ set_target_properties(clang-patch
 )
 
 install(TARGETS clang-patch
-    LIBRARY 
+    LIBRARY
     DESTINATION ${XSAN_INSTALL_PATCHDIR}
     COMPONENT patch
 )

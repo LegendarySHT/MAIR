@@ -91,7 +91,9 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 4. 设置环境变量（建议写入 `.bashrc` 等配置文件）：
 
    ```bash
-   export LLVM_DIR=/path/to/llvm-build
+   export LLVM_DIR=/path/to/llvm_dir
+   # 如果 clang-15 安装在不同于 LLVM-15 的其它目录，你需要设置 Clang_DIR 为 clang-15 的目录
+   export Clang_DIR=/path/to/clang_dir
    export PATH=$LLVM_DIR/bin:$PATH
    ```
 
@@ -112,6 +114,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    >   `export CC=/path/to/clang-15; export CXX=/path/to/clang++-15`
    > - 修改cmake参数：
    >   `cmake -DCMAKE_C_COMPILER=/path/to/clang-15 -DCMAKE_CXX_COMPILER=/path/to/clang++-15 ...`
+   > 如果你有 >1 个 clang/LLVM 版本，你应该通过设置环境变量 `Clang_DIR` 和 `LLVM_DIR` 来指定 clang/LLVM 的版本。
 
    * **调试模式**（用于开发和调试）：
 
