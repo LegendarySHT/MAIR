@@ -99,7 +99,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
 ### 构建 / 测试 / 安装 / 打包 XSan
 
-1. 克隆 XSan 项目：
+#### 1. 克隆 XSan 项目：
 
    ```bash
    git clone https://github.com/Camsyn/XSan.git /path/to/xsan
@@ -107,14 +107,16 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
    > `dev-xsan` 分支为开发的主分支
 
-2. 构建 XSan：
+#### 2. 构建 XSan：
 
    > 注意：我们需要 `clang-15` 来编译构建 XSan，可以通过以下手段之一实现
    > - 更改环境变量: 
    >   `export CC=/path/to/clang-15; export CXX=/path/to/clang++-15`
    > - 修改cmake参数：
    >   `cmake -DCMAKE_C_COMPILER=/path/to/clang-15 -DCMAKE_CXX_COMPILER=/path/to/clang++-15 ...`
-   > 如果你有 >1 个 clang/LLVM 版本，你应该通过设置环境变量 `Clang_DIR` 和 `LLVM_DIR` 来指定 clang/LLVM 的版本。
+   >   如果你有 >1 个 clang/LLVM 版本，你应该通过设置环境变量 `Clang_DIR` 和 `LLVM_DIR` 来指定 clang/LLVM 的版本。
+
+   > 注意：若使用侵入式补丁，cmake配置时，需要指定参数 `-DXSAN_USE_LIVEPATCH=OFF` 来禁用热补丁
 
    * **调试模式**（用于开发和调试）：
 
@@ -134,12 +136,29 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
 
    > 如有 Ninja，也可以使用 `cmake -G Ninja ... && ninja` 来构建
 
-3. 运行测试：
+#### 3. 运行测试：
 
-   > 注意：
-   >
-   > - ASan有5个测试用例在**Debug模式**下可能会 Unexpected Pass，请忽略. 
-   > - 如果以**非标准环境 (即非 Ubuntu + Docker) **运行测试，由于权限或API不支持等原因，部分测试用例可能也会失败，请甄别。
+- 先决依赖：
+   本项目的测试依赖于 LLVM LIT + FileCheck。
+   请确保你的环境下可以找到 `FileCheck` 等LLVM测试工具。
+
+   ```bash
+   FileCheck --version
+   ```
+   若缺失 `FileCheck`, 按以下步骤进行修复：
+   ```bash
+   # 若 $LLVM_DIR/bin/FileCheck 存在，直接符号链接
+   if [ -f $LLVM_DIR/bin/FileCheck ]; then
+       sudo ln -s $LLVM_DIR/bin/FileCheck /usr/bin/FileCheck
+       sudo ln -s $LLVM_DIR/bin/not /usr/bin/not
+       sudo ln -s $LLVM_DIR/bin/count /usr/bin/count
+   # 若 $LLVM_DIR/bin/FileCheck 不存在，尝试从包管理器获取
+   else
+       sudo apt-get install llvm-15-tools
+   fi
+   ```
+
+- 运行测试：
 
    ```bash
    cd /path/to/xsan/build
@@ -151,14 +170,31 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    make check-xsan    # 仅运行为 Xsan 单独设计的测试
    ```
 
-4. 使用 XSan（无需安装）：
+- 可能的合理测试失败原因及相关解决方案：
+   
+   - ASan有5个测试用例在**Debug模式**下可能会 Unexpected Pass：可忽略或通过 Release 构建XSan来解决
+      - 特征： Unexpected Pass
+   
+   - 如果以**非标准环境 (即非 Ubuntu + Docker) **运行测试，由于权限或API不支持等原因，部分测试用例可能也会失败，请甄别。
+      - 典型特征：报错提示为权限不足或者assert失败
+      - 如不支持 `process_vm_readv` 、`name_to_handle_at` 等底层API时，针对这些API的测试会失败
+      - 非 ROOT 权限运行测试：部分需要ROOT权限的测试会失败
+   
+   - `$LLVM_DIR/bin/llvm-symbolizer` 没有启用 zlib 支持，导致符号化失败，进而导致测试的检查失败。该问题常见于那些静态链接的 `llvm-symbolizer` ，如 LLVM GitHub Release下下载的 `clang+llvm` 压缩包，或 `-DBUILD_SHARED_LIBS=OFF`的本地LLVM构建。可以忽略，或者通过以下方法解决
+      - 特征：报错  `error: failed to decompress '.debug_aranges', zlib is not available`  
+      - 可以通过如下命令进行验证：`echo 'CODE "/lib/x86_64-linux-gnu/libc.so.6" 0x2a1c9 ' | $LLVM_DIR/bin/llvm-symbolizer`
+      - 若`$LLVM_DIR/bin/llvm-symbolizer`确实没有启用 zlib 支持，可以通过提前设置环境变量 `XSAN_SYMBOLIZER_PATH=/path/to/llvm-symbolizer-with-zlib-support` ，强制改变LIT测试所用的 `llvm-symbolizer` 来解决该问题,
+         - 若本地无 `llvm-symbolizer-with-zlib-support`，可以通过 `sudo apt-get install llvm-15` 来安装带有 zlib 支持的 `llvm-symbolizer` 或者自己本地构建LLVM
+   
+
+#### 4. 使用 XSan（无需安装）：
 
    ```bash
    export XSAN_DIR=/path/to/xsan
    export PATH=$XSAN_DIR/build:$PATH
    ```
 
-5. （可选）安装 XSan 到系统：
+#### 5. （可选）安装 XSan 到系统：
 
    - 可通过 `cmake -DCMAKE_INSTALL_PREFIX=/path/to/install` 来自定义安装目录
 
@@ -167,7 +203,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    make install
    ```
 
-6. （可选）打包为独立归档包：
+#### 6. （可选）打包为独立归档包：
 
    ```bash
    cd /path/to/xsan/build

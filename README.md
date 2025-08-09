@@ -63,7 +63,7 @@ Sanitizers that are not considered:
     sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
     ```
 
-3. (Optional) Apply intrusive patches to the compilers.
+3. (Optional) Apply invasive patches to the compilers.
     - **ONLY for the scenarios that XSan's livepatches do not work with your `clang`/`gcc`.**
     - XSan only provides patches for clang-15 and gcc-9.4. If you require support for other compiler versions, please refer to our patch files and apply the modifications manually.
     - Patch the `clang-15` project with the modifications in the `llvm-15.0.7.patch` file.
@@ -90,21 +90,23 @@ Sanitizers that are not considered:
     export PATH=$LLVM_DIR/bin:$PATH
     ```
 ### Build/Test/Install/Archive XSan
-1. Clone the XSan project.
+#### 1. Clone the XSan project.
     ```shell
     # From GitHub
     git clone https://github.com/Camsyn/XSan.git /path/to/xsan
     ```
     > `dev-xsan` is the main branch.
 
-2. Build XSan.
+#### 2. Build XSan.
 
    > Note: we require `clang-15` to compile/build XSan, which could be set up via
    > - Set environment variables: 
    >   `export CC=/path/to/clang-15; export CXX=/path/to/clang++-15`
    > - Or set cmake parameters:
    >   `cmake -DCMAKE_C_COMPILER=/path/to/clang-15 -DCMAKE_CXX_COMPILER=/path/to/clang++-15 ...`
-   > If you have >1 clang/LLVM versions, you should specify the version of clang/LLVM by setting the environment variable `Clang_DIR` and `LLVM_DIR` accordingly.
+   >   If you have >1 clang/LLVM versions, you should specify the version of clang/LLVM by setting the environment variable `Clang_DIR` and `LLVM_DIR` accordingly.
+
+   > Note: if use invasive patches, you should apply this cmake argument `-DXSAN_USE_LIVEPATCH=OFF` to disable the livepatches.
 
     - Debug mode: use to develop and debug the project.
     ```shell
@@ -118,49 +120,85 @@ Sanitizers that are not considered:
     cmake -DCMAKE_BUILD_TYPE=Release ..
     make -j$(nproc)
     ```
-
+    
     > If you have Ninja installed, you can also build with `cmake -G Ninja ... && ninja`
 
-3. Test the XSan.
+#### 3. Test the XSan.
 
-    > Note: 
-    >
-    > - ASan has 5 test cases that may Unexpected Pass in **Debug** mode, please ignore them.
-    > - If you run the tests with **non-standard environment (i.e., non Ubuntu + Docker)**,  due to permissions or API unsupported reasons, some test cases may also fail, please distinguish.
+- Prerequisites:
+   The tests for this project depend on LLVM LIT and FileCheck.
+   Please make sure that `FileCheck` and other LLVM testing tools are available in your environment.
 
-    ```shell
-    cd /path/to/xsan/build
-    make check-all # check all the test cases
-    make check-asan # check the ASan test cases
-    make check-msan # check the MSan test cases
-    make check-ubsan # check the UBSan test cases
-    make check-tsan # check the TSan test cases
-    make check-xsan # check the test cases designated for XSan
-    ```
+   ```bash
+   FileCheck --version
+   ```
+   If `FileCheck` is missing, fix it as follows:
+   ```bash
+   # If $LLVM_DIR/bin/FileCheck exists, create symbolic links directly
+   if [ -f $LLVM_DIR/bin/FileCheck ]; then
+       sudo ln -s $LLVM_DIR/bin/FileCheck /usr/bin/FileCheck
+       sudo ln -s $LLVM_DIR/bin/not /usr/bin/not
+       sudo ln -s $LLVM_DIR/bin/count /usr/bin/count
+   # If $LLVM_DIR/bin/FileCheck does not exist, try to install via package manager
+   else
+       sudo apt-get install llvm-15-tools
+   fi
+   ```
 
-4. Use XSan without installation.
-    - Export the relevant environment variables to your dev env (e.g., in .bashrc).
-    ```shell
-    export XSAN_DIR=/path/to/xsan
-    export PATH=$XSAN_DIR/build:$PATH
-    ```
+- Run the tests:
 
-5. (Optional) Install XSan to the system.
+   ```bash
+   cd /path/to/xsan/build
+   make check-all     # Run all tests
+   make check-asan    # Run only ASan tests
+   make check-msan    # Run only MSan tests
+   make check-ubsan   # Run only UBSan tests
+   make check-tsan    # Run only TSan tests
+   make check-xsan    # Run only tests specifically designed for XSan
+   ```
 
-    - You can use this cmake option `-DCMAKE_INSTALL_PREFIX=/path/to/install` to customize the directory to install.
+- Possible reasonable test failures and related solutions:
+  
+   - There are 5 ASan test cases that may have Unexpected Passes in **Debug mode**: you can ignore them or resolve by building XSan in Release mode.
+      - Symptom: "Unexpected Pass"
+   
+   - If you run the tests in a **non-standard environment (i.e., not Ubuntu + Docker)**, some test cases may fail due to permission or unsupported API issues. Please identify these cases.
+      - Typical symptom: error messages about insufficient permissions or assertion failures
+      - If low-level APIs like `process_vm_readv` or `name_to_handle_at` are not supported, tests for these APIs will fail
+      - Running tests without ROOT privileges: some tests requiring ROOT will fail
+   
+   - If `$LLVM_DIR/bin/llvm-symbolizer` is built without zlib support, symbolization will fail, causing test checks to fail. This issue is common with statically linked `llvm-symbolizer`, such as those from LLVM GitHub Releases or local LLVM builds with `-DBUILD_SHARED_LIBS=OFF`. You can ignore this, or fix it as follows:
+      - Symptom: error message `error: failed to decompress '.debug_aranges', zlib is not available`
+      - You can verify with: `echo 'CODE "/lib/x86_64-linux-gnu/libc.so.6" 0x2a1c9 ' | $LLVM_DIR/bin/llvm-symbolizer`
+      - If `$LLVM_DIR/bin/llvm-symbolizer` indeed lacks zlib support, you can set the environment variable `XSAN_SYMBOLIZER_PATH=/path/to/llvm-symbolizer-with-zlib-support` in advance to force LIT to use a different `llvm-symbolizer` with zlib support.
+         - If you don't have a local `llvm-symbolizer-with-zlib-support`, you can install one with `sudo apt-get install llvm-15` or build LLVM yourself.
 
-    ```shell
-    cd /path/to/xsan/build
-    make install
-    ```
 
-6. (Optional) Archive XSan to a standalone package.
-    ```shell
-    cd /path/to/xsan/build
-    make package
-    ```
-    Or you can directly archive the build directory.
-    - In theory, XSan supports distributing a standalone package—a compressed archive containing all the necessary binaries—allowing users to run it out of the box after extraction, without requiring installation.
+#### 4. Use XSan without installation.
+
+Export the relevant environment variables to your dev env (e.g., in .bashrc).
+
+```shell
+export XSAN_DIR=/path/to/xsan
+export PATH=$XSAN_DIR/build:$PATH
+```
+
+#### 5. (Optional) Install XSan to the system.
+
+You can use this cmake option `-DCMAKE_INSTALL_PREFIX=/path/to/install` to customize the directory to install.
+
+```shell
+cd /path/to/xsan/build
+make install
+```
+
+#### 6. (Optional) Archive XSan to a standalone package.
+```shell
+cd /path/to/xsan/build
+make package
+```
+Or you can directly archive the build directory.
+- In theory, XSan supports distributing a standalone package—a compressed archive containing all the necessary binaries—allowing users to run it out of the box after extraction, without requiring installation.
 
 ## How to Use
 
