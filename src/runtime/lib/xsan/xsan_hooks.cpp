@@ -175,6 +175,13 @@ XSAN_WRAPPER(void, _ZN11__sanitizer21ScopedErrorReportLock6UnlockEv, ) {
 XSAN_WRAPPER(void, _ZNK11__sanitizer10StackTrace5PrintEv,
              const StackTrace *self) {
   __xsan::ScopedXsanInternal scope;
-  __xsan::ScopedIgnoreInterceptors ignore(true);
-  XSAN_REAL(_ZNK11__sanitizer10StackTrace5PrintEv)(self);
+  if (!GetCurrentThread()) {
+    // If we cannot obtain the current thread, we are in the thread created by
+    // internal_start_thread, i.e., internal thread.
+    XSAN_REAL(_ZNK11__sanitizer10StackTrace5PrintEv)(self);
+  } else {
+    // ScopedIgnoreInterceptors is used to ignore interceptors for user-threads.
+    __xsan::ScopedIgnoreInterceptors ignore(true);
+    XSAN_REAL(_ZNK11__sanitizer10StackTrace5PrintEv)(self);
+  }
 }
