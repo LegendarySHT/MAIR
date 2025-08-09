@@ -76,6 +76,7 @@ class LLVMConfig(object):
 
         self.with_system_environment(
             [
+                "XSAN_SYMBOLIZER_PATH",
                 "ASAN_SYMBOLIZER_PATH",
                 "HWASAN_SYMBOLIZER_PATH",
                 "MSAN_SYMBOLIZER_PATH",
