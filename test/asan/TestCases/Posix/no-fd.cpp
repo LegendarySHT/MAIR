@@ -13,7 +13,9 @@
 // on them remaining closed across an execve(). This is not the case on newer
 // versions of Android. On PPC with ASLR turned on, this fails when linked with
 // lld - see https://bugs.llvm.org/show_bug.cgi?id=45076.
-// UNSUPPORTED: android, target=powerpc{{.*}}
+/// TODO: figure out why XSan/TSan/MSan do not support test_only_emulate_no_memorymap=1
+///       Relevant code in CheckAndProtect
+// UNSUPPORTED: android, target=powerpc{{.*}}, xsan
 
 #include <assert.h>
 #include <stdio.h>
