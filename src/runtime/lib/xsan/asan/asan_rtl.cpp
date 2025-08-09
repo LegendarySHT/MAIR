@@ -716,6 +716,7 @@ void AsanInitFromXsan() {
   AllocatorOptions allocator_options;
   allocator_options.SetFrom(flags(), common_flags());
   InitializeAllocator(allocator_options);
+  __xsan::is_heap_init = true;
 
   if (SANITIZER_START_BACKGROUND_THREAD_IN_ASAN_INTERNAL)
     MaybeStartBackgroudThread();
@@ -775,7 +776,6 @@ void AsanInitFromXsan() {
 }
 
 void AsanInitFromXsanLate() {
-
   if (flags()->atexit)
     Atexit(asan_atexit);
 
@@ -785,4 +785,14 @@ void AsanInitFromXsanLate() {
     InstallAtExitCheckLeaks();
   }
 }
+}  // namespace __asan
+
+namespace __xsan {
+
+bool InitializeAllocator() {
+  AllocatorOptions allocator_options;
+  allocator_options.SetFrom(__asan::flags(), common_flags());
+  InitializeAllocator(allocator_options);
+  return true;
 }
+}  // namespace __xsan

@@ -87,6 +87,8 @@ uptr FindDynamicShadowStart();
 void *XsanDoesNotSupportStaticLinkage();
 void XsanCheckDynamicRTPrereqs();
 void XsanCheckIncompatibleRT();
+void InitializePlatform();
+void InitializePlatformEarly();
 
 // Unpoisons platform-specific stacks.
 // Returns true if all stacks have been unpoisoned.
@@ -132,7 +134,7 @@ void InstallAtForkHandler();
 bool XsanInited();
 // Used to avoid infinite recursion in __xsan_init().
 extern bool xsan_in_init;
-
+extern bool is_heap_init;
 extern bool replace_intrin_cached;
 extern void (*death_callback)(void);
 

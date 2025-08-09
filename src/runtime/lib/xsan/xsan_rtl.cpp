@@ -24,11 +24,6 @@
 
 namespace __xsan {
 
-// With the zero shadow base we can not actually map pages starting from 0.
-// This constant is somewhat arbitrary.
-constexpr uptr ZeroBaseShadowStart = 0;
-constexpr uptr ZeroBaseMaxShadowStart = 1 << 18;
-
 // -------------------------- Globals --------------------- {{{1
 static StaticSpinMutex xsan_inited_mutex;
 static atomic_uint8_t xsan_inited = {0};
@@ -44,7 +39,7 @@ static atomic_uint8_t xsan_asan_inited = {0};
 /// Only set to false after all sub-santizers's initialization.
 bool xsan_in_init;
 bool replace_intrin_cached;
-
+bool is_heap_init = false;
 uptr vmaSize;
 
 #if !ASAN_FIXED_MAPPING
@@ -69,151 +64,10 @@ static void CheckUnwind() {
   stack.Print();
 }
 
-uptr ALWAYS_INLINE HeapEnd() {
-  return HeapMemEnd() + PrimaryAllocator::AdditionalSize();
-}
-
-static void ProtectRange(uptr beg, uptr end) {
-  if (beg == end) return;
-  ProtectGap(beg, end - beg, ZeroBaseShadowStart, ZeroBaseMaxShadowStart);
-}
-
-void CheckAndProtect() {
-  // Ensure that the binary is indeed compiled with -pie.
-  MemoryMappingLayout proc_maps(true);
-  MemoryMappedSegment segment;
-  while (proc_maps.Next(&segment)) {
-    if (IsAppMem(segment.start))
-      continue;
-    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd())
-      continue;
-    if (segment.protection == 0)  // Zero page or mprotected.
-      continue;
-    if (segment.start >= VdsoBeg())  // vdso
-      break;
-    Printf("FATAL: XSan: unexpected memory mapping 0x%zx-0x%zx\n",
-           segment.start, segment.end);
-    DumpProcessMap();
-    Die();
-  }
-
-#    if SANITIZER_IOS && !SANITIZER_IOSSIM
-  ProtectRange(HeapMemEnd(), TsanShadowBeg());
-  ProtectRange(TsanShadowEnd(), TsanMetaShadowBeg());
-  ProtectRange(TsanMetaShadowEnd(), HiAppMemBeg());
-#    else
-  SmallVector<NamedRange, 1024> map_ranges;
-  map_ranges.push_back({{LoAppMemBeg(), LoAppMemEnd()}, "low app memory"});
-  map_ranges.push_back({{MidAppMemBeg(), MidAppMemEnd()}, "mid app memory"});
-  map_ranges.push_back({{HeapMemBeg(), HeapMemEnd()}, "heap memory"});
-  map_ranges.push_back({{HiAppMemBeg(), HiAppMemEnd()}, "high app memory"});
-  NeededMapRanges(map_ranges);
-  Sort(map_ranges.data, map_ranges.size(),
-       [](const NamedRange &lh, const NamedRange &rh) {
-         return lh.range.begin < rh.range.begin;
-       });
-
-  NamedRange fake_range = {{0, 0}, "fake range"};
-  const NamedRange *last_range = &fake_range;
-  for (const auto &cur_range : map_ranges) {
-    VPrintf(1, "Protecting gap before: %s: 0x%zx-0x%zx\n", cur_range.name,
-            cur_range.range.begin, cur_range.range.end);
-    if (cur_range.range.begin < last_range->range.end) {
-      Report(
-          "FATAL: XSan: overlapping memory mapping between:\n"
-          "%s: \t0x%zx-0x%zx\n"
-          "%s: \t0x%zx-0x%zx\n",
-          last_range->name, last_range->range.begin, last_range->range.end,
-          cur_range.name, cur_range.range.begin, cur_range.range.end);
-      Die();
-    }
-    ProtectRange(last_range->range.end, cur_range.range.begin);
-    last_range = &cur_range;
-  }
-#    endif
-
-#    if defined(__s390x__)
-  // Protect the rest of the address space.
-  const uptr user_addr_max_l4 = 0x0020000000000000ull;
-  const uptr user_addr_max_l5 = 0xfffffffffffff000ull;
-  // All the maintained s390x kernels support at least 4-level page tables.
-  ProtectRange(HiAppMemEnd(), user_addr_max_l4);
-  // Older s390x kernels may not support 5-level page tables.
-  TryProtectRange(user_addr_max_l4, user_addr_max_l5);
-#    endif
-}
-
-void InitializePlatformEarly() {
-  vmaSize =
-    (MostSignificantSetBitIndex(GET_CURRENT_FRAME()) + 1);
-#if defined(__aarch64__)
-# if !SANITIZER_GO
-  if (vmaSize != 39 && vmaSize != 42 && vmaSize != 48) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 39, 42 and 48\n", vmaSize);
-    Die();
-  }
-#else
-  if (vmaSize != 48) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 48\n", vmaSize);
-    Die();
-  }
-#endif
-#elif SANITIZER_LOONGARCH64
-# if !SANITIZER_GO
-  if (vmaSize != 47) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
-    Die();
-  }
-#    else
-  if (vmaSize != 47) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
-    Die();
-  }
-#    endif
-#elif defined(__powerpc64__)
-# if !SANITIZER_GO
-  if (vmaSize != 44 && vmaSize != 46 && vmaSize != 47) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 44, 46, and 47\n", vmaSize);
-    Die();
-  }
-# else
-  if (vmaSize != 46 && vmaSize != 47) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 46, and 47\n", vmaSize);
-    Die();
-  }
-# endif
-#elif defined(__mips64)
-# if !SANITIZER_GO
-  if (vmaSize != 40) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 40\n", vmaSize);
-    Die();
-  }
-# else
-  if (vmaSize != 47) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 47\n", vmaSize);
-    Die();
-  }
-# endif
-#  elif SANITIZER_RISCV64
-  // the bottom half of vma is allocated for userspace
-  vmaSize = vmaSize + 1;
-#    if !SANITIZER_GO
-  if (vmaSize != 39 && vmaSize != 48) {
-    Printf("FATAL: Xsan: unsupported VMA range\n");
-    Printf("FATAL: Found %zd - Supported 39 and 48\n", vmaSize);
-    Die();
-  }
-#    endif
-#  endif
-}
+/// Implemented in ASan RTL. Currently not used.
+/// TODO: Use XSan to initialize the allocator.
+/// @return Whether the heap is initialized.
+bool InitializeAllocator();
 
 // -------------------------- Run-time entry ------------------- {{{1
 /* The sanitizer initialization sequence is as follows (those marked with * are
@@ -257,26 +111,12 @@ static bool XsanInitInternal() {
 
   CacheBinaryName();
   CheckASLR();
-  // XSan doesn't play well with unlimited stack size (as stack
-  // overlaps with shadow memory). If we detect unlimited stack size,
-  // we re-exec the program with limited stack size as a best effort.
-  if (StackSizeIsUnlimited()) {
-    const uptr kMaxStackSize = 32 * 1024 * 1024;
-    VReport(1,
-            "Program is run with unlimited stack size, which wouldn't "
-            "work with ThreadSanitizer.\n"
-            "Re-execing with stack size limited to %zd bytes.\n",
-            kMaxStackSize);
-    SetStackSizeLimitInBytes(kMaxStackSize);
-    ReExec();
-  }
-
   InitializeFlags();
-
+  AvoidCVE_2016_2143();
   __sanitizer::InitializePlatformEarly();
+  /// Core: if memory mappings does not fit xsan_platform.h, ReExec() is called.
   InitializePlatformEarly();
-  CheckAndProtect();
-  InitFromXsanEarly();
+  __xsan::InitFromXsanEarly();
 
   // Stop performing init at this point if we are being loaded via
   // dlopen() and the platform supports it.
@@ -288,26 +128,38 @@ static bool XsanInitInternal() {
   // Make sure we are not statically linked.
   __interception::DoesNotSupportStaticLinking();
 
-  AvoidCVE_2016_2143();
-
-  // Setup correct file descriptor for error reports.
-  __sanitizer_set_report_path(common_flags()->log_path);
-
 #if !SANITIZER_GO
-  // InitializeAllocator();
   /// TODO: For Android, move it to Xsan initialization
   ReplaceSystemMalloc();
 #endif
 
   InitializeXsanInterceptors();
 
-  DisableCoreDumperIfNecessary();
+  // Setup correct file descriptor for error reports.
+  __sanitizer_set_report_path(common_flags()->log_path);
 
   XsanTSDInit(XsanTSDDtor);
 
+  /// TODO: might be too early to call this
+  // See
+  // https://github.com/llvm/llvm-project/commit/bbb90feb8742b4a83c4bbfbbbdf0f9735939d184
+  /// Core: if memory mappings does not fit xsan_platform.h, ReExec() is called.
+  InitializePlatform();
+
   // We need to initialize ASan before xsan::InitializeMainThread() because
   // the latter call asan::GetCurrentThread to get the main thread of ASan.
-  InitFromXsan();
+  __xsan::InitFromXsan();
+
+  // is_heap_init = InitializeAllocator();
+
+  /// TODO: please fix me
+  // The InitializePlatform() should be called after allocator/sub-sanitizers'
+  // initialization.
+  // See
+  // https://github.com/llvm/llvm-project/commit/bbb90feb8742b4a83c4bbfbbbdf0f9735939d184
+  // However, it crashes as the non-app regions allocated by sanitizers.
+  // Core: if memory mappings does not fit xsan_platform.h, ReExec() is called.
+  // InitializePlatform();
 
   /// TODO: figure out whether we need to replace the callback with XSan's
   InstallDeadlySignalHandlers(__asan::AsanOnDeadlySignal);
@@ -327,7 +179,7 @@ static bool XsanInitInternal() {
   // Because we need to wait __asan::AsanTSDInit() to be called.
   InitializeMainThread();
 
-  InitFromXsanLate();
+  __xsan::InitFromXsanLate();
 
   InitializeCoverage(common_flags()->coverage, common_flags()->coverage_dir);
 
