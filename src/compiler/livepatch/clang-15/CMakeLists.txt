@@ -54,6 +54,9 @@ if(LLVM_LINK_LLVM_DYLIB)
     # ## because clang-patch will be injected into the clang process as a dynamic library
     # ## The clang process has already loaded these libraries, so we can use them directly
     # target_link_libraries(clang-patch PRIVATE clang-cpp LLVM)
+
+    # To livepatch static-linked clang, we need to link LLVM libraries explicitly
+    target_link_libraries(clang-patch PRIVATE LLVM)
     target_link_options(clang-patch PRIVATE -Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/simple_version_script.map)
 else()
     if(CLANG_LINK_CLANG_DYLIB)
@@ -65,6 +68,22 @@ else()
     # ## because clang-patch will be injected into the clang process as a dynamic library
     # ## The clang process has already loaded these libraries, so we can use them directly
     # target_link_libraries(clang-patch PRIVATE clangBasic LLVMSupport LLVMOption)
+
+    # To livepatch static-linked clang, we need to link LLVM libraries explicitly
+    target_link_libraries(clang-patch PRIVATE LLVMSupport)
+
+    if (${LINK_DYNAMIC_LLVMSUPPORT})
+        # You can use `readelf -d <ELF> | grep 'RPATH\|RUNPATH'` to check the RUNPATH.
+        # Privilege: RPATH > LD_LIBRARIES_DIR > RUNPATH
+        # The libLLVMSupport.so has the RUNPATH `$ORIGIN/../lib`,
+        # When installing the patch, set `-rpath=$ORIGIN/../lib` to the patch, so that
+        # the clang's livepatch can search the LLVMSupport in the lib directory.
+        set_target_properties(clang-patch
+            PROPERTIES
+            # When build, we have different RPATH.
+            INSTALL_RPATH "\$ORIGIN/../lib"
+        )
+    endif()
 endif()
 
 set_target_properties(clang-patch
