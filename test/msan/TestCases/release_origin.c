@@ -19,6 +19,11 @@ int main(int argc, char **argv) {
   p = malloc(s);
   sleep(1);
   fprintf(stderr, "memset\n");
+  /// Unlike original MSan, memset -> unpoison
+  /// XSan performs unpoison -> memset
+  /// Therefore, in some rare cases, memory profiler would sample RSS before
+  /// memset when unpoison, i.e., can observe 'soft rss limit unexhausted'
+  /// unexpectedly.
   memset(p, 1, s);
   sleep(1);
   fprintf(stderr, "free\n");
@@ -35,9 +40,21 @@ int main(int argc, char **argv) {
 
 // CHECK-LABEL: memset
 
-// Memset reserve modified pages, frees ~20M for shadow. So not change in RSS for non-origin mode.
-// Origin mode also frees ~20M of origins, so 'unexhausted'.
-// ORIGIN: soft rss limit unexhausted
+/// Unlike original MSan, memset -> unpoison
+/// XSan performs unpoison -> memset
+/// Therefore, in some rare cases, memory profiler would sample RSS before
+/// memset when unpoison, i.e., can observe 'soft rss limit unexhausted'
+/// unexpectedly. Do not worry, this is FP, as follows:
+//         245: ==2612677==XSan: soft rss limit exhausted (20Mb vs 24Mb)
+//         246: memset
+//         247: ==2612677==XSan: soft rss limit unexhausted (20Mb vs 9Mb)
+// not:imp1                      !~~~~~~~~~~~~~ error: no match expected
+//         248: ==2612677==XSan: soft rss limit exhausted (20Mb vs 24Mb)
+//         249: free
+//         250: ==2612677==XSan: soft rss limit unexhausted (20Mb vs 5Mb)
+// Memset reserve modified pages, frees ~20M for shadow. So not change in RSS
+// for non-origin mode. Origin mode also frees ~20M of origins, so
+// 'unexhausted'. ORIGIN: soft rss limit unexhausted
 
 // CHECK-LABEL: free
 
