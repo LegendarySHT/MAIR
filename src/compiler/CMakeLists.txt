@@ -1,9 +1,4 @@
 option(XSAN_USE_LIVEPATCH "Use livepatch feature" ON)
-if(${XSAN_USE_LIVEPATCH})
-  set(XSAN_ENABLE_LIVEPATCH 1 CACHE STRING "Enable livepatch feature")
-else()
-  set(XSAN_ENABLE_LIVEPATCH 0 CACHE STRING "Enable livepatch feature")
-endif()
 
 include_directories(include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})

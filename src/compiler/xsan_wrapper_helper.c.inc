@@ -511,7 +511,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
       }
     }
 
-#if XSAN_ENABLE_LIVEPATCH
+#if XSAN_USE_LIVEPATCH
     // Use livepatch if invasive patches are not applied.
     const char *dso_path = alloc_printf("%s/" XSAN_DSO_PATCH, obj_path);
     append_env_var("LD_PRELOAD", dso_path);
@@ -531,7 +531,7 @@ static void add_wrap_link_option(enum SanitizerType sanTy, u8 is_cxx) {
   // Symbol wrapped, However, gcc's live patch implements but does not use
   // `add_wrap_link_option` in gcc.cpp, which is just for future usage. Please
   // refer to RoStrPatcher()@gcc.cpp for details.
-  if (sanTy != XSan || (XSAN_ENABLE_LIVEPATCH && !WRAP_GCC))
+  if (sanTy != XSan || (XSAN_USE_LIVEPATCH && !WRAP_GCC))
     return;
 
   // Use Linker Response File to include lots of -wrap=<symbol> options in one

@@ -1,8 +1,8 @@
 #ifndef _COMPILER_CONFIG_H
 #define _COMPILER_CONFIG_H
 
-#define HAS_LLVM_OBJECT @HAS_LLVM_OBJECT@
-#define HAS_LIBELF @HAS_LIBELF@
+#cmakedefine HAS_LLVM_OBJECT ${HAS_LLVM_OBJECT}
+#cmakedefine HAS_LIBELF ${HAS_LIBELF}
 
 #define XSAN_PATH "@XSAN_BIN_DIR@"
 
@@ -32,6 +32,6 @@
 #define XSAN_mips_TRIPLE "@XSAN_mips_TRIPLE@"
 #define XSAN_mipsel_TRIPLE "@XSAN_mipsel_TRIPLE@"
 
-#define XSAN_ENABLE_LIVEPATCH @XSAN_ENABLE_LIVEPATCH@
+#cmakedefine01 XSAN_USE_LIVEPATCH
 
 #endif // _COMPILER_CONFIG_H

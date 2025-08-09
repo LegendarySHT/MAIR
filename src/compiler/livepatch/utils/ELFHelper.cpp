@@ -4,12 +4,12 @@
 using namespace __xsan;
 
 // These macros are defined in the CMakeLists.txt file
-#if HAS_LLVM_OBJECT
+#if defined(HAS_LLVM_OBJECT)
 #include "elf/ELFParserLLVM.h"
 // Rely on LLVM
 // Should we use `ElfParser`, which rely on nothing but a header file.
 static LLVMELFParser Parser;
-#elif HAS_LIBELF
+#elif defined(HAS_LIBELF)
 #include "elf/ELFParserLibElf.h"
 static LibElfParser Parser;
 #else
