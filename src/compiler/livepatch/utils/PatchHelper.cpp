@@ -55,8 +55,15 @@ SanitizerType getSanType() {
 }
 
 // r--p
+// ARM64 stores rodata in executable segments (r-x), unlike x86_64 (r--)
 static bool is_rodata(Elf64_Word flags) {
+#if defined(__x86_64__)
   return (flags & PF_R) && !(flags & PF_W) && !(flags & PF_X);
+#elif defined(__aarch64__) || defined(__arm64__)
+  return (flags & PF_R) && !(flags & PF_W);
+#else
+#error "Unsupported architecture"
+#endif
 }
 
 const std::vector<ROSegment> &getSelfModuleROSegments() {
