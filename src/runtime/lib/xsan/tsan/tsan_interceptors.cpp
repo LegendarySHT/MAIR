@@ -2529,6 +2529,9 @@ int sigaction_impl(int sig, const __sanitizer_sigaction *act,
 static __sanitizer_sighandler_ptr signal_impl(int sig,
                                               __sanitizer_sighandler_ptr h) {
   __sanitizer_sigaction act;
+  // initialize the MSan shadow of the act struct before calling
+  // sigaction_symname
+  ::__xsan::InitRange(nullptr, &act, sizeof(act));
   act.handler = h;
   internal_memset(&act.sa_mask, -1, sizeof(act.sa_mask));
   act.sa_flags = 0;
