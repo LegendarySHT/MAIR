@@ -9,9 +9,22 @@
 
 #define FANCY_BOXES
 
-enum SanitizerType { SanNone, ASan, TSan, MSan, UBSan, XSan, NumSanitizerTypes };
+enum SanitizerType {
+  /* As both options and sanitizer type*/
+  SanNone = 0,
+  ASan = 1,
+  TSan = 2,
+  MSan = 3,
+  UBSan = 4,
+  /// XSan mode with auto supported sanitizers specification
+  XSan = 5,
+  /* Only as option*/
+  /// XSan mode with manual sanitizer specification
+  XSanOnly = 6,
+  /* Utility enum */
+  NumSanitizerTypes = 6,
+  /* Sanitizer type XSan has two options: -xsan and -xsan-only */
+  NumSanitizerOptions = 7,
+};
 
 enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };
-
-// We have already defined and assigned values to the XSAN_CONTAINS_XXX macros in CMakeLists.txt
-// we use these macros in clang_wrapper.c

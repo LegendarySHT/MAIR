@@ -260,65 +260,14 @@ static u8 handle_ubsan_options(const char *opt) { return 0; }
 /*
   Ports the arguments for sanitizers to our plugin sanitizers
   Dicards the original argument if return 1.
-
 */
 static u8 handle_sanitizer_options(const char *arg, u8 is_mllvm_arg,
                                    enum SanitizerType sanTy) {
-  OPT_EQ_AND_THEN(arg, "-lib-only", { return 1; })
-
-  if (OPT_EQ(arg, "-asan") || OPT_EQ(arg, "-tsan") || OPT_EQ(arg, "-msan") ||
-      OPT_EQ(arg, "-ubsan") || OPT_EQ(arg, "-xsan")) {
-    return 1;
-  }
-
-  u8 is_neg = 0;
-  /// If this arg is not a mllvm option, do not check for -fsanitize-xxx
-  if (!is_mllvm_arg) {
-    // Check prefix "-f"
-    if (arg[0] != '-' || arg[1] != 'f') {
-      return 0;
-    }
-    arg += 2;
-    // Check prefix "no-"
-    if (arg[0] == 'n' && arg[1] == 'o' && arg[2] == '-') {
-      is_neg = 1;
-      arg += 3;
-    }
-    // Check prefix "sanitize-"
-    if (!OPT_MATCH(arg, "sanitize-")) {
-      return 0;
-    }
-
-    arg += sizeof("sanitize-") - 1;
-  }
-
-  // -fsanitize-recover
-  // frontend option, forward to middle-end option defined in PassRegistry.cpp
-  OPT_GET_VAL_AND_THEN(arg, "recover", {
-    OPT_EQ_AND_THEN(val, "all", {
-      if (is_neg) {
-        clear(&xsan_recover_options, XSan);
-      } else {
-        set(&xsan_recover_options, XSan);
-      }
-    })
-    OPT_EQ_AND_THEN(val, "address", {
-      if (is_neg) {
-        clear(&xsan_recover_options, ASan);
-      } else {
-        set(&xsan_recover_options, ASan);
-      }
-    })
-    OPT_EQ_AND_THEN(val, "memory", {
-      if (is_neg) {
-        clear(&xsan_recover_options, MSan);
-      } else {
-        set(&xsan_recover_options, MSan);
-      }
-    })
-    return 0;
-  })
-
+  OptAction action = handle_generic_sanitizer_options(arg, !is_mllvm_arg);
+  if (action.act != OPT_PENDING)
+    return action.act == OPT_REMOVE;
+  arg = action.arg;
+  u8 is_neg = action.is_neg;
   switch (sanTy) {
   case ASan:
     return handle_asan_options(arg, is_mllvm_arg, is_neg);

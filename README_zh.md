@@ -266,6 +266,13 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
     xgcc -xsan ...
     ```
 
+* 若希望启用 XSan 但手动指定所需的 Sanitizer，可使用以下方式：
+
+    ```bash
+    xclang -xsan-only -fsanitize=xxx ...
+    xgcc -xsan-only -fsanitize=xxx ...
+    ```
+
 * 若你通过 `xclang` / `xgcc` 显式启用若干“互不兼容”的 Sanitizer，XSan 将自动接管并支持其组合，如下所示：
 
    ```bash

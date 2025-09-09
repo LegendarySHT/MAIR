@@ -54,7 +54,11 @@ static const u8 *xsan_comb_name = ""; /* combination name, e.g., xsan_asan */
 static XsanOption xsan_options;
 static XsanOption xsan_recover_options;
 
-static void init(XsanOption *opt) {
+static const char *const option_names[] = {
+    [ASan] = "-asan",   [TSan] = "-tsan", [MSan] = "-msan",
+    [UBSan] = "-ubsan", [XSan] = "-xsan", [XSanOnly] = "-xsan-only"};
+
+static void set_all(XsanOption *opt) {
 #if XSAN_CONTAINS_UBSAN
   opt->mask |= (u64)1 << UBSan;
 #endif
@@ -70,13 +74,8 @@ static void init(XsanOption *opt) {
   opt->mask |= (u64)1 << XSan;
 }
 
-/// TODO: handle unsupported sanTy.
 static void set(XsanOption *opt, enum SanitizerType sanTy) {
-  if (sanTy == XSan) {
-    init(opt);
-  } else {
-    opt->mask |= (u64)1 << sanTy;
-  }
+  opt->mask |= (u64)1 << sanTy;
 }
 
 static void clear(XsanOption *opt, enum SanitizerType sanTy) {
@@ -273,6 +272,8 @@ static u8 handle_x_option(const u8 *const *arg, u8 *asm_as_source) {
 
   // If cur == '-xsan', just skip it.
   OPT_EQ_AND_THEN(cur + 2, "san", { return 0; })
+  // If cur == '-xsan-only', just skip it.
+  OPT_EQ_AND_THEN(cur + 2, "san-only", { return 0; })
 
   const u8 *language = (cur[2] == '\0') ? arg[1] : cur + 2;
 
@@ -282,6 +283,102 @@ static u8 handle_x_option(const u8 *const *arg, u8 *asm_as_source) {
     *asm_as_source = 1;
   }
   return 1;
+}
+
+typedef struct {
+  enum {
+    /// Remove the original argument
+    OPT_REMOVE = 0,
+    /// Keep the original argument
+    OPT_KEEP = 1,
+    /// Pending, wait for the subsequent handlings.
+    OPT_PENDING = 2,
+  } act;
+  const char *arg;
+  u8 is_neg;
+} OptAction;
+
+/// @brief Handle generic sanitizer options.
+/// @details handle '-lib-only', '-*san', '-fsanitize-recover=*' and the common
+/// prefix of '-fsanitize-'.
+/// @param arg The argument to handle.
+/// @param check_san_opt Whether to check the sanitizer option. E.g., if the arg
+/// is a mllvm arg, we don't need to check the sanitizer option.
+/// @return The action to take, including action, pending argument and whether
+/// the argument is negative.
+static OptAction handle_generic_sanitizer_options(const char *arg,
+                                                  u8 check_san_opt) {
+// ({...; ...}): statement expression, GNU C extension, behave like a Rust
+// expression.
+#define OPT_ACT(opt)                                                           \
+  ({                                                                           \
+    OptAction opt_act = {opt, arg, is_neg};                                    \
+    opt_act;                                                                   \
+  })
+  u8 is_neg = 0;
+  OPT_EQ_AND_THEN(arg, "-lib-only", { return OPT_ACT(OPT_REMOVE); })
+  for (enum SanitizerType opt = ASan; opt < NumSanitizerOptions; opt++) {
+    if (OPT_EQ(arg, option_names[opt]))
+      return OPT_ACT(OPT_REMOVE);
+  }
+
+  if (!check_san_opt)
+    return OPT_ACT(OPT_PENDING);
+
+  // Check prefix "-f"
+  if (arg[0] != '-' || arg[1] != 'f')
+    return OPT_ACT(OPT_KEEP);
+  arg += 2;
+  // Check prefix "no-"
+  if (arg[0] == 'n' && arg[1] == 'o' && arg[2] == '-') {
+    is_neg = 1;
+    arg += 3;
+  } else {
+    is_neg = 0;
+  }
+  // Check prefix "sanitize-"
+  if (!OPT_MATCH(arg, "sanitize-"))
+    return OPT_ACT(OPT_KEEP);
+
+  arg += sizeof("sanitize-") - 1;
+
+  // -fsanitize-recover
+  // frontend option, forward to middle-end option defined in PassRegistry.cpp
+  OPT_GET_VAL_AND_THEN(arg, "recover", {
+    OPT_EQ_AND_THEN(val, "all", {
+      if (is_neg) {
+        clear(&xsan_recover_options, XSan);
+      } else {
+        set_all(&xsan_recover_options);
+      }
+    })
+    OPT_EQ_AND_THEN(val, "address", {
+      if (is_neg) {
+        clear(&xsan_recover_options, ASan);
+      } else {
+        set(&xsan_recover_options, ASan);
+      }
+    })
+    OPT_EQ_AND_THEN(val, "memory", {
+      if (is_neg) {
+        clear(&xsan_recover_options, MSan);
+      } else {
+        set(&xsan_recover_options, MSan);
+      }
+    })
+    return OPT_ACT(OPT_KEEP);
+  })
+  // Fallback to pending, wait for the subsequent handlings.
+  return OPT_ACT(OPT_PENDING);
+#undef OPT_ACT
+}
+
+static enum SanitizerType get_sanitizer_type(const u32 type) {
+  if (type == XSanOnly)
+    return XSan;
+  if (type >= NumSanitizerTypes)
+    return SanNone;
+  return type;
 }
 
 static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
@@ -301,28 +398,22 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
       [XSan] = 1,
   };
 
-  static const char *const option_names[] = {[ASan] = "-asan",
-                                             [TSan] = "-tsan",
-                                             [MSan] = "-msan",
-                                             [UBSan] = "-ubsan",
-                                             [XSan] = "-xsan"};
-
   enum SanitizerType xsanTy = SanNone;
   for (u32 i = 1; i < argc; i++) {
     const char *cur = argv[i];
-    for (enum SanitizerType san = ASan; san < NumSanitizerTypes; san++) {
-      OPT_EQ_AND_THEN(cur, option_names[san], {
+    for (enum SanitizerType opt = ASan; opt < NumSanitizerOptions; opt++) {
+      enum SanitizerType san = get_sanitizer_type(opt);
+      OPT_EQ_AND_THEN(cur, option_names[opt], {
         for (u32 incomp_idx = 0; incomp_idx < NumSanitizerTypes; incomp_idx++) {
           enum SanitizerType incomp = incompatible_san_types[san][incomp_idx];
           if (!incomp)
             break;
           if (has(&xsan_options, incomp))
             FATAL("'%s' could not be used with '%s'", option_names[incomp],
-                  option_names[san]);
+                  option_names[opt]);
         }
-        if (!support_subsanitizers[san]) {
-          FATAL("'%s' is not supported by this compiler", option_names[san]);
-        }
+        if (!support_subsanitizers[san])
+          FATAL("'%s' is not supported by this compiler", option_names[opt]);
         if (san == UBSan) {
           /// Only if no other sanitizer is specified, we treat it as UBSan
           /// standalone.
@@ -331,7 +422,11 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
         } else {
           xsanTy = san;
         }
-        set(&xsan_options, xsanTy);
+        // If -xsan specified, set all sanitizers.
+        if (opt == XSan)
+          set_all(&xsan_options);
+        else
+          set(&xsan_options, xsanTy);
         continue;
       })
     }
@@ -372,14 +467,12 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
         } else {
           /// TODO: support other sanitizers
         }
-        if (is_neg) {
+        if (is_neg)
           clear(&xsan_options, sanTy);
-        } else {
+        else
           set(&xsan_options, sanTy);
-        }
-        if (!comma) {
+        if (!comma)
           break;
-        }
         val_ptr = comma + 1;
       }
       ck_free(val_str);
@@ -387,6 +480,9 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
     })
   }
 
+  // ==========================================================================
+  // Automatically enable XSan if some 'conflicting' sanitizers are enabled.
+  // ==========================================================================
   if (xsanTy == SanNone) {
     u8 has_conflict = 0;
     for (enum SanitizerType san = ASan;
@@ -701,6 +797,8 @@ static void print_help() {
       "  -ubsan         Use our UndefinedBehaviorSanitizer (UBSan). \n"
       "                 Uses the " CC " frontend (no midend required).\n"
       "  -xsan          Use our eXtended Sanitizer (XSAN).\n"
+      "  -xsan-only     Enable XSan but with manual sanitizer specification.\n"
+      "                 E.g., -xsan-only -fsanitize=address\n"
 #if WRAP_CLANG
       "                 Integrates ASan, TSan, MSan and UBSan. \n"
 #elif WRAP_GCC
