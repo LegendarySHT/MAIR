@@ -51,8 +51,8 @@ static const u8 **cc_params;          /* Parameters passed to the real CC  */
 static u32 cc_par_cnt = 1;            /* Param count, including argv0      */
 static const u8 *obj_path;            /* Path to runtime libraries         */
 static const u8 *xsan_comb_name = ""; /* combination name, e.g., xsan_asan */
-static XsanOption xsan_options;
-static XsanOption xsan_recover_options;
+static XsanOption act_sanitizers;
+static XsanOption recover_sanitizers;
 
 static const char *const option_names[] = {
     [ASan] = "-asan",   [TSan] = "-tsan", [MSan] = "-msan",
@@ -347,23 +347,23 @@ static OptAction handle_generic_sanitizer_options(const char *arg,
   OPT_GET_VAL_AND_THEN(arg, "recover", {
     OPT_EQ_AND_THEN(val, "all", {
       if (is_neg) {
-        clear(&xsan_recover_options, XSan);
+        clear(&recover_sanitizers, XSan);
       } else {
-        set_all(&xsan_recover_options);
+        set_all(&recover_sanitizers);
       }
     })
     OPT_EQ_AND_THEN(val, "address", {
       if (is_neg) {
-        clear(&xsan_recover_options, ASan);
+        clear(&recover_sanitizers, ASan);
       } else {
-        set(&xsan_recover_options, ASan);
+        set(&recover_sanitizers, ASan);
       }
     })
     OPT_EQ_AND_THEN(val, "memory", {
       if (is_neg) {
-        clear(&xsan_recover_options, MSan);
+        clear(&recover_sanitizers, MSan);
       } else {
-        set(&xsan_recover_options, MSan);
+        set(&recover_sanitizers, MSan);
       }
     })
     return OPT_ACT(OPT_KEEP);
@@ -408,7 +408,7 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
           enum SanitizerType incomp = incompatible_san_types[san][incomp_idx];
           if (!incomp)
             break;
-          if (has(&xsan_options, incomp))
+          if (xsanTy == incomp)
             FATAL("'%s' could not be used with '%s'", option_names[incomp],
                   option_names[opt]);
         }
@@ -417,16 +417,16 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
         if (san == UBSan) {
           /// Only if no other sanitizer is specified, we treat it as UBSan
           /// standalone.
-          if (!has_any(&xsan_options))
+          if (!has_any(&act_sanitizers))
             xsanTy = UBSan;
         } else {
           xsanTy = san;
         }
         // If -xsan specified, set all sanitizers.
         if (opt == XSan)
-          set_all(&xsan_options);
+          set_all(&act_sanitizers);
         else
-          set(&xsan_options, xsanTy);
+          set(&act_sanitizers, xsanTy);
         continue;
       })
     }
@@ -468,9 +468,9 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
           /// TODO: support other sanitizers
         }
         if (is_neg)
-          clear(&xsan_options, sanTy);
+          clear(&act_sanitizers, sanTy);
         else
-          set(&xsan_options, sanTy);
+          set(&act_sanitizers, sanTy);
         if (!comma)
           break;
         val_ptr = comma + 1;
@@ -489,26 +489,26 @@ static enum SanitizerType detect_san_type(const u32 argc, const char *argv[]) {
          san < NumSanitizerTypes && !has_conflict; san++) {
       if (san == XSan || san == UBSan)
         continue;
-      if (!has(&xsan_options, san))
+      if (!has(&act_sanitizers, san))
         continue;
       for (u32 incomp_idx = 0; incomp_idx < NumSanitizerTypes && !has_conflict;
            incomp_idx++) {
         enum SanitizerType incomp = incompatible_san_types[san][incomp_idx];
         if (!incomp)
           break;
-        has_conflict = has_conflict || has(&xsan_options, incomp);
+        has_conflict = has_conflict || has(&act_sanitizers, incomp);
       }
     }
 
     if (has_conflict) {
       xsanTy = XSan;
-      xsan_options.mask |= (u64)1 << XSan;
+      act_sanitizers.mask |= (u64)1 << XSan;
     }
   }
 
   /// TODO: figure out whether we need to do that.
   // /// Use our out-of-tree runtime
-  if (xsanTy != XSan && !has(&xsan_options, xsanTy))
+  if (xsanTy != XSan && !has(&act_sanitizers, xsanTy))
     xsanTy = SanNone;
 
   return xsanTy;
@@ -540,35 +540,35 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
   case MSan:
   case UBSan:
   case XSan:
-    xsan_comb_name = get_xsan_comb_name(&xsan_options);
+    xsan_comb_name = get_xsan_comb_name(&act_sanitizers);
     // Use env var to control clang only perform frontend
     // transformation for sanitizers.
-    str_options = alloc_printf("%llu", xsan_options.mask);
+    str_options = alloc_printf("%llu", act_sanitizers.mask);
     setenv("XSAN_COMPILE_MASK", str_options, 1);
 
     // Reuse the frontend code relevant to sanitizer
-    if (has(&xsan_options, ASan)) {
+    if (has(&act_sanitizers, ASan)) {
       if (sanTy == XSan && !XSAN_CONTAINS_ASAN) {
         FATAL("xsan did not contain asan, '-xsan' could not be used with "
               "'-fsanitize=address'");
       }
       cc_params[cc_par_cnt++] = "-fsanitize=address";
     }
-    if (has(&xsan_options, TSan)) {
+    if (has(&act_sanitizers, TSan)) {
       if (sanTy == XSan && !XSAN_CONTAINS_TSAN) {
         FATAL("xsan did not contain tsan, '-xsan' could not be used with "
               "'-fsanitize=thread'");
       }
       cc_params[cc_par_cnt++] = "-fsanitize=thread";
     }
-    if (has(&xsan_options, MSan)) {
+    if (has(&act_sanitizers, MSan)) {
       if (sanTy == XSan && !XSAN_CONTAINS_MSAN) {
         FATAL("xsan did not contain msan, '-xsan' could not be used with "
               "'-fsanitize=memory'");
       }
       cc_params[cc_par_cnt++] = "-fsanitize=memory";
     }
-    if (has(&xsan_options, UBSan)) {
+    if (has(&act_sanitizers, UBSan)) {
       cc_params[cc_par_cnt++] = "-fsanitize=undefined";
       /// FIXME:
       if (!!getenv("XSAN_IN_ASAN_TEST") || !!getenv("XSAN_IN_TSAN_TEST")) {
@@ -591,7 +591,7 @@ static void init_sanitizer_setting(enum SanitizerType sanTy) {
       }
 
       /// Some sub-functionality of UBSan is duplicated with ASan
-      if (has(&xsan_options, ASan)) {
+      if (has(&act_sanitizers, ASan)) {
         /// -object-size option is duplicated with -fsanitize=address, which
         /// detects overflow issues for object accesses.
         /// What's more, in LLVM 15, -fsanitize=object-size affects the

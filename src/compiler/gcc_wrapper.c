@@ -59,7 +59,7 @@ static u8 handle_sanitizer_options(const char *arg, enum SanitizerType sanTy) {
   case UBSan:
     return handle_ubsan_options(arg);
   case XSan:
-    if (has(&xsan_options, MSan)) {
+    if (has(&act_sanitizers, MSan)) {
       FATAL("'gcc-9.4.0 do not support 'msan'");
     }
     return handle_asan_options(arg, is_neg) | handle_tsan_options(arg, is_neg) |

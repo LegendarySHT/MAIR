@@ -334,17 +334,17 @@ static void add_pass_options(enum SanitizerType sanTy) {
     return;
   }
 
-  if (has(&xsan_options, ASan)) {
+  if (has(&act_sanitizers, ASan)) {
     if (!asan_use_globals_gc()) {
       ADD_LLVM_MIDDLE_END_OPTION("-asan-globals-gc=0");
     }
 
-    if (has(&xsan_recover_options, ASan)) {
+    if (has(&recover_sanitizers, ASan)) {
       ADD_LLVM_MIDDLE_END_OPTION("-sanitize-recover-address");
     }
   }
-  if (has(&xsan_options, MSan)) {
-    if (has(&xsan_recover_options, MSan)) {
+  if (has(&act_sanitizers, MSan)) {
+    if (has(&recover_sanitizers, MSan)) {
       ADD_LLVM_MIDDLE_END_OPTION("-sanitize-recover-memory");
     }
   }
@@ -413,13 +413,13 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   if (sanTy != XSan) {
     return;
   }
-  if (!has(&xsan_options, ASan)) {
+  if (!has(&act_sanitizers, ASan)) {
     ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-asan");
   }
-  if (!has(&xsan_options, TSan)) {
+  if (!has(&act_sanitizers, TSan)) {
     ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-tsan");
   }
-  if (!has(&xsan_options, MSan)) {
+  if (!has(&act_sanitizers, MSan)) {
     ADD_LLVM_MIDDLE_END_OPTION("-xsan-disable-msan");
   }
 }
@@ -526,7 +526,7 @@ static void edit_params(u32 argc, const char **argv) {
       have_unroll = 1;
     else {
       OPT_EQ_AND_THEN(cur, "-shared-libsan", {
-        if (xsanTy == XSan && has(&xsan_options, MSan)) {
+        if (xsanTy == XSan && has(&act_sanitizers, MSan)) {
           PFATAL(
               "XSan with MSan does not support the shared runtime "
               "temporarily, as MSan does not support it either. Consider "
