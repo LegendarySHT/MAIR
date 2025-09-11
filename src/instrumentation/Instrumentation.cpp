@@ -56,7 +56,6 @@
 #include <cstdint>
 #include <optional>
 
-
 using namespace llvm;
 
 #define DEBUG_TYPE "xsan_opt"
@@ -323,11 +322,10 @@ public:
 };
 
 /// Compared with `llvm::SplitEdge`, this function merges identical edges
-static BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
-                                          DominatorTree *DT,
-                                          PostDominatorTree *PDT, LoopInfo *LI,
-                                          MemorySSAUpdater *MSSAU,
-                                          const Twine &BBName) {
+BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
+                                   DominatorTree *DT, PostDominatorTree *PDT,
+                                   LoopInfo *LI, MemorySSAUpdater *MSSAU,
+                                   const Twine &BBName) {
   unsigned SuccNum = GetSuccessorNumber(From, To);
   Instruction *LatchTerm = From->getTerminator();
 
@@ -413,6 +411,41 @@ static BasicBlock *splitKnownCriticalEdge(BasicBlock *From, BasicBlock *To,
   return SplitBB;
 }
 
+/// @brief Augment functionality of @llvm::SplitBlockAndInsertIfThen with auto
+/// MemoryPhi updates.
+Instruction *SplitBlockAndInsertIfThen(Value *Cond, Instruction *SplitBefore,
+                                       bool Unreachable,
+                                       MDNode *BranchWeights = nullptr,
+                                       DominatorTree *DT = nullptr,
+                                       LoopInfo *LI = nullptr,
+                                       MemorySSAUpdater *MSSAU = nullptr,
+                                       BasicBlock *ThenBlock = nullptr) {
+  /*
+  OldBB:
+    ...
+    SplitBefore
+  */
+  BasicBlock *OldBB = SplitBefore->getParent();
+  Instruction *Term = llvm::SplitBlockAndInsertIfThen(
+      Cond, SplitBefore, Unreachable, BranchWeights, DT, LI, ThenBlock);
+  /*
+  OldBB:
+    ...
+    if (Cond) {
+      Term
+    }
+  NewBB:
+    SplitBefore
+  */
+  BasicBlock *NewBB = SplitBefore->getParent();
+
+  // Move MemoryAccesses still tracked in Old, but part of New now.
+  // Update accesses in successor blocks accordingly.
+  // MemoryPhi((OldBB, ... ), ...) -> MemoryPhi((NewBB, ... ), ...)
+  if (MSSAU)
+    MSSAU->moveAllAfterSpliceBlocks(OldBB, NewBB, SplitBefore);
+  return Term;
+}
 } // namespace
 
 namespace __xsan {
@@ -1372,7 +1405,7 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 
       // Update ExitBlock
       // This optimization splits block without update PDT, causing PDT cannot
-      // be updated correctly in the following splitKnownCriticalEdge. 
+      // be updated correctly in the following splitKnownCriticalEdge.
       // Hence, we set PDT to nullptr here.
       ExitBlock = splitKnownCriticalEdge(Exiting, ExitBlock, &DT, nullptr, &LI,
                                          &MSSAU, "xsan.loop.exit");
@@ -1434,7 +1467,8 @@ bool LoopMopInstrumenter::combinePeriodicChecks(bool RangeAccessOnly) {
 //   }
 static Instruction *instrumentIndicator(Instruction *Inst,
                                         BasicBlock *ExitBlock,
-                                        DominatorTree &DT, LoopInfo &LI) {
+                                        DominatorTree &DT, LoopInfo &LI,
+                                        MemorySSAUpdater &MSSAU) {
   /// TODO: do not rely on the optimization, just instrument a GOOD IR with
   /// PHINode.
 
@@ -1466,8 +1500,8 @@ static Instruction *instrumentIndicator(Instruction *Inst,
     the DT. As if DTU is used, the new DT should be obtained by
     DTU.getDomTree().
   */
-  auto *Term = SplitBlockAndInsertIfThen(EqTrue, EqTrue->getNextNode(), false,
-                                         nullptr, &DT, &LI);
+  auto *Term = ::SplitBlockAndInsertIfThen(EqTrue, EqTrue->getNextNode(), false,
+                                           nullptr, &DT, &LI, &MSSAU);
 
   return Term;
 }
@@ -1531,7 +1565,7 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
       }
       if (IsInBranch) {
         // Insert indicator to indicate if the MOP is executed in loop.
-        InsertPt = instrumentIndicator(Inst, ExitBlock, DT, LI);
+        InsertPt = instrumentIndicator(Inst, ExitBlock, DT, LI, MSSAU);
         if (!InsertPt) {
           continue;
         }
@@ -1552,7 +1586,6 @@ bool LoopMopInstrumenter::relocateInvariantChecks() {
     }
 
     size_t Idx = countTrailingZeros(MopSize);
-
 
     InstrumentationIRBuilder IRB(InsertPt);
 
