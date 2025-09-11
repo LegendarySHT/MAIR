@@ -1,6 +1,6 @@
 本目录为XSan在50+个项目上运行的根目录
 
-- <package> : 被测试的软件包
+- `<package>` : 被测试的软件包
     - [手写] `fetch.sh`: 拉取软件包的代码，尽可能减少包体积，比如git clone 时，应该指定 --depth=1 参数
     - [手写] `compile.sh`: 编译脚本，受外部环境变量，并极可能减少无关产物的编译, 并将产物移动到 artefacts目录
         ```requirements
@@ -13,28 +13,29 @@
     - repo: 软件包的代码, 尽可能减少包体积，比如git clone 时，应该指定 --depth=1 参数
     - temp: 临时目录，用于 compile.sh的编译
     - artefact
-        - <program1>: 编译后的可执行文件名
-        - <program2>: 编译后的可执行文件名
+        - `<program1>`: 编译后的可执行文件名
+        - `<program2>`: 编译后的可执行文件名
           - [手写] `run.sh` : 运行脚本，用于运行目标program，需要设置环境变量 PRE_OPT, POST_OPT, stdin 和 PROG_DIR
             - 注意：run.sh 需要适合大规模运行，即不会在工作目录产生‘垃圾’文件，不会就地修改输入文件。例如，解压缩软件，就需要将解压地址设置为 /tmp/ 下的一个临时目录。
-          - <prog>.dbg: 用于debug的程序
-          - <prog>.raw: 不开sanitizer的baseline
-          - <prog>.asan: ASan
-          - <prog>.tsan: TSan
-          - <prog>.ubsan: UBSan
-          - <prog>.msan: MSan
-          - <prog>.xsan-asan: ASan@XSan
-          - <prog>.xsan-asan-msan: (ASan+MSan)@XSan
-          - <prog>.xsan-asan-tsan: (ASan+TSan)@XSan
-          - <prog>.xsan-asan-ubsan: (ASan+UBSan)@XSan
-          - <prog>.xsan-asan-msan-tsan: (ASan+MSan+TSan)@XSan
-          - <prog>.xsan-asan-msan-ubsan: (ASan+MSan+UBSan)@XSan
-          - <prog>.xsan-asan-tsan-ubsan: (ASan+TSan+UBSan)@XSan
-          - <prog>.xsan-asan-msan-tsan-ubsan: (ASan+MSan+TSan+UBSan)@XSan
+          - `<prog>.dbg`: 用于debug的程序
+          - `<prog>.raw`: 不开sanitizer的baseline
+          - `<prog>.asan`: ASan
+          - `<prog>.tsan`: TSan
+          - `<prog>.ubsan`: UBSan
+          - `<prog>.msan`: MSan
+          - `<prog>.xsan-asan`: ASan@XSan
+          - `<prog>.xsan-asan-msan`: (ASan+MSan)@XSan
+          - `<prog>.xsan-asan-tsan`: (ASan+TSan)@XSan
+          - `<prog>.xsan-asan-ubsan`: (ASan+UBSan)@XSan
+          - `<prog>.xsan-asan-msan-tsan`: (ASan+MSan+TSan)@XSan
+          - `<prog>.xsan-asan-msan-ubsan`: (ASan+MSan+UBSan)@XSan
+          - `<prog>.xsan-asan-tsan-ubsan`: (ASan+TSan+UBSan)@XSan
+          - `<prog>.xsan-asan-msan-tsan-ubsan`: (ASan+MSan+TSan+UBSan)@XSan
     - inputs: 测试输入（可以来自fuzzing的seeds corpus，也可以是程序自带的测试用例）
-        - <program1> : 一个目录，表示 program1 的测试输入，拥有 1 个及以上的测试输入文件
-        - <program2> : 如果program2 与program1共享一种输入用例，那么 用 `ln -s program1 program2` 即可
-- <pakcage>: ...
+        - `<program1>` : 一个目录，表示 program1 的测试输入，拥有 1 个及以上的测试输入文件
+        - `<program2>` : 如果program2 与program1共享一种输入用例，那么 用 `ln -s program1 program2` 即可
+- `<pakcage>`: ...
+  - ...
 - `activate_compile_flags.sh`: 供 `compile.sh` 导入
 - `compile-all.sh`: 调用 `compile.sh` 编译程序的所有Sanitizer模式
 - `run.sh`: 运行脚本，仅供 artefacts/<prog>/run.sh 调用
@@ -48,7 +49,6 @@
 Example:
 ```
 .
-├── activate_compile_flags.sh
 ├── binutils
 │   ├── artefacts
 │   │   ├── cxxfilt
@@ -153,6 +153,9 @@ Example:
 │   ├── fetch.sh
 │   ├── repo
 │   └── temp
+├── activate_compile_flags.sh
 ├── compile-all.sh
+├── ...
 └── README.md
+
 ```
