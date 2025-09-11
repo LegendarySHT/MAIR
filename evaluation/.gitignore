@@ -1,0 +1,18 @@
+# 忽略所有文件
+*
+
+# 允许目录递归遍历
+!*/
+
+# 允许 .sh 和 .py 文件
+!*.sh
+!*.py
+
+# 确保 .gitignore 自己不会被忽略
+!.gitignore
+!README.md
+
+# 特别忽略一些目录（包括里面所有内容）
+repo/
+temp/
+data/
