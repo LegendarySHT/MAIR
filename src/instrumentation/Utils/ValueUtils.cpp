@@ -85,9 +85,9 @@ static bool isInReadOnlySection(const GlobalVariable &GV) {
 /// TODO: ensure this point: any direct/indirect reference to vtable is
 /// unwritable.
 // In most of the implementations of vtable, any direct/indirect reference of
-// vtable is unwritable. However, the standard indeed permits a vtable pointer 
-// pointing to a writable region. Hence, this optimization is aggressive and depends
-// on the implementation of vtable.
+// vtable is unwritable. However, the standard indeed permits a vtable pointer
+// pointing to a writable region. Hence, this optimization is aggressive and
+// depends on the implementation of vtable.
 //
 // The content of vtable is unwritable, including
 //  - (direct) vptr->func_ptr
@@ -160,19 +160,17 @@ bool isUncapturedFuncLocal(const Value &Addr) {
 BlockAddress *getBlockAddressOfInstruction(Instruction &I, DominatorTree *DT,
                                            LoopInfo *LI,
                                            MemorySSAUpdater *MSSAU) {
-  BasicBlock *OriginalBb = I.getParent();
-
-  auto *FirstRealInstruction = OriginalBb->getFirstNonPHIOrDbgOrLifetime();
+  BasicBlock *OriginalBB = I.getParent();
+  auto *FirstRealInstruction = OriginalBB->getFirstNonPHIOrDbgOrLifetime();
 
   // If the current instruction is the first valid instruction
-  if (FirstRealInstruction == &I) {
-    return BlockAddress::get(OriginalBb->getParent(), OriginalBb);
-  }
+  if (FirstRealInstruction == &I)
+    return BlockAddress::get(OriginalBB->getParent(), OriginalBB);
 
   // or split the block
-  BasicBlock *NewBb =
-      llvm::SplitBlock(OriginalBb, &I, DT, LI, MSSAU, "mop.address", false);
-  return BlockAddress::get(NewBb->getParent(), NewBb);
+  BasicBlock *NewBB =
+      llvm::SplitBlock(OriginalBB, &I, DT, LI, MSSAU, "mop.address", false);
+  return BlockAddress::get(NewBB->getParent(), NewBB);
 }
 
 // ref: llvm/lib/Analysis/ValueTracking.cpp
