@@ -85,6 +85,10 @@ static void edit_params(u32 argc, const char **argv) {
   u8 is_cxx;
   int dump_active = 0;
 
+  // Whether to use livepatch to handle link spec instead of custom specs
+  // 1 = use livepatch for link spec; 0 = use specs (if enabled at build time)
+  u8 livepatch_link_spec = 0;
+
   cc_params = ck_alloc((argc + 128) * sizeof(u8 *));
 
   name = strrchr(argv[0], '/');
@@ -94,16 +98,18 @@ static void edit_params(u32 argc, const char **argv) {
     name++;
 
   // Set the real compiler to 'gcc' or 'g++'
+  // If the compiler is not 'gcc' or 'g++', we will use livepatch
   if (!strncmp(name, "xg++", strlen("xg++"))) {
     is_cxx = 1;
     u8 *alt_cxx = getenv("X_CXX");
+    livepatch_link_spec = alt_cxx ? 1 : 0;
     cc_params[0] = alt_cxx ? alt_cxx : (u8 *)"g++";
   } else {
     is_cxx = 0;
     u8 *alt_cc = getenv("X_CC");
+    livepatch_link_spec = alt_cc ? 1 : 0;
     cc_params[0] = alt_cc ? alt_cc : (u8 *)"gcc";
   }
-
   /* Detect the compilation mode in advance. */
   xsanTy = detect_san_type(argc, argv);
 
@@ -147,7 +153,11 @@ static void edit_params(u32 argc, const char **argv) {
       have_unroll = 1;
     else if (!strcmp(cur, "-fdump-"))
       dump_active = 1;
-    else {
+    // If the user specifies custom specs, we will use livepatch
+    else if (strncmp(cur, "-specs", 6) == 0) {
+      WARNF("XSan: Custom specs may disable XSan functionality");
+      livepatch_link_spec = 1;
+    } else {
       OPT_EQ_AND_THEN(cur, "-static-libsan", {
         needs_shared_rt = 0;
         continue;
@@ -197,7 +207,20 @@ static void edit_params(u32 argc, const char **argv) {
       }
     }
   }
-  /// Set -x none for sanitizer rutnime libraries.
+
+#if XSAN_USE_GCC_SPEC
+  // Configure livepatch based on build-time choice and runtime detection
+  if (livepatch_link_spec) {
+    setenv(XSAN_LIVEPATCH_GCC_LINK_SPEC_FLAG, "1", 1);
+  } else {
+    unsetenv(XSAN_LIVEPATCH_GCC_LINK_SPEC_FLAG);
+  }
+#else
+  // When specs patch is disabled at build time, default to livepatch
+  setenv(XSAN_LIVEPATCH_GCC_LINK_SPEC_FLAG, "1", 1);
+#endif
+
+  /// Set -x none for sanitizer runtime libraries.
   if (x_set) {
     cc_params[cc_par_cnt++] = "-x";
     cc_params[cc_par_cnt++] = "none";
@@ -218,6 +241,17 @@ static void edit_params(u32 argc, const char **argv) {
   if (!preprocessor_only && !have_c_or_S && !partial_linking) {
     cc_params[cc_par_cnt++] = "-B";
     cc_params[cc_par_cnt++] = obj_path;
+
+#if XSAN_USE_GCC_SPEC
+    // Use our custom specs to remove GCC default sanitizer linking
+    // Only use specs if not falling back to livepatch
+    if (!livepatch_link_spec) {
+      cc_params[cc_par_cnt++] = "-specs";
+      cc_params[cc_par_cnt++] =
+          alloc_printf("%s/" XSAN_SHARE_DIR "/%s", obj_path,
+                       is_cxx ? XSAN_SPEC_GPP_NAME : XSAN_SPEC_GCC_NAME);
+    }
+#endif
     add_sanitizer_runtime(xsanTy, is_cxx, shared_linking, needs_shared_rt);
   }
 

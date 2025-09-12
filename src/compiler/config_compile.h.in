@@ -34,5 +34,13 @@
 
 /* Define if XSan uses livepatch feature */
 #cmakedefine01 XSAN_USE_LIVEPATCH
+#cmakedefine01 XSAN_USE_GCC_SPEC
+
+// Livepatch control env var: toggles GCC link spec patching via libgcc-patch.so
+#define XSAN_LIVEPATCH_GCC_LINK_SPEC_FLAG "@XSAN_LIVEPATCH_GCC_LINK_SPEC_FLAG@"
+
+// XSan spec file configuration
+#define XSAN_SPEC_GPP_NAME "@XSAN_SPEC_GPP_NAME@"
+#define XSAN_SPEC_GCC_NAME "@XSAN_SPEC_GCC_NAME@"
 
 #endif // _COMPILER_CONFIG_H

@@ -23,6 +23,11 @@ option(XSAN_CONTAINS_ASAN "Enable AddressSanitizer (ASan) globally" ON)
 # This option is used to enable or disable UndefinedBehaviorSanitizer (UBSan) globally.
 option(XSAN_CONTAINS_UBSAN "Enable UndefinedBehaviorSanitizer (UBSan) globally" ON)
 
+# Define XSAN_USE_GCC_SPEC to control whether to use custom GCC spec file or livepatch
+# When ON: Use custom spec file to remove default sanitizer linking (preferred)
+# When OFF: Use livepatch approach to modify GCC's link_command_spec at runtime (fallback)
+option(XSAN_USE_GCC_SPEC "Use custom GCC spec file instead of livepatch for sanitizer linking" ON)
+
 # Because we use this to generate the xsan_hooks_gen.h,in the xsan_hooks_gen.h,
 # We use Xxxx such as Asan, Tsan to represent the enum that contains the hooks for the macro
 set(XSAN_DELEGATED_SANITIZERS Asan Tsan Msan)

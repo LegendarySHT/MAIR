@@ -124,6 +124,7 @@ The key components related to sanitizers are:
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <type_traits>
@@ -679,7 +680,8 @@ template <typename Ty> class B : public A<Ty> {
 };
 
 RoStrPatcher::RoStrPatcher() {
-  if (!isXsanEnabled())
+  // Early exit unless XSan and livepatch are both enabled
+  if (!isXsanEnabled() || !getenv(XSAN_LIVEPATCH_GCC_LINK_SPEC_FLAG))
     return;
   bool isCxx;
   // Match gcc, x86_64-linux-gnu-gcc-9 and etc.

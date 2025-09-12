@@ -8,6 +8,9 @@
 # - It is hard to intercept, because it is stripped.
 # - As a result, we rewrite the link_command_spec used in `do_spec` to our own.
 
+# Generate XSan GCC spec file
+include(gcc_spec_gen.cmake)
+
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # To shared libaray
@@ -16,6 +19,7 @@ add_library(gcc-patch MODULE
     gcc.cpp
     ../utils/PatchHelper.cpp
 )
+
 add_dependencies(livepatch gcc-patch)
 
 target_link_libraries(gcc-patch PRIVATE dl)
