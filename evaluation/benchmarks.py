@@ -2,13 +2,39 @@
 from pathlib import PosixPath
 
 BENCHMARKS = [
-    {'program': '7zz', 'package': '7zip', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/7zip/artefacts/7zz'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/7zip'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/7zip/data/7zz'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/7zip/corpus/7zz')},
-    {'program': 'objdump', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/objdump'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/objdump'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/objdump')},
-    {'program': 'strings', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/strings'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/strings'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/strings')},
-    {'program': 'size', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/size'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/size'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/size')},
-    {'program': 'cxxfilt', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/cxxfilt'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/cxxfilt'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/cxxfilt')},
-    {'program': 'readelf', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/readelf'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/readelf'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/readelf')},
-    {'program': 'objcopy', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/objcopy'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/objcopy'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/objcopy')},
-    {'program': 'strip-new', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/strip-new'), 'package_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/strip-new'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/strip-new')},
+    {'program': '7zz', 'package': '7zip', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/7zip/artefacts/7zz'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/7zip'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/7zip/data/7zz'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/7zip/corpus/7zz')},
+    {'program': 'objdump', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/objdump'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/objdump'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/objdump')},
+    {'program': 'strings', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/strings'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/strings'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/strings')},
+    {'program': 'size', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/size'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/size'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/size')},
+    {'program': 'cxxfilt', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/cxxfilt'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/cxxfilt'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/cxxfilt')},
+    {'program': 'readelf', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/readelf'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/readelf'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/readelf')},
+    {'program': 'objcopy', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/objcopy'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/objcopy'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/objcopy')},
+    {'program': 'strip-new', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/strip-new'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/strip-new'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/strip-new')},
+    {'program': 'nm-new', 'package': 'binutils', 'program_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/artefacts/nm-new'), 'package_dir': PosixPath(
+        '/data/projects/xsan-20/evaluation/binutils'), 'data_dir': PosixPath('/data/projects/xsan-20/evaluation/binutils/data/nm-new'), 'corpus': PosixPath('/data/projects/xsan-20/evaluation/binutils/corpus/nm-new')},
 ]
 
+
+PACKAGE_2_PROGRAMS = {
+    '7zip': [
+        '7zz'
+    ],
+    'binutils': [
+        'objdump',
+        'strings',
+        'size',
+        'cxxfilt',
+        'readelf',
+        'objcopy',
+        'strip-new',
+        'nm-new'
+    ],
+}

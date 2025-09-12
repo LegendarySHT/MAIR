@@ -18,6 +18,8 @@ CONFIG_SPEC = '''# 基准测试配置文件
 from pathlib import PosixPath
 
 BENCHMARKS = {bench}
+
+PACKAGE_2_PROGRAMS = {package_2_programs}
 '''
 
 
@@ -29,12 +31,14 @@ def generate_bench_configs(dump_program_list: bool = False):
     生成基准测试配置文件
     '''
     benchmarks = []
+    package_programs = {}
     for package in EVAL_ROOT.iterdir():
         if not package.is_dir() or package.name.startswith("."):
             continue
         artefacts_dir = package / "artefacts"
         if not artefacts_dir.exists():
             continue
+        programs = []
         for program in artefacts_dir.iterdir():
             if not program.is_dir() or program.name.startswith("."):
                 continue
@@ -47,6 +51,8 @@ def generate_bench_configs(dump_program_list: bool = False):
                 "corpus": package / "corpus" / program.name
             }
             benchmarks.append(benchmark)
+            programs.append(program.name)
+        package_programs[package.name] = programs
     if dump_program_list:
         with open(EVAL_ROOT / "program_list.txt", "w") as f:
             for benchmark in benchmarks:
@@ -57,9 +63,16 @@ def generate_bench_configs(dump_program_list: bool = False):
         for benchmark in benchmarks:
             bench_config += f'    {repr(benchmark)},\n'
         bench_config += ']\n'
-        config = CONFIG_SPEC.format(bench=bench_config)
+        package_2_programs = '{\n'
+        for package, programs in package_programs.items():
+            list_str = (",\n" + str(' ' * 8)).join(repr(program)
+                                                   for program in programs)
+            package_2_programs += f'    {repr(package)}: [\n        {list_str}\n    ],\n'
+        package_2_programs += '}\n'
+        config = CONFIG_SPEC.format(
+            bench=bench_config, package_2_programs=package_2_programs)
         f.write(config)
-     
+
 
 if __name__ == '__main__':
     generate_bench_configs()

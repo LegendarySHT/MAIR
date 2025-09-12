@@ -26,7 +26,7 @@ make -j
 
 # 将 binutils/ 下的指定可执行文件移动到 ../artefacts 目录
 mkdir -p .bin
-BINUTILS_BINARIES=(nm readelf objdump objcopy strings size cxxfilt strip-new)
+BINUTILS_BINARIES=(nm-new readelf objdump objcopy strings size cxxfilt strip-new)
 for bin in "${BINUTILS_BINARIES[@]}"; do
     if [ -f "binutils/$bin" ]; then
         mv "binutils/$bin" ".bin/$bin"

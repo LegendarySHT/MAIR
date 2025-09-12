@@ -16,3 +16,5 @@
 repo/
 temp/
 data/
+
+__pycache__/

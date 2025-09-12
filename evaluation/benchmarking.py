@@ -41,7 +41,7 @@ import concurrent.futures
 import multiprocessing
 import numpy as np
 import shutil
-from benchmarks import BENCHMARKS
+from benchmarks import BENCHMARKS, PACKAGE_2_PROGRAMS
 
 # REPEAT_TIMES = 1
 REPEAT_TIMES = 40
@@ -68,7 +68,7 @@ RERUN = {
 }
 
 BENCH_TO_RUN = {
-    'cxxfilt',
+    *PACKAGE_2_PROGRAMS['binutils'],
 }
 
 
@@ -173,6 +173,8 @@ class Bench:
             raise ValueError(f"Corpus is empty: {self.corpus_dir}")
         self.corpus = self.full_corpus
         self.run_script = self.directory / 'run.sh'
+        if not self.run_script.exists():
+            raise ValueError(f"Run script not found: {self.run_script}")
 
     def run(self, mode: str, input: str, env=None) -> tuple:
         cmd = [str(MEASURE_SCRIPT), str(self.run_script), mode, input]
@@ -183,23 +185,31 @@ class Bench:
         except subprocess.CalledProcessError as e:
             return Bench._resolve_time_rss(e.output.decode('utf-8'))
 
-    def get_data_file(self, name: str) -> Path:
-        return self.data_dir / f"{name}"
+    def get_data_file(self, name: str, group: str = '') -> Path:
+        if not group:
+            return self.data_dir / name
+        return self.data_dir / group / name
 
-    def save_np_data(self, name: str, data: np.ndarray):
-        data_file = self.get_data_file(name)
+    def save_np_data(self, data: np.ndarray, name: str, group: str = ''):
+        data_file = self.get_data_file(name, group)
+        text_dir = data_file.parent / 'readable'
+        if not text_dir.exists():
+            text_dir.mkdir(parents=True, exist_ok=True)
         np.save(data_file.with_suffix('.npy'), data)
-        np.savetxt(data_file.with_suffix('.txt'),
-                   data, delimiter=',', fmt='%f',)
+        np.savetxt(text_dir / f"{name}.txt",
+                   data, delimiter=',', fmt='%d',)
 
-    def load_np_data(self, name: str) -> np.ndarray:
-        data_file = self.get_data_file(name)
+    def load_np_data(self, name: str, group: str = '') -> np.ndarray:
+        data_file = self.get_data_file(name, group).with_suffix('.npy')
         if not data_file.exists():
             return None
-        return np.load(data_file.with_suffix('.npy'))
+        return np.load(data_file)
 
-    def remove_np_data(self, name: str):
-        data_file = self.get_data_file(name)
+    def remove_np_data(self, name: str, group: str = ''):
+        data_file = self.get_data_file(name, group).with_suffix('.npy')
+        if data_file.exists():
+            data_file.unlink()
+        data_file = self.get_data_file(name, group).with_suffix('.txt')
         if data_file.exists():
             data_file.unlink()
 
@@ -368,13 +378,13 @@ class Benchmarker:
             san = self.sanitizers[idx]
             if san in self.seen or san not in self.done:
                 continue
-            self.bench.save_np_data(f"time-{san}", data)
+            self.bench.save_np_data(data, san, "time")
 
         for idx, data in enumerate(self.data_rss):
             san = self.sanitizers[idx]
             if san in self.seen or san not in self.done:
                 continue
-            self.bench.save_np_data(f"rss-{san}", data)
+            self.bench.save_np_data(data, san, "rss")
 
         seed_file = self.bench.get_data_file("seeds.txt")
         with open(seed_file, 'w') as f:
@@ -386,16 +396,16 @@ class Benchmarker:
         load the benchmarking results from a file
         '''
         for idx, sanitizer in enumerate(self.sanitizers):
-            data = self.bench.load_np_data(f"time-{sanitizer}")
-            if not data:
+            data = self.bench.load_np_data(sanitizer, "time")
+            if data is None or len(data) == 0:
                 continue
             # check whether filled with zeros
             if np.all(data[0, :] == 0):
-                self.bench.remove_np_data(f"time-{sanitizer}")
+                self.bench.remove_np_data(sanitizer, "time")
                 continue
             self.data[idx] = data[:, :REPEAT_TIMES]
-            data_rss = self.bench.load_np_data(f"rss-{sanitizer}")
-            if not data_rss:
+            data_rss = self.bench.load_np_data(sanitizer, "rss")
+            if data_rss is None or len(data_rss) == 0:
                 continue
             self.data_rss[idx] = data_rss[:, :REPEAT_TIMES]
             if sanitizer not in RERUN:
@@ -420,14 +430,6 @@ class Benchmarker:
         number = output[idx_left:idx_right].strip().replace(',', '')
         rss_kb = float(number)
         return t_ms, rss_kb
-
-    @staticmethod
-    def _run_once(input):
-        pass
-        # exec, seed, env = input
-        # # output = perf_target(exec, seed, env)
-        # # t_ms, rss_kb = Benchmarker._resolve_time_rss(output)
-        # return (t_ms, rss_kb)
 
     def _add_task(self, mode: str, seed: Path, env=None) -> list:
         """
