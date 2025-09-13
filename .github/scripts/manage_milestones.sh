@@ -28,7 +28,6 @@ MILESTONES_TO_CREATE=(
   "${MAJOR}.${MINOR}.${NEXT_PATCH}"
 )
 
-
 ################################################################################
 ####                 Milestone creation                                     ####
 ################################################################################
@@ -46,12 +45,11 @@ for M in "${MILESTONES_TO_CREATE[@]}"; do
     gh api "repos/$GITHUB_REPOSITORY/milestones" \
       -f title="$M" \
       -f state="open" \
-      --silent # Use --silent to avoid verbose output
+      --silent
   fi
 done
 echo "Milestone check/creation complete."
 echo "---"
-
 
 ################################################################################
 ####                 Milestone cleanup                                      ####
@@ -59,15 +57,14 @@ echo "---"
 
 # Fetch all open milestones with their numbers and titles for easy lookup
 echo "Fetching all open milestones for lookup..."
-declare -A open_milestones
+declare -A milestones
 while IFS= read -r line; do
     number="${line%%:*}"
     title="${line#*:}"
-    open_milestones["$title"]="$number"
+    milestones["$title"]="$number"
 done <<< "$(gh api "repos/$GITHUB_REPOSITORY/milestones" --paginate --jq '.[] | select(.state=="open") | "\(.number):\(.title)"')"
-echo "Found ${#open_milestones[@]} open milestones."
+echo "Found ${#milestones[@]} open milestones."
 echo "---"
-
 
 # Delete all milestones with version less than the current closed milestone
 # Current closed milestone version
@@ -79,12 +76,33 @@ version_lt() {
   [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ] && [ "$1" != "$2" ]
 }
 
+# Function: Determine the next milestone title for issue migration
+# Arguments:
+#   $1 - current milestone title (semantic version string)
+# Returns:
+#   Echoes the next milestone title
+get_next_milestone_title() {
+  local current_title="$1"
+  local next_title=""
+  if [[ "$current_title" =~ ^[0-9]+\.0\.0$ ]]; then
+    # Major release (e.g., 2.0.0) -> move to next major (e.g., 4.0.0)
+    next_title="${NEXT_MAJOR}.0.0"
+  elif [[ "$current_title" =~ ^[0-9]+\.[1-9][0-9]*\.0$ ]]; then
+    # Minor release (e.g., 2.8.0) -> move to next minor (e.g., 3.1.0)
+    next_title="${MAJOR}.${NEXT_MINOR}.0"
+  else
+    # Patch release (e.g., 2.7.3) -> move to next patch (e.g., 3.0.1)
+    next_title="${MAJOR}.${MINOR}.${NEXT_PATCH}"
+  fi
+  echo "$next_title"
+}
+
 echo "Start deleting open milestones with version less than $CURRENT_VERSION..."
 
 # Iterate over a copy of the keys, as we might read the array again
-for TITLE in "${!open_milestones[@]}"; do
-  NUMBER=${open_milestones["$TITLE"]}
-  
+for TITLE in "${!milestones[@]}"; do
+  NUMBER=${milestones["$TITLE"]}
+
   # Skip milestones that are not in x.y.z format
   if [[ ! "$TITLE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Skipping milestone '$TITLE' (not in semantic version format)."
@@ -103,19 +121,9 @@ for TITLE in "${!open_milestones[@]}"; do
   #################################################################################
 
   # 1. Determine the next milestone to move issues to
-  NEXT_MILESTONE_TITLE=""
-  if [[ "$TITLE" =~ ^[0-9]+\.0\.0$ ]]; then
-    # Major release (e.g., 2.0.0) -> move to next major (e.g., 4.0.0)
-    NEXT_MILESTONE_TITLE="${NEXT_MAJOR}.0.0"
-  elif [[ "$TITLE" =~ ^[0-9]+\.[1-9][0-9]*\.0$ ]]; then
-    # Minor release (e.g., 2.8.0) -> move to next minor (e.g., 3.1.0)
-    NEXT_MILESTONE_TITLE="${MAJOR}.${NEXT_MINOR}.0"
-  else
-    # Patch release (e.g., 2.7.3) -> move to next patch (e.g., 3.0.1)
-    NEXT_MILESTONE_TITLE="${MAJOR}.${MINOR}.${NEXT_PATCH}"
-  fi
-  
-  NEXT_MILESTONE_NUMBER=${open_milestones["$NEXT_MILESTONE_TITLE"]}
+  NEXT_MILESTONE_TITLE="$(get_next_milestone_title "$TITLE")"
+
+  NEXT_MILESTONE_NUMBER=${milestones["$NEXT_MILESTONE_TITLE"]}
 
   if [ -z "$NEXT_MILESTONE_NUMBER" ]; then
     echo "  [ERROR] Could not find the number for the next milestone '$NEXT_MILESTONE_TITLE'. Skipping issue migration for '$TITLE'."
@@ -123,7 +131,7 @@ for TITLE in "${!open_milestones[@]}"; do
   fi
   echo "  Target milestone for issues is '$NEXT_MILESTONE_TITLE' (number: $NEXT_MILESTONE_NUMBER)."
 
-  # 2. Find all issues/PRs in the current milestone
+  # 2. Find all issues/PRs in the current milestone (all states)
   ISSUES_TO_MOVE=$(gh api "repos/$GITHUB_REPOSITORY/issues?milestone=$NUMBER&state=all&per_page=100" --paginate --jq '.[].number')
 
   if [ -z "$ISSUES_TO_MOVE" ]; then
@@ -145,7 +153,44 @@ for TITLE in "${!open_milestones[@]}"; do
   gh api "repos/$GITHUB_REPOSITORY/milestones/$NUMBER" -X DELETE --silent
   echo "  Milestone '$TITLE' deleted successfully."
   echo "---"
-
 done
+
+################################################################################
+####                 Move open issues in current closed milestone            ####
+################################################################################
+
+# Current closed milestone title and number
+CURRENT_MILESTONE_TITLE="${CURRENT_VERSION}"
+CURRENT_MILESTONE_NUMBER=""
+
+# Get the number of the current closed milestone
+CURRENT_MILESTONE_NUMBER=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all" --paginate --jq ".[] | select(.title==\"$CURRENT_MILESTONE_TITLE\") | .number")
+
+if [ -z "$CURRENT_MILESTONE_NUMBER" ]; then
+  echo "Could not find the current closed milestone '$CURRENT_MILESTONE_TITLE', skip open issue migration."
+else
+  # Calculate the next milestone title
+  NEXT_MILESTONE_TITLE="$(get_next_milestone_title "$CURRENT_MILESTONE_TITLE")"
+  NEXT_MILESTONE_NUMBER=${milestones["$NEXT_MILESTONE_TITLE"]}
+
+  if [ -z "$NEXT_MILESTONE_NUMBER" ]; then
+    echo "  [ERROR] Could not find the number for the next milestone '$NEXT_MILESTONE_TITLE', skip open issue migration."
+  else
+    # Find all open issues/PRs in the current closed milestone
+    OPEN_ISSUES_TO_MOVE=$(gh api "repos/$GITHUB_REPOSITORY/issues?milestone=$CURRENT_MILESTONE_NUMBER&state=open&per_page=100" --paginate --jq '.[].number')
+    if [ -z "$OPEN_ISSUES_TO_MOVE" ]; then
+      echo "No open issues/PRs found in the current closed milestone '$CURRENT_MILESTONE_TITLE'."
+    else
+      echo "Open issues/PRs to move: ${OPEN_ISSUES_TO_MOVE//$'\n'/, }"
+      for ISSUE_NUMBER in $OPEN_ISSUES_TO_MOVE; do
+        echo "  Moving open issue #$ISSUE_NUMBER from '$CURRENT_MILESTONE_TITLE' to '$NEXT_MILESTONE_TITLE'..."
+        gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" \
+          -X PATCH \
+          -f milestone=$NEXT_MILESTONE_NUMBER \
+          --silent
+      done
+    fi
+  fi
+fi
 
 echo "Milestone cleanup complete."

@@ -8,7 +8,7 @@ permissions: write-all
 
 jobs:
   create-release-pr:
-    if: ${{ github.event.milestone.open_issues == 0 && github.event.milestone.closed_issues > 0 }}
+    if: ${{ github.event.milestone.closed_issues > 0 }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -46,6 +46,17 @@ jobs:
           MAJOR: ${{ steps.get_version.outputs.major }}
           MINOR: ${{ steps.get_version.outputs.minor }}
           PATCH: ${{ steps.get_version.outputs.patch }}
+      
+      - name: Create/Delete Milestones
+        if: steps.get_version.outputs.version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MAJOR: ${{ steps.get_version.outputs.major }}
+          MINOR: ${{ steps.get_version.outputs.minor }}
+          PATCH: ${{ steps.get_version.outputs.patch }}
+        run: ./.github/scripts/manage_milestones.sh 
+        shell: bash
 
       - name: Generate Release Notes
         if: steps.get_version.outputs.version
@@ -84,14 +95,3 @@ jobs:
           add-paths: |
             docs/release_notes/${{ steps.get_version.outputs.version }}.md
             CMakeLists.txt
-
-      - name: Create/Delete Milestones
-        if: steps.get_version.outputs.version
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          MAJOR: ${{ steps.get_version.outputs.major }}
-          MINOR: ${{ steps.get_version.outputs.minor }}
-          PATCH: ${{ steps.get_version.outputs.patch }}
-        run: ./.github/scripts/manage_milestones.sh 
-        shell: bash
