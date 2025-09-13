@@ -433,7 +433,9 @@ def draw_overall_compare_figure(overheads: np.ndarray, sanitizers: list, is_time
             if col == 0:
                 ax.set_ylabel("Overhead (%)")
             else:
-                ax.set_yticklabels([])
+                # Set ylabel for the all columns
+                pass
+                # ax.set_yticklabels([])
 
         # --- legend ---
         legend_handles = []
@@ -663,8 +665,6 @@ def draw_overall_figures(
             ax.set_xticks([])
             if col == 0:
                 ax.set_ylabel("Overhead (%)")
-            else:
-                ax.set_yticklabels([])
 
         # --- 图例 ---
         legend_handles = [
