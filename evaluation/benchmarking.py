@@ -41,7 +41,13 @@ import concurrent.futures
 import multiprocessing
 import numpy as np
 import shutil
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+import gen_bench_config
+gen_bench_config.generate_bench_configs(lazy=True)
 from benchmarks import BENCHMARKS, PACKAGE_2_PROGRAMS
+
 
 # REPEAT_TIMES = 1
 REPEAT_TIMES = 40
@@ -50,9 +56,9 @@ MAX_WORKERS = 5
 SANITIZERS = [
     "raw",
     "asan",
-    "ubsan",
-    "tsan",
     "msan",
+    "tsan",
+    "ubsan",
     "xsan-asan",
     "xsan-asan-tsan",
     "xsan-asan-msan",
@@ -72,7 +78,6 @@ BENCH_TO_RUN = {
 }
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
 MEASURE_SCRIPT = SCRIPT_DIR / 'eval-sample.sh'
 
 # disable LSan
@@ -204,6 +209,40 @@ class Bench:
         if not data_file.exists():
             return None
         return np.load(data_file)
+
+    def load_np_data_batchly(self, names: list, group: str = '') -> np.ndarray:
+        return np.array([self.load_np_data(name, group) for name in names])
+
+    def load_overhead(self, name: str, group: str = '', depth: int = 1) -> np.ndarray:
+        '''
+        get the mean overhead of the specified sanitizer
+        
+        Args:
+            name: str, the name of the sanitizer
+            group: str, the group of the data
+            depth: int, the depth of the data
+                if depth == 0, return the overhead of the specified sanitizer
+                if depth >= 1, further average the REPEAT_TIMES
+                if depth == 2, further average the size_corpus
+        '''
+        base = self.load_np_data('raw', group)
+        data = self.load_np_data(name, group)
+        # base & data shape: (size_corpus, REPEAT_TIMES)
+        # averge the REPEATS, filter out the outliers (> 2 \sigma)
+        if depth >= 1:
+            base = filter_outliers_and_mean(base)
+            data = filter_outliers_and_mean(data)
+
+        # get the overhead
+        overhead = data / base * 100
+        if depth == 2:
+            overhead = np.mean(overhead)
+        elif depth > 2:
+            raise ValueError(f"Invalid depth: {depth} , only support depth <= 2")
+        return overhead
+
+    def load_overhead_batchly(self, names: list, group: str = '', depth: int = 1) -> np.ndarray:
+        return np.array([self.load_overhead(name, group, depth) for name in names])
 
     def remove_np_data(self, name: str, group: str = ''):
         data_file = self.get_data_file(name, group).with_suffix('.npy')

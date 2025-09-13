@@ -20,18 +20,23 @@ from pathlib import PosixPath
 BENCHMARKS = {bench}
 
 PACKAGE_2_PROGRAMS = {package_2_programs}
+
+def find_bench_config(program: str) -> dict:
+    return next((cfg for cfg in BENCHMARKS if cfg['program'] == program), None)
+
 '''
 
 
 EVAL_ROOT = Path(__file__).parent.absolute()
 
 
-def generate_bench_configs(dump_program_list: bool = False):
+def generate_bench_configs(lazy: bool = False):
     '''
     生成基准测试配置文件
     '''
     benchmarks = []
     package_programs = {}
+    programs_set = set()
     for package in EVAL_ROOT.iterdir():
         if not package.is_dir() or package.name.startswith("."):
             continue
@@ -52,11 +57,25 @@ def generate_bench_configs(dump_program_list: bool = False):
             }
             benchmarks.append(benchmark)
             programs.append(program.name)
+            programs_set.add(program.name)
         package_programs[package.name] = programs
-    if dump_program_list:
-        with open(EVAL_ROOT / "program_list.txt", "w") as f:
-            for benchmark in benchmarks:
-                f.write(f"{benchmark['program']}\n")
+    should_gen = not lazy
+    if lazy:
+        try:
+            from benchmarks import BENCHMARKS
+            old_programs_set = set(bench['program']
+                                   for bench in BENCHMARKS)
+            if old_programs_set != programs_set:
+                print("old_programs_set != programs_set, generating benchmarks.py...")
+                should_gen = True
+        except ModuleNotFoundError:
+            print(
+                "ModuleNotFoundError: benchmarks.py not found, generating benchmarks.py...")
+            should_gen = True
+        except Exception as e:
+            print(f"Unknown Exception: {e}")
+            should_gen = True
+    if not should_gen:
         return
     with open(EVAL_ROOT / "benchmarks.py", "w") as f:
         bench_config = '[\n'
