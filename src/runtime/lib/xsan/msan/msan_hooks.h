@@ -128,7 +128,7 @@ struct MsanHooks : ::__xsan::DefaultHooks<MsanContext, MsanThread> {
     __msan::InitializeFlags();
   }
   ALWAYS_INLINE static void SetCommonFlags(CommonFlags &cf) {
-    // cf.handle_ioctl = true;
+    cf.handle_ioctl = true;
     // cf.check_printf = false;
   }
 
