@@ -155,7 +155,10 @@ INTERCEPTOR(int, posix_memalign, void **memptr, uptr alignment, uptr size) {
     return 0;
   }
   SCOPED_XSAN_INTERCEPTOR_MALLOC(posix_memalign, memptr, alignment, size);
-  return xsan_posix_memalign(memptr, alignment, size, &stack);
+  int res = xsan_posix_memalign(memptr, alignment, size, &stack);
+  if (!res)
+    XSAN_INIT_RANGE(nullptr, memptr, sizeof(memptr));
+  return res;
 }
 
 INTERCEPTOR(void *, valloc, uptr size) {

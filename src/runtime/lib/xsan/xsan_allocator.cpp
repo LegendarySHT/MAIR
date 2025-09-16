@@ -1,6 +1,5 @@
 #include "xsan_allocator.h"
 
-#include "asan/asan_allocator.h"
 #include <lsan/lsan_common.h>
 #include <sanitizer_common/sanitizer_allocator_checks.h>
 #include <sanitizer_common/sanitizer_allocator_interface.h>
@@ -10,6 +9,8 @@
 #include <sanitizer_common/sanitizer_list.h>
 #include <sanitizer_common/sanitizer_quarantine.h>
 #include <sanitizer_common/sanitizer_stackdepot.h>
+
+#include "asan/asan_allocator.h"
 
 #if XSAN_CONTAINS_TSAN
 namespace __tsan {
@@ -135,7 +136,6 @@ void xsan_mz_force_unlock() SANITIZER_NO_THREAD_SAFETY_ANALYSIS {
 }
 }  // namespace __xsan
 
-
 namespace __xsan {
 // ---------------------- API exposed by xsan::allocator ---------------
 XsanAllocator xsan_allocator;
@@ -166,7 +166,6 @@ void FreeImpl(void *p) {
   // InternalFree(p, &thr->proc()->internal_alloc_cache);
   InternalFree(p);
 }
-
 
 }  // namespace __xsan
 
