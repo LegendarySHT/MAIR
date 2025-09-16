@@ -47,6 +47,8 @@ def generate_bench_configs(lazy: bool = False):
         for program in artefacts_dir.iterdir():
             if not program.is_dir() or program.name.startswith("."):
                 continue
+            if not (program / "run.sh").exists():
+                continue
             benchmark = {
                 "program": program.name,
                 "package": package.name,

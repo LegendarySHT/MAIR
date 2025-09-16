@@ -30,11 +30,11 @@
 
 # 可用的mode列表
 modes=(
+    raw
     asan
     ubsan
     tsan
     msan
-    raw
     dbg
     xsan-asan
     xsan-asan-tsan
@@ -61,16 +61,12 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
-            if [ -z "$workdir" ]; then
+            # 如果 workdir 为空，且 $1 是一个目录，则将 $1 设置为 workdir
+            if [ -z "$workdir" ] && [ -e "$1" ]; then
                 workdir="$1"
+            else
+                enabled_modes+=("$1")
             fi
-            # 如果 $1 在 modes 中，将其加入 enabled_modes
-            for m in "${modes[@]}"; do
-                if [ "$1" = "$m" ]; then
-                    enabled_modes+=("$1")
-                    break
-                fi
-            done
             shift
             ;;
     esac

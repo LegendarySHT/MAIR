@@ -39,8 +39,13 @@
 mode="$1"
 is_cxx="$2"
 
-export CC=xclang
-export CXX=xclang++
+if command -v clang >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
+    export CC=xclang
+    export CXX=xclang++
+else
+    echo "错误: 未找到 clang/clang++，请确保已在 PATH 中。" >&2
+    exit 1
+fi
 
 # export CC=clang
 # export CXX=clang++
@@ -50,6 +55,18 @@ export CFLAGS="${CFLAGS:+$CFLAGS }-g"
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-g"
 export LDFLAGS="${LDFLAGS:+$LDFLAGS }"
 
+# 推荐用 BASH_SOURCE 获取脚本真实路径，兼容 source 和直接执行
+SCRIPTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd)
+
+export FUZZER_LIB="${SCRIPTS_DIR}/libAFL.a"
+export LIB_FUZZING_ENGINE="${SCRIPTS_DIR}/libAFL.a"
+
+# If FUZZER_LIB does not exist, create it by running fetch-gen-driver.sh
+if [ ! -f "${SCRIPTS_DIR}/libAFL.a" ]; then
+    echo "FUZZER_LIB does not exist, creating it by running fetch-gen-driver.sh"
+    ${SCRIPTS_DIR}/fetch-gen-driver.sh
+fi
+
 # is_cxx = true 时，CXXFLAGS, LDFLAGS 追加 -stdlib=libc++
 if [ "$is_cxx" = "true" ]; then
     export CXXFLAGS="${CXXFLAGS} -stdlib=libc++"
@@ -58,7 +75,7 @@ fi
 
 # mode 处理
 case "$mode" in
-    dbg)
+    *dbg)
         export CFLAGS="${CFLAGS} -O0"
         export CXXFLAGS="${CXXFLAGS} -O0"
         ;;
@@ -67,6 +84,10 @@ case "$mode" in
         export CXXFLAGS="${CXXFLAGS} -O2"
         ;;
 esac
+
+# 从 mode 中去除 -dbg 后缀（如有），便于后续 case 判断
+mode="${mode%.dbg}"
+mode="${mode%-dbg}"
 
 # sanitizer 相关
 case "$mode" in
@@ -130,7 +151,7 @@ case "$mode" in
         export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=address,memory,thread,undefined"
         export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=address,memory,thread,undefined"
         ;;
-    raw)
+    raw|'')
         # 不做处理
         ;;
     *)
@@ -139,4 +160,3 @@ case "$mode" in
         ;;
 esac
 
-echo $CFLAGS

@@ -1,4 +1,32 @@
 #!/usr/bin/env /usr/bin/python3
+'''
+本脚本 evaluation/plot.py 用于对基准测试结果进行可视化分析。它会读取基准测试数据，
+计算不同 Sanitizer 组合的性能开销，并生成相应的图表，帮助用户直观比较各类 Sanitizer 对程序性能的影响。
+
+绘制图表包括：
+    1. 各个独立的sanitizer模式的性能开销图 ( {bar fig, violin fig} × {CPU, RSS} )
+    2. Sanitizer组合与对应的XSan组合的性能开销对比图 ( {bar fig, violin fig} × {CPU, RSS} )
+    3. 每个program各自的性能开销图 ( {bar fig} × {regular, compare} × {CPU, RSS} )
+
+Usage:
+    python3 ./plot.py [-f]
+
+常用选项说明：
+    -f              强制重新生成数据或覆盖已有结果
+
+脚本主要流程：
+    1. 读取基准测试配置和结果数据
+    2. 计算各 Sanitizer 及其组合的性能开销
+    3. 绘制对比图表并保存
+        1. 将各个 program 的相关图表保存于 <package>/data/<program> 目录下
+        2. 将整体性能图表保存于工作目录，即 evaluation/ 目录下
+
+请根据实际需求修改 BENCH_TO_PLOT 变量以选择需要可视化的基准程序。
+'''
+
+import sys
+from itertools import combinations, chain
+from benchmarking import Bench, SANITIZERS
 from typing import Iterable
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
@@ -7,12 +35,19 @@ import numpy as np
 import gen_bench_config
 gen_bench_config.generate_bench_configs(lazy=True)
 from benchmarks import PACKAGE_2_PROGRAMS, find_bench_config
-from benchmarking import Bench, SANITIZERS
-from itertools import combinations, chain
-import sys
 
 BENCH_TO_PLOT = [
+    # *PACKAGE_2_PROGRAMS['7zip'],
+    # *PACKAGE_2_PROGRAMS['igb'], // 内核模块没办法使用sanitizer
+    # *PACKAGE_2_PROGRAMS['trusted-firmware-a'], // 需要交叉编译
+    *PACKAGE_2_PROGRAMS['pcre2'],
+    *PACKAGE_2_PROGRAMS['zlib'],
     *PACKAGE_2_PROGRAMS['binutils'],
+    *PACKAGE_2_PROGRAMS['zstd'],
+    *PACKAGE_2_PROGRAMS['xz'],
+    *PACKAGE_2_PROGRAMS['tpm2-tss'],
+    *PACKAGE_2_PROGRAMS['strongswan'],
+    *PACKAGE_2_PROGRAMS['cJSON'],
 ]
 
 FORCE = False
@@ -43,7 +78,8 @@ def sumup_data(overheads: np.ndarray, san_comb: Iterable, sanitizers: list) -> (
         # Handle M case
         new_overhead = np.sum(overheads[indices])
     else:
-        raise ValueError("Overheads dimension not supported: {}".format(overheads.shape))
+        raise ValueError(
+            "Overheads dimension not supported: {}".format(overheads.shape))
     return new_overhead, '+'.join(san_comb)
 
 
@@ -58,7 +94,8 @@ def get_xsan_data(overheads: np.ndarray, san_comb: Iterable, sanitizers: list) -
     elif overheads.ndim == 1:
         overhead = overheads[index]
     else:
-        raise ValueError("Overheads dimension not supported: {}".format(overheads.shape))
+        raise ValueError(
+            "Overheads dimension not supported: {}".format(overheads.shape))
     return overhead, name
 
 

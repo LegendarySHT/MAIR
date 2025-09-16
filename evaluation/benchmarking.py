@@ -39,6 +39,7 @@ import subprocess
 from pathlib import Path
 import concurrent.futures
 import multiprocessing
+import sys
 import numpy as np
 import shutil
 
@@ -74,9 +75,20 @@ RERUN = {
 }
 
 BENCH_TO_RUN = {
-    *PACKAGE_2_PROGRAMS['binutils'],
+    # *PACKAGE_2_PROGRAMS['binutils'],
+    # *PACKAGE_2_PROGRAMS['pcre2'],
+    # *PACKAGE_2_PROGRAMS['zlib'],
+    # *PACKAGE_2_PROGRAMS['7zip'],
+    # *PACKAGE_2_PROGRAMS['zstd'],
+    # *PACKAGE_2_PROGRAMS['xz'],
+    # *PACKAGE_2_PROGRAMS['igb'], // 内核模块没办法使用sanitizer
+    # *PACKAGE_2_PROGRAMS['trusted-firmware-a'], // 需要交叉编译
+    # *PACKAGE_2_PROGRAMS['tpm2-tss'],
+    # *PACKAGE_2_PROGRAMS['strongswan'],
+    *PACKAGE_2_PROGRAMS['cJSON'],
 }
 
+FORCE = False
 
 MEASURE_SCRIPT = SCRIPT_DIR / 'eval-sample.sh'
 
@@ -447,7 +459,7 @@ class Benchmarker:
             if data_rss is None or len(data_rss) == 0:
                 continue
             self.data_rss[idx] = data_rss[:, :REPEAT_TIMES]
-            if sanitizer not in RERUN:
+            if sanitizer not in RERUN and not FORCE:
                 self.seen.add(sanitizer)
 
     @staticmethod
@@ -503,4 +515,6 @@ def main():
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        FORCE = sys.argv[1] == '-f'
     main()

@@ -50,10 +50,10 @@ input="${1:-}"
 if [ -z "$input" ]; then
     # 提取 PROG_DIR 的 name
     prog_name=$(basename "$PROG_DIR")
-    
+
     # 构建 corpus 目录路径
     corpus_dir="$PROG_DIR/../../corpus/$prog_name"
-    
+
     # 检查 corpus 目录是否存在，并获取第一个文件
     if [ -d "$corpus_dir" ]; then
         # 获取目录下第一个文件
