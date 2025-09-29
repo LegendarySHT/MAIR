@@ -6,8 +6,8 @@
 #include "../xsan_common_defs.h"
 namespace __tsan {
 
-// Only set/read in main thread, hence no need for atomic ops.
-THREADLOCAL bool MainThreadTsanDisabled = false;
+// Only set/read in main thread, hence no need for atomic ops and THREADLOCAL.
+bool MainThreadTsanDisabled = false;
 
 static struct {
   int ignore_reads_and_writes;
@@ -44,12 +44,10 @@ void DisableMainThreadTsan(ThreadState *thr) {
   if (atomic_load_relaxed(&thr->in_signal_handler)) {
     return;
   }
-  if (thr->tid != kMainTid) {
-    CHECK(0 && "DisableMainThreadTsan called for non-main thread");
-  }
-  if (MainThreadTsanDisabled) {
+  CHECK(thr->tid == kMainTid &&
+        "DisableMainThreadTsan called for non-main thread");
+  if (MainThreadTsanDisabled)
     return;
-  }
   MainThreadTsanDisabled = true;
 
   DisableTsan(thr);
@@ -61,12 +59,10 @@ void EnableMainThreadTsan(ThreadState *thr) {
   if (atomic_load_relaxed(&thr->in_signal_handler)) {
     return;
   }
-  if (!MainThreadTsanDisabled) {
+  if (!MainThreadTsanDisabled)
     return;
-  }
-  if (thr->tid != kMainTid) {
-    CHECK(0 && "EnableMainThreadTsan called for non-main thread");
-  }
+  CHECK(thr->tid == kMainTid &&
+        "EnableMainThreadTsan called for non-main thread");
 
   MainThreadTsanDisabled = false;
 
@@ -118,7 +114,7 @@ TSan's original comment says:
 */
 void DisableTsanForVfork() {
   /* VFORK is epected to call exit/exec soon, so we should not do TSan's sanity
-   * checks for its child. 
+   * checks for its child.
    * Moreover, it is UB to create new thread in vfork's child process,
    * therefore, we can disable TSan for the vfork child process just by
    * setting the flags in cur_thread(). */
@@ -211,17 +207,17 @@ TSAN_INTERCEPT_AND_IGNORE_VOID(void, __lsan_do_recoverable_leak_check,
 /// function and ignore the TSan's interceptor.
 // __santizer::IsAccessibleMemoryRange
 TSAN_INTERCEPT_AND_IGNORE(bool, _ZN11__sanitizer23IsAccessibleMemoryRangeEmm,
-                     (uptr beg, uptr size), (beg, size))
+                          (uptr beg, uptr size), (beg, size))
 
 #undef TSAN_INTERCEPT_AND_IGNORE
 #undef TSAN_INTERCEPT_AND_IGNORE_VOID
 
 using namespace __tsan;
 // ----------- Intercept Data Race Checking Functions -----------
-/// void MemoryRangeImitateWrite(ThreadState* thr, uptr pc, 
+/// void MemoryRangeImitateWrite(ThreadState* thr, uptr pc,
 ///                              uptr addr, uptr size)
 XSAN_WRAPPER(void, _ZN6__tsan23MemoryRangeImitateWriteEPNS_11ThreadStateEmmm,
-              ThreadState* thr, uptr pc, uptr addr, uptr size) {
+             ThreadState *thr, uptr pc, uptr addr, uptr size) {
   /// FIXME: is it a bug? should report to TSan officiallly?
   /// We should directly return if fast_state.GetIgnoreBit() is true,
   /// Because
@@ -246,6 +242,7 @@ XSAN_WRAPPER(void, _ZN6__tsan23MemoryRangeImitateWriteEPNS_11ThreadStateEmmm,
   /// fast_state.GetIgnoreBit() is set.
   if (UNLIKELY(thr->fast_state.GetIgnoreBit()))
     return;
-  XSAN_REAL(_ZN6__tsan23MemoryRangeImitateWriteEPNS_11ThreadStateEmmm)(thr, pc, addr, size);
+  XSAN_REAL(_ZN6__tsan23MemoryRangeImitateWriteEPNS_11ThreadStateEmmm)
+  (thr, pc, addr, size);
 }
 }

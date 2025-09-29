@@ -175,9 +175,9 @@ uptr __asan_region_is_poisoned(uptr beg, uptr size) {
   if (!size)
     return 0;
   uptr end = beg + size;
-  if (!AddrIsInMem(beg))
+  if (UNLIKELY(!AddrIsInMem(beg)))
     return beg;
-  if (!AddrIsInMem(end))
+  if (UNLIKELY(!AddrIsInMem(end)))
     return end;
   CHECK_LT(beg, end);
   uptr aligned_b = RoundUpTo(beg, ASAN_SHADOW_GRANULARITY);

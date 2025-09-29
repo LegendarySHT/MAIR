@@ -4,13 +4,14 @@
 
 #pragma once
 
+#include "sanitizer_common/sanitizer_allocator_interface.h"
 #include "sanitizer_common/sanitizer_asm.h"
-#include "tsan_rtl.h"
 
 namespace __tsan {
+struct ThreadState;
 
 /// Comes from  interceptor_ctx()->finalize_key;
-unsigned& finalize_key();
+unsigned &finalize_key();
 bool IsAppMem(uptr mem);
 
 class ScopedIgnoreTsan {
@@ -38,7 +39,7 @@ void EnableTsan(ThreadState *thr);
 /// 3. Therefore, we provide this function to recover the state in Longjmp.
 void RestoreTsanState(ThreadState *thr);
 
-extern THREADLOCAL bool MainThreadTsanDisabled;
+extern bool MainThreadTsanDisabled;
 
 #if SANITIZER_DEBUG
 #  define TSAN_ADDR_GUARD_CONDITION(addr) (!IsAppMem((uptr)(addr)))
@@ -53,7 +54,7 @@ extern THREADLOCAL bool MainThreadTsanDisabled;
 #define TSAN_CHECK_GUARD_CONDIITON \
   (MainThreadTsanDisabled /* Fast Version of thr->fast_state.GetIgnoreBit()*/)
 
-/// FIXME: Shall we really need to guard the metatdat store?
+/// FIXME: Shall we really need to guard the metatdata store?
 /// StoreShadow is just one atomic operation, while TraceAccess is
 /// relatively expensive.
 #define TSAN_STORE_GUARD_CONDIITON (is_now_single_threaded())

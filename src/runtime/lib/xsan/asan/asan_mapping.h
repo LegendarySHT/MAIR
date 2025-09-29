@@ -372,7 +372,7 @@ static inline bool AddrIsInMem(uptr a) {
 
 static inline uptr MemToShadow(uptr p) {
   PROFILE_ASAN_MAPPING();
-  CHECK(AddrIsInMem(p));
+  DCHECK(AddrIsInMem(p));
   return MEM_TO_SHADOW(p);
 }
 
@@ -383,7 +383,7 @@ static inline bool AddrIsInShadow(uptr a) {
 
 static inline uptr ShadowToMem(uptr p) {
   PROFILE_ASAN_MAPPING();
-  CHECK(AddrIsInShadow(p));
+  DCHECK(AddrIsInShadow(p));
   return SHADOW_TO_MEM(p);
 }
 

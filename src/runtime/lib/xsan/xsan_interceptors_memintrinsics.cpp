@@ -88,6 +88,7 @@ extern "C" {
 
 void *__xsan_memcpy(void *dst, const void *src, uptr size) {
   void *ctx;
+  /// PERF: ShouldXsanIgnoreInterceptor in pcre2test
 #  if PLATFORM_HAS_DIFFERENT_MEMCPY_AND_MEMMOVE
   XSAN_INTERCEPTOR_ENTER(ctx, memcpy, dst, src, size);
   FUNC_SCOPE(xsan_memintrinsic);

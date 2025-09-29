@@ -104,22 +104,6 @@ ScopedIgnoreChecks::~ScopedIgnoreChecks() {
 #  endif
 }
 
-ScopedInterceptor::ScopedInterceptor(const XsanContext &xsan_ctx,
-                                     const char *func, uptr caller_pc)
-#  if XSAN_CONTAINS_TSAN
-    : tsan_si(xsan_ctx.tsan.thr_, func, caller_pc)
-#  endif
-{
-}
-
-bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
-  if (xsan_ignore_interceptors || !XsanInited())
-    return true;
-  XsanThread *thread = __xsan::GetCurrentThread();
-  return (thread && (!thread->is_inited_ || thread->in_ignored_lib_)) ||
-         __xsan::ShouldSanitzerIgnoreInterceptors(xsan_ctx);
-}
-
 // The sole reason tsan wraps atexit callbacks is to establish synchronization
 // between callback setup and callback execution.
 using AtExitFuncTy = void (*)();

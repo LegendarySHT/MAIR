@@ -11,6 +11,8 @@
 #include "interception/interception.h"
 #include "xsan_interceptors_memintrinsics.h"
 #include "xsan_internal.h"
+#include "xsan_thread.h"
+
 namespace __xsan {
 
 void InitializeXsanInterceptors();
@@ -224,7 +226,13 @@ class ScopedIgnoreChecks {
 /// Used in Interceptros to manage the resources uniformly.
 class ScopedInterceptor {
  public:
-  ScopedInterceptor(const XsanContext &xsan_ctx, const char *func, uptr caller_pc);
+  ScopedInterceptor(const XsanContext &xsan_ctx, const char *func,
+                    uptr caller_pc)
+#if XSAN_CONTAINS_TSAN
+      : tsan_si(xsan_ctx.tsan.thr_, func, caller_pc)
+#endif
+  {
+  }
   ~ScopedInterceptor() {}
 #if XSAN_CONTAINS_TSAN
   void DisableIgnores() { tsan_si.DisableIgnores(); }
@@ -237,12 +245,19 @@ class ScopedInterceptor {
 #endif
 };
 
-bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx);
+extern THREADLOCAL uptr xsan_ignore_interceptors;
+inline bool ShouldXsanIgnoreInterceptor(const XsanContext &xsan_ctx) {
+  if (xsan_ignore_interceptors || !XsanInited())
+    return true;
+  XsanThread *thread = __xsan::GetCurrentThread();
+  return UNLIKELY(!thread || !thread->is_inited_ || thread->in_ignored_lib_) ||
+         __xsan::ShouldSanitzerIgnoreInterceptors(xsan_ctx);
+}
 
 }  // namespace __xsan
 
 #define SCOPED_XSAN_INTERCEPTOR_INTERNAL(func, caller_pc, curr_pc) \
-  __xsan::XsanContext xsan_ctx(curr_pc);       \
+  __xsan::XsanContext xsan_ctx(curr_pc);                           \
   __xsan::ScopedInterceptor xsi(xsan_ctx, #func, caller_pc);
 
 #define SCOPED_XSAN_INTERCEPTOR_MALLOC(func, ...) \

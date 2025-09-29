@@ -6,6 +6,7 @@
 #include "sanitizer_common/sanitizer_platform_limits_posix.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "tsan_interface_xsan.h"
+#include "tsan_rtl_extra.h"
 
 namespace __tsan {
 
@@ -213,33 +214,39 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   ALWAYS_INLINE static void InitializeInterceptors() {
     __tsan::InitializeInterceptors();
   }
-  PSEUDO_MACRO static void ReadRange(Context *ctx, const void *offset,
+  PSEUDO_MACRO static void ReadRange(const Context *ctx, const void *offset,
                                      uptr size, const char *func_name) {
+    if (TSAN_CHECK_GUARD_CONDIITON)
+      return;
     AccessMemoryRange<true>(ctx, offset, size);
   }
-  PSEUDO_MACRO static void WriteRange(Context *ctx, const void *offset,
+  PSEUDO_MACRO static void WriteRange(const Context *ctx, const void *offset,
                                       uptr size, const char *func_name) {
+    if (TSAN_CHECK_GUARD_CONDIITON)
+      return;
     AccessMemoryRange<false>(ctx, offset, size);
   }
-  PSEUDO_MACRO static void CommonReadRange(Context *ctx, const void *offset,
-                                           uptr size, const char *func_name) {
+  PSEUDO_MACRO static void CommonReadRange(const Context *ctx,
+                                           const void *offset, uptr size,
+                                           const char *func_name) {
     ReadRange(ctx, offset, size, func_name);
   }
-  PSEUDO_MACRO static void CommonWriteRange(Context *ctx, const void *offset,
-                                            uptr size, const char *func_name) {
+  PSEUDO_MACRO static void CommonWriteRange(const Context *ctx,
+                                            const void *offset, uptr size,
+                                            const char *func_name) {
     WriteRange(ctx, offset, size, func_name);
   }
   PSEUDO_MACRO static void CommonSyscallPreReadRange(const Context &ctx,
                                                      const void *offset,
                                                      uptr size,
                                                      const char *func_name) {
-    AccessMemoryRange<true>(&ctx, offset, size);
+    ReadRange(&ctx, offset, size, func_name);
   }
   PSEUDO_MACRO static void CommonSyscallPreWriteRange(const Context &ctx,
                                                       const void *offset,
                                                       uptr size,
                                                       const char *func_name) {
-    AccessMemoryRange<false>(&ctx, offset, size);
+    WriteRange(&ctx, offset, size, func_name);
   }
   // ---------- Xsan-Interface-Related Hooks ----------------
   template <u32 ReadSize>
