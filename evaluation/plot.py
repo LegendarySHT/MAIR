@@ -37,21 +37,32 @@ gen_bench_config.generate_bench_configs(lazy=True)
 from benchmarks import PACKAGE_2_PROGRAMS, find_bench_config
 
 BENCH_TO_PLOT = [
-    # *PACKAGE_2_PROGRAMS['7zip'],
-    # *PACKAGE_2_PROGRAMS['igb'], // 内核模块没办法使用sanitizer
-    # *PACKAGE_2_PROGRAMS['trusted-firmware-a'], // 需要交叉编译
+    *PACKAGE_2_PROGRAMS['7zip'],
     *PACKAGE_2_PROGRAMS['pcre2'],
-    *PACKAGE_2_PROGRAMS['zlib'],
     *PACKAGE_2_PROGRAMS['binutils'],
     *PACKAGE_2_PROGRAMS['zstd'],
     *PACKAGE_2_PROGRAMS['xz'],
     *PACKAGE_2_PROGRAMS['tpm2-tss'],
     *PACKAGE_2_PROGRAMS['strongswan'],
+    *PACKAGE_2_PROGRAMS['lua'],
+    *PACKAGE_2_PROGRAMS['iproute2'],
     *PACKAGE_2_PROGRAMS['cJSON'],
+    *PACKAGE_2_PROGRAMS['json'],
+    *PACKAGE_2_PROGRAMS['jsoncpp'],
+    *PACKAGE_2_PROGRAMS['zlib'],
+    *PACKAGE_2_PROGRAMS['libjpeg-turbo'],
+    *PACKAGE_2_PROGRAMS['sqlite3'],
+    *PACKAGE_2_PROGRAMS['libpng'],
+    *PACKAGE_2_PROGRAMS['re2'],
+    *PACKAGE_2_PROGRAMS['curl'],
+    *PACKAGE_2_PROGRAMS['lcms'],
+    *PACKAGE_2_PROGRAMS['libxml2'],
+    *PACKAGE_2_PROGRAMS['openssl'],
 ]
 
 FORCE = False
-
+OUTPUT_FORMAT = 'png'
+DPI = 600
 
 def get_overheads(data: np.ndarray) -> np.ndarray:
     '''
@@ -113,7 +124,10 @@ def plot_figure(is_time: bool):
     for bench in BENCH_TO_PLOT:
         config = find_bench_config(bench)
         bench = Bench(config)
-        data = bench.load_overhead_batchly(sanitizers, group, depth=2)
+        '''
+        ignore_init=True: 忽略初始化时间这一固定耗费，如此可以测量一些执行时间极短的程序
+        '''
+        data = bench.load_overhead_batchly(sanitizers, group, ignore_init=False, depth=2)
         draw_per_bench_figures(data, sanitizers, bench, is_time)
         overheads.append(data)
 
@@ -133,8 +147,8 @@ def draw_per_bench_figures(overheads: np.ndarray, sanitizers: list, bench: Bench
         bench: Bench, the benchmark
     '''
     name = 'time' if is_time else 'rss'
-    bar_fig_path = bench.get_data_file(f'overhead_{name}.png')
-    cmp_fig_path = bench.get_data_file(f'compare_{name}.png')
+    bar_fig_path = bench.get_data_file(f'overhead_{name}.{OUTPUT_FORMAT}')
+    cmp_fig_path = bench.get_data_file(f'compare_{name}.{OUTPUT_FORMAT}')
 
     def draw_bar():
         M = len(sanitizers)
@@ -214,7 +228,7 @@ def draw_per_bench_figures(overheads: np.ndarray, sanitizers: list, bench: Bench
         )
 
         # 保存
-        plt.savefig(bar_fig_path, dpi=300, bbox_inches='tight')
+        plt.savefig(bar_fig_path, dpi=DPI, bbox_inches='tight')
         plt.close(fig)
 
     def draw_compare_figure():
@@ -348,7 +362,7 @@ def draw_per_bench_figures(overheads: np.ndarray, sanitizers: list, bench: Bench
 
         fig.subplots_adjust(top=0.93, left=0.06, right=0.94, bottom=0.08)
 
-        plt.savefig(cmp_fig_path, dpi=300, bbox_inches='tight')
+        plt.savefig(cmp_fig_path, dpi=DPI, bbox_inches='tight')
         plt.close(fig)
 
     if FORCE or not bar_fig_path.exists():
@@ -384,8 +398,8 @@ def draw_overall_compare_figure(overheads: np.ndarray, sanitizers: list, is_time
     for (new_san, xsan_name), (sum_overhead, xsan_overhead) in zip(san_pair_to_compare, data_pair_to_compare):
         speedups = 1 - (xsan_overhead / sum_overhead)
         print(f'{new_san}')
-        for bench, speedup in zip(BENCH_TO_PLOT, speedups):
-            print(f'\t{bench:{mlen}s} : {speedup * 100:8.2f}%')
+        for bench, speedup, xsan_oh, sum_oh in zip(BENCH_TO_PLOT, speedups, xsan_overhead, sum_overhead):
+            print(f'\t{bench:{mlen}s} : {speedup * 100:8.2f}%, ( {xsan_oh:>8.2f} / {sum_oh:<8.2f} )')
 
         # shared values
     N = len(BENCH_TO_PLOT)
@@ -496,8 +510,8 @@ def draw_overall_compare_figure(overheads: np.ndarray, sanitizers: list, is_time
                              fontsize=9)
 
         typ = "time" if is_time else "rss"
-        plt.savefig(f"compare_{typ}.png",
-                    dpi=300, bbox_inches="tight")
+        plt.savefig(f"compare_{typ}.{OUTPUT_FORMAT}",
+                    dpi=DPI, bbox_inches="tight")
         plt.close(fig)
 
     def draw_violin():
@@ -521,7 +535,7 @@ def draw_overall_compare_figure(overheads: np.ndarray, sanitizers: list, is_time
         cmap = plt.get_cmap("tab10")
         group_colors = {g: cmap(i % 10) for i, g in enumerate(groups)}
 
-        fig = plt.figure(figsize=(10, 6))
+        fig = plt.figure(figsize=(10, 10))
         gs = fig.add_gridspec(3, 1, height_ratios=[
                               0.06, 0.2, 1.0], hspace=0.02)
 
@@ -608,8 +622,8 @@ def draw_overall_compare_figure(overheads: np.ndarray, sanitizers: list, is_time
         # 压缩上下左右空白
         # plt.tight_layout(rect=[0.05, 0.05, 0.98, 0.95])
         typ = 'time' if is_time else 'rss'
-        plt.savefig(f'compare_violin_{typ}.png',
-                    dpi=300, bbox_inches='tight')
+        plt.savefig(f'compare_violin_{typ}.{OUTPUT_FORMAT}',
+                    dpi=DPI, bbox_inches='tight')
         plt.close()
 
     # --- run both ---
@@ -725,8 +739,8 @@ def draw_overall_figures(
         # --- 保存 ---
         typ = 'rss' if is_rss else 'time'
         typ = f'{typ}_big' if ignore_small else typ
-        plt.savefig(f'overheads_{typ}.png',
-                    dpi=300, bbox_inches='tight')
+        plt.savefig(f'overheads_{typ}.{OUTPUT_FORMAT}',
+                    dpi=DPI, bbox_inches='tight')
         plt.close(fig)
 
     def draw_violin():
@@ -739,7 +753,7 @@ def draw_overall_figures(
         cmap = plt.get_cmap("tab20")
         colors = [cmap(i % 20) for i in range(len(sanitizers))]
 
-        fig = plt.figure(figsize=(10, 6))
+        fig = plt.figure(figsize=(10, 10))
         gs = fig.add_gridspec(3, 1, height_ratios=[
                               0.08, 0.14, 1.0], hspace=0.05)
 
@@ -832,8 +846,8 @@ def draw_overall_figures(
         # 保存
         typ = "rss" if is_rss else "time"
         typ = f"{typ}_big" if ignore_small else typ
-        plt.savefig(f"overheads_violin_{typ}.png",
-                    dpi=300, bbox_inches="tight")
+        plt.savefig(f"overheads_violin_{typ}.{OUTPUT_FORMAT}",
+                    dpi=DPI, bbox_inches="tight")
         plt.close(fig)
 
     draw_bar()

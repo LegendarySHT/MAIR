@@ -21,8 +21,8 @@
 
 
 # 检查参数数量
-if [ "$#" -lt 2 ]; then
-    echo "用法: $0 <program> <args>, ..."
+if [ "$#" -lt 1 ]; then
+    echo "用法: $0 <program> [<args>, ...]"
     exit 1
 fi
 

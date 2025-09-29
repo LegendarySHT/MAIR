@@ -36,8 +36,13 @@
 
 # 由于 bash 没有原生的枚举类型，通常用字符串或数组来模拟枚举。这里我们用字符串，并在函数内部用 case 语句处理。
 # 参数: $1 = mode, $2 = is_cxx (true/false)
-mode="$1"
-is_cxx="$2"
+if [ $# -eq 1 ] && { [ "$1" = "true" ] || [ "$1" = "false" ]; }; then
+    mode="raw"
+    is_cxx="$1"
+else
+    mode="$1"
+    is_cxx="$2"
+fi
 
 if command -v clang >/dev/null 2>&1 && command -v clang++ >/dev/null 2>&1; then
     export CC=xclang
@@ -111,10 +116,45 @@ case "$mode" in
         export CXXFLAGS="${CXXFLAGS} -fsanitize=memory"
         export LDFLAGS="${LDFLAGS} -fsanitize=memory"
         ;;
+    asan-new)
+        export CFLAGS="${CFLAGS} -asan"
+        export CXXFLAGS="${CXXFLAGS} -asan"
+        export LDFLAGS="${LDFLAGS} -asan"
+        ;;
+    ubsan-new)
+        export CFLAGS="${CFLAGS} -ubsan"
+        export CXXFLAGS="${CXXFLAGS} -ubsan"
+        export LDFLAGS="${LDFLAGS} -ubsan"
+        ;;
+    tsan-new)
+        export CFLAGS="${CFLAGS} -tsan"
+        export CXXFLAGS="${CXXFLAGS} -tsan"
+        export LDFLAGS="${LDFLAGS} -tsan"
+        ;;
+    msan-new)
+        export CFLAGS="${CFLAGS} -msan"
+        export CXXFLAGS="${CXXFLAGS} -msan"
+        export LDFLAGS="${LDFLAGS} -msan"
+        ;;
     xsan-asan)
         export CFLAGS="${CFLAGS} -xsan-only -fsanitize=address"
         export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=address"
         export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=address"
+        ;;
+    xsan)
+        export CFLAGS="${CFLAGS} -xsan-only -fsanitize=address,thread"
+        export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=address,thread"
+        export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=thread"
+        ;;     
+    xsan-tsan)
+        export CFLAGS="${CFLAGS} -xsan-only -fsanitize=thread"
+        export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=thread"
+        export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=thread"
+        ;;
+    xsan-msan)
+        export CFLAGS="${CFLAGS} -xsan-only -fsanitize=memory"
+        export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=memory"
+        export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=memory"
         ;;
     xsan-asan-tsan)
         export CFLAGS="${CFLAGS} -xsan-only -fsanitize=address,thread"
@@ -160,3 +200,6 @@ case "$mode" in
         ;;
 esac
 
+if [ ! -z "$PROF" ]; then
+    export LDFLAGS="${LDFLAGS} -lprofiler"
+fi

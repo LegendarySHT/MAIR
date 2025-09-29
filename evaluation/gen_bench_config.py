@@ -44,7 +44,9 @@ def generate_bench_configs(lazy: bool = False):
         if not artefacts_dir.exists():
             continue
         programs = []
-        for program in artefacts_dir.iterdir():
+        programs_list = list(artefacts_dir.iterdir())
+        programs_list.sort()
+        for program in programs_list:
             if not program.is_dir() or program.name.startswith("."):
                 continue
             if not (program / "run.sh").exists():

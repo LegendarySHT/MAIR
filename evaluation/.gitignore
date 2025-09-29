@@ -21,3 +21,5 @@ data/
 benchmarks.py
 
 __pycache__/
+debug/
+

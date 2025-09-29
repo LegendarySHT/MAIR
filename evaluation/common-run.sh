@@ -30,6 +30,7 @@ usage() {
     echo "用法: $0 <mode> <program-dir> <stdin:bool> [<input>] [preoptions] [postoptions]"
     echo "  <mode>           : 运行模式（如 asan, msan, xsan-asan 等）"
     echo "  <program-dir>    : 程序所在目录"
+    echo "  <use-perf:bool>  : 是否进行CPU + Memory 性能测量（true/false）"
     echo "  <stdin:bool>     : 是否通过标准输入传递输入（true/false）"
     echo "  <input>          : （可选）输入文件路径"
     echo "  preoptions       : （可选）程序参数，放在输入文件前"
@@ -46,11 +47,17 @@ if [ $# -lt 3 ]; then
     usage
 fi
 
+export ASAN_OPTIONS=detect_leaks=0
+export TSAN_OPTIONS=report_bugs=0
+
+SCRIPTS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")"; pwd)
+PERF_SCRIPT=$SCRIPTS_DIR/eval-sample.sh
 
 mode="$1"
 program_path="$2"/$(basename "$2")
-stdin="$3"
-shift 3
+use_perf="$3"
+stdin="$4"
+shift 4
 
 # 判断 stdin 是否为 true/false
 if [[ "$stdin" != "true" && "$stdin" != "false" ]]; then
@@ -97,12 +104,21 @@ if [ "$stdin" = "false" ]; then
     else
         cmd=( "$prog_bin" $preoptions $postoptions )
     fi
-    exec "${cmd[@]}"
+    if [ "$use_perf" = "true" ]; then
+        cmd=( "$PERF_SCRIPT" "${cmd[@]}" )
+    fi
+    
+    # echo "执行命令: ${cmd[@]}"
+    exec ${cmd[@]}
 else
     # stdin 模式
+    cmd=( "$prog_bin" $preoptions $postoptions )
+    if [ "$use_perf" = "true" ]; then
+        cmd=( "$PERF_SCRIPT" "${cmd[@]}" )
+    fi
     if [ -n "$input" ]; then
-        exec "$prog_bin" $preoptions $postoptions < "$input"
+        "${cmd[@]}" < "$input"
     else
-        exec "$prog_bin" $preoptions $postoptions
+        "${cmd[@]}"
     fi
 fi

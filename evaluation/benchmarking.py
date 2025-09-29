@@ -34,6 +34,7 @@
 '''
 
 
+import gen_bench_config
 import os
 import subprocess
 from pathlib import Path
@@ -45,7 +46,6 @@ import shutil
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-import gen_bench_config
 gen_bench_config.generate_bench_configs(lazy=True)
 from benchmarks import BENCHMARKS, PACKAGE_2_PROGRAMS
 
@@ -53,6 +53,28 @@ from benchmarks import BENCHMARKS, PACKAGE_2_PROGRAMS
 # REPEAT_TIMES = 1
 REPEAT_TIMES = 40
 MAX_WORKERS = 5
+
+'''
+Platform-Specific Initialization Time
+
+通过重复测量初始化例程100次的执行时间得到
+XSan 的初始化时间基本等于所选sanitizers的初始化时间之和要小，因为XSan没有重复进行一些通用的初始化.
+'''
+INIT_TIMES = {
+    'asan': 1.798,
+    'msan': 1.918,
+    'tsan': 6.373,
+    'ubsan': 0.281,
+    'xsan-asan': 2.210,
+    'xsan-asan-msan': 2.538,
+    'xsan-asan-tsan': 8.042,
+    'xsan-asan-ubsan': 2.261,
+    'xsan-asan-msan-tsan': 8.223,
+    'xsan-asan-msan-ubsan': 2.603,
+    'xsan-asan-tsan-ubsan': 8.156,
+    'xsan-asan-msan-tsan-ubsan': 8.316,
+}
+
 
 SANITIZERS = [
     "raw",
@@ -72,29 +94,48 @@ SANITIZERS = [
 
 
 RERUN = {
+    'xsan-asan',
+    'raw',
+    'xsan-asan-msan',
+    'xsan-asan-tsan',
+    'xsan-asan-tsan-ubsan',
+    'xsan-asan-msan-tsan',
+    'xsan-asan-msan-ubsan',
+    'xsan-asan-msan-tsan-ubsan',
 }
 
 BENCH_TO_RUN = {
-    # *PACKAGE_2_PROGRAMS['binutils'],
-    # *PACKAGE_2_PROGRAMS['pcre2'],
-    # *PACKAGE_2_PROGRAMS['zlib'],
-    # *PACKAGE_2_PROGRAMS['7zip'],
-    # *PACKAGE_2_PROGRAMS['zstd'],
-    # *PACKAGE_2_PROGRAMS['xz'],
-    # *PACKAGE_2_PROGRAMS['igb'], // 内核模块没办法使用sanitizer
-    # *PACKAGE_2_PROGRAMS['trusted-firmware-a'], // 需要交叉编译
-    # *PACKAGE_2_PROGRAMS['tpm2-tss'],
-    # *PACKAGE_2_PROGRAMS['strongswan'],
+    *PACKAGE_2_PROGRAMS['binutils'],
+    *PACKAGE_2_PROGRAMS['pcre2'],
+    *PACKAGE_2_PROGRAMS['zlib'],
+    *PACKAGE_2_PROGRAMS['7zip'],
+    *PACKAGE_2_PROGRAMS['zstd'],
+    *PACKAGE_2_PROGRAMS['xz'],
+    *PACKAGE_2_PROGRAMS['lua'],
+    *PACKAGE_2_PROGRAMS['tpm2-tss'],
+    *PACKAGE_2_PROGRAMS['strongswan'],
+    *PACKAGE_2_PROGRAMS['iproute2'],
     *PACKAGE_2_PROGRAMS['cJSON'],
+    *PACKAGE_2_PROGRAMS['json'],
+    *PACKAGE_2_PROGRAMS['jsoncpp'],
+    *PACKAGE_2_PROGRAMS['sqlite3'],
+    *PACKAGE_2_PROGRAMS['libjpeg-turbo'],
+    *PACKAGE_2_PROGRAMS['libpng'],
+    *PACKAGE_2_PROGRAMS['libxml2'],
+    *PACKAGE_2_PROGRAMS['lcms'],
+    *PACKAGE_2_PROGRAMS['re2'],
+    *PACKAGE_2_PROGRAMS['curl'],
+    *PACKAGE_2_PROGRAMS['openssl'],
 }
 
 FORCE = False
 
-MEASURE_SCRIPT = SCRIPT_DIR / 'eval-sample.sh'
 
 # disable LSan
 os.environ['ASAN_OPTIONS'] = 'detect_leaks=0'
 os.environ['TSAN_OPTIONS'] = 'report_bugs=0'
+# Use perf to measure the performance
+os.environ['USE_PERF'] = 'true'
 
 
 def filter_outliers_and_mean(data, threshold=2):
@@ -174,10 +215,9 @@ class MyProcessPoolExecutor(concurrent.futures.ProcessPoolExecutor):
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-MEASURE_SCRIPT = SCRIPT_DIR / 'eval-sample.sh'
-
 
 class Bench:
+
     def __init__(self, config: dict):
         self.program = config['program']
         self.package = config['package']
@@ -194,7 +234,7 @@ class Bench:
             raise ValueError(f"Run script not found: {self.run_script}")
 
     def run(self, mode: str, input: str, env=None) -> tuple:
-        cmd = [str(MEASURE_SCRIPT), str(self.run_script), mode, input]
+        cmd = [str(self.run_script), mode, input]
         try:
             output = subprocess.check_output(
                 cmd, stderr=subprocess.STDOUT, env=env)
@@ -225,13 +265,14 @@ class Bench:
     def load_np_data_batchly(self, names: list, group: str = '') -> np.ndarray:
         return np.array([self.load_np_data(name, group) for name in names])
 
-    def load_overhead(self, name: str, group: str = '', depth: int = 1) -> np.ndarray:
+    def load_overhead(self, name: str, group: str = '', ignore_init: bool = True, depth: int = 1) -> np.ndarray:
         '''
         get the mean overhead of the specified sanitizer
-        
+
         Args:
             name: str, the name of the sanitizer
             group: str, the group of the data
+            ignore_init: bool, if True, ignore the initialization time of the sanitizer
             depth: int, the depth of the data
                 if depth == 0, return the overhead of the specified sanitizer
                 if depth >= 1, further average the REPEAT_TIMES
@@ -239,22 +280,28 @@ class Bench:
         '''
         base = self.load_np_data('raw', group)
         data = self.load_np_data(name, group)
+        print(f"base: {base} {name} {group} {self.data_dir}")
+        print(f"data: {data}")
         # base & data shape: (size_corpus, REPEAT_TIMES)
         # averge the REPEATS, filter out the outliers (> 2 \sigma)
         if depth >= 1:
             base = filter_outliers_and_mean(base)
             data = filter_outliers_and_mean(data)
-
+        if ignore_init:
+            data -= INIT_TIMES.get(name, 0)
         # get the overhead
         overhead = data / base * 100
         if depth == 2:
             overhead = np.mean(overhead)
         elif depth > 2:
-            raise ValueError(f"Invalid depth: {depth} , only support depth <= 2")
+            raise ValueError(
+                f"Invalid depth: {depth} , only support depth <= 2")
         return overhead
 
-    def load_overhead_batchly(self, names: list, group: str = '', depth: int = 1) -> np.ndarray:
-        return np.array([self.load_overhead(name, group, depth) for name in names])
+    def load_overhead_batchly(self, names: list, group: str = '', 
+                              ignore_init: bool = True, depth: int = 1) -> np.ndarray:
+        data = np.array([self.load_overhead(name, group, ignore_init, depth) for name in names])
+        return data
 
     def remove_np_data(self, name: str, group: str = ''):
         data_file = self.get_data_file(name, group).with_suffix('.npy')
@@ -398,11 +445,13 @@ class Benchmarker:
 
         return overhead
 
-    def print_overhead(self, name: str, times: np.ndarray, rss: np.ndarray, skip=False):
+    def print_overhead(self, name: str, times: np.ndarray, rss: np.ndarray, 
+                       ignore_init: bool = True, skip=False):
         '''
         print the overhead of the sanitizers
         '''
-
+        if ignore_init:
+            times -= INIT_TIMES.get(name, 0)
         time_overhead = self.get_overhead(times)
         rss_overhead = self.get_overhead(rss, base=self.base_rss)
 
@@ -446,6 +495,11 @@ class Benchmarker:
         '''
         load the benchmarking results from a file
         '''
+        if FORCE:
+            '''
+            Force to rerun the benchmarks
+            '''
+            return
         for idx, sanitizer in enumerate(self.sanitizers):
             data = self.bench.load_np_data(sanitizer, "time")
             if data is None or len(data) == 0:
@@ -459,7 +513,7 @@ class Benchmarker:
             if data_rss is None or len(data_rss) == 0:
                 continue
             self.data_rss[idx] = data_rss[:, :REPEAT_TIMES]
-            if sanitizer not in RERUN and not FORCE:
+            if sanitizer not in RERUN:
                 self.seen.add(sanitizer)
 
     @staticmethod

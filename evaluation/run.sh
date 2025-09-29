@@ -46,8 +46,8 @@ FILE_DIR=$(cd "$(dirname "$0")"; pwd)
 mode="$1"
 shift
 input="${1:-}"
-# 如果 input 为空，则从 corpus 目录获取默认输入文件
-if [ -z "$input" ]; then
+# 如果 stdin=true 且 input 为空，则从 corpus 目录获取默认输入文件
+if [ "$stdin" = "true" ] && [ -z "$input" ]; then
     # 提取 PROG_DIR 的 name
     prog_name=$(basename "$PROG_DIR")
 
@@ -64,5 +64,11 @@ if [ -z "$input" ]; then
     fi
 fi
 
+if [ -n "$USE_PERF" ]; then
+    use_perf="true"
+else
+    use_perf="false"
+fi
 
-"$FILE_DIR/common-run.sh" "$mode" "$PROG_DIR" "$stdin" "$input" "$PRE_OPT" "$POST_OPT"
+
+"$FILE_DIR/common-run.sh" "$mode" "$PROG_DIR" "$use_perf" "$stdin" "$input" "$PRE_OPT" "$POST_OPT"
