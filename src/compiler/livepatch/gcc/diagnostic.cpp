@@ -8,7 +8,6 @@ Patch the error_at in diagnostic.c/diagnostic.cc in gcc.
 #include "llvm/ADT/STLExtras.h"
 #include <llvm/ADT/StringRef.h>
 
-
 // This type definition comes from gcc's unexported header file:
 // libcpp/include/line-map.h
 using location_t = unsigned int;
@@ -18,7 +17,7 @@ static __xsan::XsanInterceptor
     Interceptor(&error_at,
                 /* In fact, cc1 is enough, our match is a match, just
                    to clarify the semantics, plus cc1plus */
-                {"cc1", "cc1plus"});
+                {"cc1", "cc1plus", /* For LTO */ "lto1"});
 
 static unsigned
 count_gcc_diag_specifiers(const char *gmsgid,
