@@ -58,7 +58,8 @@ public:
       : Args(Args), replace(getXsanMask().any()),
         shouldHasStaticRt(getSanType() == XSan || getSanType() == ASan),
         XsanRtDir(getXsanArchRtDir(TC.getTriple().str())),
-        PrefixToReplace(XsanRtDir / "libclang_rt."), TC(TC) {
+        PrefixToReplace(XsanRtDir / "libclang_rt."),
+        archSuffix("-" + TC.getArchName().str()), TC(TC) {
     if (getSanType() == SanNone || PrefixToReplace.empty())
       return;
 
@@ -117,6 +118,29 @@ private:
     }
     if (pos == StringRef::npos)
       return std::nullopt;
+
+    // If suffix[:pos] ends with the archSuffix "-" + TC.getArchName(), remove
+    // the archSuffix
+    if (pos >= archSuffix.size()) {
+      StringRef prefix = suffix.substr(0, pos);
+      if (prefix.endswith(archSuffix)) {
+        // --------------------------------------------------------------
+        // Some non-standard link path might contains the archSuffix, as
+        // follows:
+        // .../lib/linux/libclang_rt.<san>-x86_64.a
+        // Therefore, we need to remove the archSuffix.
+        // --------------------------------------------------------------
+        // Remove the archSuffix
+        std::string rewrittenPath =
+            /* <XSan-Path>/lib/<triple>/ */
+            PrefixToReplace +
+            /* libclang_rt.<san>-<arch> -> libclang_rt.<san> */
+            prefix.substr(0, prefix.size() - archSuffix.size()).str() +
+            /* .a/.so/.a.syms */
+            suffix.substr(pos).str();
+        return rewrittenPath;
+      }
+    }
     // Initialize the new RT as
     // <XSan-Path>/lib/<triple>/libclang_rt.<san><suffix>
     return PrefixToReplace + suffix.str();
@@ -200,6 +224,8 @@ private:
 
   const std::filesystem::path XsanRtDir;
   std::string PrefixToReplace;
+  // e.g., "-x86_64"
+  std::string archSuffix;
   ArgStringList &Args;
 
   mutable llvm::StringSet<> SeenRts;
