@@ -3,7 +3,7 @@ URL="https://github.com/nlohmann/json.git"
 
 
 # Use depth 1 to avoid cloning the history
-git clone $URL repo --depth 1
+git clone "$URL" repo --depth 1
 
 
 # 拉取测试数据
@@ -22,7 +22,7 @@ rm -fr json_test_data-$TEST_DATA_VERSION
 
 # 实际上，以标准JSON为输入的fuzzer 是 parse_afl_fuzzer
 rm -rf corpus/json@parse_afl_fuzzer
-mv corpus/json@parse_{json,afl}_fuzzer
+mv corpus/json@parse_json_fuzzer corpus/json@parse_afl_fuzzer
 
 # 对于C++程序，由于我们不插桩 libc++, 因此MSan可能有误报；因此，我们手动过滤掉引起误报的测试输入
 FP_JSON_SEEDS=(

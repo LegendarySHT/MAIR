@@ -9,7 +9,7 @@ SRC="../binutils/corpus/nm-new/objdump.raw"
 DEST_DIR="corpus/zstd"
 SEED_RAW="${DEST_DIR}/objdump.raw"
 SEED_7Z="${DEST_DIR}/objdump.raw.zstd"
-SEVEN_ZIP="./artefacts/zstd/zstd.raw"
+ZSTD_BIN="./artefacts/zstd/zstd.raw"
 
 # 先清空目标目录
 if [ -d "${DEST_DIR}" ]; then
@@ -26,8 +26,8 @@ if [ ! -f "${SRC}" ]; then
   exit 1
 fi
 
-if [ ! -x "${SEVEN_ZIP}" ]; then
-  echo "ERROR: 找不到 zstd 可执行文件: ${SEVEN_ZIP} (请先编译 zstd)" >&2
+if [ ! -x "${ZSTD_BIN}" ]; then
+  echo "ERROR: 找不到 zstd 可执行文件: ${ZSTD_BIN} (请先编译 zstd)" >&2
   exit 1
 fi
 
@@ -35,7 +35,7 @@ echo "复制原始种子..."
 cp -f "${SRC}" "${SEED_RAW}"
 
 echo "创建压缩种子 (.zstd)..."
-"${SEVEN_ZIP}" a "${SEED_7Z}" "${SEED_RAW}" >/dev/null
+"${ZSTD_BIN}" -q -f -o "${SEED_7Z}" -- "${SEED_RAW}"
 
 echo "语料准备完成！"
 ls -la "${DEST_DIR}"

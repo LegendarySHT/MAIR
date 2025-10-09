@@ -2,7 +2,7 @@
 URL="https://github.com/madler/zlib.git"
 
 # Use depth 1 to avoid cloning the history
-git clone $URL repo --depth 1
+git clone "$URL" repo --depth 1
 
 
 # Obtain the interface to test the zlib From FuzzBench

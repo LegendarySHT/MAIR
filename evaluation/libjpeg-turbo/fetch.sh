@@ -3,7 +3,7 @@ export PROJ=libjpeg-turbo
 URL="https://github.com/libjpeg-turbo/libjpeg-turbo.git"
 
 # Use depth 1 to avoid cloning the history
-git clone $URL repo --depth 1
+git clone "$URL" repo --depth 1
 
 # 从 fuzzbench git 拉取 fuzzer 代码
 echo "从 fuzzbench git 拉取 fuzzer 代码..."

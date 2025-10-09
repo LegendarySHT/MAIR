@@ -52,10 +52,14 @@ echo "fetch 完成。"
 #!/bin/bash
 set -e
 
-# 从fuzzbench复制源码
-echo "从fuzzbench复制 libpng 源码..."
-cp -r "/data/fuzz/fuzzbench/benchmarks/libpng_libpng_read_fuzzer"/* repo/
-echo "完成: libpng 源码获取"
+# 从 fuzzbench 复制源码（可选，提升可移植性）
+echo "从 fuzzbench 复制 libpng 源码..."
+if [ -d "fuzzbench-temp/benchmarks/libpng_libpng_read_fuzzer" ]; then
+  cp -r fuzzbench-temp/benchmarks/libpng_libpng_read_fuzzer/* repo/
+  echo "完成: libpng 源码获取"
+else
+  echo "警告: 未找到 fuzzbench-temp/benchmarks/libpng_libpng_read_fuzzer，已跳过源码复制" >&2
+fi
 
 # 从仓库中搜寻语料文件
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)

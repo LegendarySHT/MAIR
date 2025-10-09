@@ -20,6 +20,3 @@ export POST_OPT=""
 export stdin="false"
 
 $PROG_DIR/../../../run.sh $@
-
-
-$PROG_DIR/../../../run.sh $@

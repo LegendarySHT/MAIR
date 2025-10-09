@@ -2,8 +2,6 @@
 # export PROJ=tpm2-tss
 URL="https://github.com/tpm2-software/tpm2-tss.git"
 
-# git clone "$URL" repo --depth 1
-
 
 
 # 将 json_object *jso_content; 更改为 json_object *jso_content = NULL;

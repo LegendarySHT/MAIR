@@ -4,7 +4,7 @@ URL="https://github.com/bminor/binutils-gdb.git"
 
 
 # Use depth 1 to avoid cloning the history
-git clone $URL repo --depth 1
+git clone "$URL" repo --depth 1
 
 # 原仓库未提供输入语料。为便于冒烟与快速基准，这里生成基础语料：
 
