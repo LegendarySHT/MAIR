@@ -2,7 +2,7 @@
 # export PROJ=tpm2-tss
 URL="https://github.com/tpm2-software/tpm2-tss.git"
 
-
+git clone "$URL" repo --depth 1
 
 # 将 json_object *jso_content; 更改为 json_object *jso_content = NULL;
 # 注释说明：该变量在第三方库 libjson-c.so 中初始化，由于我们不插桩第三方库，因此，为了避免 MSan的误报，这里手动对其进行初始化
