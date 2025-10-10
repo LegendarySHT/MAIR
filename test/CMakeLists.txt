@@ -76,8 +76,12 @@ if(OS_NAME MATCHES "SunOS")
   list(REMOVE_ITEM XSAN_TEST_ARCH x86_64)
 endif()
 
-set(XCLANG_PATH "${XSAN_OUTPUT_BINDIR}/xclang")
+set(XCLANG_PATH "${XSAN_OUTPUT_BINDIR}/xclang" CACHE PATH "Path to XSan's xclang wrapper")
 set(XSAN_TEST_TARGET_CC ${XCLANG_PATH})
+
+# Force xclang as the default test compiler.
+set(COMPILER_RT_TEST_COMPILER "${XCLANG_PATH}" CACHE PATH "Compiler to use for testing" FORCE)
+set(COMPILER_RT_TEST_COMPILER_ID "Clang" CACHE STRING "Test compiler ID" FORCE)
 
 
 if (SHADOW_MAPPING_UNRELIABLE)
