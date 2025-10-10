@@ -39,6 +39,7 @@ Sanitizers that are not considered:
     - asan: the ASan test cases.
     - ubsan: the UBSan test cases.
     - tsan: the TSan test cases.
+    - msan: the MSan test cases.
     - xsan: the XSan-specific test cases.
 
 ### Branches
@@ -60,11 +61,11 @@ Sanitizers that are not considered:
     sudo ln -s /usr/lib/llvm-15/lib /usr/lib/lib
     sudo ln -s /usr/lib/llvm-15/include /usr/lib/include
     sudo apt-get update
-    sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
+    sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev lld-15
     ```
 
 3. (Optional) Apply invasive patches to the compilers.
-    - **ONLY for the scenarios that XSan's livepatches do not work with your `clang`/`gcc`.**
+    - **ONLY for the scenarios that XSan's livepatches do not work with your `clang`/`gcc`, e.g., non-standard compilers.**
     - XSan only provides patches for clang-15 and gcc-9.4. If you require support for other compiler versions, please refer to our patch files and apply the modifications manually.
     - Patch the `clang-15` project with the modifications in the `llvm-15.0.7.patch` file.
         - Apply the patch file to the LLVM/Clang source code.
@@ -227,7 +228,7 @@ Ensure that the XSan binaries are accessible in your environment, whether they a
       sudo ln -s /usr/lib/llvm-15/lib /usr/lib/lib
       sudo ln -s /usr/lib/llvm-15/include /usr/lib/include
       sudo apt-get update
-      sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
+      sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev lld-15
       ```
 
 ### 1. Access the compiler wrappers (i.e., `xclang` and `xgcc`) for help.

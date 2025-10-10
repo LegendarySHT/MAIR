@@ -43,6 +43,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
   * `asan`：ASan 的测试用例
   * `ubsan`：UBSan 的测试用例
   * `tsan`：TSan 的测试用例
+  * `msan`：MSan 的测试用例
   * `xsan`：XSan 相关的测试用例
 
 ### 分支说明
@@ -65,10 +66,10 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
       sudo ln -s /usr/lib/llvm-15/lib /usr/lib/lib
       sudo ln -s /usr/lib/llvm-15/include /usr/lib/include
       sudo apt-get update
-      sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
+      sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev lld-15
       ```
 3. （可选）对编译器施加侵入式补丁：
-   * **仅在 XSan 的运行时补丁无法生效时使用。**
+   * **仅在 XSan 的运行时补丁无法生效时使用，如使用了非标准编译器。**
    * XSan 的侵入式补丁当前仅支持 clang-15 与 gcc-9.4。如需支持其他版本，请参考补丁内容自行适配。
    * 对 clang-15 应用补丁：
      ```bash
@@ -243,7 +244,7 @@ TODO：计划在后续 LLVM 版本中支持更多 Sanitizer，如：
    sudo ln -s /usr/lib/llvm-15/lib /usr/lib/lib
    sudo ln -s /usr/lib/llvm-15/include /usr/lib/include
    sudo apt-get update
-   sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev
+   sudo apt-get install ninja-build clang-15 llvm-15-dev libclang-15-dev lld-15
    ```
 
 ### 1. 查看编译器包装器的帮助信息：
