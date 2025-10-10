@@ -182,13 +182,45 @@ fs::path getXsanAbsPath(std::string_view rel_path) {
 
 fs::path getXsanArchRtDir(std::string_view triple) {
   static std::string default_triple = llvm::sys::getProcessTriple();
+  static fs::path parent_dir = getXsanAbsPath(XSAN_RUNTIME_DIR "/");
+  static std::optional<fs::path> fallback_triple_path =
+      []() -> std::optional<fs::path> {
+    if (fs::exists(parent_dir) && fs::is_directory(parent_dir)) {
+      std::optional<fs::path> fallback_triple_path = std::nullopt;
+      for (const auto &entry : fs::directory_iterator(parent_dir)) {
+        if (fs::is_directory(entry.path())) {
+          if (!fallback_triple_path.has_value())
+            fallback_triple_path = entry.path();
+          else
+            return std::nullopt;
+        }
+      }
+      return fallback_triple_path;
+    }
+    return std::nullopt;
+  }();
   // If triple is empty, we should speculate the triple from the current
   // process.
-  if (triple.empty()) {
+  if (triple.empty())
     triple = default_triple;
+
+  auto triple_path = getXsanAbsPath(XSAN_RUNTIME_DIR "/") / triple;
+  // For some scenarios, e.g., if clang was built in another compatible system,
+  // the runtime triple (e.g., x86_64-pc-linux-gnu) might not be the same as the
+  // configuration-time triple, which depends on the LLVMConfig.cmake of clang
+  // (e.g., x86_64-unknown-linux-gnu).
+  // If there is only one triple directory, we should use it directly regardless
+  // of whether the TWO triples match or not.
+  if (!fs::exists(triple_path)) {
+    if (fallback_triple_path.has_value()) {
+      triple_path = fallback_triple_path.value();
+    } else {
+      FATAL("Cannot find triple directory for %s in library directory %s",
+            std::string(triple).c_str(), parent_dir.c_str());
+    }
   }
-  return getXsanAbsPath(XSAN_RUNTIME_DIR "/") / triple /
-         getXsanCombName(getXsanMask());
+
+  return triple_path / getXsanCombName(getXsanMask());
 }
 
 std::string getXsanCombName(const std::bitset<NumSanitizerTypes> &xsan_mask) {
