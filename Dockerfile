@@ -44,11 +44,12 @@ RUN ln -sf /usr/lib/llvm-15/lib /usr/lib/lib && \
 # Set build arguments (can be overridden)
 ARG BUILD_TYPE=Debug
 ARG LLVM_VERSION=15
-ARG EXTRA_CMAKE_ARGS="-DXSAN_ENABLE_LIT_TESTS=ON"
+ARG EXTRA_CMAKE_ARGS=""
 
 # Set environment variables for clang
 ENV X_CC=clang-15
 ENV X_CXX=clang++-15
+ENV XSAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer-15
 
 # Copy XSan source code into the image
 WORKDIR /workspace
