@@ -24,20 +24,29 @@ const StringSet<> HackedModulePasses = {"ModuleAddressSanitizerPass",
 const StringSet<> HackedFunctionPasses = {"ThreadSanitizerPass",
                                           "MemorySanitizerPass"};
 
+void verifyOriginalPassNotExists(StringRef PassName) {
+  if (!HackedModulePasses.contains(PassName))
+    return;
+  FATAL("Sanitizer's original pass %s is registered "
+        "unexpectedly.\n\n" ERR_MSG_4_ORIG_PASS,
+        PassName.str().c_str());
+}
+
 class MPMRewriter : public ModulePassManager {
 public:
   MPMRewriter(ModulePassManager &&MPM)
       : ModulePassManager(std::forward<ModulePassManager>(MPM)) {
 
     /// TODO: Remove and add passes here
-    // for (auto &P : Passes) {
-    //   if (P->name() == "ModuleToFunctionPassAdaptor") {
-    //     auto *p = (ModuleToFunctionPassAdaptor *)&P;
-    //     p->printPipeline(outs(), [](StringRef PassName) { return PassName;
-    //     }); outs() << "\n";
-    //   }
-    //   OKF("Pass: %s", P->name().str().c_str());
-    // }
+    for (auto &P : Passes) {
+      // if (P->name() == "ModuleToFunctionPassAdaptor") {
+      //   auto *p = (ModuleToFunctionPassAdaptor *)&P;
+      //   p->printPipeline(outs(), [](StringRef PassName) { return PassName;
+      //   }); outs() << "\n";
+      // }
+      // OKF("Pass: %s", P->name().str().c_str());
+      ::verifyOriginalPassNotExists(P->name());
+    }
   }
 
 private:

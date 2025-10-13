@@ -177,16 +177,74 @@ void error_at(location_t loc, const char *gmsgid, ...) {
     FORWARD(20)
 #undef FORWARD
   default:
-    FATAL("Unsupported number of arguments: %d", count_extra_args);
+    FATAL("Unsupported number of arguments: %d (max %d)", count_extra_args,
+          MAX_ARGS);
   }
 
   va_end(args);
 }
 
 /*
-We collected that the format strings used by gcc's error_at have the following
-format
-*/
+ * GCC diagnostic format specifiers for x86_64 GNU/Linux (System V ABI)
+ *
+ * This table shows the format specifiers supported by GCC's internal
+ * diag() (error_at) function, along with their corresponding C/C++ types
+ * and sizes in va_list:
+ *
+ * | Format | Description                    | C/C++ Type        | Size |
+ * |--------|--------------------------------|-------------------|------|
+ * | %d     | Signed decimal integer        | int               | 4    |
+ * | %i     | Same as %d                    | int               | 4    |
+ * | %o     | Unsigned octal integer        | unsigned int      | 4    |
+ * | %u     | Unsigned decimal integer      | unsigned int      | 4    |
+ * | %x     | Unsigned hex integer (lower)  | unsigned int      | 4    |
+ * | %c     | Character (promoted to int)   | int               | 4    |
+ * | %%     | Literal % (no arg consumed)   | —                 | —    |
+ * | %s     | C string                      | char *            | 8    |
+ * | %p     | Pointer                       | void *            | 8    |
+ * | %*     | Width/precision wildcard      | int               | 4    |
+ * | %ld    | Signed long decimal           | long              | 8    |
+ * | %li    | Same as %ld                   | long              | 8    |
+ * | %lo    | Unsigned long octal           | unsigned long     | 8    |
+ * | %lu    | Unsigned long decimal         | unsigned long     | 8    |
+ * | %lx    | Unsigned long hex             | unsigned long     | 8    |
+ * | %lld   | Signed long long decimal      | long long         | 8    |
+ * | %lli   | Same as %lld                  | long long         | 8    |
+ * | %llo   | Unsigned long long octal      | unsigned long long| 8    |
+ * | %llu   | Unsigned long long decimal    | unsigned long long| 8    |
+ * | %llx   | Unsigned long long hex        | unsigned long long| 8    |
+ * | %wd    | Signed __gcc_host_wide_int__  | long long         | 8    |
+ * | %wi    | Same as %wd                   | long long         | 8    |
+ * | %wo    | Unsigned wide int octal       | unsigned long long| 8    |
+ * | %wu    | Unsigned wide int decimal     | unsigned long long| 8    |
+ * | %wx    | Unsigned wide int hex         | unsigned long long| 8    |
+ * | %D     | Print tree decl node          | tree (pointer)    | 8    |
+ * | %E     | Print tree expr node          | tree (pointer)    | 8    |
+ * | %O     | Print obstack or similar      | tree (pointer)    | 8    |
+ * | %P     | Print generic node (debug)    | tree (pointer)    | 8    |
+ * | %T     | Print tree type node          | tree (pointer)    | 8    |
+ * | %qD    | Print quoted tree decl        | tree (pointer)    | 8    |
+ * | %qE    | Print quoted tree expr        | tree (pointer)    | 8    |
+ * | %qO    | Print quoted obstack          | tree (pointer)    | 8    |
+ * | %qP    | Print quoted generic node     | tree (pointer)    | 8    |
+ * | %qT    | Print quoted tree type        | tree (pointer)    | 8    |
+ * | %qc    | Print quoted character        | int               | 4    |
+ * | %qs    | Print quoted string           | char *            | 8    |
+ * | %qp    | Print quoted pointer          | void *            | 8    |
+ * | %m     | strerror(errno) (no arg)      | —                 | —    |
+ *
+ * Notes:
+ * - tree is a pointer type in GCC, so it takes pointer size (8 bytes)
+ * - All integer types smaller than 8 bytes (char→int, short→int, int) are
+ *   integer-promoted and stored in 8-byte registers/stack slots under System V
+ *   ABI, but va_arg(args,int) still extracts as int (4 bytes)
+ * - Floating point (%f, %e, %g, etc.) and %n are not accepted in diagnostic
+ *   framework
+ * - %% and %m do not correspond to any user arguments
+ *
+ * This allows you to quickly determine which type to extract from va_list
+ * using va_arg(args, ...) and the sizeof of that type in C++.
+ */
 
 /**
  * @brief Parse C-style format string and calculate the number of specifiers
@@ -261,68 +319,6 @@ static unsigned count_gcc_diag_specifiers(const char *gmsgid,
 
   return count;
 }
-
-/*
- * GCC diagnostic format specifiers for x86_64 GNU/Linux (System V ABI)
- *
- * This table shows the format specifiers supported by GCC's internal
- * diag() (error_at) function, along with their corresponding C/C++ types
- * and sizes in va_list:
- *
- * | Format | Description                    | C/C++ Type        | Size |
- * |--------|--------------------------------|-------------------|------|
- * | %d     | Signed decimal integer        | int               | 4    |
- * | %i     | Same as %d                    | int               | 4    |
- * | %o     | Unsigned octal integer        | unsigned int      | 4    |
- * | %u     | Unsigned decimal integer      | unsigned int      | 4    |
- * | %x     | Unsigned hex integer (lower)  | unsigned int      | 4    |
- * | %c     | Character (promoted to int)   | int               | 4    |
- * | %%     | Literal % (no arg consumed)   | —                 | —    |
- * | %s     | C string                      | char *            | 8    |
- * | %p     | Pointer                       | void *            | 8    |
- * | %*     | Width/precision wildcard      | int               | 4    |
- * | %ld    | Signed long decimal           | long              | 8    |
- * | %li    | Same as %ld                   | long              | 8    |
- * | %lo    | Unsigned long octal           | unsigned long     | 8    |
- * | %lu    | Unsigned long decimal         | unsigned long     | 8    |
- * | %lx    | Unsigned long hex             | unsigned long     | 8    |
- * | %lld   | Signed long long decimal      | long long         | 8    |
- * | %lli   | Same as %lld                  | long long         | 8    |
- * | %llo   | Unsigned long long octal      | unsigned long long| 8    |
- * | %llu   | Unsigned long long decimal    | unsigned long long| 8    |
- * | %llx   | Unsigned long long hex        | unsigned long long| 8    |
- * | %wd    | Signed __gcc_host_wide_int__  | long long         | 8    |
- * | %wi    | Same as %wd                   | long long         | 8    |
- * | %wo    | Unsigned wide int octal       | unsigned long long| 8    |
- * | %wu    | Unsigned wide int decimal     | unsigned long long| 8    |
- * | %wx    | Unsigned wide int hex         | unsigned long long| 8    |
- * | %D     | Print tree decl node          | tree (pointer)    | 8    |
- * | %E     | Print tree expr node          | tree (pointer)    | 8    |
- * | %O     | Print obstack or similar      | tree (pointer)    | 8    |
- * | %P     | Print generic node (debug)    | tree (pointer)    | 8    |
- * | %T     | Print tree type node          | tree (pointer)    | 8    |
- * | %qD    | Print quoted tree decl        | tree (pointer)    | 8    |
- * | %qE    | Print quoted tree expr        | tree (pointer)    | 8    |
- * | %qO    | Print quoted obstack          | tree (pointer)    | 8    |
- * | %qP    | Print quoted generic node     | tree (pointer)    | 8    |
- * | %qT    | Print quoted tree type        | tree (pointer)    | 8    |
- * | %qc    | Print quoted character        | int               | 4    |
- * | %qs    | Print quoted string           | char *            | 8    |
- * | %qp    | Print quoted pointer          | void *            | 8    |
- * | %m     | strerror(errno) (no arg)      | —                 | —    |
- *
- * Notes:
- * - tree is a pointer type in GCC, so it takes pointer size (8 bytes)
- * - All integer types smaller than 8 bytes (char→int, short→int, int) are
- *   integer-promoted and stored in 8-byte registers/stack slots under System V
- *   ABI, but va_arg(args,int) still extracts as int (4 bytes)
- * - Floating point (%f, %e, %g, etc.) and %n are not accepted in diagnostic
- *   framework
- * - %% and %m do not correspond to any user arguments
- *
- * This allows you to quickly determine which type to extract from va_list
- * using va_arg(args, ...) and the sizeof of that type in C++.
- */
 
 /*
 @brief A more sound interception schema for varargs function, with the core

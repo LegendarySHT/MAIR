@@ -4,6 +4,7 @@
 #include "UbsanInstTagging.hpp"
 #include "Utils/Logging.h"
 #include "Utils/Options.h"
+#include "debug.h"
 #include "xsan_common.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/InstVisitor.h"
@@ -15,12 +16,25 @@
 using namespace llvm;
 using namespace __xsan;
 
-// static cl::opt<bool> ClLog(
-//     "xsan-post-opt", cl::init(true),
-//     cl::desc("Whether to perform post-sanitziers optimizations for XSan"),
-//     cl::Hidden);
-
 namespace __xsan {
+
+static void verifyOriginalPassNotRun(Module &M) {
+  static constexpr std::pair<const char *, const char *> KeyFuncNames[] = {
+      {"asan.module_ctor", "ASan"},
+      {"msan.module_ctor", "MSan"},
+      {"tsan.module_ctor", "TSan"},
+  };
+  for (const auto &[funcName, passName] : KeyFuncNames) {
+    auto *Func = M.getFunction(funcName);
+    if (!Func)
+      continue;
+    if (Func->hasFnAttribute(Attribute::DisableSanitizerInstrumentation))
+      continue;
+    FATAL("%s's original pass has already executed before XSan — this "
+          "is unsupported.\n\n" ERR_MSG_4_ORIG_PASS,
+          passName);
+  }
+}
 
 class SanitizerCompositorPass
     : public llvm::PassInfoMixin<SanitizerCompositorPass> {
@@ -145,6 +159,7 @@ SanitizerCompositorPass::SanitizerCompositorPass(OptimizationLevel level)
 
 PreservedAnalyses SanitizerCompositorPass::run(Module &M,
                                                ModuleAnalysisManager &MAM) {
+  verifyOriginalPassNotRun(M);
   options::ClDebug.setValue(options::ClDebug || !!std::getenv("XSAN_DEBUG"));
 
   FunctionAnalysisManager &FAM =
