@@ -2502,6 +2502,7 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
                                             kAsanInitName, /*InitArgTypes=*/{},
                                             /*InitArgs=*/{}, VersionCheckName);
   }
+  // To avoid other sanitizers instrumenting this function.
   AsanCtorFunction->addFnAttr(Attribute::NoSanitizeCoverage);
   AsanCtorFunction->addFnAttr(Attribute::DisableSanitizerInstrumentation);
 
