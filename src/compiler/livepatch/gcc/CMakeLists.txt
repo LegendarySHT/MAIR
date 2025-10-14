@@ -38,7 +38,7 @@ else()
     # libLLVMSupport.a (installed) or libLLVMSupport.so (self-built)
     target_link_libraries(gcc-patch PRIVATE LLVMSupport)
 
-    if (${LINK_DYNAMIC_LLVMSUPPORT})
+    if(${LINK_DYNAMIC_LLVMSUPPORT})
         # You can use `readelf -d <ELF> | grep 'RPATH\|RUNPATH'` to check the RUNPATH.
         # Privilege: RPATH > LD_LIBRARIES_DIR > RUNPATH
         # The libLLVMSupport.so has the RUNPATH `$ORIGIN/../lib`,

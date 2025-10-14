@@ -18,7 +18,6 @@ find_package(Clang REQUIRED CONFIG
     HINTS ${LLVM_BINARY_DIR}
 )
 
-
 include_directories(${CLANG_INCLUDE_DIRS})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
@@ -72,7 +71,7 @@ else()
     # To livepatch static-linked clang, we need to link LLVM libraries explicitly
     target_link_libraries(clang-patch PRIVATE LLVMSupport)
 
-    if (${LINK_DYNAMIC_LLVMSUPPORT})
+    if(${LINK_DYNAMIC_LLVMSUPPORT})
         # You can use `readelf -d <ELF> | grep 'RPATH\|RUNPATH'` to check the RUNPATH.
         # Privilege: RPATH > LD_LIBRARIES_DIR > RUNPATH
         # The libLLVMSupport.so has the RUNPATH `$ORIGIN/../lib`,

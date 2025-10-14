@@ -9,4 +9,3 @@ bool isSelfProcStripped();
 // Along with resolution of the base address, we can thus get the symbol
 // address.
 void *find_symtab_symbol_addr(const std::string &symbol_name);
-

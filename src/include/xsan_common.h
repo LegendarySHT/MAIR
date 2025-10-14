@@ -45,7 +45,7 @@ enum ObjectFormatType { MachO, COFF, ELF, UnknownObjectFormat };
   "sources, installed via apt, or from the official clang+llvm "               \
   "archive).\n"                                                                \
   "  2) If you have a customized Clang, the standard hotpatch may not "        \
-  "work — either rebuild a livepatch adapted to your Clang, or manually "    \
+  "work — either rebuild a livepatch adapted to your Clang, or manually "      \
   "patch Clang sources to disable the original sanitizer pass.\n"              \
   "    2-1) For manual patching, refer to the changes in llvm-15.0.7.patch "   \
   "as a reference and apply equivalent edits to your Clang source.\n"          \

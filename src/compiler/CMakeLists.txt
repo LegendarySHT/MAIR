@@ -101,6 +101,6 @@ foreach(EXE_NAME IN LISTS XSAN_EXECUTABLES)
 endforeach()
 
 # ################ For LivePatch #################
-if (${XSAN_USE_LIVEPATCH})
+if(${XSAN_USE_LIVEPATCH})
   add_subdirectory(livepatch)
 endif()

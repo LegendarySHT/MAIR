@@ -1,4 +1,4 @@
-## Generate XSan cleaned specs from both g++ and gcc using a shared cleaner
+# # Generate XSan cleaned specs from both g++ and gcc using a shared cleaner
 
 # Use the standalone Python script for sanitizer block removal
 set(DUMP_GCC_SPEC_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/dump_gcc_spec.py")
@@ -9,10 +9,10 @@ set(DUMP_GCC_SPEC_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/dump_gcc_spec.py")
 if(NOT DEFINED XSAN_SPEC_GPP_NAME)
     set(XSAN_SPEC_GPP_NAME "xsan.gpp.spec")
 endif()
+
 if(NOT DEFINED XSAN_SPEC_GCC_NAME)
     set(XSAN_SPEC_GCC_NAME "xsan.gcc.spec")
 endif()
-
 
 function(generate_clean_spec DRIVER EXEC_NAME OUT_SPEC_BASENAME)
     # Find Python 3 interpreter
@@ -21,7 +21,7 @@ function(generate_clean_spec DRIVER EXEC_NAME OUT_SPEC_BASENAME)
     # Use the new dump_gcc_spec.py script to generate cleaned specs
     set(XSAN_SPEC_FILE "${XSAN_OUTPUT_DATADIR}/${OUT_SPEC_BASENAME}")
     file(MAKE_DIRECTORY "${XSAN_OUTPUT_DATADIR}")
-    
+
     execute_process(
         COMMAND ${Python3_EXECUTABLE} "${DUMP_GCC_SPEC_SCRIPT}" --cc=${DRIVER} -o "${XSAN_SPEC_FILE}"
         RESULT_VARIABLE PYTHON_RESULT
@@ -30,9 +30,9 @@ function(generate_clean_spec DRIVER EXEC_NAME OUT_SPEC_BASENAME)
     if(NOT PYTHON_RESULT EQUAL 0)
         message(FATAL_ERROR "${EXEC_NAME}: Failed to generate cleaned spec with dump_gcc_spec.py")
     endif()
-    
+
     message(STATUS "Generated XSan spec file: ${XSAN_SPEC_FILE}")
-    
+
     # Install the spec file
     install(FILES "${XSAN_SPEC_FILE}"
         DESTINATION ${XSAN_INSTALL_DATADIR}

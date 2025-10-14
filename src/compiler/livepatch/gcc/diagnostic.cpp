@@ -259,15 +259,16 @@ void error_at(location_t loc, const char *gmsgid, ...) {
  *
  */
 static unsigned count_gcc_diag_specifiers(const char *gmsgid,
-                                          const llvm::StringRef given_spec) {
+                                          const std::string_view given_spec) {
   // Supported conversion specifiers (excluding "%%" and "%m")
-  static constexpr std::array<llvm::StringRef, 39> supported_specifiers = {
+  static constexpr std::array<std::string_view, 39> supported_specifiers = {
       // multi-char must come first (longer prefixes)
       "llx", "llo", "llu", "lli", "lld", "llX", "llO", "llU", // if ever needed
       "wd",  "wi",  "wo",  "wu",  "wx",  "ld",  "li",  "lo",  "lu", "lx", "qD",
       "qE",  "qO",  "qP",  "qT",  "qc",  "qs",  "qp",  "D",   "E",  "O",  "P",
       "T",   "d",   "i",   "o",   "u",   "x",   "c",   "s",   "p",
   };
+
   unsigned count = 0;
   size_t len = std::strlen(gmsgid);
 
@@ -293,27 +294,28 @@ static unsigned count_gcc_diag_specifiers(const char *gmsgid,
 
     // now try to match the longest supported specifier at this position
     auto check_specifier = [len, cur, gmsgid,
-                            &i](llvm::StringRef spec) -> bool {
+                            &i](std::string_view spec) -> bool {
       size_t slen = spec.size();
-      if (cur + slen <= len &&
-          std::strncmp(gmsgid + cur, spec.data(), slen) == 0) {
+      if (cur + slen > len)
+        return false;
+      std::string_view str2cmp(gmsgid + cur, slen);
+
+      bool matched = str2cmp == spec;
+      if (matched) {
         // found one
         i = cur + slen - 1; // advance i to end of this spec
-        return true;
       }
-      return false;
+      return matched;
     };
     bool matched = given_spec.empty()
                        ? llvm::any_of(supported_specifiers, check_specifier)
                        : check_specifier(given_spec);
-    if (matched) {
+    if (matched)
       count++;
-    }
 
     // special case: "%m" (no argument consumed)
-    if (!matched && cur < len && gmsgid[cur] == 'm') {
+    if (!matched && cur < len && gmsgid[cur] == 'm')
       i = cur;
-    }
     // else unknown specifier: skip it
   }
 

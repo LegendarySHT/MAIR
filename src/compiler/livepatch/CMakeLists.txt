@@ -18,9 +18,9 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
 include_directories(${LLVM_INCLUDE_DIRS})
 
-##############################################################################
-####   Install LLVMSupport and LLVMDemangle if they are shared libraries  ####
-##############################################################################
+# #############################################################################
+# ###   Install LLVMSupport and LLVMDemangle if they are shared libraries  ####
+# #############################################################################
 # Please refer to to $LLVM_DIR/lib/cmake/llvm/LLVMExports.cmake
 # to see the imported targets of LLVM.
 get_target_property(_llvmsupport_type LLVMSupport TYPE)
@@ -31,6 +31,7 @@ get_target_property(_llvmsupport_type LLVMSupport TYPE)
 # cannot open shared object file: No such file or directory
 option(LINK_DYNAMIC_LLVMSUPPORT "Link dynamic LLVMSupport library" OFF)
 message_green("_llvmsupport_type: ${_llvmsupport_type}")
+
 if(_llvmsupport_type STREQUAL "SHARED_LIBRARY")
     set(LINK_DYNAMIC_LLVMSUPPORT ON CACHE BOOL "Link dynamic LLVMSupport library")
 
@@ -51,7 +52,6 @@ if(_llvmsupport_type STREQUAL "SHARED_LIBRARY")
     install(FILES ${LLVMSupport_LOCATION} DESTINATION ${XSAN_INSTALL_RUNTIME_DIR} COMPONENT patch)
     install(FILES ${LLVMDemangle_LOCATION} DESTINATION ${XSAN_INSTALL_RUNTIME_DIR} COMPONENT patch)
 endif()
-
 
 # If the dynsym locates in the main executable, the symbol with the same name
 # will be masked. Therefore, we need to use -Bsymbolic-functions to ensure the
