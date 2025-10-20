@@ -490,8 +490,10 @@ class TSanMapper(ShadowMapper):
 
     def _add_app_distinguishable_constraints(self, optimizer):
         """
+        TSan Implicit Constraint 1: addr[41:43] must be distinguishable.
+
         Add app region distinguishable constraints for all region pairs
-        Relevant Code : src/runtime/lib/xsan/tsan/tsan_platform.h
+        Relevant Code : src/runtime/lib/xsan/tsan/tsan_platform.h:RestoreAddrImpl
         Relevant Commit:
         https://github.com/llvm/llvm-project/commit/b1338d1e3a8c4b1b4c7364696852f67401fa40ca
         TODO: eliminate this constraint via modify the relevant code in tsan_platform.h
@@ -504,6 +506,21 @@ class TSanMapper(ShadowMapper):
             r2_beg_ind = r2_beg & self.indicator
             r2_end_ind = r2_end & self.indicator
             optimizer.add(Or(r1_end_ind <= r2_beg_ind, r2_end_ind <= r1_beg_ind))
+
+    def _add_heap_constraints(self, optimizer):
+        """
+        TSan Implicit Constraint 2: heap & (msk) == msk
+
+        Relevant Code : src/runtime/lib/xsan/tsan/tsan_platform.h:ShadowToMemImpl
+        Relevant Commit:
+        https://github.com/llvm/llvm-project/commit/62c340760c5a7c37c0c81aa4dd75583de13c8ef1
+
+        TODO: reduce such implicit constraints via change ShadowToMem
+        """
+        heap_beg, heap_end, _ = next(filter(lambda x: x[2] == "Heap", self.app_regions))
+        mask = self.config.shadow_mask
+        optimizer.add((heap_beg & mask) == mask)
+        optimizer.add((heap_end & mask) == mask)
 
     def add_constraints(self, optimizer: Optimize, platform: PlatformConfig):
         optimizer.add(self.kTsanShadowAdd < platform.hi_app_beg_hint)
