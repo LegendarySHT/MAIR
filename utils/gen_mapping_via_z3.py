@@ -234,7 +234,7 @@ class ShadowMapper(ABC):
         code = f"{indent}// {san_name} Parameters:\n"
         for key, value in params.items():
             if isinstance(value, int):
-                code += f"{indent}static constexpr const uptr {key} = 0x{format_cpp_int(value)}ull;\n"
+                code += f"{indent}static constexpr const uintptr {key} = 0x{format_cpp_int(value)}ull;\n"
         return code
 
     def format_parameters(self, model) -> Dict[str, int]:
@@ -317,10 +317,10 @@ class ASanMapper(ShadowMapper):
             Overwrite print_parameters_as_cpp_code for custom print
             """
             if key == "kAsanShadowScale":
-                code += f"{align}static constexpr const uptr {key} = {value};\n"
+                code += f"{align}static constexpr const uintptr {key} = {value};\n"
                 continue
             if isinstance(value, int):
-                code += f"{align}static constexpr const uptr {key} = 0x{format_cpp_int(value)}ull;\n"
+                code += f"{align}static constexpr const uintptr {key} = 0x{format_cpp_int(value)}ull;\n"
         return code
 
 
@@ -393,6 +393,7 @@ class TSanMapper(ShadowMapper):
         super().__init__(config, app_regions)
         self.config = config
 
+        # TODO: reduce such implicit constraints via change RestoreAddr
         # TSan uses bits [41:44] to restore a compressed address to the original address.
         # That means, the app region must be distinguishable by the [41:44] bits.
         # Unlike shadow_mask, which only requires the app region distinguishable by the
@@ -514,6 +515,9 @@ class TSanMapper(ShadowMapper):
 
         # TSan requires the [41:44] bits of the app region to be distinguishable.
         self._add_app_distinguishable_constraints(optimizer)
+        # There is no solution under x64_48 with such implicit constraints
+        # We specialize the relevant template to support such comment out.
+        # self._add_heap_constraints(optimizer)
 
 
 # Platform configurations
@@ -872,38 +876,38 @@ class SanitizerShadowAllocator:
         print(f"SOLUTION - Platform: {self.platform_key}")
         print("=" * 80)
         print(
-            f"static constexpr const uptr kVdsoBeg = 0x{format_cpp_int(self.platform.vdso_beg)}ull;"
+            f"static constexpr const uintptr kVdsoBeg = 0x{format_cpp_int(self.platform.vdso_beg)}ull;"
         )
 
         print("\n// App Memory Regions:")
 
         print(
-            f"static constexpr const uptr kLoAppMemBeg = 0x{format_cpp_int(solution['kLoAppMemBeg'])}ull;"
+            f"static constexpr const uintptr kLoAppMemBeg = 0x{format_cpp_int(solution['kLoAppMemBeg'])}ull;"
         )
         print(
-            f"static constexpr const uptr kLoAppMemEnd = 0x{format_cpp_int(solution['kLoAppMemEnd'])}ull;"
+            f"static constexpr const uintptr kLoAppMemEnd = 0x{format_cpp_int(solution['kLoAppMemEnd'])}ull;"
         )
         print(
             "// Used only for ASan's shadow calculation\n"
-            f"static constexpr const uptr kAsanLoAppMemEnd = 0x{format_cpp_int(solution['kAsanLoAppMemEnd'])}ull;"
+            f"static constexpr const uintptr kAsanLoAppMemEnd = 0x{format_cpp_int(solution['kAsanLoAppMemEnd'])}ull;"
         )
         print(
-            f"static constexpr const uptr kMidAppMemBeg = 0x{format_cpp_int(solution['kMidAppMemBeg'])}ull;"
+            f"static constexpr const uintptr kMidAppMemBeg = 0x{format_cpp_int(solution['kMidAppMemBeg'])}ull;"
         )
         print(
-            f"static constexpr const uptr kMidAppMemEnd = 0x{format_cpp_int(solution['kMidAppMemEnd'])}ull;"
+            f"static constexpr const uintptr kMidAppMemEnd = 0x{format_cpp_int(solution['kMidAppMemEnd'])}ull;"
         )
         print(
-            f"static constexpr const uptr kHiAppMemBeg = 0x{format_cpp_int(solution['kHiAppMemBeg'])}ull;"
+            f"static constexpr const uintptr kHiAppMemBeg = 0x{format_cpp_int(solution['kHiAppMemBeg'])}ull;"
         )
         print(
-            f"static constexpr const uptr kHiAppMemEnd = 0x{format_cpp_int(solution['kHiAppMemEnd'])}ull;"
+            f"static constexpr const uintptr kHiAppMemEnd = 0x{format_cpp_int(solution['kHiAppMemEnd'])}ull;"
         )
         print(
-            f"static constexpr const uptr kHeapMemBeg = 0x{format_cpp_int(solution['kHeapMemBeg'])}ull;"
+            f"static constexpr const uintptr kHeapMemBeg = 0x{format_cpp_int(solution['kHeapMemBeg'])}ull;"
         )
         print(
-            f"static constexpr const uptr kHeapMemEnd = 0x{format_cpp_int(solution['kHeapMemEnd'])}ull;"
+            f"static constexpr const uintptr kHeapMemEnd = 0x{format_cpp_int(solution['kHeapMemEnd'])}ull;"
         )
         # Print sanitizer parameters
         for sanitizer in self.sanitizers:
@@ -1006,7 +1010,7 @@ class SanitizerShadowAllocator:
             if comment is not None:
                 parameters.append(f"  // {comment}")
             parameters.append(
-                f"  static constexpr const uptr {name} = 0x{format_cpp_int(val)}ull;"
+                f"  static constexpr const uintptr {name} = 0x{format_cpp_int(val)}ull;"
             )
 
         append_const("kHeapMemBeg", solution["kHeapMemBeg"])
