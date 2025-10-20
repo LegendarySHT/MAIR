@@ -6,6 +6,7 @@
 #include "sanitizer_common/sanitizer_platform_limits_posix.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "tsan_interface_xsan.h"
+#include "tsan_platform.h"
 #include "tsan_rtl_extra.h"
 
 namespace __tsan {
@@ -56,13 +57,29 @@ struct TsanHooks : ::__xsan::DefaultHooks<TsanContext, TsanThread> {
   }
   ALWAYS_INLINE static ArrayRef<__xsan::NamedRange> NeededMapRanges() {
     static bool initialized = false;
-    static __xsan::NamedRange map_ranges[2];
+    static __xsan::NamedRange map_ranges[8];
+#define APP2SHADOW(app)                                           \
+  {{(uptr)__tsan::MemToShadow(app##MemBeg()),                     \
+    (uptr)(__tsan::MemToShadow(app##MemEnd() - 1) + kShadowCnt)}, \
+   "TSan Shadow (" #app ")"}
+#define APP2META(app)                                  \
+  {{(uptr)__tsan::MemToMeta(app##MemBeg()),            \
+    (uptr)(__tsan::MemToMeta(app##MemEnd() - 1) + 1)}, \
+   "TSan Meta (" #app ")"}
     if (!initialized) {
       // caller is thread safe, so we do not use atomic_bool
       initialized = true;
-      map_ranges[0] = {{TsanShadowBeg(), TsanShadowEnd()}, "tsan shadow"};
-      map_ranges[1] = {{TsanMetaBeg(), TsanMetaEnd()}, "tsan meta"};
+      map_ranges[0] = APP2SHADOW(LoApp);
+      map_ranges[1] = APP2SHADOW(MidApp);
+      map_ranges[2] = APP2SHADOW(HiApp);
+      map_ranges[3] = APP2SHADOW(Heap);
+      map_ranges[4] = APP2META(LoApp);
+      map_ranges[5] = APP2META(MidApp);
+      map_ranges[6] = APP2META(HiApp);
+      map_ranges[7] = APP2META(Heap);
     }
+#undef APP2SHADOW
+#undef APP2META
     return map_ranges;
   }
   // ------------------ State-Related Hooks ----------------

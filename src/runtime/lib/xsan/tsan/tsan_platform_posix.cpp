@@ -21,6 +21,7 @@
 #  include "sanitizer_common/sanitizer_errno.h"
 #  include "sanitizer_common/sanitizer_libc.h"
 #  include "sanitizer_common/sanitizer_procmaps.h"
+#  include "tsan_hooks.h"
 #  include "tsan_platform.h"
 #  include "tsan_rtl.h"
 
@@ -46,36 +47,24 @@ void DontDumpShadow(uptr addr, uptr size) {
 void InitializeShadowMemory() {
   // Map memory shadow.
 
-  // Don't count the shadow against mmap_limit_mb.
-  DecreaseTotalMmap(ShadowEnd() - ShadowBeg());
-  if (!MmapFixedSuperNoReserve(ShadowBeg(), ShadowEnd() - ShadowBeg(),
-                               "shadow")) {
-    Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
-    Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
-    Die();
+  auto map_ranges = __tsan::TsanHooks::NeededMapRanges();
+  for (const auto &[range, name] : map_ranges) {
+    const auto &[beg, end] = range;
+    const uptr size = end - beg;
+    // Don't count the shadow against mmap_limit_mb.
+    DecreaseTotalMmap(size);
+    if (!MmapFixedSuperNoReserve(beg, size, name)) {
+      Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
+      Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
+      Die();
+    }
+    // This memory range is used for thread stacks and large user mmaps.
+    // Frequently a thread uses only a small part of stack and similarly
+    // a program uses a small part of large mmap. On some programs
+    // we see 20% memory usage reduction without huge pages for this range.
+    DontDumpShadow(beg, size);
+    DPrintf("%s: %zx-%zx (%zuGB)\n", name, beg, end, size >> 30);
   }
-  // This memory range is used for thread stacks and large user mmaps.
-  // Frequently a thread uses only a small part of stack and similarly
-  // a program uses a small part of large mmap. On some programs
-  // we see 20% memory usage reduction without huge pages for this range.
-  DontDumpShadow(ShadowBeg(), ShadowEnd() - ShadowBeg());
-  DPrintf("memory shadow: %zx-%zx (%zuGB)\n", ShadowBeg(), ShadowEnd(),
-          (ShadowEnd() - ShadowBeg()) >> 30);
-
-  // Map meta shadow.
-  const uptr meta = MetaShadowBeg();
-  const uptr meta_size = MetaShadowEnd() - meta;
-
-  // Don't count the shadow against mmap_limit_mb.
-  DecreaseTotalMmap(meta_size);
-  if (!MmapFixedSuperNoReserve(meta, meta_size, "meta shadow")) {
-    Printf("FATAL: ThreadSanitizer can not mmap the shadow memory\n");
-    Printf("FATAL: Make sure to compile with -fPIE and to link with -pie.\n");
-    Die();
-  }
-  DontDumpShadow(meta, meta_size);
-  DPrintf("meta shadow: %zx-%zx (%zuGB)\n", meta, meta + meta_size,
-          meta_size >> 30);
 
   InitializeShadowMemoryPlatform();
 
@@ -125,7 +114,8 @@ bool CheckAndProtect(bool protect, bool ignore_heap, bool print_warnings) {
       continue;
 
     // Guard page after the heap end
-    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd()) continue;
+    if (segment.start >= HeapMemEnd() && segment.start < HeapEnd())
+      continue;
 
     if (segment.protection == 0)  // Zero page or mprotected.
       continue;

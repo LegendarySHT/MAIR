@@ -299,7 +299,41 @@ static bool CheckAndProtect(bool protect, bool ignore_heap,
   ProtectRange(TsanMetaShadowEnd(), HiAppMemBeg());
 #  else
   SmallVector<NamedRange, 1024> map_ranges;
+
+  /*
+   * Currently, [lo_app, lo_end) overlaps with ASan's shadow
+   *
+   * NOTE: Special handling for LoApp region due to ASan shadow mapping.
+   *
+   * - ASan's shadow offset is difficult to change (tied to ABI and intrinsics),
+   * so its LoAppMemEnd() is much smaller than what is needed for other
+   * sanitizers. For example, ideally, LoAppMemEnd() should at least cover the
+   * range 0x003000000000 - 0x005000000000 (the "prelink" segment).
+   *
+   * - To address this, we provide a dedicated AsanLoAppMemEnd() for ASan, while
+   *   other sanitizers use a larger LoAppMemEnd(). This may result in LoApp's
+   * end address overlapping with ASan's shadow region:
+   *
+   *       LoAppEnd ∈ [AsanShadowBeg, AsanShadowEnd)
+   *
+   * - This overlap is safe: ASan itself ensures that any overlapped memory is
+   *   inaccessible to the application, preventing incorrect access.
+   *
+   * - In CheckAndProtect, we deliberately skip (ignore) protection/mapping for
+   *   LoApp. This works because the range from LoAppMemBeg() to AsanShadowEnd()
+   *   is continuous (with no other gaps that require protection by XSan).
+   *
+   * - Therefore, real LoApp is not included in the protection/mapping flows
+   *   here. We instead use AsanLoAppMemEnd() to represent the end of the low
+   *   app memory.
+   */
+#    if !XSAN_CONTAINS_ASAN
   map_ranges.push_back({{LoAppMemBeg(), LoAppMemEnd()}, "low app memory"});
+#    else
+  map_ranges.push_back(
+      {{LoAppMemBeg(), AsanLoAppMemEnd()}, "low app memory (for ASan)"});
+#    endif
+
   map_ranges.push_back({{MidAppMemBeg(), MidAppMemEnd()}, "mid app memory"});
   map_ranges.push_back({{HeapMemBeg(), HeapMemEnd()}, "heap memory"});
   map_ranges.push_back({{HiAppMemBeg(), HiAppMemEnd()}, "high app memory"});

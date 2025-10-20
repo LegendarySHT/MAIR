@@ -6,6 +6,8 @@
 
 #include <sanitizer_common/sanitizer_common.h>
 
+#include "xsan_platform_mapping.h"
+
 namespace __xsan {
 
 enum {
@@ -60,37 +62,39 @@ C/C++ on netbsd/amd64 can reuse the same mapping:
  * ASLR must be disabled per-process or globally.
 */
 /// Modified: enlarge the heap size from 1T to 2T to fit ASan's needs.
-struct Mapping48AddressSpace {
-  static constexpr const uptr kHeapMemBeg = 0x520000000000ull;
-  static constexpr const uptr kHeapMemEnd = 0x540000000000ull;
+// struct Mapping48AddressSpace {
+//   static constexpr const uptr kHeapMemBeg = 0x520000000000ull;
+//   static constexpr const uptr kHeapMemEnd = 0x540000000000ull;
 
-  static constexpr const uptr kLoAppMemBeg = 0x000000000000ull;
-  // ASan set this 0x00007fff8000ull but it protects the last page. So we
-  // only use 0x00007fff7000ull.
-  static constexpr const uptr kLoAppMemEnd = 0x00007fff7000ull;
-  static constexpr const uptr kMidAppMemBeg = 0x550000000000ull;
-  static constexpr const uptr kMidAppMemEnd = 0x5a0000000000ull;
-  static constexpr const uptr kHiAppMemBeg = 0x7a0000000000ull;
-  static constexpr const uptr kHiAppMemEnd = 0x800000000000ull;
-  static constexpr const uptr kVdsoBeg = 0xf000000000000000ull;
+//   static constexpr const uptr kLoAppMemBeg = 0x000000000000ull;
+//   // ASan set this 0x00007fff8000ull but it protects the last page. So we
+//   // only use 0x00007fff7000ull.
+//   static constexpr const uptr kLoAppMemEnd = 0x00007fff7000ull;
+//   static constexpr const uptr kMidAppMemBeg = 0x550000000000ull;
+//   static constexpr const uptr kMidAppMemEnd = 0x5a0000000000ull;
+//   static constexpr const uptr kHiAppMemBeg = 0x7a0000000000ull;
+//   static constexpr const uptr kHiAppMemEnd = 0x800000000000ull;
+//   static constexpr const uptr kVdsoBeg = 0xf000000000000000ull;
 
-  /// TSan's Shadow & MetaInfo Shadow parameters
-  static constexpr const uptr kTsanShadowBeg = 0x1a0000000000ull;
-  static constexpr const uptr kTsanShadowEnd = 0x3a0000000000ull;
-  static constexpr const uptr kTsanMetaShadowBeg = 0x600000000000ull;
-  static constexpr const uptr kTsanMetaShadowEnd = 0x680000000000ull;
-  static constexpr const uptr kTsanShadowMsk = 0x700000000000ull;
-  static constexpr const uptr kTsanShadowXor = 0x000000000000ull;
-  static constexpr const uptr kTsanShadowAdd = 0x1a0000000000ull;
+//   /// TSan's Shadow & MetaInfo Shadow parameters
+//   static constexpr const uptr kTsanShadowBeg = 0x1a0000000000ull;
+//   static constexpr const uptr kTsanShadowEnd = 0x3a0000000000ull;
+//   static constexpr const uptr kTsanMetaShadowBeg = 0x600000000000ull;
+//   static constexpr const uptr kTsanMetaShadowEnd = 0x680000000000ull;
+//   static constexpr const uptr kTsanShadowMsk = 0x700000000000ull;
+//   static constexpr const uptr kTsanShadowXor = 0x000000000000ull;
+//   static constexpr const uptr kTsanShadowAdd = 0x1a0000000000ull;
 
-  /// ASan's Shadow parameters
-  static constexpr const uptr kAsanShadowOffset = 0x000000007fff8000ull;
-  static constexpr const uptr kAsanShadowScale = 3;
+//   /// ASan's Shadow parameters
+//   static constexpr const uptr kAsanShadowOffset = 0x000000007fff8000ull;
+//   static constexpr const uptr kAsanShadowScale = 3;
 
-  /// MSan's Shadow parameters
-  static constexpr uptr kMSanShadowXor = 0x400000000000ull;
-  static constexpr uptr kMSanShadowAdd = 0x300000000000ull;
-};
+//   /// MSan's Shadow parameters
+//   static constexpr uptr kMSanShadowXor = 0x400000000000ull;
+//   static constexpr uptr kMSanShadowAdd = 0x300000000000ull;
+// };
+
+using Mapping48AddressSpace = __xsan::MappingX64_48;
 
 /*
 C/C++ on linux/mips64 (40-bit VMA)
@@ -221,37 +225,37 @@ struct MappingAarch64_42 {
   static constexpr const uptr kVdsoBeg = 0x37f00000000ull;
 };
 
-struct MappingAarch64_48 {
-  // Keep same with MappingAarch64_39 since ASan allocator needs to know the
-  // heap memory range at compile time.
-  static constexpr uptr kHeapMemBeg    = 0x0f20000000000ull;
-  static constexpr uptr kHeapMemEnd    = 0x0f40000000000ull;
-  
-  static constexpr uptr kLoAppMemBeg   = 0x0000000000000ull;
-  static constexpr uptr kLoAppMemEnd   = 0x0000ffffff000ull;
-  static constexpr uptr kMidAppMemBeg  = 0x0aaaa00000000ull;
-  static constexpr uptr kMidAppMemEnd  = 0x0ac0000000000ull;
-  static constexpr uptr kHiAppMemBeg   = 0x0fc0000000000ull;
-  static constexpr uptr kHiAppMemEnd   = 0x1000000000000ull;
-  static constexpr uptr kVdsoBeg       = 0xffff000000000ull;
+// struct MappingAarch64_48 {
+//   // Keep same with MappingAarch64_39 since ASan allocator needs to know the
+//   // heap memory range at compile time.
+//   static constexpr uptr kHeapMemBeg    = 0x0f20000000000ull;
+//   static constexpr uptr kHeapMemEnd    = 0x0f40000000000ull;
 
-  /// TSan's Shadow & MetaInfo Shadow parameters
-  static constexpr uptr kTsanShadowAdd = 0x0000000000000ull;
-  static constexpr uptr kTsanShadowBeg = 0x0255400000000ull;
-  static constexpr uptr kTsanShadowEnd = 0x0380000000000ull;
-  static constexpr uptr kTsanMetaShadowBeg = 0x0380000000000ull;
-  static constexpr uptr kTsanMetaShadowEnd = 0x0400000000000ull;
-  static constexpr uptr kTsanShadowMsk = 0x0f00000000000ull;
-  static constexpr uptr kTsanShadowXor = 0x0180000000000ull;
+//   static constexpr uptr kLoAppMemBeg   = 0x0000000000000ull;
+//   static constexpr uptr kLoAppMemEnd   = 0x0000ffffff000ull;
+//   static constexpr uptr kMidAppMemBeg  = 0x0aaaa00000000ull;
+//   static constexpr uptr kMidAppMemEnd  = 0x0ac0000000000ull;
+//   static constexpr uptr kHiAppMemBeg   = 0x0fc0000000000ull;
+//   static constexpr uptr kHiAppMemEnd   = 0x1000000000000ull;
+//   static constexpr uptr kVdsoBeg       = 0xffff000000000ull;
 
-  /// ASan's Shadow parameters
-  static constexpr const uptr kAsanShadowOffset = 0x0000001000000000ull;
-  static constexpr const uptr kAsanShadowScale = 3;
+//   /// TSan's Shadow & MetaInfo Shadow parameters
+//   static constexpr uptr kTsanShadowAdd = 0x0000000000000ull;
+//   static constexpr uptr kTsanShadowBeg = 0x0255400000000ull;
+//   static constexpr uptr kTsanShadowEnd = 0x0380000000000ull;
+//   static constexpr uptr kTsanMetaShadowBeg = 0x0380000000000ull;
+//   static constexpr uptr kTsanMetaShadowEnd = 0x0400000000000ull;
+//   static constexpr uptr kTsanShadowMsk = 0x0f00000000000ull;
+//   static constexpr uptr kTsanShadowXor = 0x0180000000000ull;
 
-  /// MSan's Shadow parameters
-  static constexpr uptr kMSanShadowXor = 0x0600000000000ull;
-  static constexpr uptr kMSanShadowAdd = 0x0040000000000ull;
-};
+//   /// ASan's Shadow parameters
+//   static constexpr const uptr kAsanShadowOffset = 0x0000001000000000ull;
+//   static constexpr const uptr kAsanShadowScale = 3;
+
+//   /// MSan's Shadow parameters
+//   static constexpr uptr kMSanShadowXor = 0x0600000000000ull;
+//   static constexpr uptr kMSanShadowAdd = 0x0040000000000ull;
+// };
 
 /*
 C/C++ on linux/powerpc64 (44-bit VMA)
@@ -590,57 +594,59 @@ extern uptr vmaSize;
 
 template <typename Func, typename... Args>
 ALWAYS_INLINE auto SelectMapping(Args... args) {
-#if SANITIZER_GO
-#  if defined(__powerpc64__)
-  switch (vmaSize) {
-    case 46:
-      return Func::template Apply<MappingGoPPC64_46>(args...);
-    case 47:
-      return Func::template Apply<MappingGoPPC64_47>(args...);
-  }
-#  elif defined(__mips64)
-  return Func::template Apply<MappingGoMips64_47>(args...);
-#  elif defined(__s390x__)
-  return Func::template Apply<MappingGoS390x>(args...);
-#  elif defined(__aarch64__)
-  return Func::template Apply<MappingGoAarch64>(args...);
-#  elif SANITIZER_WINDOWS
-  return Func::template Apply<MappingGoWindows>(args...);
-#  else
-  return Func::template Apply<MappingGo48>(args...);
-#  endif
-#else  // SANITIZER_GO
-#  if SANITIZER_IOS && !SANITIZER_IOSSIM
-  return Func::template Apply<MappingAppleAarch64>(args...);
-#  elif defined(__x86_64__) || SANITIZER_APPLE
-  return Func::template Apply<Mapping48AddressSpace>(args...);
-#  elif defined(__aarch64__)
-  switch (vmaSize) {
-    // case 39:
-    //   return Func::template Apply<MappingAarch64_39>(args...);
-    // case 42:
-    //   return Func::template Apply<MappingAarch64_42>(args...);
-    case 48:
-      return Func::template Apply<MappingAarch64_48>(args...);
-  }
-#  elif defined(__powerpc64__)
-  switch (vmaSize) {
-    case 44:
-      return Func::template Apply<MappingPPC64_44>(args...);
-    case 46:
-      return Func::template Apply<MappingPPC64_46>(args...);
-    case 47:
-      return Func::template Apply<MappingPPC64_47>(args...);
-  }
-#  elif defined(__mips64)
-  return Func::template Apply<MappingMips64_40>(args...);
-#  elif defined(__s390x__)
-  return Func::template Apply<MappingS390x>(args...);
-#  else
-#    error "unsupported platform"
-#  endif
-#endif
-  Die();
+  /// Now we do not support dynamic dispatch for different VMA in aarch64
+  return Func::template Apply<XsanMapping>(args...);
+  //   #if SANITIZER_GO
+  // #  if defined(__powerpc64__)
+  //   switch (vmaSize) {
+  //     case 46:
+  //       return Func::template Apply<MappingGoPPC64_46>(args...);
+  //     case 47:
+  //       return Func::template Apply<MappingGoPPC64_47>(args...);
+  //   }
+  // #  elif defined(__mips64)
+  //   return Func::template Apply<MappingGoMips64_47>(args...);
+  // #  elif defined(__s390x__)
+  //   return Func::template Apply<MappingGoS390x>(args...);
+  // #  elif defined(__aarch64__)
+  //   return Func::template Apply<MappingGoAarch64>(args...);
+  // #  elif SANITIZER_WINDOWS
+  //   return Func::template Apply<MappingGoWindows>(args...);
+  // #  else
+  //   return Func::template Apply<MappingGo48>(args...);
+  // #  endif
+  // #else  // SANITIZER_GO
+  // #  if SANITIZER_IOS && !SANITIZER_IOSSIM
+  //   return Func::template Apply<MappingAppleAarch64>(args...);
+  // #  elif defined(__x86_64__) || SANITIZER_APPLE
+  //   return Func::template Apply<Mapping48AddressSpace>(args...);
+  // #  elif defined(__aarch64__)
+  //   switch (vmaSize) {
+  //     // case 39:
+  //     //   return Func::template Apply<MappingAarch64_39>(args...);
+  //     // case 42:
+  //     //   return Func::template Apply<MappingAarch64_42>(args...);
+  //     case 48:
+  //       return Func::template Apply<MappingAarch64_48>(args...);
+  //   }
+  // #  elif defined(__powerpc64__)
+  //   switch (vmaSize) {
+  //     case 44:
+  //       return Func::template Apply<MappingPPC64_44>(args...);
+  //     case 46:
+  //       return Func::template Apply<MappingPPC64_46>(args...);
+  //     case 47:
+  //       return Func::template Apply<MappingPPC64_47>(args...);
+  //   }
+  // #  elif defined(__mips64)
+  //   return Func::template Apply<MappingMips64_40>(args...);
+  // #  elif defined(__s390x__)
+  //   return Func::template Apply<MappingS390x>(args...);
+  // #  else
+  // #    error "unsupported platform"
+  // #  endif
+  // #endif
+  // Die();
 }
 
 template <typename Func>
@@ -685,6 +691,7 @@ void ForEachMapping() {
 
 XSAN_MAP_FIELD_FUNC(LoAppMemBeg, kLoAppMemBeg)
 XSAN_MAP_FIELD_FUNC(LoAppMemEnd, kLoAppMemEnd)
+XSAN_MAP_FIELD_FUNC(AsanLoAppMemEnd, kAsanLoAppMemEnd)
 XSAN_MAP_FIELD_FUNC(MidAppMemBeg, kMidAppMemBeg)
 XSAN_MAP_FIELD_FUNC(MidAppMemEnd, kMidAppMemEnd)
 XSAN_MAP_FIELD_FUNC(HeapMemBeg, kHeapMemBeg)

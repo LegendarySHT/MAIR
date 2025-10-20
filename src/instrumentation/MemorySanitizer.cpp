@@ -204,6 +204,7 @@
 #include "Utils/MetaDataUtils.h"
 #include "Utils/Options.h"
 #include "Utils/ValueUtils.h"
+#include "xsan_platform_mapping.h"
 
 using namespace llvm;
 
@@ -397,10 +398,10 @@ static const MemoryMapParams Linux_X86_64_MemoryMapParams = {
 
 // x86_64 Linux for XSan
 static const MemoryMapParams XSan_Linux_X86_64_MemoryMapParams = {
-  0,               // AndMask (not used)
-  0x400000000000,  // XorMask
-  0,               // ShadowBase (not used)
-  0x300000000000,  // OriginBase
+    0,                                     // AndMask (not used)
+    __xsan::MappingX64_48::kMSanShadowXor, // XorMask
+    0,                                     // ShadowBase (not used)
+    __xsan::MappingX64_48::kMSanShadowAdd, // OriginBase
 };
 
 // mips64 Linux
@@ -437,10 +438,10 @@ static const MemoryMapParams Linux_AArch64_MemoryMapParams = {
 
 // aarch64 Linux for XSan
 static const MemoryMapParams XSan_Linux_AArch64_MemoryMapParams = {
-  0,               // AndMask (not used)
-  0x600000000000,  // XorMask
-  0,               // ShadowBase (not used)
-  0x040000000000,  // OriginBase
+    0,                                         // AndMask (not used)
+    __xsan::MappingAarch64_48::kMSanShadowXor, // XorMask
+    0,                                         // ShadowBase (not used)
+    __xsan::MappingAarch64_48::kMSanShadowAdd, // OriginBase
 };
 
 // aarch64 FreeBSD
