@@ -996,11 +996,13 @@ struct ShadowToMemImpl {
     return p | Mapping::kShadowMsk;
   }
 
-  // Current Mapping48AddressSpace is not compatible with the default
-  // ShadowToMemImpl. So this specialization is needed.
-  template <>
-  uptr Apply<Mapping48AddressSpace>(uptr sp) {
-    using Mapping = Mapping48AddressSpace;
+  /// Use such specialization to reduce implicit constraint (heap & msk == msk).
+  /// TODO: replace the default implementation under all platforms.
+  template <typename Mapping>
+  static uptr ApplySpecialization(uptr shadow) {
+    if (!IsShadowMemImpl::Apply<Mapping>(shadow))
+      return 0;
+
     constexpr uptr MidBeg = Mapping::kMidAppMemBeg & ~Mapping::kTsanShadowMsk;
     constexpr uptr MidEnd = Mapping::kMidAppMemEnd & ~Mapping::kTsanShadowMsk;
     constexpr uptr HiBeg = Mapping::kHiAppMemBeg & ~Mapping::kTsanShadowMsk;
@@ -1012,10 +1014,8 @@ struct ShadowToMemImpl {
     constexpr uptr HiOr = Mapping::kHiAppMemBeg & Mapping::kTsanShadowMsk;
     constexpr uptr HeapOr = Mapping::kHeapMemBeg & Mapping::kTsanShadowMsk;
 
-    if (!IsShadowMemImpl::Apply<Mapping>(sp))
-      return 0;
-    uptr p =
-        ((sp - Mapping::kShadowAdd) / kShadowMultiplier) ^ Mapping::kShadowXor;
+    uptr p = ((shadow - Mapping::kShadowAdd) / kShadowMultiplier) ^
+             Mapping::kShadowXor;
     if (p >= MidBeg && p < MidEnd)
       return p | MidOr;
     if (p >= HiBeg && p < HiEnd)
@@ -1025,6 +1025,19 @@ struct ShadowToMemImpl {
     return p;
   }
 };
+
+// Current Mapping48AddressSpace is not compatible with the default
+// ShadowToMemImpl. So this specialization is needed.
+// Use inline to avoid duplicate definitions error.
+template <>
+inline uptr ShadowToMemImpl::Apply<Mapping48AddressSpace>(uptr sp) {
+  return ApplySpecialization<Mapping48AddressSpace>(sp);
+}
+
+template <>
+inline uptr ShadowToMemImpl::Apply<MappingAarch64_48>(uptr sp) {
+  return ApplySpecialization<MappingAarch64_48>(sp);
+}
 
 ALWAYS_INLINE
 uptr ShadowToMem(RawShadow *s) {
