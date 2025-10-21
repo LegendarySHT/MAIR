@@ -330,9 +330,8 @@ static u8 asan_use_globals_gc() {
 static void add_pass_options(enum SanitizerType sanTy) {
   /// We only add pass options if there is any sanitizers in XSan-project
   /// activated.
-  if (sanTy == SanNone) {
+  if (sanTy == SanNone)
     return;
-  }
 
   if (has(&act_sanitizers, ASan)) {
     if (!asan_use_globals_gc()) {
@@ -360,8 +359,6 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
   switch (sanTy) {
   case ASan:
     san_pass = "ASanInstPass.so";
-    cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
-    cc_params[cc_par_cnt++] = "-D__SANITIZE_ADDRESS__";
     break;
   case TSan:
     san_pass = "TSanInstPass.so";
@@ -371,8 +368,6 @@ static void regist_pass_plugin(enum SanitizerType sanTy) {
     break;
   case XSan:
     san_pass = "XSanInstPass.so";
-    cc_params[cc_par_cnt++] = "-U_FORTIFY_SOURCE";
-    cc_params[cc_par_cnt++] = "-D__SANITIZE_ADDRESS__";
     break;
   case UBSan:
   case SanNone:

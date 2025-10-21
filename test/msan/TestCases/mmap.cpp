@@ -10,14 +10,28 @@
 #include <stdlib.h>
 #include "test.h"
 
+#if defined(__XSAN__)
+// This file locates at src/include/xsan_platform_mapping.h
+#include "../../../src/include/xsan_platform_mapping.h"
+#endif
+
 bool AddrIsApp(void *p) {
   uintptr_t addr = (uintptr_t)p;
 #if defined(__FreeBSD__) && defined(__x86_64__)
   return addr < 0x010000000000ULL || addr >= 0x600000000000ULL;
 #elif defined(__x86_64__)
+#if defined(__XSAN__)
+  return (addr >= __xsan::MappingX64_48::kLoAppMemBeg &&
+          addr < __xsan::MappingX64_48::kLoAppMemEnd) ||
+         (addr >= __xsan::MappingX64_48::kMidAppMemBeg &&
+          addr < __xsan::MappingX64_48::kMidAppMemEnd) ||
+         (addr >= __xsan::MappingX64_48::kHiAppMemBeg &&
+          addr < __xsan::MappingX64_48::kHiAppMemEnd);
+#else
   return (addr >= 0x000000000000ULL && addr < 0x010000000000ULL) ||
          (addr >= 0x510000000000ULL && addr < 0x600000000000ULL) ||
          (addr >= 0x700000000000ULL && addr < 0x800000000000ULL);
+#endif
 #elif defined(__loongarch_lp64)
   return (addr >= 0x000000000000ULL && addr < 0x010000000000ULL) ||
          (addr >= 0x510000000000ULL && addr < 0x600000000000ULL) ||
@@ -37,10 +51,21 @@ bool AddrIsApp(void *p) {
     uintptr_t start;
     uintptr_t end;
   } mappings[] = {
+#if defined(__XSAN__)
+    {__xsan::MappingAarch64_48::kLoAppMemBeg,
+     __xsan::MappingAarch64_48::kLoAppMemEnd},
+    {__xsan::MappingAarch64_48::kMidAppMemBeg,
+     __xsan::MappingAarch64_48::kMidAppMemEnd},
+    {__xsan::MappingAarch64_48::kHeapMemBeg,
+     __xsan::MappingAarch64_48::kHeapMemEnd},
+    {__xsan::MappingAarch64_48::kHiAppMemBeg,
+     __xsan::MappingAarch64_48::kHiAppMemEnd},
+#else
       {0x0000000000000ULL, 0x0100000000000ULL},
       {0x0A00000000000ULL, 0x0B00000000000ULL},
       {0x0E00000000000ULL, 0x0F00000000000ULL},
       {0x0F00000000000ULL, 0x1000000000000ULL},
+#endif
   };
   const size_t mappingsSize = sizeof (mappings) / sizeof (mappings[0]);
 

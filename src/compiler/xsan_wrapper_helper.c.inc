@@ -534,6 +534,9 @@ static void append_env_var(const char *key, const char *value) {
 
 static void init_sanitizer_setting(enum SanitizerType sanTy) {
   u8 *str_options;
+  if (sanTy == XSan)
+    cc_params[cc_par_cnt++] = "-D__XSAN__";
+
   switch (sanTy) {
   case ASan:
   case TSan:

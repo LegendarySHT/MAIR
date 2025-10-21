@@ -12,13 +12,18 @@
 #include <stdlib.h>
 #include "test.h"
 
+#if defined(__XSAN__)
+// This file locates at src/include/xsan_platform_mapping.h
+#include "../../../src/include/xsan_platform_mapping.h"
+#endif
+
 const char *mem_to_shadow(const char *p) {
 #if defined(__x86_64__)
-  if (const char *use_xsan_rt = getenv("USE_XSAN_RT");
-      use_xsan_rt && *use_xsan_rt)
-    return (char *)((uintptr_t)p ^ 0x400000000000ULL);
-  else
-    return (char *)((uintptr_t)p ^ 0x500000000000ULL);
+#if defined(__XSAN__)
+  return (char *)((uintptr_t)p ^ __xsan::MappingX64_48::kMSanShadowXor);
+#else
+  return (char *)((uintptr_t)p ^ 0x500000000000ULL);
+#endif
 #elif defined(__loongarch_lp64)
   return (char *)((uintptr_t)p ^ 0x500000000000ULL);
 #elif defined (__mips64)
@@ -30,11 +35,11 @@ const char *mem_to_shadow(const char *p) {
 #elif defined(__s390x__)
   return (char *)(((uintptr_t)p & ~0xC00000000000ULL) + 0x080000000000ULL);
 #elif defined(__aarch64__)
-  if (const char *use_xsan_rt = getenv("USE_XSAN_RT");
-      use_xsan_rt && *use_xsan_rt)
-    return (char *)((uintptr_t)p ^ 0x600000000000ULL);
-  else
+#if defined(__XSAN__)
+    return (char *)((uintptr_t)p ^ __xsan::MappingAarch64_48::kMSanShadowXor);
+#else
     return (char *)((uintptr_t)p ^ 0xB00000000000ULL);
+#endif
 #endif
 }
 

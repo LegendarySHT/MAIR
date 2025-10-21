@@ -13,13 +13,24 @@
 #include <stdint.h>
 #include <sys/mman.h>
 
+#if defined(__XSAN__)
+// This file locates at src/include/xsan_platform_mapping.h
+#include "../../../src/include/xsan_platform_mapping.h"
+#include <stdio.h>
+#endif
+
 int main(void) {
   // Hint address just below shadow.
 #if defined(__FreeBSD__) && defined(__x86_64__)
   uintptr_t hint = 0x0f0000000000ULL;
   const uintptr_t app_start = 0x000000000000ULL;
 #elif defined(__x86_64__)
+#if defined(__XSAN__)
+  uintptr_t hint = __xsan::MappingX64_48::kLoAppMemBeg ^
+                   __xsan::MappingX64_48::kMSanShadowXor;
+#else
   uintptr_t hint = 0x4f0000000000ULL;
+#endif
   const uintptr_t app_start = 0x600000000000ULL;
 #elif defined(__loongarch_lp64)
   uintptr_t hint = 0x4f0000000000ULL;
@@ -34,7 +45,12 @@ int main(void) {
   uintptr_t hint = 0x07f000000000ULL;
   const uintptr_t app_start = 0x020000000000ULL;
 #elif defined (__aarch64__)
+#if defined(__XSAN__)
+  uintptr_t hint = __xsan::MappingAarch64_48::kLoAppMemBeg ^
+                   __xsan::MappingAarch64_48::kMSanShadowXor;
+#else
   uintptr_t hint = 0X0110000000000;
+#endif
   // Unfortunately we don't have a stronger condition for this
   const uintptr_t app_start = 0x0ULL;
 #endif
