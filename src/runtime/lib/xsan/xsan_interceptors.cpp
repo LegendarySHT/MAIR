@@ -265,7 +265,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 // only, i.e., MAP_FIXED is not set.
 [[maybe_unused]]
 static bool fix_mmap_addr(void **addr, uptr sz, int flags) {
-  const int MAP_FIXED = 0x10;
+  constexpr int MAP_FIXED = 0x10;
   if (*addr) {
     if (!IsAppMem((uptr)*addr) || !IsAppMem((uptr)*addr + sz - 1)) {
       if (flags & MAP_FIXED) {
@@ -280,20 +280,18 @@ static bool fix_mmap_addr(void **addr, uptr sz, int flags) {
 }
 
 template <class Mmap>
-static void *mmap_interceptor(void *ctx, Mmap real_mmap,
-                              void *addr, SIZE_T sz, int prot, int flags,
-                              int fd, OFF64_T off) {
+static void *mmap_interceptor(void *ctx, Mmap real_mmap, void *addr, SIZE_T sz,
+                              int prot, int flags, int fd, OFF64_T off) {
   void *const MAP_FAILED = (void *)-1;
-  /// FIXME: conflicts with cuda_test.cpp. Should we really return -1 when addr
-  /// is not in app memory?
-  // if (!fix_mmap_addr(&addr, sz, flags)) return MAP_FAILED;
+  if (!fix_mmap_addr(&addr, sz, flags))
+    return MAP_FAILED;
   void *res = real_mmap(addr, sz, prot, flags, fd, off);
   if (res != MAP_FAILED) {
-    // if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
-    //   Report("XSan: mmap at bad address: addr=%p size=%p res=%p\n",
-    //          addr, (void*)sz, res);
-    //   Die();
-    // }
+    if (!IsAppMem((uptr)res) || !IsAppMem((uptr)res + sz - 1)) {
+      Report("XSan: mmap at bad address: addr=%p size=%p res=%p\n", addr,
+             (void *)sz, res);
+      Die();
+    }
     if (IsAppMem((uptr)res) && IsAppMem((uptr)res + sz - 1)) {
       const XsanInterceptorContext *ctx_ =
           reinterpret_cast<const XsanInterceptorContext *>(ctx);
