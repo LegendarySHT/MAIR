@@ -19,9 +19,8 @@ static __xsan::XsanInterceptor
                    to clarify the semantics, plus cc1plus */
                 {"cc1", "cc1plus", /* For LTO */ "lto1"});
 
-static unsigned
-count_gcc_diag_specifiers(const char *gmsgid,
-                          const llvm::StringRef given_spec = "");
+static unsigned count_gcc_diag_specifiers(const char *gmsgid,
+                                          std::string_view given_spec = "");
 
 // template <size_t> intptr_t get_arg(va_list &args) {
 //   return va_arg(args, intptr_t);
@@ -259,7 +258,7 @@ void error_at(location_t loc, const char *gmsgid, ...) {
  *
  */
 static unsigned count_gcc_diag_specifiers(const char *gmsgid,
-                                          const std::string_view given_spec) {
+                                          std::string_view given_spec) {
   // Supported conversion specifiers (excluding "%%" and "%m")
   static constexpr std::array<std::string_view, 39> supported_specifiers = {
       // multi-char must come first (longer prefixes)
