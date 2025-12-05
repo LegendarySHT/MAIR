@@ -26,16 +26,12 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
   if (LoadInst* LI = dyn_cast<LoadInst>(Inst)) {
     // 处理Load指令
     Value* Ptr = LI->getPointerOperand();
-    auto AddrInfo = analyzeAddress(Ptr);
     
     // 获取访问大小
     uint64_t Size = DL.getTypeStoreSizeInBits(LI->getType()) / 8;
     
-    // 获取对齐信息
-    unsigned Alignment = LI->getAlign().value();
-    
-    // 创建内存位置信息
-    MemoryLocation Loc(AddrInfo.first, AddrInfo.second, Size, Alignment);
+    // 使用LLVM的MemoryLocation构造函数
+    MemoryLocation Loc = MemoryLocation::get(LI);
     
     // 创建MOP对象
     return std::make_unique<Mop>(MopType::Load, Loc, Inst);
@@ -43,16 +39,12 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
   if (StoreInst* SI = dyn_cast<StoreInst>(Inst)) {
     // 处理Store指令
     Value* Ptr = SI->getPointerOperand();
-    auto AddrInfo = analyzeAddress(Ptr);
     
     // 获取访问大小
     uint64_t Size = DL.getTypeStoreSizeInBits(SI->getValueOperand()->getType()) / 8;
     
-    // 获取对齐信息
-    unsigned Alignment = SI->getAlign().value();
-    
-    // 创建内存位置信息
-    MemoryLocation Loc(AddrInfo.first, AddrInfo.second, Size, Alignment);
+    // 使用LLVM的MemoryLocation构造函数
+    MemoryLocation Loc = MemoryLocation::get(SI);
     
     // 创建MOP对象
     return std::make_unique<Mop>(MopType::Store, Loc, Inst);
@@ -60,16 +52,12 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
   if (AtomicRMWInst* AI = dyn_cast<AtomicRMWInst>(Inst)) {
     // 处理原子RMW指令
     Value* Ptr = AI->getPointerOperand();
-    auto AddrInfo = analyzeAddress(Ptr);
     
     // 获取访问大小
     uint64_t Size = DL.getTypeStoreSizeInBits(AI->getType()) / 8;
     
-    // 获取对齐信息
-    unsigned Alignment = AI->getAlign().value();
-    
-    // 创建内存位置信息
-    MemoryLocation Loc(AddrInfo.first, AddrInfo.second, Size, Alignment);
+    // 使用LLVM的MemoryLocation构造函数
+    MemoryLocation Loc = MemoryLocation::get(AI);
     
     // 创建MOP对象
     return std::make_unique<Mop>(MopType::Atomic, Loc, Inst);
@@ -77,16 +65,12 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
   if (AtomicCmpXchgInst* CI = dyn_cast<AtomicCmpXchgInst>(Inst)) {
     // 处理原子比较交换指令
     Value* Ptr = CI->getPointerOperand();
-    auto AddrInfo = analyzeAddress(Ptr);
     
     // 获取访问大小
     uint64_t Size = DL.getTypeStoreSizeInBits(CI->getCompareOperand()->getType()) / 8;
     
-    // 获取对齐信息
-    unsigned Alignment = CI->getAlign().value();
-    
-    // 创建内存位置信息
-    MemoryLocation Loc(AddrInfo.first, AddrInfo.second, Size, Alignment);
+    // 使用LLVM的MemoryLocation构造函数
+    MemoryLocation Loc = MemoryLocation::get(CI);
     
     // 创建MOP对象
     return std::make_unique<Mop>(MopType::Atomic, Loc, Inst);
@@ -100,20 +84,16 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
         // 处理内存拷贝
         if (CB->arg_size() >= 3) {
           Value* DstPtr = CB->getArgOperand(0);
-          auto AddrInfo = analyzeAddress(DstPtr);
           
           // 获取大小参数
           Value* SizeVal = CB->getArgOperand(2);
-          uint64_t Size = 0;
+          LocationSize Size = LocationSize::precise(0);  // 默认使用大小为0
           if (ConstantInt* CI = dyn_cast<ConstantInt>(SizeVal)) {
-            Size = CI->getZExtValue();
+            Size = LocationSize::precise(CI->getZExtValue());
           }
           
-          // 默认对齐
-          unsigned Alignment = 1;
-          
-          // 创建内存位置信息
-          MemoryLocation Loc(AddrInfo.first, AddrInfo.second, Size, Alignment);
+          // 使用LLVM的MemoryLocation构造函数
+          MemoryLocation Loc = MemoryLocation(DstPtr, Size);
           
           // 创建MOP对象
           return std::make_unique<Mop>(MopType::Memcpy, Loc, Inst);
@@ -123,20 +103,16 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
         // 处理内存设置
         if (CB->arg_size() >= 3) {
           Value* DstPtr = CB->getArgOperand(0);
-          auto AddrInfo = analyzeAddress(DstPtr);
           
           // 获取大小参数
           Value* SizeVal = CB->getArgOperand(2);
-          uint64_t Size = 0;
+          LocationSize Size = LocationSize::precise(0);  // 默认使用大小为0
           if (ConstantInt* CI = dyn_cast<ConstantInt>(SizeVal)) {
-            Size = CI->getZExtValue();
+            Size = LocationSize::precise(CI->getZExtValue());
           }
           
-          // 默认对齐
-          unsigned Alignment = 1;
-          
-          // 创建内存位置信息
-          MemoryLocation Loc(AddrInfo.first, AddrInfo.second, Size, Alignment);
+          // 使用LLVM的MemoryLocation构造函数
+          MemoryLocation Loc = MemoryLocation(DstPtr, Size);
           
           // 创建MOP对象
           return std::make_unique<Mop>(MopType::Memset, Loc, Inst);

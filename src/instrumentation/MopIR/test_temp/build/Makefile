@@ -253,6 +253,30 @@ XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/XSanMopIR.dir/build.make CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.s
 .PHONY : XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.s
 
+XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.o: XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o
+.PHONY : XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.o
+
+# target to build an object file
+XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/XSanMopIR.dir/build.make CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o
+.PHONY : XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o
+
+XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.i: XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i
+.PHONY : XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.i
+
+# target to preprocess a source file
+XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/XSanMopIR.dir/build.make CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i
+.PHONY : XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i
+
+XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.s: XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s
+.PHONY : XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.s
+
+# target to generate assembly for a file
+XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/XSanMopIR.dir/build.make CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s
+.PHONY : XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -275,6 +299,9 @@ help:
 	@echo "... XSan/src/instrumentation/MopIR/lib/MopBuilder.o"
 	@echo "... XSan/src/instrumentation/MopIR/lib/MopBuilder.i"
 	@echo "... XSan/src/instrumentation/MopIR/lib/MopBuilder.s"
+	@echo "... XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.o"
+	@echo "... XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.i"
+	@echo "... XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.s"
 .PHONY : help
 
 

@@ -315,8 +315,8 @@ CMakeFiles/SimpleMopConverter.dir/SimpleMopConverter.cpp.o: \
  /usr/lib/llvm-15/include/llvm/ADT/Sequence.h \
  /XSan/src/instrumentation/MopIR/test_temp/../include/MopBuilder.h \
  /XSan/src/instrumentation/MopIR/test_temp/../include/Mop.h \
- /usr/lib/llvm-15/include/llvm/Analysis/AliasAnalysis.h \
  /usr/lib/llvm-15/include/llvm/Analysis/MemoryLocation.h \
+ /usr/lib/llvm-15/include/llvm/Analysis/AliasAnalysis.h \
  /usr/lib/llvm-15/include/llvm/IR/PassManager.h \
  /usr/lib/llvm-15/include/llvm/ADT/TinyPtrVector.h \
  /usr/lib/llvm-15/include/llvm/IR/PassInstrumentation.h \

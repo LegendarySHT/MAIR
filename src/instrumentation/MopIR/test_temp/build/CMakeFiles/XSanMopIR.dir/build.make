@@ -97,19 +97,35 @@ CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.s: cm
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp -o CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.s
 
+CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o: CMakeFiles/XSanMopIR.dir/flags.make
+CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o: /XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp
+CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o: CMakeFiles/XSanMopIR.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o -MF CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o.d -o CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o -c /XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp
+
+CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp > CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.i
+
+CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp -o CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.s
+
 # Object files for target XSanMopIR
 XSanMopIR_OBJECTS = \
 "CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/Mop.cpp.o" \
-"CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.o"
+"CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.o" \
+"CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o"
 
 # External object files for target XSanMopIR
 XSanMopIR_EXTERNAL_OBJECTS =
 
 libXSanMopIR.a: CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/Mop.cpp.o
 libXSanMopIR.a: CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.o
+libXSanMopIR.a: CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o
 libXSanMopIR.a: CMakeFiles/XSanMopIR.dir/build.make
 libXSanMopIR.a: CMakeFiles/XSanMopIR.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX static library libXSanMopIR.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX static library libXSanMopIR.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/XSanMopIR.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/XSanMopIR.dir/link.txt --verbose=$(VERBOSE)
 

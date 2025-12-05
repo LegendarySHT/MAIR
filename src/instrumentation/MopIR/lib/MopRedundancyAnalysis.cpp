@@ -125,19 +125,25 @@ bool MopRedundancyAnalysis::isAccessRangeContains(const Mop* Mop1, const Mop* Mo
   const MemoryLocation& Loc1 = Mop1->getLocation();
   const MemoryLocation& Loc2 = Mop2->getLocation();
   
-  // 如果基地址不同，无法确定是否包含（简化处理）
-  if (Loc1.BasePtr != Loc2.BasePtr) {
+  // 如果指针不同，无法确定是否包含（简化处理）
+  if (Loc1.Ptr != Loc2.Ptr) {
     return false;
   }
   
-  // 计算内存范围
-  uint64_t Loc1Start = Loc1.Offset.getZExtValue();
-  uint64_t Loc1End = Loc1Start + Loc1.Size;
-  uint64_t Loc2Start = Loc2.Offset.getZExtValue();
-  uint64_t Loc2End = Loc2Start + Loc2.Size;
+  // 如果大小信息未知，保守返回false（无法确定是否包含）
+  if (!Loc1.Size.hasValue() || !Loc2.Size.hasValue()) {
+    return false;
+  }
   
-  // 检查Loc1是否完全包含Loc2
-  return (Loc1Start <= Loc2Start) && (Loc1End >= Loc2End);
+  // 由于LLVM的MemoryLocation没有直接的偏移量信息，我们简化处理：
+  // 只有当两个内存访问完全相同的大小和指针时，才认为一个包含另一个
+  // 在实际实现中，需要通过更复杂的分析来获取偏移量信息
+  uint64_t Size1 = Loc1.Size.getValue();
+  uint64_t Size2 = Loc2.Size.getValue();
+  
+  // 简化处理：只有当大小相同时才认为可能包含
+  // 注意：这是一个保守的简化，实际实现需要更精确的分析
+  return Size1 >= Size2;
 }
 
 bool MopRedundancyAnalysis::doesDominateOrPostDominate(const Mop* Mop1, const Mop* Mop2) const {

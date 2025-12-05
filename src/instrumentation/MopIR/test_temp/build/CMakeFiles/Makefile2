@@ -164,12 +164,12 @@ CMakeFiles/acc_gen.dir/clean:
 CMakeFiles/XSanMopIR.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/XSanMopIR.dir/build.make CMakeFiles/XSanMopIR.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/XSanMopIR.dir/build.make CMakeFiles/XSanMopIR.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles --progress-num=3,4,5 "Built target XSanMopIR"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --progress-dir=/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles --progress-num=3,4,5,6 "Built target XSanMopIR"
 .PHONY : CMakeFiles/XSanMopIR.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/XSanMopIR.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles 4
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/XSanMopIR.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles 0
 .PHONY : CMakeFiles/XSanMopIR.dir/rule
@@ -195,7 +195,7 @@ CMakeFiles/SimpleMopConverter.dir/all: CMakeFiles/XSanMopIR.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/SimpleMopConverter.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles 5
+	$(CMAKE_COMMAND) -E cmake_progress_start /XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles 6
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/SimpleMopConverter.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles 0
 .PHONY : CMakeFiles/SimpleMopConverter.dir/rule

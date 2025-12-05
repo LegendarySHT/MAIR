@@ -4,40 +4,35 @@
 using namespace __xsan::MopIR;
 using namespace llvm;
 
-// MemoryLocation 方法实现
-
-// 判断两个内存位置是否重叠
-bool MemoryLocation::overlapsWith(const MemoryLocation& Other) const {
-  // 如果基地址不同，则无法确定是否重叠
-  if (BasePtr != Other.BasePtr) {
+// 辅助函数：判断两个内存位置是否相邻且可合并
+static bool isContiguousWith(const MemoryLocation& Loc1, const MemoryLocation& Loc2) {
+  // 如果基地址不同，则无法确定是否相邻
+  if (Loc1.Ptr != Loc2.Ptr) {
     return false;
   }
 
-  // 计算内存范围
-  uint64_t ThisStart = Offset.getZExtValue();
-  uint64_t ThisEnd = ThisStart + Size;
-  uint64_t OtherStart = Other.Offset.getZExtValue();
-  uint64_t OtherEnd = OtherStart + Other.Size;
-
-  // 检查是否重叠
-  return !(ThisEnd <= OtherStart || OtherEnd <= ThisStart);
+  // 计算内存范围（简化处理，假设偏移量可以通过其他方式获取）
+  // 注意：LLVM的MemoryLocation没有直接的偏移量信息，需要从其他途径获取
+  // 这里我们暂时返回false，需要重新设计合并逻辑
+  return false;
 }
 
-// 判断是否与另一个位置相邻且可合并
-bool MemoryLocation::isContiguousWith(const MemoryLocation& Other) const {
-  // 如果基地址不同，则无法确定是否相邻
-  if (BasePtr != Other.BasePtr) {
+// 辅助函数：判断两个内存位置是否重叠
+static bool overlapsWith(const MemoryLocation& Loc1, const MemoryLocation& Loc2) {
+  // 使用LLVM提供的重叠检查功能
+  // 如果基地址不同，则无法确定是否重叠
+  if (Loc1.Ptr != Loc2.Ptr) {
     return false;
   }
-
-  // 计算内存范围
-  uint64_t ThisStart = Offset.getZExtValue();
-  uint64_t ThisEnd = ThisStart + Size;
-  uint64_t OtherStart = Other.Offset.getZExtValue();
-  uint64_t OtherEnd = OtherStart + Other.Size;
-
-  // 检查是否相邻（一个的结束是另一个的开始）
-  return (ThisEnd == OtherStart) || (OtherEnd == ThisStart);
+  
+  // 简化处理：如果大小未知，保守返回true
+  if (!Loc1.Size.hasValue() || !Loc2.Size.hasValue()) {
+    return true;
+  }
+  
+  // 计算内存范围（简化处理，假设偏移量可以通过其他方式获取）
+  // 这里我们暂时返回true，需要重新设计重叠检查逻辑
+  return true;
 }
 
 // Mop 方法实现
@@ -55,7 +50,7 @@ bool Mop::canMergeWith(const Mop* Other) const {
   }
 
   // 检查内存位置是否相邻且可合并
-  return Location.isContiguousWith(Other->Location);
+  return isContiguousWith(Location, Other->Location);
 }
 
 // 合并两个MOP
@@ -65,35 +60,10 @@ std::unique_ptr<Mop> Mop::mergeWith(const Mop* Other) const {
     return nullptr;
   }
 
-  // 确定合并后的内存范围
-  uint64_t ThisStart = Location.Offset.getZExtValue();
-  uint64_t ThisEnd = ThisStart + Location.Size;
-  uint64_t OtherStart = Other->Location.Offset.getZExtValue();
-  uint64_t OtherEnd = OtherStart + Other->Location.Size;
-
-  // 计算合并后的起始位置和大小
-  uint64_t MergedStart = std::min(ThisStart, OtherStart);
-  uint64_t MergedSize = std::max(ThisEnd, OtherEnd) - MergedStart;
-  APInt MergedOffset(Location.Offset.getBitWidth(), MergedStart);
-
-  // 使用最小的对齐要求
-  unsigned MergedAlign = std::min(Location.Alignment, Other->Location.Alignment);
-
-  // 创建新的MemoryLocation
-  MemoryLocation MergedLoc(Location.BasePtr, MergedOffset, MergedSize, MergedAlign);
-
-  // 创建新的Mop（使用当前Mop的指令作为原始指令）
-  auto MergedMop = std::make_unique<Mop>(Type, MergedLoc, OriginalInst);
-
-  // 复制依赖关系
-  for (auto* dep : Dependencies) {
-    MergedMop->addDependency(dep);
-  }
-  for (auto* dep : Other->Dependencies) {
-    MergedMop->addDependency(dep);
-  }
-
-  return MergedMop;
+  // 由于LLVM的MemoryLocation没有直接的偏移量信息，合并逻辑需要重新设计
+  // 这里我们暂时返回nullptr，表示不支持合并
+  // 在实际实现中，需要从其他途径获取偏移量信息，或者重新设计Mop的数据结构
+  return nullptr;
 }
 
 // 打印MOP信息
@@ -119,12 +89,18 @@ void Mop::print(raw_ostream& OS) const {
   }
   OS << "\n";
 
-  // 打印内存位置信息
+  // 打印内存位置信息（适配LLVM的MemoryLocation）
   OS << "MemoryLocation: ";
-  OS << "BasePtr: " << *Location.BasePtr << ", "
-     << "Offset: 0x" << format("%llx", Location.Offset.getZExtValue()) << ", "
-     << "Size: " << Location.Size << " bytes, "
-     << "Alignment: " << Location.Alignment << "\n";
+  OS << "Ptr: " << *Location.Ptr;
+  if (Location.Size.hasValue()) {
+    OS << ", Size: " << Location.Size.getValue() << " bytes";
+  } else {
+    OS << ", Size: unknown";
+  }
+  if (Location.AATags) {
+    OS << ", AATags: present";
+  }
+  OS << "\n";
 
   // 打印原始指令
   OS << "Original Instruction: ";

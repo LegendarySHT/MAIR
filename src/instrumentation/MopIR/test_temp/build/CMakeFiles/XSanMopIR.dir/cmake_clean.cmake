@@ -3,6 +3,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/Mop.cpp.o.d"
   "CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.o"
   "CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.o.d"
+  "CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o"
+  "CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o.d"
   "libXSanMopIR.a"
   "libXSanMopIR.pdb"
 )

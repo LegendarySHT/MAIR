@@ -4,6 +4,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
@@ -20,38 +21,21 @@ enum class MopType {
   Memset     // 内存设置
 };
 
-// 内存位置信息
-struct MemoryLocation {
-  llvm::Value* BasePtr;      // 基地址
-  llvm::APInt Offset;        // 偏移量
-  uint64_t Size;             // 大小（字节）
-  unsigned Alignment;        // 对齐要求
-  
-  MemoryLocation(llvm::Value* Base, const llvm::APInt& Off, uint64_t Sz, unsigned Align)
-    : BasePtr(Base), Offset(Off), Size(Sz), Alignment(Align) {}
-  
-  // 判断两个内存位置是否重叠
-  bool overlapsWith(const MemoryLocation& Other) const;
-  
-  // 判断是否与另一个位置相邻且可合并
-  bool isContiguousWith(const MemoryLocation& Other) const;
-};
-
 // MOP基类
 class Mop {
 private:
   MopType Type;                           // 操作类型
-  MemoryLocation Location;                // 内存位置
+  llvm::MemoryLocation Location;          // 内存位置（使用LLVM官方实现）
   llvm::Instruction* OriginalInst;        // 原始LLVM指令
   llvm::SmallVector<Mop*, 4> Dependencies; // 依赖的其他MOP
 
 public:
-  Mop(MopType Ty, const MemoryLocation& Loc, llvm::Instruction* Inst)
+  Mop(MopType Ty, const llvm::MemoryLocation& Loc, llvm::Instruction* Inst)
     : Type(Ty), Location(Loc), OriginalInst(Inst) {}
   
   // 访问器方法
   MopType getType() const { return Type; }
-  const MemoryLocation& getLocation() const { return Location; }
+  const llvm::MemoryLocation& getLocation() const { return Location; }
   llvm::Instruction* getOriginalInst() const { return OriginalInst; }
   
   // 判断是否可以与其他MOP合并
