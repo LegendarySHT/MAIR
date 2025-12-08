@@ -9,6 +9,16 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/PassManager.h"
 
+// 前向声明
+namespace __xsan {
+namespace MopIR {
+class MopIRAnnotator;
+}
+}
+
+// 需要 AnnotationLevel 的完整定义（用于默认参数）
+#include "MopIRAnnotator.h"
+
 namespace __xsan {
 namespace MopIR {
 
@@ -100,6 +110,12 @@ public:
   
   // 打印MOP IR信息（用于调试）
   void print(llvm::raw_ostream& OS) const;
+  
+  // 将 MopIR 信息以注释形式添加到 LLVM IR 中
+  // Level: 注释详细级别
+  // UseMetadata: 是否使用 Metadata（推荐，否则使用注释字符串）
+  void annotateIR(AnnotationLevel Level = AnnotationLevel::Basic, 
+                  bool UseMetadata = true);
 
 private:
   // 初始化默认的分析和优化流水线
