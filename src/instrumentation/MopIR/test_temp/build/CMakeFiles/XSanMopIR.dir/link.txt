@@ -1,2 +1,0 @@
-/usr/bin/ar qc libXSanMopIR.a CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/Mop.cpp.o CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopBuilder.cpp.o CMakeFiles/XSanMopIR.dir/XSan/src/instrumentation/MopIR/lib/MopRedundancyAnalysis.cpp.o
-/usr/bin/ranlib libXSanMopIR.a

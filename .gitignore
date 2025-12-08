@@ -21,4 +21,6 @@ TODO.md
 compile_commands.json
 xsan_config.cmake
 
+/src/instrumentation/MopIR/test_temp/build
+
 xsan_hooks_gen.h

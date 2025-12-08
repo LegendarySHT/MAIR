@@ -1,7 +1,0 @@
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/intrinsics_gen.dir
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/omp_gen.dir
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/acc_gen.dir
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/XSanMopIR.dir
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/SimpleMopConverter.dir
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/edit_cache.dir
-/XSan/src/instrumentation/MopIR/test_temp/build/CMakeFiles/rebuild_cache.dir
