@@ -39,8 +39,8 @@ public:
   const char* getName() const override { return "MopAliasAnalysis"; }
   
   // 查询两个MOP是否别名
-  bool isAliased(const Mop* M1, const Mop* M2) const;
-  
+  bool isAliased(const Mop *M1, const Mop *M2) const;
+
   // 清除分析结果
   void clear() { AliasResults.clear(); }
 };

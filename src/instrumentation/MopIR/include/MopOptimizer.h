@@ -50,8 +50,8 @@ private:
 
 public:
   MopRecurrenceOptimizer(bool Tsan = false, bool IgnoreCallsCheck = false)
-    : IsTsan(Tsan), IgnoreCalls(IgnoreCallsCheck) {}
-  
+      : IsTsan(Tsan), IgnoreCalls(IgnoreCallsCheck) {}
+
   void optimize(MopList& Mops) override;
   const char* getName() const override { return "MopRecurrenceOptimizer"; }
   
@@ -66,7 +66,7 @@ private:
   // 检查内存访问范围是否包含（考虑别名）
   bool isAccessRangeContains(Mop* KillingMop, Mop* DeadMop,
                              int64_t& KillingOff, int64_t& DeadOff);
-  
+
   // 构建赘余图并找到支配集
   void buildRecurringGraphAndFindDominatingSet(
       const MopList& Mops,

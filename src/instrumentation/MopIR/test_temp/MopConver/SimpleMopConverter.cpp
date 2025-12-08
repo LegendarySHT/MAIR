@@ -8,8 +8,8 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instructions.h"
-#include "../include/MopBuilder.h"
-#include "../include/Mop.h"
+#include "../../include/MopBuilder.h"
+#include "../../include/Mop.h"
 
 using namespace llvm;
 using namespace __xsan::MopIR;

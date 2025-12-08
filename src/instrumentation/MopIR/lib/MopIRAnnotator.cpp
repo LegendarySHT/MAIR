@@ -15,7 +15,8 @@ std::string MopIRAnnotator::mopTypeToString(MopType Type) const {
     case MopType::Load:   return "Load";
     case MopType::Store:  return "Store";
     case MopType::Atomic: return "Atomic";
-    case MopType::Memcpy: return "Memcpy";
+    case MopType::Memcpy:
+      return "Memcpy";
     case MopType::Memset: return "Memset";
     default:              return "Unknown";
   }

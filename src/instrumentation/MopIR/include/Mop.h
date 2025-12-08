@@ -41,10 +41,10 @@ struct AccessPatternInfo {
   
   // 范围访问 (Range Access): [L, R)
   llvm::Value* RangeBegin;         // L - 范围起始地址
-  llvm::Value* RangeEnd;           // R - 范围结束地址
-  
+  llvm::Value *RangeEnd;           // R - 范围结束地址
+
   // 周期性访问 (Periodic Access): ([L, R), AccessSize, Step)
-  llvm::Value* PeriodicBegin;      // L - 周期起始地址
+  llvm::Value *PeriodicBegin;       // L - 周期起始地址
   llvm::Value* PeriodicEnd;         // R - 周期结束地址
   uint64_t AccessSize;             // AccessSize - 每次访问的大小
   llvm::Value* Step;               // Step - 步长值（可能为常量或值）

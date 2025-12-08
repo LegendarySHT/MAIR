@@ -55,7 +55,7 @@ std::unique_ptr<Mop> MopBuilder::createMop(Instruction* Inst) const {
     
     // 获取访问大小
     uint64_t Size = DL.getTypeStoreSizeInBits(AI->getType()) / 8;
-    
+
     // 使用LLVM的MemoryLocation构造函数
     MemoryLocation Loc = MemoryLocation::get(AI);
     
