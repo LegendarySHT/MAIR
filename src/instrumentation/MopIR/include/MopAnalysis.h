@@ -183,6 +183,18 @@ public:
 private:
   // 检查两个内存操作之间是否有干扰调用
   bool hasInterferingCallBetween(const Mop* Earlier, const Mop* Later) const;
+
+  // 判断内存访问是否与循环无关（用于保证 AA 结果可靠）
+  bool isGuaranteedLoopIndependent(const llvm::Instruction* Current,
+                                   const llvm::Instruction* KillingDef,
+                                   const llvm::MemoryLocation& CurrentLoc) const;
+
+  // 判断指针是否为循环不变
+  bool isGuaranteedLoopInvariant(const llvm::Value* Ptr) const;
+
+  // 在需要时强化访问大小（如 *_chk 内建）
+  llvm::LocationSize strengthenLocationSize(const llvm::Instruction* I,
+                                            llvm::LocationSize Size) const;
   
   // 检查MOP1的内存范围是否包含MOP2的内存范围（考虑别名）
   bool isAccessRangeContains(const Mop* Mop1, const Mop* Mop2,
