@@ -33,3 +33,7 @@ else
     echo "Error: MopIRTest executable not found!"
     exit 1
 fi
+
+# 添加复杂控制流测试
+echo "Running test_complex.ll"
+./MopIRTest test_complex.ll

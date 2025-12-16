@@ -38,7 +38,7 @@
 
 - **MopAliasAnalysis** ✅
   - ✅ 基本框架
-  - ✅ 别名分析逻辑（基础实现）
+  - ✅ 使用 `AAResults` 对所有 MOP 两两进行别名查询并缓存结果
 
 - **MopDominanceAnalysis** ✅
   - ✅ 支配关系分析
@@ -46,11 +46,17 @@
   - ✅ 缓存机制
 
 - **MopDataflowAnalysis** ✅
-  - ✅ 基本框架（占位）
+  - ✅ 基本框架（占位，未实现具体数据流逻辑）
 
 - **MopRedundancyAnalysis** ✅
-  - ✅ 基本框架（占位）
-  - ⚠️ 需要完整实现
+  - ✅ 基本框架与主要逻辑已实现
+  - ✅ 覆盖判断 `doesMopCover()`：写/读敏感、范围包含、支配/后支配、干扰调用检测
+  - ✅ 干扰调用检测 `hasInterferingCallBetween()`：同基本块扫描副作用调用，忽略 `nosanitize`
+  - ✅ 循环独立性与不变量判断 `isGuaranteedLoopIndependent()` / `isGuaranteedLoopInvariant()`
+  - ✅ 访问大小强化 `strengthenLocationSize()`：支持 `*_chk` 内建
+  - ✅ 访问范围包含 `isAccessRangeContains()`：`AA.alias`、MustAlias/PartialAlias、GEP 基指针偏移、MemIntrinsic 长度匹配
+  - ✅ 支配关系整合 `doesDominateOrPostDominate()`：DT/PDT
+  - ⚠️ 仍需更多测试与边界条件验证
 
 ### 6. 优化流水线 ✅
 - **MopOptimizationPipeline** (`MopOptimizer.h`, `MopOptimizer.cpp`)
@@ -58,14 +64,19 @@
   - ✅ 上下文管理
 
 - **ContiguousReadMerger** ✅
-  - ✅ 基本框架（占位）
+  - ✅ 基本框架（占位，未实现合并逻辑）
 
 - **RedundantWriteEliminator** ✅
-  - ✅ 基本框架（占位）
+  - ✅ 基本框架（占位，未实现消除逻辑）
 
 - **MopRecurrenceOptimizer** ✅
-  - ✅ 基本框架
-  - ⚠️ 需要完整实现（整合 MopRecurrenceReducer）
+  - ✅ 基本框架（在 `MopOptimizer.cpp` 中）
+  - ✅ 初步整合核心逻辑：`isMopCheckRecurring()`、`isAccessRangeContains()`、支配集近似提取
+  - ✅ 已实现同基本块与跨基本块路径的调用干扰检测（ActiveMopAnalysis）
+  - ✅ 接入 BatchAA（带 EarliestEscapeInfo 缓存）用于别名与偏移查询
+  - ✅ 接入 SCEV 辅助循环不变性判断（循环独立性强化）
+  - ✅ `*_chk` 精确长度强化、`masked_store` 特例、对象完整覆盖判断
+  - ⚠️ 支配集仍采用近似 RecurringGraph 源集 + DFS 的策略（功能等价，结构尚未完全对齐）
 
 ### 7. 注释功能 ✅
 - **MopIRAnnotator** (`MopIRAnnotator.h`, `MopIRAnnotator.cpp`)
@@ -78,25 +89,26 @@
 ### 高优先级
 
 1. **MopRecurrenceOptimizer 完整实现** ⚠️
-   - [ ] 整合 MopRecurrenceReducer 的核心逻辑
-   - [ ] 实现 isMopCheckRecurring()
-   - [ ] 实现 isAccessRangeContains()
-   - [ ] 实现 buildRecurringGraphAndFindDominatingSet()
-   - [ ] 参考：`MopRecurrenceReducer.cpp`
+  - [x] 初步整合核心逻辑（不含调用干扰分析）
+  - [x] 实现 isMopCheckRecurring()（支配/后支配 + 范围包含）
+  - [x] 实现 isAccessRangeContains()（AA + 基指针偏移 + MemIntrinsic/MaskedStore 特例）
+  - [x] 实现 buildRecurringGraphAndFindDominatingSet()（入度为 0 近似支配集）
+  - [x] 实现同/跨基本块路径的调用干扰检测（ActiveMopAnalysis）
+  - [x] 接入 BatchAA 与 SCEV（循环独立性与大小强化）
+   - [x] 参考：`MopRecurrenceReducer.cpp`
 
 2. **MopAccessPatternAnalysis 完整实现** ⚠️
-   - [ ] 实现 analyzeMopAccessPattern()
-   - [ ] 实现 tryIdentifyRangeAccess()
-   - [ ] 实现 tryIdentifyPeriodicAccess()
-   - [ ] 实现 tryIdentifyCyclicAccess()
-   - [ ] 使用 SCEV 分析
-   - [ ] 参考：`Instrumentation.cpp:1313-1440`
+  - [ ] 实现 `analyze()` 及 `analyzeMopAccessPattern()`
+  - [ ] 实现 `tryIdentifyRangeAccess()`
+  - [ ] 实现 `tryIdentifyPeriodicAccess()`
+  - [ ] 实现 `tryIdentifyCyclicAccess()`
+  - [ ] 使用 SCEV 分析
+  - [ ] 参考：`Instrumentation.cpp:1313-1440`
 
 3. **MopRedundancyAnalysis 完整实现** ⚠️
-   - [ ] 实现完整的冗余分析逻辑
-   - [ ] 实现 isAccessRangeContains()
-   - [ ] 实现 hasInterferingCallBetween()
-   - [ ] 实现 doesMopCover()
+  - [ ] 增加更完善的测试覆盖与角落用例处理
+  - [ ] 验证跨基本块路径与调用栈影响的保守性策略
+  - [ ] 与优化器 `MopRecurrenceOptimizer` 对齐接口与行为
 
 ### 中优先级
 
@@ -124,13 +136,13 @@
 
 ## 实现进度
 
-### 已完成 (~60%)
+### 已完成 (~65%)
 - ✅ 核心数据结构
 - ✅ 构建系统
 - ✅ 基本框架
 - ✅ 注释功能
 
-### 进行中 (~30%)
+### 进行中 (~25%)
 - ⚠️ 核心优化器（MopRecurrenceOptimizer）
 - ⚠️ 访问模式分析
 - ⚠️ 冗余分析

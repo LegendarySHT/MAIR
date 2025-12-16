@@ -26,7 +26,7 @@ echo "Running tests..."
 echo "=================="
 
 if [ -f "./MopIRTest" ]; then
-    for ll in test_redundant.ll test_redundant_complex.ll; do
+    for ll in test_redundant.ll test_redundant_complex.ll test_recurrence.ll; do
         # 在源代码目录中查找 .ll 文件
         LL_FILE="${SOURCE_DIR}/$ll"
         if [ -f "$LL_FILE" ]; then

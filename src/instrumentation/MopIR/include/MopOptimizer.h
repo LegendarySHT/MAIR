@@ -3,6 +3,7 @@
 
 #include "Mop.h"
 #include "MopContext.h"
+#include "MOPState.h"
 #include "llvm/IR/Function.h"
 
 namespace __xsan {
@@ -61,11 +62,13 @@ public:
 
 private:
   // 检查两个MOP之间是否存在赘余关系
-  bool isMopCheckRecurring(Mop* KillingMop, Mop* DeadMop, bool WriteSensitive);
+  bool isMopCheckRecurring(Mop* KillingMop, Mop* DeadMop, bool WriteSensitive,
+                           MOPState &State);
   
   // 检查内存访问范围是否包含（考虑别名）
   bool isAccessRangeContains(Mop* KillingMop, Mop* DeadMop,
-                             int64_t& KillingOff, int64_t& DeadOff);
+                             int64_t& KillingOff, int64_t& DeadOff,
+                             MOPState &State);
 
   // 构建赘余图并找到支配集
   void buildRecurringGraphAndFindDominatingSet(

@@ -212,6 +212,24 @@ bool testPrint(MopIR& MopIR) {
   return true;
 }
 
+// 测试复杂控制流
+bool testComplexControlFlow(MopIR& MopIR, TestResults& Results) {
+  outs() << "\n=== Testing Complex Control Flow ===\n";
+
+  MopIR.build();
+  MopIR.analyze();
+
+  // 验证冗余 MOP 检测
+  MopRedundancyAnalysis Redund;
+  Redund.setContext(MopIR.getContext());
+  Redund.analyze(MopIR.getMops());
+
+  unsigned RedundantCount = Redund.getRedundantMops().size();
+  outs() << "  Redundant MOPs: " << RedundantCount << "\n";
+
+  return RedundantCount == 0; // 假设复杂控制流中无冗余
+}
+
 // 打印测试结果摘要
 void printTestSummary(const TestResults& Results) {
   outs() << "\n" << std::string(60, '=') << "\n";
@@ -316,6 +334,7 @@ int main(int argc, char** argv) {
     //AllTestsPassed &= testInstrumentationPoints(MopIR, Results);
     //AllTestsPassed &= testAnnotation(MopIR, Results);
     //AllTestsPassed &= testPrint(MopIR);
+    AllTestsPassed &= testComplexControlFlow(MopIR, Results);
   }
   
   // 打印测试摘要
