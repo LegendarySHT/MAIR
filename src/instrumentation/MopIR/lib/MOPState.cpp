@@ -1,6 +1,7 @@
 #include "../include/MOPState.h"
 #include <optional>
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/MemoryLocation.h"
@@ -8,6 +9,12 @@
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Operator.h"
+
+// LLVM <=15 未在头文件中对 mayContainIrreducibleControl 提供显式声明，
+// 这里前向声明以便链接到 LLVM 提供的实现，保持与 MopRecurrenceReducer 一致。
+namespace llvm {
+bool mayContainIrreducibleControl(const Function &F, const LoopInfo *LI = nullptr);
+}
 
 using namespace llvm;
 using namespace __xsan::MopIR;
@@ -32,8 +39,8 @@ MOPState::MOPState(Function &F, AAResults &AA, DominatorTree &DT,
                    LoopInfo &LI, ScalarEvolution &SE)
     : F(F), AA(AA), EI(DT, LI, EphValues), BatchAA(AA, &EI), DT(DT), PDT(PDT),
         TLI(TLI), DL(F.getParent()->getDataLayout()), LI(LI), SE(SE) {
-      // 保守：不特殊处理不可约环，按可约处理
-      ContainsIrreducibleLoops = false;
+      // 与 MopRecurrenceReducer 保持一致：检测不可约环，控制循环相关假设
+      ContainsIrreducibleLoops = mayContainIrreducibleControl(F, &LI);
 }
 
 bool MOPState::isMaskedStoreOverwrite(const Instruction *KillingI,
@@ -67,13 +74,6 @@ bool MOPState::isGuaranteedLoopInvariant(const Value *Ptr) {
     const Loop *L = LI.getLoopFor(I->getParent());
     if (!ContainsIrreducibleLoops && !L)
       return true;
-
-    // 额外：尝试用 SCEV 判断在当前循环 L 内是否不变
-    if (L && SE.isSCEVable(Ptr->getType())) {
-      const SCEV *S = SE.getSCEV(const_cast<Value *>(Ptr));
-      if (SE.isLoopInvariant(S, L))
-        return true;
-    }
     return false;
   }
   return true;
@@ -144,12 +144,8 @@ bool MOPState::isAccessRangeContains(const Instruction *KillingI,
   // AA 查询
   AliasResult AAR = BatchAA.alias(KillingLoc, DeadLoc);
   if (AAR == AliasResult::MustAlias) {
-    if (KillingLocSize.isPrecise()) {
-      if (KillingLocSize.getValue() >= DeadSize)
-        return true;
-    } else if (KillingSize >= DeadSize) {
+    if (KillingSize >= DeadSize)
       return true;
-    }
   }
 
   if (AAR == AliasResult::PartialAlias && AAR.hasOffset()) {

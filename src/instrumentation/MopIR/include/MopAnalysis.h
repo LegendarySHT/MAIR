@@ -10,6 +10,8 @@
 namespace __xsan {
 namespace MopIR {
 
+class MOPState;
+
 // MOP分析器基类
 class MopAnalysis {
 protected:
@@ -155,6 +157,8 @@ private:
   llvm::DenseSet<const Mop*> RedundantMops;
   // 存储MOP之间的覆盖关系 (Dead -> Killing)
   llvm::DenseMap<const Mop*, const Mop*> CoveringMopMap;
+  bool IsTsan = false;      // 写敏感模式（TSan）
+  bool IgnoreCalls = false; // 是否忽略调用干扰（测试用途）
   
 public:
   void analyze(const MopList& Mops) override;
@@ -171,8 +175,9 @@ public:
     return RedundantMops;
   }
   
-  // 判断MOP1是否覆盖MOP2
-  bool doesMopCover(const Mop* Mop1, const Mop* Mop2) const;
+  // 配置选项
+  void setTsanMode(bool Tsan) { IsTsan = Tsan; }
+  void setIgnoreCalls(bool Ignore) { IgnoreCalls = Ignore; }
   
   // 清除分析结果
   void clear() {
@@ -181,27 +186,16 @@ public:
   }
 
 private:
-  // 检查两个内存操作之间是否有干扰调用
-  bool hasInterferingCallBetween(const Mop* Earlier, const Mop* Later) const;
-
-  // 判断内存访问是否与循环无关（用于保证 AA 结果可靠）
-  bool isGuaranteedLoopIndependent(const llvm::Instruction* Current,
-                                   const llvm::Instruction* KillingDef,
-                                   const llvm::MemoryLocation& CurrentLoc) const;
-
-  // 判断指针是否为循环不变
-  bool isGuaranteedLoopInvariant(const llvm::Value* Ptr) const;
-
-  // 在需要时强化访问大小（如 *_chk 内建）
-  llvm::LocationSize strengthenLocationSize(const llvm::Instruction* I,
-                                            llvm::LocationSize Size) const;
-  
-  // 检查MOP1的内存范围是否包含MOP2的内存范围（考虑别名）
-  bool isAccessRangeContains(const Mop* Mop1, const Mop* Mop2,
-                              int64_t& Off1, int64_t& Off2) const;
-  
-  // 检查MOP1是否支配MOP2或者后支配MOP2
-  bool doesDominateOrPostDominate(const Mop* Mop1, const Mop* Mop2) const;
+  // 递归检查与包含判断（复发检测）
+  bool isMopCheckRecurring(Mop* KillingMop, Mop* DeadMop, bool WriteSensitive,
+                           class MOPState &State);
+  bool isAccessRangeContains(Mop* KillingMop, Mop* DeadMop,
+                             int64_t &KillingOff, int64_t &DeadOff,
+                             class MOPState &State);
+  void buildRecurringGraphAndFindDominatingSet(
+      const MopList &Mops,
+      llvm::SmallVectorImpl<Mop *> &DominatingSet,
+      llvm::DenseMap<Mop *, Mop *> &CoveringMap);
 };
 
 // 分析流水线（类似于优化流水线）

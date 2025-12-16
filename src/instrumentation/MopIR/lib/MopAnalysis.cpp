@@ -1,6 +1,9 @@
 #include <iterator>
 #include <optional>
 #include <optional>
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 #include "../include/MopAnalysis.h"
 #include "../include/MopContext.h"
@@ -16,9 +19,23 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Support/TypeSize.h"
 #include "llvm/Support/raw_ostream.h"
+#include "../include/MOPState.h"
+#include "../include/ActiveMopAnalysis.h"
 
 using namespace __xsan::MopIR;
 using namespace llvm;
+
+// 前向声明以复用已实现的 MopRecurrenceReducer，避免与 MopIR 自带的
+// ActiveMopAnalysis 重复定义。
+namespace __xsan {
+class MopRecurrenceReducer {
+public:
+  MopRecurrenceReducer(Function &F, FunctionAnalysisManager &FAM);
+  SmallVector<const Instruction *, 16>
+  distillRecurringChecks(ArrayRef<const Instruction *> Insts, bool IsTsan,
+                         bool IgnoreCalls = false);
+};
+}
 
 namespace {
 // Mirror helper from MopRecurrenceReducer: derive precise object size if known.
@@ -173,8 +190,6 @@ bool MopDominanceAnalysis::dominatesOrPostDominates(const Mop* Mop1, const Mop* 
 // MopRedundancyAnalysis 实现（占位实现）
 // ============================================================================
 
-//Traverse the Mop list and find redundant MOPs.
-//ref: [distillRecurringChecks] in MopRecurrenceReducer.cpp
 void MopRedundancyAnalysis::analyze(const MopList& Mops) {
   if (!Context) {
     return;
@@ -184,28 +199,66 @@ void MopRedundancyAnalysis::analyze(const MopList& Mops) {
   RedundantMops.clear();
   CoveringMopMap.clear();
 
-  // 两两检查可覆盖关系，满足覆盖则把 Later 记为冗余
-  for (const auto &KMopUPtr : Mops) {
-    Mop *Killing = KMopUPtr.get();
-    if (!Killing || !Killing->getOriginalInst() || Killing->isRedundant()) {
+  // 若可用 FunctionAnalysisManager，则直接复用 MopRecurrenceReducer，确保行为一致
+  if (auto *FAM = Context->getAnalysisManager()) {
+    llvm::SmallVector<const Instruction*, 64> Insts;
+    llvm::DenseMap<const Instruction*, Mop*> Inst2Mop;
+    Insts.reserve(Mops.size());
+    for (const auto &UP : Mops) {
+      Mop *M = UP.get();
+      Instruction *I = M ? M->getOriginalInst() : nullptr;
+      if (!I)
+        continue;
+      Insts.push_back(I);
+      Inst2Mop[I] = M;
+    }
+
+    __xsan::MopRecurrenceReducer Reducer(Context->getFunction(), *FAM);
+    llvm::SmallVector<const Instruction*, 16> Survivors =
+        Reducer.distillRecurringChecks(Insts, IsTsan, IgnoreCalls);
+
+    llvm::DenseSet<const Instruction*> Keep;
+    for (const Instruction *I : Survivors) {
+      Keep.insert(I);
+    }
+
+    for (const auto &UP : Mops) {
+      Mop *M = UP.get();
+      Instruction *I = M ? M->getOriginalInst() : nullptr;
+      if (!M || !I)
+        continue;
+      bool Live = Keep.contains(I);
+      M->setRedundant(!Live);
+      if (!Live) {
+        RedundantMops.insert(M);
+      }
+    }
+    return;
+  }
+
+  // 复用原优化器的复发图逻辑：构建覆盖图，提取支配（幸存）集合
+  llvm::SmallVector<Mop*, 16> Dominating;
+  llvm::DenseMap<Mop*, Mop*> Covering;
+  buildRecurringGraphAndFindDominatingSet(Mops, Dominating, Covering);
+
+  llvm::SmallPtrSet<Mop*, 32> DomSet;
+  for (auto *M : Dominating) DomSet.insert(M);
+
+  for (const auto &UP : Mops) {
+    Mop *M = UP.get();
+    bool IsDom = DomSet.contains(M);
+    M->setRedundant(!IsDom);
+    if (IsDom) {
+      M->setCoveringMop(nullptr);
       continue;
     }
-
-    for (const auto &DMopUPtr : Mops) {
-      Mop *Dead = DMopUPtr.get();
-      if (!Dead || Killing == Dead || !Dead->getOriginalInst()) {
-        continue;
-      }
-
-      if (!doesMopCover(Killing, Dead)) {
-        continue;
-      }
-
-      RedundantMops.insert(Dead);
-      CoveringMopMap[Dead] = Killing;
-      Dead->setRedundant(true);
-      Dead->setCoveringMop(Killing);
+    auto It = Covering.find(M);
+    const Mop *Cover = (It != Covering.end()) ? It->second : nullptr;
+    if (Cover) {
+      CoveringMopMap[M] = Cover;
     }
+    RedundantMops.insert(M);
+    M->setCoveringMop(const_cast<Mop*>(Cover));
   }
 }
 
@@ -221,258 +274,193 @@ const Mop* MopRedundancyAnalysis::getCoveringMop(const Mop* M) const {
   return nullptr;
 }
 
-//return whether Mop1 can cover Mop2.
-//ref: [isMopCheckRecurring] in MopRecurrenceReducer.cpp
-bool MopRedundancyAnalysis::doesMopCover(const Mop* Mop1, const Mop* Mop2) const {
-  if (!Context || !Mop1 || !Mop2) {
+bool MopRedundancyAnalysis::isMopCheckRecurring(Mop* KillingMop, Mop* DeadMop,
+                                                bool WriteSensitive,
+                                                MOPState &State) {
+  if (!Context || !KillingMop || !DeadMop) {
     return false;
   }
 
-  auto *I1 = Mop1->getOriginalInst();
-  auto *I2 = Mop2->getOriginalInst();
-  if (!I1 || !I2) {
+  Instruction *KillingI = KillingMop->getOriginalInst();
+  Instruction *DeadI = DeadMop->getOriginalInst();
+  if (!KillingI || !DeadI) {
     return false;
   }
 
-  // 写操作可以覆盖任意，读操作仅覆盖读操作
-  if (!Mop1->isWrite() && Mop1->isWrite() != Mop2->isWrite()) {
-    return false;
-  }
-
-  int64_t Off1 = 0;
-  int64_t Off2 = 0;
-  if (!isAccessRangeContains(Mop1, Mop2, Off1, Off2)) {
-    return false;
-  }
-
-  if (!doesDominateOrPostDominate(Mop1, Mop2)) {
-    return false;
-  }
-
-  if (hasInterferingCallBetween(Mop1, Mop2)) {
-    return false;
-  }
-
-  return true;
-}
-
-bool MopRedundancyAnalysis::hasInterferingCallBetween(const Mop* Earlier, const Mop* Later) const {
-  if (!Earlier || !Later) {
-    return true;  // 保守：无法判断则认为存在干扰
-  }
-
-  Instruction *I1 = Earlier->getOriginalInst();
-  Instruction *I2 = Later->getOriginalInst();
-  if (!I1 || !I2) {
-    return true;
-  }
-
-  // 仅在同一基本块内进行扫描，跨基本块保守处理
-  if (I1->getParent() != I2->getParent()) {
-    return true;
-  }
-
-  BasicBlock *BB = I1->getParent();
-
-  // 确定遍历方向
-  Instruction *Begin = I1;
-  Instruction *End = I2;
-  if (!I1->comesBefore(I2)) {
-    std::swap(Begin, End);
-  }
-
-  // 在 Begin 之后、End 之前查找可能写内存或有副作用的调用
-  for (auto It = std::next(Begin->getIterator()); It != End->getIterator(); ++It) {
-    Instruction &Cur = *It;
-    if (isa<DbgInfoIntrinsic>(&Cur)) {
-      continue;
-    }
-    if (auto *CB = dyn_cast<CallBase>(&Cur)) {
-      // 忽略显式标记 no-sanitize 的调用
-      if (Cur.getMetadata("nosanitize")) {
-        continue;
-      }
-      if (CB->mayHaveSideEffects()) {
-        return true;
-      }
-    }
-    if (Cur.mayHaveSideEffects()) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-bool MopRedundancyAnalysis::isGuaranteedLoopInvariant(const Value* Ptr) const {
-  if (!Context) {
-    return false;
-  }
-  auto &LI = Context->getLoopInfo();
-
-  Ptr = Ptr->stripPointerCasts();
-  if (const auto *GEP = dyn_cast<GEPOperator>(Ptr)) {
-    if (GEP->hasAllConstantIndices()) {
-      Ptr = GEP->getPointerOperand()->stripPointerCasts();
-    }
-  }
-
-  if (const auto *I = dyn_cast<Instruction>(Ptr)) {
-    // 位于入口块或者不在任何循环中则视为循环不变
-    return I->getParent()->isEntryBlock() || !LI.getLoopFor(I->getParent());
-  }
-  return true;
-}
-
-bool MopRedundancyAnalysis::isGuaranteedLoopIndependent(
-    const Instruction* Current, const Instruction* KillingDef,
-    const MemoryLocation& CurrentLoc) const {
-  if (!Context || !Current || !KillingDef) {
-    return false;
-  }
-  auto &LI = Context->getLoopInfo();
-
-  // 同一基本块内必然可安全比较
-  if (Current->getParent() == KillingDef->getParent()) {
-    return true;
-  }
-
-  const Loop *CurrentLoop = LI.getLoopFor(Current->getParent());
-  if (CurrentLoop && CurrentLoop == LI.getLoopFor(KillingDef->getParent())) {
-    return true;
-  }
-
-  // 其他情况需要保证指针在所有循环中不变
-  return isGuaranteedLoopInvariant(CurrentLoc.Ptr);
-}
-
-LocationSize MopRedundancyAnalysis::strengthenLocationSize(
-    const Instruction* I, LocationSize Size) const {
-  if (!Context || !I) {
-    return Size;
-  }
-  if (const auto *CB = dyn_cast<CallBase>(I)) {
-    LibFunc F;
-    const auto &TLI = Context->getTargetLibraryInfo();
-    if (TLI.getLibFunc(*CB, F) && TLI.has(F) &&
-        (F == LibFunc_memset_chk || F == LibFunc_memcpy_chk)) {
-      if (const auto *Len = dyn_cast<ConstantInt>(CB->getArgOperand(2))) {
-        return LocationSize::precise(Len->getZExtValue());
-      }
-    }
-  }
-  return Size;
-}
-
-//ref: [isAccessRangeContains] in MopRecurrenceReducer.cpp
-bool MopRedundancyAnalysis::isAccessRangeContains(const Mop* Mop1, const Mop* Mop2,
-                                                    int64_t& Off1, int64_t& Off2) const {
-  if (!Context || !Mop1 || !Mop2) {
-    return false;
-  }
-
-  const auto &Loc1 = Mop1->getLocation();
-  const auto &Loc2 = Mop2->getLocation();
-
-  auto &AA = Context->getAAResults();
-  const DataLayout &DL = Context->getDataLayout();
-  const auto &TLI = Context->getTargetLibraryInfo();
-
-  const Instruction *KillingI = Mop1->getOriginalInst();
-  const Instruction *DeadI = Mop2->getOriginalInst();
-
-  if (!isGuaranteedLoopIndependent(DeadI, KillingI, Loc2)) {
-    return false;
-  }
-
-  LocationSize KillingSize = strengthenLocationSize(KillingI, Loc1.Size);
-  const Value *DeadPtr = Loc2.Ptr->stripPointerCasts();
-  const Value *KillingPtr = Loc1.Ptr->stripPointerCasts();
-  const Value *DeadUndObj = getUnderlyingObject(DeadPtr);
-  const Value *KillingUndObj = getUnderlyingObject(KillingPtr);
-
-  if (DeadUndObj == KillingUndObj && KillingSize.isPrecise() &&
-      isIdentifiedObject(KillingUndObj)) {
-    if (auto ObjSize = getPointerSize(KillingUndObj, DL, TLI,
-                                      &Context->getFunction())) {
-      if (*ObjSize == KillingSize.getValue()) {
-        return true;
-      }
-    }
-  }
-
-  // 尝试处理不精确的大小（例如 MemIntrinsic）
-  if (!KillingSize.isPrecise() || !Loc2.Size.isPrecise()) {
-    const auto *KillingMemI = dyn_cast_or_null<MemIntrinsic>(KillingI);
-    const auto *DeadMemI = dyn_cast_or_null<MemIntrinsic>(DeadI);
-    if (KillingMemI && DeadMemI) {
-      const Value *KillingLen = KillingMemI->getLength();
-      const Value *DeadLen = DeadMemI->getLength();
-      if (KillingLen == DeadLen && AA.isMustAlias(Loc2, Loc1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  AliasResult AR = AA.alias(Loc1, Loc2);
-  if (AR == AliasResult::NoAlias) {
-    return false;
-  }
-
-  uint64_t Size1 = KillingSize.getValue();
-  uint64_t Size2 = Loc2.Size.getValue();
-
-  if (DeadUndObj != KillingUndObj) {
-    return false;
-  }
-
-  int64_t BaseOff1 = 0;
-  int64_t BaseOff2 = 0;
-  const Value *Base1 =
-      GetPointerBaseWithConstantOffset(KillingPtr, BaseOff1, DL);
-  const Value *Base2 = GetPointerBaseWithConstantOffset(DeadPtr, BaseOff2, DL);
-
-  // MustAlias: 只需比较大小
-  if (AR == AliasResult::MustAlias) {
-    Off1 = BaseOff1;
-    Off2 = BaseOff2;
-    return Size1 >= Size2;
-  }
-
-  // 如果能分解出同一基指针，则用偏移与大小判断包含关系
-  if (Base1 && Base2 && Base1 == Base2) {
-    Off1 = BaseOff1;
-    Off2 = BaseOff2;
-    return (Off1 <= Off2) &&
-           (static_cast<uint64_t>(Off2 - Off1) + Size2 <= Size1);
-  }
-
-  // PartialAlias 带偏移的情况（如果分析器提供偏移）
-  if (AR == AliasResult::PartialAlias && AR.hasOffset()) {
-    int32_t Off = AR.getOffset();
-    if (Off >= 0 && static_cast<uint64_t>(Off) + Size2 <= Size1) {
-      Off1 = 0;
-      Off2 = Off;
-      return true;
-    }
-  }
-
-  // 无法精确判断时，返回false
-  return false;
-}
-
-bool MopRedundancyAnalysis::doesDominateOrPostDominate(const Mop* Mop1, const Mop* Mop2) const {
-  if (!Context) {
-    return false;
-  }
-  
-  if (!Mop1 || !Mop2 || !Mop1->getOriginalInst() || !Mop2->getOriginalInst()) {
+  // 写敏感约束：TSan 模式需要写或类型一致
+  if (WriteSensitive && !KillingMop->isWrite() &&
+      (KillingMop->isWrite() != DeadMop->isWrite())) {
     return false;
   }
 
   auto &DT = Context->getDominatorTree();
   auto &PDT = Context->getPostDominatorTree();
-  return DT.dominates(Mop1->getOriginalInst(), Mop2->getOriginalInst()) ||
-         PDT.dominates(Mop1->getOriginalInst(), Mop2->getOriginalInst());
+  bool Dominates = DT.dominates(KillingI, DeadI);
+  bool PostDominates = PDT.dominates(KillingI, DeadI);
+  if (!Dominates && !PostDominates) {
+    return false;
+  }
+
+  int64_t KillingOff = 0;
+  int64_t DeadOff = 0;
+  if (!isAccessRangeContains(KillingMop, DeadMop, KillingOff, DeadOff, State)) {
+    return false;
+  }
+
+  return true;
+}
+
+bool MopRedundancyAnalysis::isAccessRangeContains(Mop* KillingMop, Mop* DeadMop,
+                                                  int64_t &KillingOff,
+                                                  int64_t &DeadOff,
+                                                  MOPState &State) {
+  if (!Context || !KillingMop || !DeadMop) {
+    return false;
+  }
+
+  Instruction *KillingI = KillingMop->getOriginalInst();
+  Instruction *DeadI = DeadMop->getOriginalInst();
+  const MemoryLocation &KillingLoc = KillingMop->getLocation();
+  const MemoryLocation &DeadLoc = DeadMop->getLocation();
+  return State.isAccessRangeContains(KillingI, DeadI, KillingLoc, DeadLoc,
+                                     KillingOff, DeadOff);
+}
+
+void MopRedundancyAnalysis::buildRecurringGraphAndFindDominatingSet(
+    const MopList &Mops,
+    SmallVectorImpl<Mop *> &DominatingSet,
+    llvm::DenseMap<Mop *, Mop *> &CoveringMap) {
+  if (!Context) {
+    return;
+  }
+
+  MOPState State(*Context);
+  struct Edge {
+    Mop *Killing;
+    Mop *Dead;
+    bool Blocked;
+    Instruction *FromI;
+    Instruction *ToI;
+  };
+
+  SmallVector<Edge, 32> Edges;
+  SmallVector<Mop *, 32> Candidates;
+  SmallPtrSet<Mop *, 32> CandSet;
+  bool WriteSensitive = IsTsan;
+
+  for (const auto &Uk : Mops) {
+    Mop *Km = Uk.get();
+    Instruction *KI = Km ? Km->getOriginalInst() : nullptr;
+    if (!KI || !__xsan::isInterestingMop(*KI)) {
+      continue;  // 与 MopRecurrenceReducer 保持一致：仅处理“interesting” MOP
+    }
+    for (const auto &Ud : Mops) {
+      Mop *Dm = Ud.get();
+      if (Km == Dm) {
+        continue;
+      }
+      Instruction *DI = Dm ? Dm->getOriginalInst() : nullptr;
+      if (!DI || !__xsan::isInterestingMop(*DI)) {
+        continue;
+      }
+      if (!isMopCheckRecurring(Km, Dm, WriteSensitive, State)) {
+        continue;
+      }
+      auto &DT = Context->getDominatorTree();
+      auto &PDT = Context->getPostDominatorTree();
+      Instruction *FromI = nullptr;
+      Instruction *ToI = nullptr;
+      if (DT.dominates(KI, DI)) {
+        FromI = KI;
+        ToI = DI;
+      } else if (PDT.dominates(KI, DI)) {
+        FromI = DI;
+        ToI = KI;
+      } else {
+        continue;
+      }
+      Edges.push_back({Km, Dm, /*Blocked=*/false, FromI, ToI});
+      CandSet.insert(Km);
+      CandSet.insert(Dm);
+    }
+  }
+
+  for (auto *M : CandSet) {
+    Candidates.push_back(M);
+  }
+
+  if (!IgnoreCalls && !Edges.empty()) {
+    SmallVector<const Instruction *, 64> MopInsts;
+    for (auto *M : Candidates) {
+      MopInsts.push_back(M->getOriginalInst());
+    }
+    __xsan::ActiveMopAnalysis AMA(Context->getFunction(), MopInsts, IsTsan);
+    for (auto &E : Edges) {
+      bool IsToDead = (E.FromI == E.Killing->getOriginalInst());
+      bool Active = AMA.isOneMopActiveToAnother(E.FromI, E.ToI, IsToDead);
+      E.Blocked = !Active;
+    }
+  }
+
+  struct Vertex {
+    Mop *M;
+    SmallVector<Vertex *, 16> Children;
+    bool HasParent = false;
+  };
+  SmallVector<std::unique_ptr<Vertex>, 64> Verts;
+  DenseMap<Mop *, Vertex *> Map;
+  for (auto *M : Candidates) {
+    Verts.emplace_back(std::make_unique<Vertex>(Vertex{M, {}, false}));
+    Map[M] = Verts.back().get();
+  }
+  for (auto &E : Edges) {
+    if (E.Blocked) {
+      continue;
+    }
+    auto *K = Map.lookup(E.Killing);
+    auto *D = Map.lookup(E.Dead);
+    if (!K || !D) {
+      continue;
+    }
+    K->Children.push_back(D);
+    D->HasParent = true;
+    if (!CoveringMap.lookup(D->M)) {
+      CoveringMap[D->M] = K->M;
+    }
+  }
+
+  DominatingSet.clear();
+  SmallPtrSet<Vertex *, 32> Visited;
+  auto Dfs = [&](auto &Self, Vertex *V) -> void {
+    if (!Visited.insert(V).second) {
+      return;
+    }
+    for (auto *C : V->Children) {
+      Self(Self, C);
+    }
+  };
+
+  for (auto &UP : Verts) {
+    Vertex *V = UP.get();
+    if (!V->HasParent) {
+      DominatingSet.push_back(V->M);
+      Dfs(Dfs, V);
+    }
+  }
+
+  for (auto &UP : Verts) {
+    Vertex *V = UP.get();
+    if (Visited.contains(V)) {
+      continue;
+    }
+    DominatingSet.push_back(V->M);
+    Dfs(Dfs, V);
+  }
+
+  for (const auto &U : Mops) {
+    Mop *M = U.get();
+    if (!CandSet.contains(M)) {
+      DominatingSet.push_back(M);
+    }
+  }
 }

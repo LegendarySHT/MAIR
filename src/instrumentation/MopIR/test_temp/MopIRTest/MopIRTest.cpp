@@ -133,15 +133,11 @@ bool testRedundancy(MopIR& MopIR, TestResults& Results) {
 // 测试优化功能
 bool testOptimize(MopIR& MopIR, TestResults& Results) {
   outs() << "\n=== Testing Optimization Function ===\n";
-  
-  // 添加优化器
-  auto RecurrenceOpt = std::make_unique<MopRecurrenceOptimizer>(/*IsTsan=*/false);
-  MopIR.getOptimizationPipeline().addOptimizer(std::move(RecurrenceOpt));
-  
+
+  // 兼容旧接口：分析阶段已标记冗余，这里仅统计结果
   MopIR.optimize();
   Results.OptimizeSuccess = true;
-  
-  // 统计冗余 MOP
+
   const auto& Mops = MopIR.getOptimizedMops();
   for (const auto& Mop : Mops) {
     if (Mop->isRedundant()) {

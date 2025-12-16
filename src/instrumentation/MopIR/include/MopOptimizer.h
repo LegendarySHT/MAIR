@@ -3,7 +3,6 @@
 
 #include "Mop.h"
 #include "MopContext.h"
-#include "MOPState.h"
 #include "llvm/IR/Function.h"
 
 namespace __xsan {
@@ -40,40 +39,6 @@ class RedundantWriteEliminator : public MopOptimizer {
 public:
   void optimize(MopList& Mops) override;
   const char* getName() const override { return "RedundantWriteEliminator"; }
-};
-
-// 赘余检查消除优化器（整合自 MopRecurrenceReducer）
-// 这是核心优化器，用于消除被其他MOP检查覆盖的冗余检查
-class MopRecurrenceOptimizer : public MopOptimizer {
-private:
-  bool IsTsan;           // 是否为 TSan 模式（写敏感）
-  bool IgnoreCalls;      // 是否忽略调用检查（用于测试）
-
-public:
-  MopRecurrenceOptimizer(bool Tsan = false, bool IgnoreCallsCheck = false)
-      : IsTsan(Tsan), IgnoreCalls(IgnoreCallsCheck) {}
-
-  void optimize(MopList& Mops) override;
-  const char* getName() const override { return "MopRecurrenceOptimizer"; }
-  
-  // 设置优化选项
-  void setTsanMode(bool Tsan) { IsTsan = Tsan; }
-  void setIgnoreCalls(bool Ignore) { IgnoreCalls = Ignore; }
-
-private:
-  // 检查两个MOP之间是否存在赘余关系
-  bool isMopCheckRecurring(Mop* KillingMop, Mop* DeadMop, bool WriteSensitive,
-                           MOPState &State);
-  
-  // 检查内存访问范围是否包含（考虑别名）
-  bool isAccessRangeContains(Mop* KillingMop, Mop* DeadMop,
-                             int64_t& KillingOff, int64_t& DeadOff,
-                             MOPState &State);
-
-  // 构建赘余图并找到支配集
-  void buildRecurringGraphAndFindDominatingSet(
-      const MopList& Mops,
-      llvm::SmallVectorImpl<Mop*>& DominatingSet);
 };
 
 // MOP优化流水线

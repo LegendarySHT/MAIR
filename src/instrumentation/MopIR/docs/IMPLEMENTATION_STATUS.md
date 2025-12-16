@@ -56,6 +56,7 @@
   - ✅ 访问大小强化 `strengthenLocationSize()`：支持 `*_chk` 内建
   - ✅ 访问范围包含 `isAccessRangeContains()`：`AA.alias`、MustAlias/PartialAlias、GEP 基指针偏移、MemIntrinsic 长度匹配
   - ✅ 支配关系整合 `doesDominateOrPostDominate()`：DT/PDT
+  - ✅ 整合 `MopRecurrenceOptimizer` 的逻辑，包括支配集提取、循环独立性判断、调用干扰检测等
   - ⚠️ 仍需更多测试与边界条件验证
 
 ### 6. 优化流水线 ✅
@@ -69,15 +70,6 @@
 - **RedundantWriteEliminator** ✅
   - ✅ 基本框架（占位，未实现消除逻辑）
 
-- **MopRecurrenceOptimizer** ✅
-  - ✅ 基本框架（在 `MopOptimizer.cpp` 中）
-  - ✅ 初步整合核心逻辑：`isMopCheckRecurring()`、`isAccessRangeContains()`、支配集近似提取
-  - ✅ 已实现同基本块与跨基本块路径的调用干扰检测（ActiveMopAnalysis）
-  - ✅ 接入 BatchAA（带 EarliestEscapeInfo 缓存）用于别名与偏移查询
-  - ✅ 接入 SCEV 辅助循环不变性判断（循环独立性强化）
-  - ✅ `*_chk` 精确长度强化、`masked_store` 特例、对象完整覆盖判断
-  - ⚠️ 支配集仍采用近似 RecurringGraph 源集 + DFS 的策略（功能等价，结构尚未完全对齐）
-
 ### 7. 注释功能 ✅
 - **MopIRAnnotator** (`MopIRAnnotator.h`, `MopIRAnnotator.cpp`)
   - ✅ 4 种注释级别
@@ -88,16 +80,7 @@
 
 ### 高优先级
 
-1. **MopRecurrenceOptimizer 完整实现** ⚠️
-  - [x] 初步整合核心逻辑（不含调用干扰分析）
-  - [x] 实现 isMopCheckRecurring()（支配/后支配 + 范围包含）
-  - [x] 实现 isAccessRangeContains()（AA + 基指针偏移 + MemIntrinsic/MaskedStore 特例）
-  - [x] 实现 buildRecurringGraphAndFindDominatingSet()（入度为 0 近似支配集）
-  - [x] 实现同/跨基本块路径的调用干扰检测（ActiveMopAnalysis）
-  - [x] 接入 BatchAA 与 SCEV（循环独立性与大小强化）
-   - [x] 参考：`MopRecurrenceReducer.cpp`
-
-2. **MopAccessPatternAnalysis 完整实现** ⚠️
+1. **MopAccessPatternAnalysis 完整实现** ⚠️
   - [ ] 实现 `analyze()` 及 `analyzeMopAccessPattern()`
   - [ ] 实现 `tryIdentifyRangeAccess()`
   - [ ] 实现 `tryIdentifyPeriodicAccess()`
@@ -105,45 +88,43 @@
   - [ ] 使用 SCEV 分析
   - [ ] 参考：`Instrumentation.cpp:1313-1440`
 
-3. **MopRedundancyAnalysis 完整实现** ⚠️
+2. **MopRedundancyAnalysis 完整实现** ⚠️
   - [ ] 增加更完善的测试覆盖与角落用例处理
   - [ ] 验证跨基本块路径与调用栈影响的保守性策略
-  - [ ] 与优化器 `MopRecurrenceOptimizer` 对齐接口与行为
 
 ### 中优先级
 
-4. **ContiguousReadMerger 实现**
+3. **ContiguousReadMerger 实现**
    - [ ] 识别连续读取
    - [ ] 合并逻辑
 
-5. **RedundantWriteEliminator 实现**
+4. **RedundantWriteEliminator 实现**
    - [ ] 识别冗余写入
    - [ ] 消除逻辑
 
-6. **MopDataflowAnalysis 实现**
+5. **MopDataflowAnalysis 实现**
    - [ ] 数据流分析逻辑
 
 ### 低优先级
 
-7. **MopIRPass 实现**
+6. **MopIRPass 实现**
    - [ ] LLVM Pass 接口实现
    - [ ] 集成到 Pass 管道
 
-8. **测试和验证**
+7. **测试和验证**
    - [ ] 单元测试
    - [ ] 集成测试
    - [ ] 性能测试
 
 ## 实现进度
 
-### 已完成 (~65%)
+### 已完成 (~70%)
 - ✅ 核心数据结构
 - ✅ 构建系统
 - ✅ 基本框架
 - ✅ 注释功能
 
-### 进行中 (~25%)
-- ⚠️ 核心优化器（MopRecurrenceOptimizer）
+### 进行中 (~20%)
 - ⚠️ 访问模式分析
 - ⚠️ 冗余分析
 
@@ -155,9 +136,8 @@
 ## 下一步工作建议
 
 ### 阶段 1：核心功能（当前）
-1. 完成 MopRecurrenceOptimizer 实现
-2. 完成 MopAccessPatternAnalysis 实现
-3. 完成 MopRedundancyAnalysis 实现
+1. 完成 MopAccessPatternAnalysis 实现
+2. 完成 MopRedundancyAnalysis 测试覆盖
 
 ### 阶段 2：优化和完善
 1. 实现其他优化器
@@ -168,23 +148,6 @@
 1. 集成到现有系统
 2. 编写测试
 3. 文档完善
-
-## 参考实现
-
-### MopRecurrenceOptimizer
-- 参考文件：`/XSan/src/instrumentation/Analysis/MopRecurrenceReducer.cpp`
-- 关键方法：
-  - `distillRecurringChecks()` (line 519)
-  - `isMopCheckRecurring()` (line 442)
-  - `isAccessRangeContains()` (line 317)
-  - `RecurringGraph::fillDominatingSet()` (line 481)
-
-### MopAccessPatternAnalysis
-- 参考文件：`/XSan/src/instrumentation/Instrumentation.cpp`
-- 关键部分：
-  - 访问模式定义 (line 1313-1320)
-  - SCEV 分析 (line 1307-1356)
-  - 范围提取 (line 1417-1423)
 
 ## 注意事项
 
