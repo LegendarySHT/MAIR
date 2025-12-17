@@ -245,6 +245,11 @@ bool MopRedundancyAnalysis::isMopCheckRecurring(Mop* KillingMop, Mop* DeadMop,
     return false;
   }
 
+  // ASan 模式下仍禁止“读覆盖写”，以与 legacy Reducer 行为对齐
+  if (!WriteSensitive && !KillingMop->isWrite() && DeadMop->isWrite()) {
+    return false;
+  }
+
   auto &DT = Context->getDominatorTree();
   auto &PDT = Context->getPostDominatorTree();
   bool Dominates = DT.dominates(KillingI, DeadI);
@@ -332,6 +337,17 @@ void MopRedundancyAnalysis::buildRecurringGraphAndFindDominatingSet(
         continue;
       }
       Edges.push_back({Km, Dm, /*Blocked=*/false, FromI, ToI});
+      // Debug: 边构建日志
+      llvm::outs() << "[MopIR Redund] EdgeAdded in "
+                   << Context->getFunction().getName() << ":\n  Killing: ";
+      KI->print(llvm::outs());
+      llvm::outs() << "\n  Dead   : ";
+      DI->print(llvm::outs());
+      llvm::outs() << "\n  From -> To: ";
+      FromI->print(llvm::outs());
+      llvm::outs() << " -> ";
+      ToI->print(llvm::outs());
+      llvm::outs() << "\n";
       CandSet.insert(Km);
       CandSet.insert(Dm);
     }
@@ -351,6 +367,13 @@ void MopRedundancyAnalysis::buildRecurringGraphAndFindDominatingSet(
       bool IsToDead = (E.FromI == E.Killing->getOriginalInst());
       bool Active = AMA.isOneMopActiveToAnother(E.FromI, E.ToI, IsToDead);
       E.Blocked = !Active;
+      // Debug: 边阻断状态
+      llvm::outs() << "[MopIR Redund] EdgeActive in "
+                   << Context->getFunction().getName() << ": ";
+      E.FromI->print(llvm::outs());
+      llvm::outs() << (Active ? " ->(active) " : " ->(blocked) ");
+      E.ToI->print(llvm::outs());
+      llvm::outs() << "\n";
     }
   }
 
@@ -413,6 +436,17 @@ void MopRedundancyAnalysis::buildRecurringGraphAndFindDominatingSet(
     Mop *M = U.get();
     if (!CandSet.contains(M)) {
       DominatingSet.push_back(M);
+    }
+  }
+
+  // Debug: 最终幸存集合
+  llvm::outs() << "[MopIR Redund] Dominating survivors in "
+               << Context->getFunction().getName() << " (" << DominatingSet.size() << ")\n";
+  for (auto *M : DominatingSet) {
+    if (auto *I = M ? M->getOriginalInst() : nullptr) {
+      llvm::outs() << "  ";
+      I->print(llvm::outs());
+      llvm::outs() << "\n";
     }
   }
 }

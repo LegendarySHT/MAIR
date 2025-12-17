@@ -24,6 +24,17 @@ using namespace llvm;
 using namespace __xsan;
 using namespace __xsan::MopIR;
 
+static void dumpInstList(StringRef Header,
+                         ArrayRef<const Instruction*> List) {
+  outs() << Header << " (" << List.size() << ")\n";
+  for (const Instruction *I : List) {
+    outs() << "    ";
+    if (I)
+      I->print(outs());
+    outs() << "\n";
+  }
+}
+
 static SmallVector<const Instruction*, 64> collectInstsFromMopIR(const __xsan::MopIR::MopIR &MIR) {
   SmallVector<const Instruction*, 64> Insts;
   for (const auto &UP : MIR.getMops()) {
@@ -98,6 +109,7 @@ int main(int argc, char **argv) {
 
     // Prepare Reducer input from MopIR MOPs to ensure the same universe
     SmallVector<const Instruction*, 64> Insts = collectInstsFromMopIR(MIR);
+    dumpInstList("  MopIR extracted insts", Insts);
     // Filter out instructions without a definable MemoryLocation to avoid
     // Optional<MemoryLocation> assertions inside the legacy reducer.
     SmallVector<const Instruction*, 64> FilteredInsts;
@@ -110,6 +122,8 @@ int main(int argc, char **argv) {
       }
     }
 
+    dumpInstList("  Filtered insts (with MemoryLocation)", FilteredInsts);
+
     if (FilteredInsts.size() != Insts.size()) {
       outs() << "  Skipped (function contains memory operations without definable MemoryLocation)\n\n";
       continue;
@@ -119,6 +133,8 @@ int main(int argc, char **argv) {
     MopRecurrenceReducer Reducer(F, FAM);
     SmallVector<const Instruction*, 16> Reduced =
         Reducer.distillRecurringChecks(FilteredInsts, IsTsan, IgnoreCalls);
+
+    dumpInstList("  Reducer survivors", Reduced);
 
     // Run MopIR RedundancyAnalysis
     MopRedundancyAnalysis Redund;
@@ -137,6 +153,10 @@ int main(int argc, char **argv) {
         SurvivorsIR.insert(I);
       }
     }
+
+    SmallVector<const Instruction*, 64> SurvivorsIRList;
+    for (const Instruction *I : SurvivorsIR) SurvivorsIRList.push_back(I);
+    dumpInstList("  MopIR survivors", SurvivorsIRList);
 
     // Collect survivors from Reducer
     DenseSet<const Instruction*> SurvivorsRR;
