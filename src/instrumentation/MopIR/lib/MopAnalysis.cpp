@@ -25,17 +25,6 @@
 using namespace __xsan::MopIR;
 using namespace llvm;
 
-// 前向声明以复用已实现的 MopRecurrenceReducer，避免与 MopIR 自带的
-// ActiveMopAnalysis 重复定义。
-namespace __xsan {
-class MopRecurrenceReducer {
-public:
-  MopRecurrenceReducer(Function &F, FunctionAnalysisManager &FAM);
-  SmallVector<const Instruction *, 16>
-  distillRecurringChecks(ArrayRef<const Instruction *> Insts, bool IsTsan,
-                         bool IgnoreCalls = false);
-};
-}
 
 namespace {
 // Mirror helper from MopRecurrenceReducer: derive precise object size if known.
@@ -198,43 +187,6 @@ void MopRedundancyAnalysis::analyze(const MopList& Mops) {
   // 清空之前的结果
   RedundantMops.clear();
   CoveringMopMap.clear();
-
-  // 若可用 FunctionAnalysisManager，则直接复用 MopRecurrenceReducer，确保行为一致
-  if (auto *FAM = Context->getAnalysisManager()) {
-    llvm::SmallVector<const Instruction*, 64> Insts;
-    llvm::DenseMap<const Instruction*, Mop*> Inst2Mop;
-    Insts.reserve(Mops.size());
-    for (const auto &UP : Mops) {
-      Mop *M = UP.get();
-      Instruction *I = M ? M->getOriginalInst() : nullptr;
-      if (!I)
-        continue;
-      Insts.push_back(I);
-      Inst2Mop[I] = M;
-    }
-
-    __xsan::MopRecurrenceReducer Reducer(Context->getFunction(), *FAM);
-    llvm::SmallVector<const Instruction*, 16> Survivors =
-        Reducer.distillRecurringChecks(Insts, IsTsan, IgnoreCalls);
-
-    llvm::DenseSet<const Instruction*> Keep;
-    for (const Instruction *I : Survivors) {
-      Keep.insert(I);
-    }
-
-    for (const auto &UP : Mops) {
-      Mop *M = UP.get();
-      Instruction *I = M ? M->getOriginalInst() : nullptr;
-      if (!M || !I)
-        continue;
-      bool Live = Keep.contains(I);
-      M->setRedundant(!Live);
-      if (!Live) {
-        RedundantMops.insert(M);
-      }
-    }
-    return;
-  }
 
   // 复用原优化器的复发图逻辑：构建覆盖图，提取支配（幸存）集合
   llvm::SmallVector<Mop*, 16> Dominating;
