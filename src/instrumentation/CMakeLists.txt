@@ -11,6 +11,19 @@ link_directories(${LLVM_LIBRARY_DIRS})
 # -Wl,-Bsymbolic : force local symbols to be used in shared library
 add_link_options(-Wl,-Bsymbolic)
 
+option(MAIR_USE_MOPIR_ASAN_REDUNDANCY
+  "Use MopIRImplementation (RedundantCheckEliminationPass) for ASan recurrence reduction"
+  OFF)
+
+set(MOPIR_ASAN_ADAPTER_SRCS
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/AsanRedundancyAdapter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/Passes/RedundantCheckEliminationPass.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/Analysis/MopRedundancyAnalysisPass.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/Analysis/ActiveMopAnalysisAdapter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/Analysis/RecurringGraph.cpp"
+)
+set(MOPIR_ASAN_ADAPTER_INC "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/include")
+
 set(XSAN_PASS_COMMON
   AttributeTaggingPass.cpp
   Instrumentation.cpp
@@ -82,6 +95,21 @@ install(TARGETS ASanInstPass TSanInstPass CovSanInstPass MSanInstPass XSanInstPa
   DESTINATION ${XSAN_INSTALL_PASSDIR}
   COMPONENT pass
 )
+
+if(MAIR_USE_MOPIR_ASAN_REDUNDANCY)
+  target_sources(ASanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_SRCS})
+  target_include_directories(ASanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
+  target_compile_definitions(ASanInstPass PRIVATE
+    MAIR_USE_MOPIR_ASAN_REDUNDANCY
+    MOP_IR_USE_LLVM
+  )
+  target_sources(XSanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_SRCS})
+  target_include_directories(XSanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
+  target_compile_definitions(XSanInstPass PRIVATE
+    MAIR_USE_MOPIR_ASAN_REDUNDANCY
+    MOP_IR_USE_LLVM
+  )
+endif()
 
 # add_llvm_component_library(LLVMInstrumentation
 # AddressSanitizer.cpp

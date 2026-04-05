@@ -95,6 +95,10 @@
 #include "Utils/MetaDataUtils.h"
 #include "Utils/Options.h"
 
+#ifdef MAIR_USE_MOPIR_ASAN_REDUNDANCY
+#include "MOP/AsanRedundancyAdapter.h"
+#endif
+
 using namespace llvm;
 
 // TODO: duplicate macro
@@ -3662,7 +3666,6 @@ public:
 
       /// Reduce recurrence between load/store instructions.
       if (__xsan::options::opt::enableReccReductionAsan()) {
-        MopRecurrenceReducer MRC(F, FAM);
         SmallVector<InterestingMemoryOperand, 16> NewOperandsToInstrument;
 
         auto RngFilter = make_filter_range(
@@ -3680,8 +3683,19 @@ public:
           return Op.getInsn();
         });
         const SmallVector<const Instruction *, 16> TmpInsts(RngMap);
-        SmallVector<const Instruction *, 16> DistilledLoadStores =
-            MRC.distillRecurringChecks(TmpInsts, false);
+        SmallVector<const Instruction *, 16> DistilledLoadStores;
+#ifdef MAIR_USE_MOPIR_ASAN_REDUNDANCY
+        if (!MopIRImpl::MOP::runAsanRedundancyReduction(F, FAM, MAM, TmpInsts,
+                                                       DistilledLoadStores)) {
+          MopRecurrenceReducer MRC(F, FAM);
+          DistilledLoadStores = MRC.distillRecurringChecks(TmpInsts, false);
+        }
+#else
+        {
+          MopRecurrenceReducer MRC(F, FAM);
+          DistilledLoadStores = MRC.distillRecurringChecks(TmpInsts, false);
+        }
+#endif
         auto RngMapBack =
             map_range(DistilledLoadStores, [](const Instruction *Inst) {
               Instruction *I = const_cast<Instruction *>(Inst);
