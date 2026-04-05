@@ -6,8 +6,10 @@
 #include "PassContext.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/DominanceFrontier.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/Dominators.h"
@@ -31,8 +33,11 @@ private:
   llvm::Module* CurrentModule;
   
 public:
-  LLVMPassContext() 
-    : FAM(nullptr), MAM(nullptr), CurrentFunction(nullptr), CurrentModule(nullptr) {}
+  Kind getPassContextKind() const override { return Kind::LLVM; }
+
+  LLVMPassContext()
+      : FAM(nullptr), MAM(nullptr), CurrentFunction(nullptr),
+        CurrentModule(nullptr) {}
   
   // 从 FunctionAnalysisManager 构造
   explicit LLVMPassContext(llvm::FunctionAnalysisManager& fam, llvm::Function& F)
@@ -68,20 +73,29 @@ public:
    * 获取 AAResults（别名分析）
    */
   llvm::AAResults& getAAResults() {
-    if (!CurrentFunction || !FAM) {
-      // 如果没有 Function，尝试从 Context 缓存获取
-      if (!CurrentModule) {
-        llvm::report_fatal_error("No function or module available for AAResults");
-      }
-      return getOrCompute<llvm::AAResults>([this]() {
-        llvm::TargetLibraryInfoWrapperPass TLIWP;
-        TLIWP.getTLI(*CurrentModule);
-        return llvm::AAResults(TLIWP.getTLI(*CurrentModule));
-      });
+    if (!CurrentFunction) {
+      llvm::report_fatal_error("No function available for AAResults");
     }
     
-    // 从 LLVM AnalysisManager 获取
-    return FAM->getResult<llvm::AAManager>(*CurrentFunction);
+    // 如果 FAM 存在，尝试从 AnalysisManager 获取
+    if (FAM) {
+      if (MAM && CurrentModule) {
+        FAM->registerPass([&MAM = *MAM] {
+          return llvm::OuterAnalysisManagerProxy<llvm::ModuleAnalysisManager,
+                                                llvm::Function>(MAM);
+        });
+      }
+      // LLVM 插件通常 -fno-exceptions，不可用 try/catch；FAM 由 PassBuilder
+      // 注册时 AAManager 应已可用。
+      return FAM->getResult<llvm::AAManager>(*CurrentFunction);
+    }
+    
+    // 回退：创建简单的 AAResults
+    return getOrCompute<llvm::AAResults>([this]() {
+      llvm::TargetLibraryInfoWrapperPass TLIWP;
+      const llvm::TargetLibraryInfo& TLI = TLIWP.getTLI(*CurrentFunction);
+      return llvm::AAResults(TLI);
+    });
   }
   
   /**
@@ -123,7 +137,9 @@ public:
         llvm::report_fatal_error("No function available for LoopInfo");
       }
       return getOrCompute<llvm::LoopInfo>([this]() {
-        return llvm::LoopInfo(*CurrentFunction);
+        // LoopInfo 需要 DominatorTree
+        llvm::DominatorTree DT(*CurrentFunction);
+        return llvm::LoopInfo(DT);
       });
     }
     return FAM->getResult<llvm::LoopAnalysis>(*CurrentFunction);
@@ -139,10 +155,11 @@ public:
       }
       return getOrCompute<llvm::ScalarEvolution>([this]() {
         llvm::TargetLibraryInfoWrapperPass TLIWP;
-        TLIWP.getTLI(*CurrentFunction);
-        return llvm::ScalarEvolution(*CurrentFunction, 
-                                      CurrentModule->getDataLayout(),
-                                      TLIWP.getTLI(*CurrentFunction));
+        llvm::TargetLibraryInfo& TLI = const_cast<llvm::TargetLibraryInfo&>(TLIWP.getTLI(*CurrentFunction));
+        llvm::AssumptionCache AC(*CurrentFunction);
+        llvm::DominatorTree DT(*CurrentFunction);
+        llvm::LoopInfo LI(DT);
+        return llvm::ScalarEvolution(*CurrentFunction, TLI, AC, DT, LI);
       });
     }
     return FAM->getResult<llvm::ScalarEvolutionAnalysis>(*CurrentFunction);

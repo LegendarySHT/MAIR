@@ -20,7 +20,9 @@ private:
   
 public:
   explicit MOPIRUnit(const std::string& name) : Name(name) {}
-  
+
+  IRUnit::Kind getIRUnitKind() const override { return Kind::MOP; }
+
   std::string getName() const override {
     return Name;
   }

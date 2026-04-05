@@ -14,8 +14,13 @@ namespace MopIRImpl {
  */
 class IRUnit {
 public:
+  /// 用于在 -fno-rtti 下替代 dynamic_cast
+  enum class Kind { MOP, LLVMFunction, LLVMModule };
+
   virtual ~IRUnit() = default;
-  
+
+  virtual Kind getIRUnitKind() const = 0;
+
   /**
    * 获取 IR 单元的名称（用于调试和日志）
    */

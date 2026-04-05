@@ -22,7 +22,9 @@ private:
   
 public:
   explicit FunctionIRUnit(llvm::Function& Func) : F(Func) {}
-  
+
+  IRUnit::Kind getIRUnitKind() const override { return Kind::LLVMFunction; }
+
   std::string getName() const override {
     return F.getName().str();
   }
@@ -51,7 +53,9 @@ private:
   
 public:
   explicit ModuleIRUnit(llvm::Module& Mod) : M(Mod) {}
-  
+
+  IRUnit::Kind getIRUnitKind() const override { return Kind::LLVMModule; }
+
   std::string getName() const override {
     return M.getName().str();
   }
