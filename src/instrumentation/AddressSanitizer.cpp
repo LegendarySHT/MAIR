@@ -98,6 +98,10 @@
 #ifdef MAIR_USE_MOPIR_ASAN_REDUNDANCY
 #include "MOP/AsanRedundancyAdapter.h"
 #endif
+#if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+#include "MOP/LoopInvariantRelocationAdapter.h"
+#include <cstdlib>
+#endif
 
 using namespace llvm;
 
@@ -3659,6 +3663,29 @@ public:
       AsanToInstrument &Targets =
           FAM.getResult<__xsan::AsanTargetsToInstrumentAnalysis>(F);
       const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
+
+#if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+      // XSan 下合成器已跑 LoopMopInstrumenter 时不可再外提一遍；lit 在开启本开关时会加
+      // -mllvm -xsan-loop-opt=no，使此处走 MopIR 实现。独立 ASanInstPass 始终可跑。
+      const bool UseMopirLoopReloc = [] {
+#ifndef XSAN_PASS
+        return true;
+#else
+        if (__xsan::options::opt::loopOptLevel() ==
+            __xsan::LoopOptLeval::NoOpt)
+          return true;
+        return std::getenv("MAIR_MOPIR_LOOP_RELOC_TEST") != nullptr;
+#endif
+      }();
+      if (UseMopirLoopReloc && !F.isDeclaration() && !F.empty() &&
+          F.hasFnAttribute(Attribute::SanitizeAddress) &&
+          !F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation) &&
+          F.getLinkage() != GlobalValue::AvailableExternallyLinkage &&
+          !F.getName().startswith("__asan_") &&
+          (ClDebugFunc.empty() || ClDebugFunc != F.getName())) {
+        MopIRImpl::MOP::runLoopInvariantRelocationOnly(F, FAM);
+      }
+#endif
 
       if (!FunctionSanitizer.collectTargetsToIntrument(F, &TLI, Targets)) {
         continue;

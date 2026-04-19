@@ -43,7 +43,11 @@ set(ASAN_TEST_TARGET_CC ${XSAN_TEST_TARGET_CC})
 #   list(REMOVE_ITEM ASAN_TEST_ARCH x86_64)
 # endif()
 
-
+if(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+  set(ASAN_LIT_MOPIR_LOOP_RELOC_PY "os.environ.setdefault('MAIR_MOPIR_LOOP_RELOC_TEST', '1')")
+else()
+  set(ASAN_LIT_MOPIR_LOOP_RELOC_PY "")
+endif()
 
 foreach(arch ${ASAN_TEST_ARCH})
   set(ASAN_TEST_TARGET_ARCH ${arch})

@@ -13,6 +13,10 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 
+#if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+#include <cstdlib>
+#endif
+
 using namespace llvm;
 using namespace __xsan;
 
@@ -168,6 +172,10 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
   XSanVisitor Visitor(M);
 
   LoopOptLeval level = options::opt::loopOptLevel();
+#if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+  if (std::getenv("MAIR_MOPIR_LOOP_RELOC_TEST"))
+    level = LoopOptLeval::NoOpt;
+#endif
   if (level != LoopOptLeval::NoOpt) {
     for (auto &F : M) {
       if (F.isDeclaration() || F.empty())

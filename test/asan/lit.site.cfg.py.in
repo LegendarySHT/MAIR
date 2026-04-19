@@ -1,5 +1,8 @@
 @LIT_SITE_CFG_IN_HEADER@
 
+import os
+@ASAN_LIT_MOPIR_LOOP_RELOC_PY@
+
 # Tool-specific config options.
 config.name_suffix = "@ASAN_TEST_CONFIG_SUFFIX@"
 config.target_cflags = "@ASAN_TEST_TARGET_CFLAGS@"

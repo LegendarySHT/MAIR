@@ -11,9 +11,7 @@ link_directories(${LLVM_LIBRARY_DIRS})
 # -Wl,-Bsymbolic : force local symbols to be used in shared library
 add_link_options(-Wl,-Bsymbolic)
 
-option(MAIR_USE_MOPIR_ASAN_REDUNDANCY
-  "Use MopIRImplementation (RedundantCheckEliminationPass) for ASan recurrence reduction"
-  OFF)
+# MAIR_USE_MOPIR_ASAN_* 选项在 ../CMakeLists.txt（src）中声明。
 
 set(MOPIR_ASAN_ADAPTER_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/AsanRedundancyAdapter.cpp"
@@ -23,6 +21,10 @@ set(MOPIR_ASAN_ADAPTER_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/Analysis/RecurringGraph.cpp"
 )
 set(MOPIR_ASAN_ADAPTER_INC "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/include")
+
+set(MOPIR_LOOP_RELOC_SRCS
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/LLVM/LoopInvariantRelocation.cpp"
+)
 
 set(XSAN_PASS_COMMON
   AttributeTaggingPass.cpp
@@ -96,17 +98,39 @@ install(TARGETS ASanInstPass TSanInstPass CovSanInstPass MSanInstPass XSanInstPa
   COMPONENT pass
 )
 
+set(MOPIR_ASAN_INSTPASS_EXTRA_SRCS)
 if(MAIR_USE_MOPIR_ASAN_REDUNDANCY)
-  target_sources(ASanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_SRCS})
+  list(APPEND MOPIR_ASAN_INSTPASS_EXTRA_SRCS ${MOPIR_ASAN_ADAPTER_SRCS})
+endif()
+if(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+  list(APPEND MOPIR_ASAN_INSTPASS_EXTRA_SRCS ${MOPIR_LOOP_RELOC_SRCS})
+endif()
+
+if(MOPIR_ASAN_INSTPASS_EXTRA_SRCS)
+  target_sources(ASanInstPass PRIVATE ${MOPIR_ASAN_INSTPASS_EXTRA_SRCS})
   target_include_directories(ASanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
-  target_compile_definitions(ASanInstPass PRIVATE
-    MAIR_USE_MOPIR_ASAN_REDUNDANCY
-    MOP_IR_USE_LLVM
-  )
+  target_compile_definitions(ASanInstPass PRIVATE MOP_IR_USE_LLVM)
+endif()
+if(MAIR_USE_MOPIR_ASAN_REDUNDANCY)
+  target_compile_definitions(ASanInstPass PRIVATE MAIR_USE_MOPIR_ASAN_REDUNDANCY)
+endif()
+if(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+  target_compile_definitions(ASanInstPass PRIVATE MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+endif()
+
+if(MAIR_USE_MOPIR_ASAN_REDUNDANCY)
   target_sources(XSanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_SRCS})
   target_include_directories(XSanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
   target_compile_definitions(XSanInstPass PRIVATE
     MAIR_USE_MOPIR_ASAN_REDUNDANCY
+    MOP_IR_USE_LLVM
+  )
+endif()
+if(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+  target_sources(XSanInstPass PRIVATE ${MOPIR_LOOP_RELOC_SRCS})
+  target_include_directories(XSanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
+  target_compile_definitions(XSanInstPass PRIVATE
+    MAIR_USE_MOPIR_ASAN_LOOP_RELOC
     MOP_IR_USE_LLVM
   )
 endif()
