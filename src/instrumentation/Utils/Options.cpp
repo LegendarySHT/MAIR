@@ -48,6 +48,11 @@ const cl::opt<bool> ClPostOpt(
     cl::desc("Whether to perform post-sanitziers optimizations for XSan"),
     cl::Hidden);
 
+const cl::opt<bool> ClMopirAsanStrict(
+    "xsan-mopir-asan-strict", cl::init(false),
+    cl::desc("Fail if MopIR ASan redundancy phase cannot complete; disable fallback to MopRecurrenceReducer"),
+    cl::Hidden);
+
 } // namespace opt
 
 const cl::opt<bool> ClDisableAsan("xsan-disable-asan", cl::init(false),

@@ -30,6 +30,8 @@ extern const cl::opt<LoopOptLeval> ClLoopOpt;
 
 /// Whether to perform post-optimization.
 extern const cl::opt<bool> ClPostOpt;
+/// Whether MopIR ASan pipeline should fail closed (no fallback).
+extern const cl::opt<bool> ClMopirAsanStrict;
 
 inline bool enableReccReduction() { return ClOpt && ClReccReduce; }
 
@@ -43,6 +45,8 @@ inline bool enableReccReductionTsan() {
 inline bool enableTsanOptStackObj() { return ClOpt && ClTsanOptStackObj; }
 
 inline bool enablePostOpt() { return ClOpt && ClPostOpt; }
+
+inline bool enableMopirAsanStrict() { return ClOpt && ClMopirAsanStrict; }
 
 inline LoopOptLeval loopOptLevel() {
   return ClOpt ? ClLoopOpt : LoopOptLeval::NoOpt;

@@ -171,6 +171,9 @@ PreservedAnalyses SanitizerCompositorPass::run(Module &M,
 
   XSanVisitor Visitor(M);
 
+  // Module 级循环优化（LoopMopInstrumenter）。ASan 侧 MopIR 流水线见
+  // MopIRImplementation/include/MOP/AsanMopIROptPipeline.h：在 AsanRequireAnalysisPass
+  // 中于 collect 之后按「冗余 → 循环外提」顺序运行，与合成器阶段解耦。
   LoopOptLeval level = options::opt::loopOptLevel();
 #if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
   if (std::getenv("MAIR_MOPIR_LOOP_RELOC_TEST"))

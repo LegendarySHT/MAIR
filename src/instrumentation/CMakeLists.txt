@@ -24,6 +24,11 @@ set(MOPIR_ASAN_ADAPTER_INC "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/incl
 
 set(MOPIR_LOOP_RELOC_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/LLVM/LoopInvariantRelocation.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/Passes/LoopInvariantRelocationLLVMWrapperPass.cpp"
+)
+
+set(MOPIR_ASAN_PIPELINE_SRCS
+  "${CMAKE_CURRENT_SOURCE_DIR}/MopIRImplementation/lib/MOP/AsanMopIROptPipeline.cpp"
 )
 
 set(XSAN_PASS_COMMON
@@ -45,6 +50,7 @@ set(XSAN_PASS_COMMON
 add_llvm_pass_plugin(ASanInstPass
   PARTIAL_SOURCES_INTENDED # Skip checking for else files
   AddressSanitizer.cpp
+  ${MOPIR_ASAN_PIPELINE_SRCS}
   ${XSAN_PASS_COMMON}
 )
 
@@ -71,6 +77,7 @@ add_llvm_pass_plugin(XSanInstPass
   AddressSanitizer.cpp
   MemorySanitizer.cpp
   XSanitizerCompositor.cpp
+  ${MOPIR_ASAN_PIPELINE_SRCS}
   ${XSAN_PASS_COMMON}
 )
 
@@ -89,8 +96,12 @@ set_target_properties(ASanInstPass
   XSanInstPass
   TestPass
   PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY "${XSAN_OUTPUT_PASSDIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${XSAN_OUTPUT_PASSDIR}"
 )
+
+# AsanMopIROptPipeline 与 MOP 头文件：即使未打开 MopIR CMake 开关也需 include 路径。
+target_include_directories(ASanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
+target_include_directories(XSanInstPass PRIVATE ${MOPIR_ASAN_ADAPTER_INC})
 
 install(TARGETS ASanInstPass TSanInstPass CovSanInstPass MSanInstPass XSanInstPass
   LIBRARY

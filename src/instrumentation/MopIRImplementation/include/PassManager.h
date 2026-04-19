@@ -57,27 +57,9 @@ public:
         continue;
       }
       
-      try {
-        bool passModified = pass->optimize(IR, ctx);
-        Modified |= passModified;
-        
-        // 如果 Pass 失败且是必需的，继续执行
-        // 如果不是必需的，可以选择是否继续
-        if (!passModified && !pass->isRequired()) {
-          // 可以在这里添加日志或统计
-        }
-      } catch (const std::exception& e) {
-        // Pass 执行出错
-        // 如果是必需 Pass，记录错误但继续
-        // 如果不是必需 Pass，可以选择跳过
-        if (pass->isRequired()) {
-          // 记录错误但继续执行
-          // 可以在这里添加错误日志
-        } else {
-          // 跳过这个 Pass
-          continue;
-        }
-      }
+      // 与 LLVM 插件一致：不在头文件中使用异常（-fno-exceptions）。
+      bool passModified = pass->optimize(IR, ctx);
+      Modified |= passModified;
     }
     
     return Modified;
@@ -104,17 +86,9 @@ public:
       
       stats.PassesRun++;
       
-      try {
-        bool passModified = pass->optimize(IR, ctx);
-        if (passModified) {
-          stats.PassesModified++;
-        }
-      } catch (const std::exception& e) {
-        stats.PassesFailed++;
-        if (!pass->isRequired()) {
-          // 非必需 Pass 失败时跳过
-          continue;
-        }
+      bool passModified = pass->optimize(IR, ctx);
+      if (passModified) {
+        stats.PassesModified++;
       }
     }
     

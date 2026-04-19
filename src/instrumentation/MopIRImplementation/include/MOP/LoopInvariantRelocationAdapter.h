@@ -10,8 +10,10 @@ namespace MopIRImpl {
 namespace MOP {
 
 /**
- * 在「仅 ASanInstPass」场景下执行与原版 LoopMopInstrumenter 中
- * RelocateInvariantChecks 等价的「不变量检查外提」。
+ * 执行与原版 LoopMopInstrumenter 中 RelocateInvariantChecks 等价的
+ * 「不变量检查外提」。在 AsanRequireAnalysisPass 中由
+ * AsanMopIROptPipeline 调度，位于 collectTargets 与冗余消除之后（见
+ * AsanMopIROptPipeline.h）。
  *
  * 实现位于 MopIRImplementation/lib/MOP/LLVM/LoopInvariantRelocation.cpp，
  * 不依赖 Instrumentation.h / LoopMopInstrumenter；仍使用相同 runtime

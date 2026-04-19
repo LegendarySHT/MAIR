@@ -95,13 +95,10 @@
 #include "Utils/MetaDataUtils.h"
 #include "Utils/Options.h"
 
-#ifdef MAIR_USE_MOPIR_ASAN_REDUNDANCY
-#include "MOP/AsanRedundancyAdapter.h"
-#endif
 #if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
-#include "MOP/LoopInvariantRelocationAdapter.h"
 #include <cstdlib>
 #endif
+#include "MOP/AsanMopIROptPipeline.h"
 
 using namespace llvm;
 
@@ -3664,10 +3661,10 @@ public:
           FAM.getResult<__xsan::AsanTargetsToInstrumentAnalysis>(F);
       const TargetLibraryInfo &TLI = FAM.getResult<TargetLibraryAnalysis>(F);
 
-#if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
-      // XSan 下合成器已跑 LoopMopInstrumenter 时不可再外提一遍；lit 在开启本开关时会加
-      // -mllvm -xsan-loop-opt=no，使此处走 MopIR 实现。独立 ASanInstPass 始终可跑。
       const bool UseMopirLoopReloc = [] {
+#if defined(MAIR_USE_MOPIR_ASAN_LOOP_RELOC)
+        // XSan 下合成器已跑 LoopMopInstrumenter 时不可再外提一遍；lit 在开启本开关时会加
+        // -mllvm -xsan-loop-opt=no，使此处走 MopIR 实现。独立 ASanInstPass 始终可跑。
 #ifndef XSAN_PASS
         return true;
 #else
@@ -3676,21 +3673,16 @@ public:
           return true;
         return std::getenv("MAIR_MOPIR_LOOP_RELOC_TEST") != nullptr;
 #endif
-      }();
-      if (UseMopirLoopReloc && !F.isDeclaration() && !F.empty() &&
-          F.hasFnAttribute(Attribute::SanitizeAddress) &&
-          !F.hasFnAttribute(Attribute::DisableSanitizerInstrumentation) &&
-          F.getLinkage() != GlobalValue::AvailableExternallyLinkage &&
-          !F.getName().startswith("__asan_") &&
-          (ClDebugFunc.empty() || ClDebugFunc != F.getName())) {
-        MopIRImpl::MOP::runLoopInvariantRelocationOnly(F, FAM);
-      }
+#else
+        return false;
 #endif
+      }();
 
       if (!FunctionSanitizer.collectTargetsToIntrument(F, &TLI, Targets)) {
         continue;
       }
 
+      // MopIR HIR 流水线（与 AsanMopIROptPipeline.h 文档一致）：先冗余，后循环 IR。
       /// Reduce recurrence between load/store instructions.
       if (__xsan::options::opt::enableReccReductionAsan()) {
         SmallVector<InterestingMemoryOperand, 16> NewOperandsToInstrument;
@@ -3711,18 +3703,16 @@ public:
         });
         const SmallVector<const Instruction *, 16> TmpInsts(RngMap);
         SmallVector<const Instruction *, 16> DistilledLoadStores;
-#ifdef MAIR_USE_MOPIR_ASAN_REDUNDANCY
-        if (!MopIRImpl::MOP::runAsanRedundancyReduction(F, FAM, MAM, TmpInsts,
-                                                       DistilledLoadStores)) {
+        if (!MopIRImpl::MOP::tryRunAsanMopIRRedundancyPhase(F, FAM, MAM, TmpInsts,
+                                                            DistilledLoadStores)) {
+          if (__xsan::options::opt::enableMopirAsanStrict()) {
+            report_fatal_error(Twine("MopIR ASan redundancy phase failed in function: ") +
+                               F.getName() +
+                               "; strict mode forbids fallback to MopRecurrenceReducer");
+          }
           MopRecurrenceReducer MRC(F, FAM);
           DistilledLoadStores = MRC.distillRecurringChecks(TmpInsts, false);
         }
-#else
-        {
-          MopRecurrenceReducer MRC(F, FAM);
-          DistilledLoadStores = MRC.distillRecurringChecks(TmpInsts, false);
-        }
-#endif
         auto RngMapBack =
             map_range(DistilledLoadStores, [](const Instruction *Inst) {
               Instruction *I = const_cast<Instruction *>(Inst);
@@ -3743,6 +3733,9 @@ public:
 
         Targets.OperandsToInstrument = std::move(NewOperandsToInstrument);
       }
+
+      MopIRImpl::MOP::runAsanMopIRLoopRelocationPhase(
+          F, FAM, UseMopirLoopReloc, llvm::StringRef(ClDebugFunc.c_str()));
     }
     return PreservedAnalyses::all();
   }

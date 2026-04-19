@@ -6,6 +6,7 @@
 #include "MOP/MOPIRUnit.h"
 #include "MOP/Passes/RedundantCheckEliminationPass.h"
 #include "LLVM/LLVMPassContext.h"
+#include "PassManager.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/MemoryLocation.h"
@@ -39,8 +40,9 @@ bool runAsanRedundancyReduction(llvm::Function &F,
     return false;
 
   LLVM::LLVMPassContext Ctx(FAM, MAM, F);
-  RedundantCheckEliminationPass Elim;
-  Elim.optimize(Unit, Ctx);
+  MopIRImpl::PassManager PM;
+  PM.addPass(std::make_unique<RedundantCheckEliminationPass>());
+  PM.run(Unit, &Ctx);
 
   for (const auto &UP : Unit.getMops()) {
     if (!UP->isRedundant())
