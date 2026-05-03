@@ -3734,8 +3734,17 @@ public:
         Targets.OperandsToInstrument = std::move(NewOperandsToInstrument);
       }
 
+      SmallVector<const Instruction *, 32> LoopMopIrCandidates;
+      for (InterestingMemoryOperand &Op : Targets.OperandsToInstrument) {
+        Instruction *Insn = Op.getInsn();
+        if (__xsan::DelegateToXSan::is(*Insn))
+          continue;
+        if (isInterestingMop(*Insn))
+          LoopMopIrCandidates.push_back(Insn);
+      }
       MopIRImpl::MOP::runAsanMopIRLoopRelocationPhase(
-          F, FAM, UseMopirLoopReloc, llvm::StringRef(ClDebugFunc.c_str()));
+          F, FAM, UseMopirLoopReloc, llvm::StringRef(ClDebugFunc.c_str()),
+          LoopMopIrCandidates);
     }
     return PreservedAnalyses::all();
   }

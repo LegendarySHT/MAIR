@@ -8,6 +8,12 @@
 
 namespace MopIRImpl {
 namespace MOP {
+class MOPIRUnit;
+} // namespace MOP
+} // namespace MopIRImpl
+
+namespace MopIRImpl {
+namespace MOP {
 
 /**
  * 执行与原版 LoopMopInstrumenter 中 RelocateInvariantChecks 等价的
@@ -25,9 +31,16 @@ namespace MOP {
 void runLoopInvariantRelocationOnly(llvm::Function &F,
                                     llvm::FunctionAnalysisManager &FAM);
 
+/**
+ * 与上面相同，但若传入非空的 \p HighLevelUnit，则在外提改写 LLVM IR
+ * 之前，对与「实际会被外提」的 load/store 对应的 MOP 置位循环外提计划标记，
+ * 使高阶 MOP 层体现循环优化决策。
+ */
+void runLoopInvariantRelocationOnly(llvm::Function &F,
+                                    llvm::FunctionAnalysisManager &FAM,
+                                    MOPIRUnit *HighLevelUnit);
+
 } // namespace MOP
 } // namespace MopIRImpl
 
 #endif // MOP_IR_USE_LLVM
-
-#endif

@@ -49,13 +49,18 @@ private:
   // 冗余检测相关
   bool IsRedundant;
   Mop* CoveringMop;       // 覆盖此 MOP 的另一个 MOP（如果冗余）
+
+#ifdef MOP_IR_USE_LLVM
+  /// 循环不变量外提：在改写 LLVM IR 之前，由外提引擎对「将实际外提」的 MOP 置位。
+  bool LoopHoistPlanned;
+#endif
   
 public:
 #ifdef MOP_IR_USE_LLVM
   // LLVM 版本构造函数
   Mop(MopType Ty, const llvm::Instruction* I, const llvm::MemoryLocation& Loc)
     : Type(Ty), Inst(I), MemLoc(Loc), Ptr(nullptr), Size(0), Offset(0),
-      IsRedundant(false), CoveringMop(nullptr) {
+      IsRedundant(false), CoveringMop(nullptr), LoopHoistPlanned(false) {
     if (Loc.Size.hasValue()) {
       Size = Loc.Size.getValue();
     }
@@ -67,7 +72,7 @@ public:
     : Type(Ty), Ptr(ptr), Size(size), Offset(offset),
       IsRedundant(false), CoveringMop(nullptr)
 #ifdef MOP_IR_USE_LLVM
-    , Inst(nullptr)
+    , Inst(nullptr), LoopHoistPlanned(false)
 #endif
   {}
   
@@ -96,6 +101,9 @@ public:
   const llvm::Instruction* getInstruction() const { return Inst; }
   const llvm::MemoryLocation& getMemoryLocation() const { return MemLoc; }
   void setMemoryLocation(const llvm::MemoryLocation& Loc) { MemLoc = Loc; }
+
+  void setLoopHoistPlanned(bool V) { LoopHoistPlanned = V; }
+  bool isLoopHoistPlanned() const { return LoopHoistPlanned; }
 #endif
   
   // 通用访问器

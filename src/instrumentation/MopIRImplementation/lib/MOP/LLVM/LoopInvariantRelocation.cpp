@@ -5,6 +5,8 @@
 
 #ifdef MOP_IR_USE_LLVM
 
+#include "MOP/MOPIRUnit.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
@@ -301,9 +303,16 @@ public:
     }
   }
 
-  void run() {
+  void run(MopIRImpl::MOP::MOPIRUnit *HighLevelUnit = nullptr) {
     if (F.isDeclaration() || F.empty())
       return;
+    if (HighLevelUnit) {
+      for (auto &Up : HighLevelUnit->getMops()) {
+        if (Up)
+          Up->setLoopHoistPlanned(false);
+      }
+      annotateHighLevelMops(*HighLevelUnit);
+    }
     (void)relocateInvariantChecks();
     PreservedAnalyses PA = PreservedAnalyses::all();
     PA.abandon<PostDominatorTreeAnalysis>();
@@ -311,6 +320,63 @@ public:
   }
 
 private:
+  /// 在 relocateInvariantChecks 改写 IR 之前，对与即将外提的 load/store 对应的
+  /// 高阶 MOP 置位，便于论文/调试观察高阶层上的循环优化决策。
+  void annotateHighLevelMops(MopIRImpl::MOP::MOPIRUnit &U) {
+    llvm::DenseMap<llvm::Instruction *, MopIRImpl::MOP::Mop *> InstToMop;
+    for (auto &Up : U.getMops()) {
+      if (!Up)
+        continue;
+      if (llvm::Instruction *Insn =
+              const_cast<llvm::Instruction *>(Up->getInstruction()))
+        InstToMop[Insn] = Up.get();
+    }
+
+    Instruction *LastInsertPt = nullptr;
+    BasicBlock *LastBB = nullptr;
+    for (LoopMop &LM : getLoopMopCandidates()) {
+      auto &[Inst, Addr, L, MopSize, DupTo, InBranch, IsWrite] = LM;
+      if (!LIC.isLoopInvariant(Addr, L))
+        continue;
+      Loop *TopL = L, *ParentL = L->getParentLoop();
+      while (ParentL && LIC.isLoopInvariant(Addr, ParentL) &&
+             isSimpleLoop(ParentL)) {
+        TopL = ParentL;
+        ParentL = TopL->getParentLoop();
+      }
+      BasicBlock *Preheader = TopL->getLoopPreheader();
+      bool IsInBranch =
+          InBranch ? InBranch
+                   : (!Preheader ||
+                      !PDT.dominates(Inst->getParent(), Preheader));
+      Instruction *InsertPt = nullptr;
+      bool SameBBWithLast = LastBB && LastBB == Inst->getParent();
+      bool HoistToPreheader = !IsInBranch && Preheader;
+      if (SameBBWithLast) {
+        InsertPt = LastInsertPt;
+      } else if (HoistToPreheader) {
+        InsertPt = Preheader->getTerminator();
+      } else {
+        // 外提引擎在真正改写时可能分裂关键边或插入指示变量；此处不修改
+        // LLVM IR，故仅对「无需上述 IR 手术即可确定插入点」的情形标注 MOP。
+        BasicBlock *ExitBlock = TopL->getUniqueExitBlock();
+        BasicBlock *Exiting = TopL->getExitingBlock();
+        if (ExitBlock->getUniquePredecessor() != Exiting)
+          continue;
+        if (IsInBranch)
+          continue;
+        InsertPt = &*ExitBlock->getFirstInsertionPt();
+      }
+      (void)MopSize;
+      (void)IsWrite;
+      (void)DupTo;
+      if (MopIRImpl::MOP::Mop *Hi = InstToMop.lookup(Inst))
+        Hi->setLoopHoistPlanned(true);
+      LastInsertPt = InsertPt;
+      LastBB = Inst->getParent();
+    }
+  }
+
   SmallVectorImpl<LoopMop> &getLoopMopCandidates() {
     if (!MopCollected)
       collectLoopMopCandidates();
@@ -529,8 +595,13 @@ namespace MopIRImpl {
 namespace MOP {
 
 void runLoopInvariantRelocationOnly(Function &F, FunctionAnalysisManager &FAM) {
+  runLoopInvariantRelocationOnly(F, FAM, nullptr);
+}
+
+void runLoopInvariantRelocationOnly(Function &F, FunctionAnalysisManager &FAM,
+                                    MOPIRUnit *HighLevelUnit) {
   LoopInvariantRelocationEngine Eng(F, FAM);
-  Eng.run();
+  Eng.run(HighLevelUnit);
 }
 
 } // namespace MOP
