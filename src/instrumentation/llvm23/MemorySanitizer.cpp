@@ -7635,7 +7635,8 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     if (!InsPoint)
       InsPoint = &I;
     NextNodeIRBuilder IRB(InsPoint);
-    Value *Len = IRB.CreateAllocationSize(MS.IntptrTy, &I);
+    Value *Len =
+        IRB.CreateTypeSize(MS.IntptrTy, *I.getAllocationSize(I.getDataLayout()));
 
     if (MS.CompileKernel)
       poisonAllocaKmsan(I, IRB, Len);

@@ -3923,7 +3923,8 @@ void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
   // redzones, and OldSize is number of allocated blocks with
   // ElementSize size, get allocated memory size in bytes by
   // OldSize * ElementSize.
-  Value *OldSize = IRB.CreateAllocationSize(IntptrTy, AI);
+  Value *OldSize = IRB.CreateTypeSize(
+      IntptrTy, *AI->getAllocationSize(AI->getDataLayout()));
 
   // PartialSize = OldSize % 32
   Value *PartialSize = IRB.CreateAnd(OldSize, AllocaRzMask);
