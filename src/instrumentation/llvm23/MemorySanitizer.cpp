@@ -7635,8 +7635,14 @@ struct MemorySanitizerVisitor : public InstVisitor<MemorySanitizerVisitor> {
     if (!InsPoint)
       InsPoint = &I;
     NextNodeIRBuilder IRB(InsPoint);
-    Value *Len =
-        IRB.CreateTypeSize(MS.IntptrTy, *I.getAllocationSize(I.getDataLayout()));
+    // LLVM 22 removed IRBuilder::CreateAllocationSize(). AllocaInst::
+    // getAllocationSize() only answers for statically known sizes, so compute
+    // arraySize * allocSize(allocatedType) to cover dynamic (VLA) allocas too.
+    const DataLayout &DL = I.getDataLayout();
+    Value *ArraySize = IRB.CreateZExtOrTrunc(I.getArraySize(), MS.IntptrTy);
+    Value *ElementSize = ConstantInt::get(
+        MS.IntptrTy, DL.getTypeAllocSize(I.getAllocatedType()).getFixedValue());
+    Value *Len = IRB.CreateMul(ArraySize, ElementSize);
 
     if (MS.CompileKernel)
       poisonAllocaKmsan(I, IRB, Len);

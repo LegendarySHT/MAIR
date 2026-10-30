@@ -3923,8 +3923,16 @@ void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
   // redzones, and OldSize is number of allocated blocks with
   // ElementSize size, get allocated memory size in bytes by
   // OldSize * ElementSize.
-  Value *OldSize = IRB.CreateTypeSize(
-      IntptrTy, *AI->getAllocationSize(AI->getDataLayout()));
+  // LLVM 22 removed IRBuilder::CreateAllocationSize(). Do not use
+  // AllocaInst::getAllocationSize() here: this is the *dynamic* alloca path, and
+  // getAllocationSize() returns std::nullopt unless the size is statically
+  // known. Compute sizeof(*AI) = arraySize * allocSize(allocatedType) instead,
+  // which is exactly what CreateAllocationSize() used to do.
+  const DataLayout &DL = AI->getDataLayout();
+  Value *ArraySize = IRB.CreateZExtOrTrunc(AI->getArraySize(), IntptrTy);
+  Value *ElementSize = ConstantInt::get(
+      IntptrTy, DL.getTypeAllocSize(AI->getAllocatedType()).getFixedValue());
+  Value *OldSize = IRB.CreateMul(ArraySize, ElementSize);
 
   // PartialSize = OldSize % 32
   Value *PartialSize = IRB.CreateAnd(OldSize, AllocaRzMask);
