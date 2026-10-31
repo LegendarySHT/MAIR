@@ -4261,6 +4261,15 @@ bool XsanAddressSanitizer::instrumentMAIRObservation(
   // for the one instruction that is intrinsically ReadWrite, an atomicrmw or a
   // cmpxchg, which it classifies as a write as well.
   bool IsWrite = Obs.Kind != mair::AccessKind::Read;
+  // The check carries the location of the access it guards, and OrigIns is what
+  // carries it: instrumentAddress copies OrigIns' DebugLoc onto the reporting
+  // call, while the shadow load, the compare and the branch of the same check
+  // come from one IRBuilder seeded at InsertBefore. Passing Source is therefore
+  // what keeps a merged range's report on the first source's line -- the builder
+  // cannot do it, because the slow path's report call is emitted after
+  // SetInsertPoint() has moved the builder onto a branch it just created, which
+  // has no location at all. Setting a location here instead would be redundant;
+  // mair-debugloc.cpp pins the property from the outside.
   doInstrumentAddress(this, Source, InsertBefore, Obs.Address, Alignment,
                       1U << Mapping.Scale, SizeInBits, IsWrite, nullptr,
                       UseCalls, ClForceExperiment, RTCI);
