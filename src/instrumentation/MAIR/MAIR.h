@@ -974,6 +974,13 @@ public:
     return NumProgramPoints;
   }
 
+  /// Whether \p F contains a cycle that LoopInfo cannot represent as a loop.
+  ///
+  /// Such a function cannot be placed in the MAIR hierarchy. Callers skip it
+  /// entirely instead of aborting the compilation; see MAIRGraph::build.
+  static bool hasUnrepresentableCycle(Function &F,
+                                      FunctionAnalysisManager &FAM);
+
   /// Build a MAIR graph for \p F using DT/PDT/LI results owned by \p FAM.
   ///
   /// The graph borrows the exact FAM results. They must remain valid, and the

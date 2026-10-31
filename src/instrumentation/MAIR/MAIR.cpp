@@ -13,6 +13,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <optional>
 
@@ -75,16 +76,14 @@ bool isInterestingMop(const Instruction &I) {
          isMaskedMemoryIntrinsic(I);
 }
 
-void verifyLoopStructure(const Function &F, const DominatorTree &DT,
-                         const LoopInfo &LI) {
-  for (const Loop *Loop : LI.getLoopsInPreorder()) {
-    if (!Loop->getLoopPreheader())
-      report_fatal_error(
-          "MAIR requires a loop preheader before graph building");
-    if (!Loop->hasDedicatedExits())
-      report_fatal_error(
-          "MAIR requires dedicated loop exits before graph building");
-  }
+// A cycle that LoopInfo does not expose as a loop cannot be placed in the MAIR
+// hierarchy. Aborting the compilation over one is not acceptable because
+// `goto`-built irreducible cycles are common in real code, so the function is
+// skipped instead: it gets an empty graph, the sanitizer falls back to its
+// legacy per-access instrumentation, and the result is exactly what a build
+// with MAIR turned off produces.
+bool containsUnrepresentableCycle(const Function &F, const DominatorTree &DT,
+                                  const LoopInfo &LI) {
   SmallPtrSet<const BasicBlock *, 32> Visited;
   SmallPtrSet<const BasicBlock *, 32> Active;
   SmallVector<std::pair<const BasicBlock *, const_succ_iterator>, 16> Stack;
@@ -106,13 +105,24 @@ void verifyLoopStructure(const Function &F, const DominatorTree &DT,
         const Loop *Loop = LI.getLoopFor(Successor);
         if (!DT.dominates(Successor, Block) || !Loop ||
             Loop->getHeader() != Successor || !Loop->contains(Block))
-          report_fatal_error(
-              "MAIR does not support irreducible or unrepresented cycles");
+          return true;
       } else if (Visited.insert(Successor).second) {
         Active.insert(Successor);
         Stack.emplace_back(Successor, succ_begin(Successor));
       }
     }
+  }
+  return false;
+}
+
+void verifyLoopStructure(const LoopInfo &LI) {
+  for (const Loop *Loop : LI.getLoopsInPreorder()) {
+    if (!Loop->getLoopPreheader())
+      report_fatal_error(
+          "MAIR requires a loop preheader before graph building");
+    if (!Loop->hasDedicatedExits())
+      report_fatal_error(
+          "MAIR requires dedicated loop exits before graph building");
   }
 }
 
@@ -130,7 +140,12 @@ MAIRGraph MAIRGraph::build(Function &F, const DominatorTree &DT,
                            const PostDominatorTree &PDT, const LoopInfo &LI,
                            MAIRBarrierAnalysisCore &BA,
                            MAIROptimizationConfig Config) {
-  verifyLoopStructure(F, DT, LI);
+  if (containsUnrepresentableCycle(F, DT, LI)) {
+    LLVM_DEBUG(dbgs() << "MAIR: skipping " << F.getName()
+                      << " (irreducible or unrepresented cycle)\n");
+    return MAIRGraph(F, Config);
+  }
+  verifyLoopStructure(LI);
   MAIRGraph Graph(F, Config);
   Graph.Analyses.bind(DT, PDT, LI);
   DenseMap<const Loop *, MAIRGraph *> LoopGraphs;
@@ -1903,6 +1918,13 @@ void MAIRGraph::print(raw_ostream &OS) const {
   OS << "}\n\n";
   for (const auto &Child : ChildGraphs)
     Child->print(OS);
+}
+
+bool MAIRGraph::hasUnrepresentableCycle(Function &F,
+                                        FunctionAnalysisManager &FAM) {
+  auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  auto &LI = FAM.getResult<llvm::LoopAnalysis>(F);
+  return containsUnrepresentableCycle(F, DT, LI);
 }
 
 } // namespace mair

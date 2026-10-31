@@ -147,9 +147,14 @@ int main(int argc, char **argv) {
     if (F.isDeclaration())
       continue;
 
-    normalizeMAIRLoops(F, FAM);
+    if (!MAIRGraph::hasUnrepresentableCycle(F, FAM))
+      normalizeMAIRLoops(F, FAM);
     Graphs.push_back(MAIRGraph::build<DefaultBarrierTrait>(F, FAM));
     MAIRGraph &Graph = Graphs.back();
+    // A skipped function has an empty graph: there is nothing to verify, run
+    // passes on, or print.
+    if (Graph.empty())
+      continue;
     if (!Graph.verify(&errs())) {
       errs() << "invalid MAIRGraph for function " << F.getName() << "\n";
       Graph.print(errs());

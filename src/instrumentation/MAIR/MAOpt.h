@@ -7,6 +7,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/PassInstrumentation.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
 
 #include <cassert>
@@ -42,6 +43,16 @@ public:
 
   MAIRGraph &build() {
     assert(!Graph && "MAOpt graph has already been built");
+    // Skipping before normalization matters: normalizeMAIRLoops rewrites the
+    // CFG, and a function that MAIR refuses has to come out untouched so the
+    // legacy sanitizer sees exactly the IR it would have seen without MAIR.
+    if (MAIRGraph::hasUnrepresentableCycle(F, FAM)) {
+      LLVM_DEBUG(dbgs() << "MAIR: skipping " << F.getName()
+                        << " (irreducible or unrepresented cycle)\n");
+      Skipped = true;
+      Graph = std::make_unique<MAIRGraph>(F, Config);
+      return *Graph;
+    }
     ModifiedIR = normalizeMAIRLoops(F, FAM);
     Graph = std::make_unique<MAIRGraph>(
         MAIRGraph::template build<BarrierTrait>(F, FAM, Config));
@@ -66,6 +77,10 @@ public:
   }
 
   llvm::Error optimize() {
+    if (Skipped)
+      return llvm::createStringError(
+          llvm::inconvertibleErrorCode(),
+          "MAIR skipped a function with irreducible or unrepresented cycles");
     if (!Graph)
       return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                      "MAOpt graph has not been built");
@@ -90,6 +105,10 @@ public:
 
   llvm::Expected<MAIRInstantiationResult>
   instantiate(MAIRObservationBackend &Backend) {
+    if (Skipped)
+      return llvm::createStringError(
+          llvm::inconvertibleErrorCode(),
+          "MAIR skipped a function with irreducible or unrepresented cycles");
     if (!Graph)
       return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                      "MAOpt graph has not been built");
@@ -144,6 +163,7 @@ private:
   bool KeepFullDebug;
   MAIROptimizationConfig Config;
   bool Optimized = false;
+  bool Skipped = false;
   bool ModifiedIR = false;
   std::unique_ptr<MAIRGraph> Graph;
   MAIRGraphAnalysisManager GAM;

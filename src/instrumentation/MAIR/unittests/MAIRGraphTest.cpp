@@ -128,6 +128,60 @@ TEST(MAOpt, BuildsOptimizesAndExposesProgramPointObservations) {
   EXPECT_TRUE(O1.getGraph().verify());
 }
 
+TEST(MAOpt, SkipsFunctionWithIrreducibleCycle) {
+  llvm::LLVMContext Ctx;
+  std::unique_ptr<llvm::Module> M = parseModule(R"IR(
+define void @f(ptr %p, i1 %entry.sel, i1 %cycle.sel, i1 %again) {
+entry:
+  br label %header
+header:
+  %i = phi i64 [ 0, %entry ], [ %next, %latch ]
+  br i1 %again, label %dispatch, label %exit
+dispatch:
+  br i1 %entry.sel, label %a, label %b
+a:
+  br i1 %cycle.sel, label %b, label %latch
+b:
+  br i1 %cycle.sel, label %a, label %latch
+latch:
+  %pi = getelementptr i8, ptr %p, i64 %i
+  %v = load i8, ptr %pi, align 1
+  %next = add i64 %i, 1
+  br label %header
+exit:
+  ret void
+}
+)IR",
+                                                Ctx);
+  ASSERT_NE(M, nullptr);
+  llvm::Function &F = *M->getFunction("f");
+
+  llvm::PassInstrumentationCallbacks PIC;
+  llvm::FunctionAnalysisManager FAM;
+  FAM.registerPass([&] { return llvm::PassInstrumentationAnalysis(&PIC); });
+  FAM.registerPass([] { return llvm::TargetLibraryAnalysis(); });
+  FAM.registerPass([] { return llvm::TargetIRAnalysis(); });
+  FAM.registerPass([] { return llvm::AssumptionAnalysis(); });
+  FAM.registerPass([] { return llvm::DominatorTreeAnalysis(); });
+  FAM.registerPass([] { return llvm::PostDominatorTreeAnalysis(); });
+  FAM.registerPass([] { return llvm::LoopAnalysis(); });
+  FAM.registerPass([] { return llvm::ScalarEvolutionAnalysis(); });
+
+  MAOpt<> Opt(F, FAM, &PIC, /*KeepFullDebug=*/false);
+  EXPECT_FALSE(Opt.hasModifiedIR());
+  MAIRGraph &Graph = Opt.build();
+  // Skipping has to be total: no program points, no observations, no IR
+  // rewrite, and optimize() refuses the empty graph so the sanitizer falls
+  // back to the legacy path.
+  EXPECT_TRUE(Graph.empty());
+  EXPECT_TRUE(Graph.verify());
+  EXPECT_TRUE(Opt.getProgramPointObservations().empty());
+  EXPECT_FALSE(Opt.hasModifiedIR());
+  llvm::Error Err = Opt.optimize();
+  EXPECT_TRUE(static_cast<bool>(Err));
+  llvm::consumeError(std::move(Err));
+}
+
 TEST(MAOpt, RetainsSelectedObservations) {
   llvm::LLVMContext Ctx;
   std::unique_ptr<llvm::Module> M = parseModule(R"(
@@ -1846,7 +1900,7 @@ exit:
   EXPECT_EQ(BodyConstant->getAPInt(), llvm::APInt(65, 4));
 }
 
-TEST(MAIRLoopAnalysis, RejectsIrreducibleRepeatedSiteBeforeBuilding) {
+TEST(MAIRLoopAnalysis, SkipsIrreducibleRepeatedSiteBeforeBuilding) {
   llvm::LLVMContext Ctx;
   auto M = parseModule(R"IR(
 define void @f(i1 %entry.sel, i1 %cycle.sel, i1 %again) {
@@ -1873,8 +1927,10 @@ exit:
   llvm::PassInstrumentationCallbacks PIC;
   llvm::FunctionAnalysisManager FAM;
   registerLoopTestAnalyses(FAM, PIC);
-  EXPECT_DEATH_IF_SUPPORTED((void)createGraphWithFunctionAnalyses(F, FAM),
-                            "irreducible");
+  MAIRGraph Graph = createGraphWithFunctionAnalyses(F, FAM);
+  EXPECT_TRUE(Graph.empty());
+  EXPECT_TRUE(Graph.verify());
+  EXPECT_TRUE(Graph.children().empty());
 }
 
 TEST(MAIRLoopAnalysis, WidensMaximumBackedgeCountWithoutWrapping) {
