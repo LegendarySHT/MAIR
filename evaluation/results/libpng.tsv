@@ -1,0 +1,4 @@
+package	mode	program	binary_bytes	text_bytes	instrumented_mops	runtime_seconds	max_rss_kb	frontend_s	optimizer_s	backend_s	codegen_s	asan_pass_s	execute_compiler_s	repeats	exit_status
+libpng	asan-new	libpng@ossfuzz	4566088	1994338	6796	0.040	10044	1.072	1.350	4.118	2.754	0.074	5.381	3	0
+libpng	asan-mair-build	libpng@ossfuzz	4622240	2024222	7334	0.040	10136	0.968	1.483	4.558	3.058	0.185	5.661	3	0
+libpng	asan-mair-opt	libpng@ossfuzz	4518880	1973342	6146	0.040	10184	0.955	1.424	4.004	2.565	0.182	5.106	3	0

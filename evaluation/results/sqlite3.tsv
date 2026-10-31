@@ -1,0 +1,4 @@
+package	mode	program	binary_bytes	text_bytes	instrumented_mops	runtime_seconds	max_rss_kb	frontend_s	optimizer_s	backend_s	codegen_s	asan_pass_s	execute_compiler_s	repeats	exit_status
+sqlite3	asan-new	sqlite3@ossfuzz	11650152	5074182	36512	0.043	13020	2.753	17.053	54.848	37.784	0.691	57.670	3	0
+sqlite3	asan-mair-build	sqlite3@ossfuzz	11744872	5146042	37812	0.040	13232	2.719	21.249	58.734	37.473	4.829	61.522	3	0
+sqlite3	asan-mair-opt	sqlite3@ossfuzz	11545232	5036486	35085	0.047	13024	2.673	21.573	57.696	36.112	5.102	60.436	3	0

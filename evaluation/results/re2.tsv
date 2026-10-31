@@ -1,0 +1,4 @@
+package	mode	program	binary_bytes	text_bytes	instrumented_mops	runtime_seconds	max_rss_kb	frontend_s	optimizer_s	backend_s	codegen_s	asan_pass_s	execute_compiler_s	repeats	exit_status
+re2	asan-new	re2@re2_fuzzer	15355888	3789411	26825	0.040	8772	71.931	10.531	23.574	12.878	0.304	97.031	3	0
+re2	asan-mair-build	re2@re2_fuzzer	15418432	3842125	28179	0.037	8664	72.324	11.599	25.060	13.288	1.271	98.931	3	0
+re2	asan-mair-opt	re2@re2_fuzzer	15058296	3689677	22630	0.037	8516	71.391	11.855	24.256	12.233	1.373	97.081	3	0

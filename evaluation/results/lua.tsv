@@ -1,0 +1,4 @@
+package	mode	program	binary_bytes	text_bytes	instrumented_mops	runtime_seconds	max_rss_kb	frontend_s	optimizer_s	backend_s	codegen_s	asan_pass_s	execute_compiler_s	repeats	exit_status
+lua	asan-new	lua	5217576	2164553	9784	0.043	7284	1.319	2.220	6.236	3.980	0.127	7.847	3	0
+lua	asan-mair-build	lua	5262472	2196465	10645	0.040	7316	1.276	2.358	6.643	4.246	0.265	8.231	3	0
+lua	asan-mair-opt	lua	5190288	2156889	9235	0.042	7340	1.369	2.369	6.442	4.037	0.300	8.172	3	0

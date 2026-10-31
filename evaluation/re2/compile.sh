@@ -20,7 +20,7 @@ pushd "${BUILD_DIR}"
 
 # Enable C++17 everywhere (required by Abseil and libraries using it)
 export CXXFLAGS="${CXXFLAGS} -std=c++17"
-export LDFLAGS="${LDFLAGS} -stdlib=libc++"
+export LDFLAGS="${LDFLAGS} ${MAIR_LIBCXX_FLAG--stdlib=libc++}"
 
 # 1) Build and install Abseil following the oss-fuzz flow
 # Use locally built Abseil to avoid polluting the system and include current mode flags
@@ -38,6 +38,10 @@ make -j$(nproc)
 make install
 popd
 export PKG_CONFIG_PATH="$(pwd)/absl-install/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+# re2's Makefile does not add the abseil include/lib path when abseil was built
+# out of tree; it only forwards CXXFLAGS/LDFLAGS, so pass them here.
+export CXXFLAGS="${CXXFLAGS} -I$(pwd)/absl-install/include"
+export LDFLAGS="${LDFLAGS} -L$(pwd)/absl-install/lib"
 
 # 2) Build RE2 static library (injecting current mode flags, without installing)
 make -C "$SRC_DIR" clean || true
@@ -67,10 +71,16 @@ EOF
 ${CXX:-xclang++} ${FUZZER_CXXFLAGS} -c ./mode_tag.cc -o ./mode_tag.o
 
 PKG_LIBS=$(pkg-config re2 --libs 2>/dev/null | sed -e 's/-lre2//' || true)
+if [ -z "$PKG_LIBS" ]; then
+  # pkg-config only reports re2's dependencies when libre2 is installed system
+  # wide (it is not, the local abseil install is used instead), so link the
+  # abseil static archives directly. --start-group keeps archive order safe.
+  PKG_LIBS="-Wl,--start-group $(ls "$(pwd)"/absl-install/lib/*.a | tr '\n' ' ') -Wl,--end-group"
+fi
 
 OUT_BIN="${BIN_DIR}/re2@re2_fuzzer"
 ${CXX:-xclang++} ${FUZZER_CXXFLAGS} ./fuzzer.o ./mode_tag.o -o "${OUT_BIN}" \
-  ${LIB_FUZZING_ENGINE} "$SRC_DIR/obj/libre2.a" ${PKG_LIBS} ${FUZZER_LDFLAGS} -lpthread -stdlib=libc++
+  ${LIB_FUZZING_ENGINE} "$SRC_DIR/obj/libre2.a" ${PKG_LIBS} ${FUZZER_LDFLAGS} -lpthread ${MAIR_LIBCXX_FLAG--stdlib=libc++}
 
 chmod +x "${OUT_BIN}"
 

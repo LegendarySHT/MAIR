@@ -8,6 +8,9 @@
 !*.sh
 !*.py
 
+# The libpng sweep needs a local stand-in: the checkout ships no oss-fuzz harness.
+!libpng/libpng_read_fuzzer.cc
+
 # Make sure .gitignore and README.md are not ignored
 !.gitignore
 !README.md
@@ -16,6 +19,12 @@
 repo/
 temp/
 data/
+
+# D5 keeps the report tables and the failure log; raw builds stay ignored
+results/*
+!results/summary.csv
+!results/*.tsv
+!results/run-log.md
 
 # This file is auto-generated
 benchmarks.py

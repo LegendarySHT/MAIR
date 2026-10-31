@@ -1,0 +1,4 @@
+package	mode	program	binary_bytes	text_bytes	instrumented_mops	runtime_seconds	max_rss_kb	frontend_s	optimizer_s	backend_s	codegen_s	asan_pass_s	execute_compiler_s	repeats	exit_status
+zlib	asan-new	zlib@zlib_uncompress_fuzzer	3380304	1494103	4114	0.043	11256	0.348	0.536	1.903	1.353	0.024	2.412	3	0
+zlib	asan-mair-build	zlib@zlib_uncompress_fuzzer	3382928	1495651	4806	0.040	11288	0.322	0.575	2.053	1.465	0.061	2.549	3	0
+zlib	asan-mair-opt	zlib@zlib_uncompress_fuzzer	3361928	1484195	3602	0.040	11264	0.366	0.575	1.836	1.248	0.066	2.356	3	0
