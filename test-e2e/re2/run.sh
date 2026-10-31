@@ -1,5 +1,8 @@
 #!/bin/bash
-# One-click RE2 end-to-end check for baseline and MAIR, under ASan and TSan.
+# One-click RE2 end-to-end check for the MAIR ablation tiers, under ASan and
+# TSan. The three variants are `baseline` (MAIR unset), `mair-build` (MAIR=build:
+# the graph is built and materialized but no MAIR transform runs) and `mair-opt`
+# (MAIR=1: the full pipeline).
 #
 # The first run clones the same repositories as evaluation/re2 and compiles
 # them. Later runs reuse test-e2e/re2/source and test-e2e/re2/build.
@@ -27,8 +30,13 @@ ABSL_SRC=$SOURCE_DIR/abseil-cpp
 # evaluation/re2 also forces xclang/xclang++ rather than inheriting CC/CXX.
 CC=${RE2_E2E_CC:-$REPO_DIR/build/xclang}
 CXX=${RE2_E2E_CXX:-$REPO_DIR/build/xclang++}
-LLVM_BIN=${LLVM_BIN:-/home/camsyn/kits/llvm/23/bin}
+# The old default pointed at another machine's kit; LLVM_BIN only supplies
+# clang (to locate the libFuzzer runtime), llvm-symbolizer and llvm-objdump.
+LLVM_BIN=${LLVM_BIN:-/usr/lib/llvm-22/bin}
 export LLVM_BIN
+# Runtimes built into the MAIR tree (build-llvm22/lib) are invisible to the
+# driver's default resource directory, so -print-file-name needs it spelled out.
+RESOURCE_DIR=${RE2_E2E_RESOURCE_DIR:-$REPO_DIR/build-llvm22}
 JOBS=${JOBS:-$(nproc)}
 RUNS=${RUNS:-1000}
 REBUILD=${RE2_E2E_REBUILD:-0}
@@ -44,10 +52,26 @@ if [[ ! -x "$LLVM_BIN/clang" ]]; then
   exit 1
 fi
 
-FUZZER_RT=$("$LLVM_BIN/clang" -print-file-name=libclang_rt.fuzzer.a)
+if [[ -n "$RESOURCE_DIR" && -d "$RESOURCE_DIR" ]]; then
+  FUZZER_RT=$("$LLVM_BIN/clang" -resource-dir="$RESOURCE_DIR" \
+    -print-file-name=libclang_rt.fuzzer.a)
+else
+  FUZZER_RT=$("$LLVM_BIN/clang" -print-file-name=libclang_rt.fuzzer.a)
+fi
 if [[ ! -f "$FUZZER_RT" ]]; then
   echo "libFuzzer runtime not found: $FUZZER_RT" >&2
   exit 1
+fi
+
+# evaluation/re2 pins -stdlib=libc++; this box has no libc++ installation, and
+# a silently different standard library would make the tiers incomparable
+# between machines rather than between variants, so probe and report it.
+STDLIB_FLAGS=-stdlib=libc++
+# The probe has to link, not just compile: compiling an empty main succeeds even
+# when -lc++ is missing, and only the link reports the missing library.
+if ! printf 'int main(){}\n' | "$CXX" -x c++ -stdlib=libc++ - -o /tmp/re2-libcxx-probe 2>/dev/null; then
+  echo "note: libc++ is unavailable for $CXX, building with its default C++ library" >&2
+  STDLIB_FLAGS=
 fi
 
 clone_repo() {
@@ -82,12 +106,24 @@ build_one() {
     return 0
   fi
   mkdir -p "$build_dir"
-  if [[ "$variant" == mair ]]; then
-    export MAIR=1
-  else
-    unset MAIR
-  fi
+  case "$variant" in
+    baseline) unset MAIR ;;
+    mair-build) export MAIR=build ;;
+    mair-opt) export MAIR=1 ;;
+    *)
+      echo "unknown variant: $variant" >&2
+      exit 1
+      ;;
+  esac
   local flag="-$sanitizer"
+  # abseil includes <sanitizer/common_interface_defs.h>, which only the MAIR
+  # build tree provides here. Add that directory with -isystem: pointing the
+  # whole resource directory at it would also drop clang's builtin headers
+  # (stddef.h, limits.h) and abseil then dies on include_next <limits.h>.
+  local rd_flags=""
+  if [[ -n "$RESOURCE_DIR" && -d "$RESOURCE_DIR/include" ]]; then
+    rd_flags="-isystem $RESOURCE_DIR/include"
+  fi
   echo "compile $sanitizer $variant"
   cmake -S "$SCRIPT_DIR" -B "$build_dir" -G Ninja \
     -DRE2_SOURCE_DIR="$RE2_SRC" \
@@ -96,9 +132,9 @@ build_one() {
     -DCMAKE_C_COMPILER="$CC" \
     -DCMAKE_CXX_COMPILER="$CXX" \
     -DCMAKE_BUILD_TYPE= \
-    -DCMAKE_C_FLAGS="-O2 -g $flag" \
-    -DCMAKE_CXX_FLAGS="-O2 -g -stdlib=libc++ $flag -fsanitize=fuzzer-no-link" \
-    -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ $flag"
+    -DCMAKE_C_FLAGS="-O2 -g $flag $rd_flags" \
+    -DCMAKE_CXX_FLAGS="-O2 -g $STDLIB_FLAGS $flag $rd_flags -fsanitize=fuzzer-no-link" \
+    -DCMAKE_EXE_LINKER_FLAGS="$STDLIB_FLAGS $flag $rd_flags"
   ninja -C "$build_dir" -j "$JOBS" re2_fuzzer re2_oracle
 }
 
@@ -171,17 +207,26 @@ run_one() {
 
 fetch_sources
 for sanitizer in asan tsan; do
-  for variant in baseline mair; do
+  for variant in baseline mair-build mair-opt; do
     build_one "$sanitizer" "$variant"
   done
 done
 corpus=$(prepare_corpus)
-mkdir -p "$SCRIPT_DIR/build/metrics"
+metrics_dir=$SCRIPT_DIR/build/metrics
+mkdir -p "$metrics_dir"
+# Keep earlier tables: a second run must not silently overwrite the numbers a
+# report already cites.
+if compgen -G "$metrics_dir/*.tsv" > /dev/null; then
+  archive=$metrics_dir/archive/$(date +%Y%m%d_%H%M%S)
+  mkdir -p "$archive"
+  mv "$metrics_dir"/*.tsv "$archive"/
+  echo "archived previous metrics to $archive"
+fi
 for kind in size time instrumentation perf; do
-  : > "$SCRIPT_DIR/build/metrics/$kind.tsv"
+  : > "$metrics_dir/$kind.tsv"
 done
 for sanitizer in asan tsan; do
-  for variant in baseline mair; do
+  for variant in baseline mair-build mair-opt; do
     run_one "$sanitizer" "$variant" "$corpus"
   done
 done
