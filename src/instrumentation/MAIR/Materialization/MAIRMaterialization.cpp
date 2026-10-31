@@ -149,6 +149,13 @@ bool validateObservation(const Observation &Obs, const Instruction &Target,
 Expected<MAIRMaterializationPlan> buildPlan(const MAIRGraph &Graph, Function &F,
                                             DominatorTree &DT, LoopInfo &LI) {
   MAIRMaterializationPlan Plan;
+  // A block can be split for at most one successor in this pass. Splitting
+  // replaces its terminator with a branch to the freshly created edge block, so
+  // any other successor it used to have is no longer reachable from it and a
+  // second SplitKnownCriticalEdge would fail halfway through instantiate().
+  // Rejecting the shape here keeps that failure in preflight, before any IR is
+  // touched.
+  DenseMap<const BasicBlock *, const BasicBlock *> EdgeTarget;
   if (!Graph.isLive())
     return materializationError("cannot instantiate an already consumed graph");
   if (!Graph.verify())
@@ -171,6 +178,10 @@ Expected<MAIRMaterializationPlan> buildPlan(const MAIRGraph &Graph, Function &F,
           !isPatchBLoopExit(*From, *To, LI))
         return materializationError(
             "unsupported edge site: expected a critical Patch B loop exit");
+      auto Existing = EdgeTarget.try_emplace(From, To);
+      if (!Existing.second && Existing.first->second != To)
+        return materializationError(
+            "unsupported edge site: one block exits to several successors");
       Target = &PP.getAnchor();
     } else {
       const BasicBlock *BB = PP.getBasicBlock();
@@ -403,8 +414,12 @@ MAIRGraph::instantiate(FunctionAnalysisManager &FAM,
     BasicBlock *VirtualExit =
         SplitKnownCriticalEdge(const_cast<Instruction *>(From->getTerminator()),
                                SuccNo, Options, "mair.edge");
+    // Preflight already established that every edge site is a critical Patch B
+    // loop exit and that no block is split for two different successors, so
+    // this cannot fail. It stays a returned error rather than an assertion so a
+    // caller can recover instead of the process aborting.
     if (!VirtualExit)
-      report_fatal_error(
+      return materializationError(
           "Patch C edge split failed after successful preflight");
     EdgeCursors.push_back({From, To, VirtualExit->getTerminator()});
     ++Result.SplitEdges;
@@ -485,8 +500,13 @@ MAIRGraph::instantiate(FunctionAnalysisManager &FAM,
     ++Result.LoweredProgramPoints;
   }
 
-  if (verifyFunction(F, &errs()))
-    report_fatal_error("Patch C produced invalid LLVM IR");
+  std::string VerifyDiagnostics;
+  raw_string_ostream VerifyOS(VerifyDiagnostics);
+  if (verifyFunction(F, &VerifyOS)) {
+    VerifyOS.flush();
+    return materializationError("Patch C produced invalid LLVM IR: " +
+                                VerifyDiagnostics);
+  }
   FAM.invalidate(F, PreservedAnalyses::none());
   markConsumed();
   return Result;
