@@ -190,7 +190,12 @@ MAIRGraph MAIRGraph::build(Function &F, const DominatorTree &DT,
       Points.insert(Points.begin(), &Boundary);
     }
   }
-  for (MAIRGraph *Scope : llvm::reverse(Graph.graphs()))
+  // Graphs must be visited children-first, and `graphs()` hands back the list
+  // by value: reversing the temporary would make llvm::reverse hold iterators
+  // into storage that dies before the first iteration (the inline buffer for
+  // eight graphs, freed heap beyond that). Bind it to a local first.
+  SmallVector<MAIRGraph *, 8> AllGraphs = Graph.graphs();
+  for (MAIRGraph *Scope : llvm::reverse(AllGraphs))
     for (const auto &Child : Scope->ChildGraphs) {
       Scope->ForwardBarrier |= Child->ForwardBarrier;
       Scope->BackwardBarrier |= Child->BackwardBarrier;
