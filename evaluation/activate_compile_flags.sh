@@ -19,6 +19,10 @@
 #     - xsan-asan-msan-tsan       : XSan with ASan + MSan + TSan
 #     - xsan-asan-msan-ubsan      : XSan with ASan + MSan + UBSan
 #     - xsan-asan-msan-tsan-ubsan : XSan with ASan + TSan + MSan + UBSan
+#     - asan-mair-build           : ASan (fork `-asan`) with MAIR engaged but no
+#                                   MAIR transform (sets MAIR=build)
+#     - asan-mair-opt             : ASan (fork `-asan`) with the full MAIR
+#                                   pipeline (sets MAIR=1)
 #
 #   is_cxx values:
 #     - "true"   : C++ project; append -stdlib=libc++ to CXXFLAGS/LDFLAGS
@@ -191,12 +195,28 @@ case "$mode" in
         export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=address,memory,thread,undefined"
         export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=address,memory,thread,undefined"
         ;;
+    asan-mair-build|asan-mair-opt)
+        # The MAIR-enabled ASan pass is the one behind the fork's own `-asan`
+        # flag (the same flag evaluation calls `asan-new`); the stock
+        # `-fsanitize=address` path ignores MAIR entirely (measured: 0
+        # mair.observation GEPs even with MAIR=1).
+        # MAIR itself is read from the compiler's process environment, not from
+        # CFLAGS: the pass calls getenv("MAIR"), a driver flag would not reach it.
+        export CFLAGS="${CFLAGS} -asan"
+        export CXXFLAGS="${CXXFLAGS} -asan"
+        export LDFLAGS="${LDFLAGS} -asan"
+        if [ "$mode" = "asan-mair-build" ]; then
+            export MAIR=build
+        else
+            export MAIR=1
+        fi
+        ;;
     raw|'')
         # Do not modify flags for raw mode
         ;;
     *)
         echo "Warning: unrecognized compile mode: $1" >&2
-        echo "Supported modes include: raw, asan, tsan, ubsan, msan, xsan-asan, xsan-asan-tsan, xsan-asan-msan, xsan-asan-ubsan, xsan-asan-tsan-ubsan, xsan-asan-msan-tsan, xsan-asan-msan-ubsan, xsan-asan-msan-tsan-ubsan" >&2
+        echo "Supported modes include: raw, asan, tsan, ubsan, msan, xsan-asan, xsan-asan-tsan, xsan-asan-msan, xsan-asan-ubsan, xsan-asan-tsan-ubsan, xsan-asan-msan-tsan, xsan-asan-msan-ubsan, xsan-asan-msan-tsan-ubsan, asan-mair-build, asan-mair-opt" >&2
         ;;
 esac
 

@@ -2,23 +2,115 @@ import re
 import json
 from collections import defaultdict
 from pathlib import Path
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+# matplotlib is imported inside the plotting function: the compile-time
+# tables are usable on hosts that do not have matplotlib installed.
 
 def extract_compile_time(file_path):
     """Extract compile time (seconds) from a file."""
     try:
         with open(file_path, 'r') as f:
             content = f.read()
-            match = re.search(r'Compile Time: (\d+) s', content)
+            # compile-all.sh writes the value with 6 decimals, so accept a
+            # fractional part as well.
+            match = re.search(r'Compile Time: (\d+(?:\.\d+)?) s', content)
             if match:
-                return int(match.group(1))
+                return float(match.group(1))
             else:
                 print(f"Warning: Compile time not found in file {file_path}")
                 return None
     except Exception as e:
         print(f"Error reading file {file_path}: {e}")
         return None
+
+# The MAIR ablation tiers built by evaluation/activate_compile_flags.sh.
+MAIR_MODES = ('asan-mair-build', 'asan-mair-opt')
+
+# Top-level phases that clang's -ftime-trace actually emits. MAIR's own
+# extract/analyze/pass/lower stages all live inside `Total AddressSanitizerPass`
+# and are not traced separately (see evaluation/README.md).
+TRACE_PHASES = ('Frontend', 'Optimizer', 'Backend', 'CodeGenPasses',
+                'Total AddressSanitizerPass', 'ExecuteCompiler')
+
+
+def sum_named_events_json(path: Path, names=TRACE_PHASES):
+    """Sum the duration (us) of the named X-phase events under path/*.json."""
+    totals = {name: 0.0 for name in names}
+    counts = {name: 0 for name in names}
+    for json_file in path.rglob("*.json"):
+        try:
+            with open(json_file, "r") as f:
+                obj = json.load(f)
+        except Exception as e:
+            print(f"Error reading JSON file {json_file}: {e}")
+            continue
+        if not isinstance(obj, dict) or not isinstance(obj.get("traceEvents"), list):
+            continue
+        for event in obj["traceEvents"]:
+            if not isinstance(event, dict) or event.get("ph") != "X":
+                continue
+            name = event.get("name")
+            if name in totals and event.get("dur") is not None:
+                try:
+                    totals[name] += float(event["dur"])
+                    counts[name] += 1
+                except Exception:
+                    continue
+    return totals, counts
+
+
+def print_mair_phases(phase_data, package_dur_data):
+    """Print the per-phase compile-time table for the MAIR ablation tiers."""
+    packages = sorted(p for p, per_mode in phase_data.items()
+                      if any(m in per_mode for m in MAIR_MODES))
+    if not packages:
+        print("\nNo MAIR compile-time data found (build a package with "
+              "`compile-all.sh -t asan-mair-build asan-mair-opt`)")
+        return
+    # Any mode that has trace data is reported; the known ones come first so
+    # the baseline sits next to the two MAIR tiers.
+    known_modes = ['raw', 'asan', 'asan-new'] + list(MAIR_MODES)
+    columns = TRACE_PHASES
+    widths = [max(len(c), 12) for c in columns]
+    print("\n===== MAIR compile-time phases in seconds (-ftime-trace) =====")
+    print(f"{'package':<16}{'mode':<20}"
+          + "".join(f"{c:>{w}}  " for c, w in zip(columns, widths)))
+    for package in packages:
+        modes = [m for m in known_modes if m in phase_data[package]]
+        modes += sorted(m for m in phase_data[package] if m not in known_modes)
+        for mode in modes:
+            totals = phase_data[package].get(mode)
+            if not totals:
+                continue
+            values = []
+            for column in columns:
+                us = totals.get(column)
+                if column == 'ExecuteCompiler' and not us:
+                    dur = package_dur_data.get(package, {}).get(mode, {})
+                    us = dur.get('duration_us')
+                values.append(us)
+            if not any(values):
+                continue
+            cells = "".join(
+                f"{'--':>{w}}  " if v is None else f"{v / 1e6:>{w}.3f}  "
+                for v, w in zip(values, widths))
+            print(f"{package:<16}{mode:<20}{cells}")
+
+
+# Phase totals live next to the ExecuteCompiler totals that compile-all.sh
+# collects, under .compiled/data-time-trace/<mode>/.
+def collect_phase_totals(package_dir: Path):
+    data_dir = package_dir / '.compiled' / 'data-time-trace'
+    totals_by_mode = {}
+    if not data_dir.is_dir():
+        return totals_by_mode
+    for mode_dir in data_dir.iterdir():
+        if not mode_dir.is_dir():
+            continue
+        totals, counts = sum_named_events_json(mode_dir)
+        if counts['ExecuteCompiler'] or counts['Frontend'] or counts['Optimizer']:
+            totals_by_mode[mode_dir.name] = totals
+    return totals_by_mode
+
 
 def sum_executecompiler_dur_json(path: Path):
     """
@@ -64,6 +156,9 @@ def plot_compile_trace_grid_bar(results, show_targets,
     4. Increase font size for subplot titles and y-axis labels
     5. Automatically set ylim per subplot to ensure top text is fully inside the plot
     """
+
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
 
     # -------------- Basic Parameters --------------
     ncols = 7
@@ -237,6 +332,7 @@ def plot_compile_trace_grid_bar(results, show_targets,
 def main():
     package_data = defaultdict(dict)
     package_dur_data = defaultdict(dict)
+    package_phase_data = defaultdict(dict)
 
     current_dir = Path('.')
     for item in current_dir.iterdir():
@@ -250,6 +346,9 @@ def main():
                         compile_time = extract_compile_time(t)
                         if compile_time is not None:
                             package_data[package][t.name] = compile_time
+            # Per-phase totals for the MAIR ablation tiers (D3).
+            for mode, totals in collect_phase_totals(item).items():
+                package_phase_data[package][mode] = totals
             if data_dir.is_dir():
                 for t in data_dir.iterdir():
                     if t.is_dir():
@@ -328,8 +427,11 @@ def main():
             'trace_percent': dict(trace_percent),
         })
 
+    # The MAIR tiers only need the trace files, not the full XSan dataset.
+    print_mair_phases(package_phase_data, package_dur_data)
+
     if not results:
-        print("No valid data available for analysis")
+        print("No valid XSan data available for analysis")
         return
 
     print("\n===== Compile Trace Tracking (Percentage relative to Raw) =====")
