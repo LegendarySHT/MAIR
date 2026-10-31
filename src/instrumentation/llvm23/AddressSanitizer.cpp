@@ -476,12 +476,20 @@ static cl::opt<int> ClDebugMin("as-debug-min", cl::desc("Debug min inst"),
 static cl::opt<int> ClDebugMax("as-debug-max", cl::desc("Debug max inst"),
                                cl::Hidden, cl::init(-1));
 
+static cl::opt<bool> ClMAIRForceFallback(
+    "mair-force-fallback", cl::Hidden, cl::init(false),
+    cl::desc("Testing only: pretend MAIR cannot materialize any function and "
+             "instrument every access with the legacy path"));
+
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
 STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
 STATISTIC(NumOptimizedAccessesToGlobalVar,
           "Number of optimized accesses to global vars");
 STATISTIC(NumOptimizedAccessesToStackVar,
           "Number of optimized accesses to stack vars");
+STATISTIC(NumMAIRFunctionsFellBack,
+          "Number of functions instrumented one access at a time because MAIR "
+          "could not materialize its graph");
 
 namespace {
 
@@ -4348,8 +4356,19 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
         MAIRModeledSources.insert(Source);
   }
 
-  if (Error Err = Opt.optimize())
-    report_fatal_error(Twine(toString(std::move(Err))));
+  // MAIR is an optimization layered on top of the legacy instrumentation,
+  // never a correctness requirement. Whatever stops the graph from being
+  // materialized -- a pass that leaves a graph preflight refuses, or a shape the
+  // backend cannot lower -- has to cost optimization only. Both failure points
+  // below record a reason and clear UseMAIR, which drops every MAIR decision so
+  // the legacy loop at the end of this function instruments all accesses again.
+  std::string MAIRFallbackReason;
+  bool UseMAIR = true;
+
+  if (Error Err = Opt.optimize()) {
+    MAIRFallbackReason = toString(std::move(Err));
+    UseMAIR = false;
+  }
 
   auto IsElidedByNativeAsanOpt = [&](Instruction &Source) {
     auto *LI = dyn_cast<LoadInst>(&Source);
@@ -4402,30 +4421,39 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
     return true;
   };
 
-  SmallVector<const mair::Observation *, 32> MAIRCandidates;
   SmallPtrSet<const mair::Observation *, 32> MAIRTargets;
-  SmallPtrSet<const Instruction *, 32> MAIRFallbackSources;
-  for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
-    (void)PP;
-    for (const mair::Observation *Obs : Observations) {
-      if (CanInstrumentViaMAIR(*Obs)) {
-        MAIRCandidates.push_back(Obs);
-        continue;
+  // Sources the MAIR path is responsible for. Empty means "MAIR is not used for
+  // this function", which is exactly what the legacy loop below needs to see.
+  SmallPtrSet<const Instruction *, 32> MAIRHandledSources;
+  if (UseMAIR) {
+    SmallVector<const mair::Observation *, 32> MAIRCandidates;
+    SmallPtrSet<const Instruction *, 32> MAIRFallbackSources;
+    for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
+      (void)PP;
+      for (const mair::Observation *Obs : Observations) {
+        if (CanInstrumentViaMAIR(*Obs)) {
+          MAIRCandidates.push_back(Obs);
+          continue;
+        }
+        for (const Instruction *Source : Obs->getInstructions())
+          MAIRFallbackSources.insert(Source);
       }
-      for (const Instruction *Source : Obs->getInstructions())
-        MAIRFallbackSources.insert(Source);
     }
-  }
-  for (const mair::Observation *Obs : MAIRCandidates) {
-    const Instruction *Source = Obs->getInstructions().front();
-    if (!MAIRFallbackSources.contains(Source))
-      MAIRTargets.insert(Obs);
-  }
+    for (const mair::Observation *Obs : MAIRCandidates) {
+      const Instruction *Source = Obs->getInstructions().front();
+      if (!MAIRFallbackSources.contains(Source))
+        MAIRTargets.insert(Obs);
+    }
 
-  SmallPtrSet<const Instruction *, 32> MAIRHandledSources = MAIRModeledSources;
-  for (const Instruction *Source : MAIRFallbackSources)
-    MAIRHandledSources.erase(Source);
-  Opt.retainObservations(MAIRTargets);
+    MAIRHandledSources = MAIRModeledSources;
+    for (const Instruction *Source : MAIRFallbackSources)
+      MAIRHandledSources.erase(Source);
+    Opt.retainObservations(MAIRTargets);
+  } else {
+    ++NumMAIRFunctionsFellBack;
+    LLVM_DEBUG(dbgs() << "ASAN: MAIR fell back for " << F.getName() << ": "
+                      << MAIRFallbackReason << "\n");
+  }
 
   AsanToInstrument Targets;
   if (!collectTargetsToIntrument(F, TLI, TTI, Targets))
@@ -4476,10 +4504,41 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
       bool changed() const { return Changed; }
     } Backend(*this, UseCalls, ObjSizeVis, RTCI);
 
-    Expected<mair::MAIRInstantiationResult> Result = Opt.instantiate(Backend);
-    if (!Result)
-      report_fatal_error(Twine(toString(Result.takeError())));
-    FunctionModified |= Backend.changed();
+    // -mair-force-fallback makes the backend refuse a graph it could have
+    // lowered, so the recovery path can be tested without hunting for an input
+    // shape the backend genuinely cannot handle; see
+    // mair-materialize-fallback.cpp.
+    Expected<mair::MAIRInstantiationResult> Result =
+        ClMAIRForceFallback
+            ? Expected<mair::MAIRInstantiationResult>(createStringError(
+                  inconvertibleErrorCode(),
+                  "MAIR materialization forced to fail for testing"))
+            : Opt.instantiate(Backend);
+    if (Result) {
+      FunctionModified |= Backend.changed();
+    } else {
+      MAIRFallbackReason = toString(Result.takeError());
+      // A failed instantiate() can leave split edges behind, so the function is
+      // reported as modified even when no check was emitted.
+      FunctionModified = true;
+      UseMAIR = false;
+      if (Backend.changed()) {
+        // Some checks are already in. The legacy loop cannot undo them: the
+        // per-source path inside instrumentMAIRObservation inserts at the
+        // source instruction, not at a cursor this frame owns, so "falling
+        // back" here would put a second check in front of every access MAIR
+        // already covered. Preflight validates every split and every region
+        // before the first instruction is emitted, so being here means a MAIR
+        // codegen bug rather than an input shape it does not model. Keep that
+        // loud instead of hiding it behind a doubled check count.
+        report_fatal_error(Twine(MAIRFallbackReason));
+      }
+      MAIRTargets.clear();
+      MAIRHandledSources.clear();
+      ++NumMAIRFunctionsFellBack;
+      LLVM_DEBUG(dbgs() << "ASAN: MAIR fell back for " << F.getName() << ": "
+                        << MAIRFallbackReason << "\n");
+    }
   }
 
   for (auto &Operand : OperandsToInstrument) {
