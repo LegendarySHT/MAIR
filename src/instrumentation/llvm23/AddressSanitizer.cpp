@@ -4236,6 +4236,8 @@ bool XsanAddressSanitizer::instrumentMAIRObservation(
   // A merged range is no better aligned than its weakest source, so take the
   // minimum rather than trusting the first source. The value only steers the
   // aligned fast path; claiming too much alignment would skip a real check.
+  // mair-merged-range-rw.cpp is the case that watches this: an 8-byte read/write
+  // range whose sources are 4-byte aligned must keep taking the two-probe path.
   MaybeAlign Alignment;
   for (Instruction *Selected : SelectedSources) {
     Align SourceAlign = isa<LoadInst>(Selected)
@@ -4245,6 +4247,11 @@ bool XsanAddressSanitizer::instrumentMAIRObservation(
       Alignment = SourceAlign;
   }
   TypeSize SizeInBits = TypeSize::getFixed(Size->getZExtValue() * 8);
+  // A ReadWrite observation reports as a write. The load and store entry points
+  // run the same shadow check and differ only in how they describe the access,
+  // so this is not a detection gap; it also matches what the legacy path does
+  // for the one instruction that is intrinsically ReadWrite, an atomicrmw or a
+  // cmpxchg, which it classifies as a write as well.
   bool IsWrite = Obs.Kind != mair::AccessKind::Read;
   doInstrumentAddress(this, Source, InsertBefore, Obs.Address, Alignment,
                       1U << Mapping.Scale, SizeInBits, IsWrite, nullptr,
@@ -4304,6 +4311,11 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
   // Reads or writes disabled by the instrumentation flags are not sanitizer
   // observations. Drop them before optimization so a disabled access cannot
   // cover a later one and then disappear, taking that check with it.
+  //
+  // The order also keeps the flags honest for merged ranges: locationmerge only
+  // runs inside optimize(), so filtering first means a disabled read never
+  // becomes half of a ReadWrite observation that the flag can no longer remove.
+  // Moving this block below optimize() would reintroduce exactly that case.
   if (!ClInstrumentReads || !ClInstrumentWrites) {
     SmallPtrSet<const mair::Observation *, 32> Kept;
     for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
@@ -4320,6 +4332,14 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
     Opt.retainObservations(Kept);
   }
 
+  // Snapshot the sources the graph models before optimize(). Optimization
+  // erases observations that a dominating check provably covers -- two loads of
+  // the same address collapse into one, as in mair-atomic.cpp -- and the
+  // instructions behind those erased observations must stay out of the legacy
+  // loop below, or the merge buys nothing. Taking the snapshot afterwards would
+  // look safer but would re-instrument every erased source one by one; the
+  // safety of doing it here rests on redundant-observation elimination only
+  // dropping an observation when a dominating one covers it.
   SmallPtrSet<const Instruction *, 32> MAIRModeledSources;
   for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
     (void)PP;
