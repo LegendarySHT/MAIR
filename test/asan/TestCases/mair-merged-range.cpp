@@ -1,28 +1,23 @@
 // RUN: env MAIR=1 %clangxx -asan -O1 -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s
-//
-// XFAIL: *
 
 struct S { int a, b, c; };
 
 int read3(S *s) { return s->a + s->b + s->c; }
 
 // The three 4-byte loads sit at s+0, s+4, s+8: contiguous and equally wide, so
-// locationmerge could fold them into one 12-byte observation.
+// locationmerge can fold them into one 12-byte observation.
 //
-// It never gets the chance. MAIROptimizationConfig::forAddressSanitizer() sets
-// AllowRelocation=false, which leaves every observation non-movable, and
-// SimplifyGraphPass only contracts a dominating/post-dominating pair when the
-// dominating one holds movable observations only. Every load therefore keeps
-// its own program point and locationmerge never sees two observations to
-// merge, so the backend gate on Obs.getInstructions().size() != 1 is not even
-// reached: three separate per-field checks come out instead.
+// AddressSanitizer pins its observations, because a check must stay ahead of the
+// access it guards and sinking would move it behind. SimplifyGraphPass therefore
+// contracts the dominating/post-dominating pair by hoisting instead, which keeps
+// every check ahead of every load and is what finally gives locationmerge two
+// observations at one program point. The three loads become one 12-byte read.
 //
-// The backend side is already widened to accept multi-source observations, so
-// as soon as the graph produces one it is materialized as a single check over
-// the whole range. 12 is not a power of two, so instrumentUnusualSizeOrAlignment
-// probes the first and the last byte and reports __asan_report_load_n(addr, 12)
-// for both of them.
+// 12 is not a power of two, so instrumentUnusualSizeOrAlignment probes the first
+// and the last byte and reports __asan_report_load_n(addr, 12) for both of them.
 //
 // CHECK-LABEL: define {{.*}} @_Z5read3P1S
+// CHECK-NOT: load i32
 // CHECK-COUNT-2: call void @__asan_report_load_n({{.*}}, i64 12)
 // CHECK-NOT: call void @__asan_report_load4
+// CHECK-COUNT-3: load i32

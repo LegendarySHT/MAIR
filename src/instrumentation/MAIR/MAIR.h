@@ -116,13 +116,16 @@ class MAIROptimizationConfig {
   bool IgnoreAtomic = false;
   bool DomCoverageOnly = false;
   bool AllowRelocation = true;
+  bool AllowHoist = false;
 
   explicit MAIROptimizationConfig(uint8_t ReadLevel, uint8_t WriteLevel,
                                   uint8_t ReadWriteLevel, bool IgnoreAtomic,
-                                  bool DomCoverageOnly, bool AllowRelocation)
+                                  bool DomCoverageOnly, bool AllowRelocation,
+                                  bool AllowHoist)
       : ReadLevel(ReadLevel), WriteLevel(WriteLevel),
         ReadWriteLevel(ReadWriteLevel), IgnoreAtomic(IgnoreAtomic),
-        DomCoverageOnly(DomCoverageOnly), AllowRelocation(AllowRelocation) {}
+        DomCoverageOnly(DomCoverageOnly), AllowRelocation(AllowRelocation),
+        AllowHoist(AllowHoist) {}
 
 public:
   MAIROptimizationConfig() = default;
@@ -133,6 +136,11 @@ public:
 
   bool allowsCoverageAlong(PPEdgeKind Kind) const;
   uint8_t getLevel(AccessKind Kind) const;
+  /// Whether an observation that may not be relocated freely can still be moved
+  /// to a program point that dominates it. Hoisting a check only makes it run
+  /// earlier, never on a path that does not reach the access, so a sanitizer
+  /// that pins observations for ordering reasons can still allow this direction.
+  bool allowsHoist() const { return AllowHoist; }
   void initializeObservation(Observation &Obs) const;
 };
 
@@ -670,6 +678,10 @@ public:
   void eraseFromParent();
 
   bool hasConcreteRange() const;
+  /// Whether every value this observation needs is already defined at \p At,
+  /// i.e. whether the observation can be materialized there. A region that is
+  /// not contiguous cannot be checked here and counts as unavailable.
+  bool isAvailableAt(const Instruction &At, const DominatorTree &DT) const;
   static Observation fromInstruction(const Instruction &I,
                                      const DataLayout &DL);
 

@@ -846,15 +846,22 @@ MAIROptimizationConfig MAIROptimizationConfig::generic() {
                                 /*ReadWriteLevel=*/3,
                                 /*IgnoreAtomic=*/false,
                                 /*DomCoverageOnly=*/false,
-                                /*AllowRelocation=*/true);
+                                /*AllowRelocation=*/true,
+                                /*AllowHoist=*/false);
 }
 
 MAIROptimizationConfig MAIROptimizationConfig::forAddressSanitizer() {
+  // AddressSanitizer must report a violation before the access executes, so
+  // its observations are pinned: sinking one would put the check behind the
+  // load or store it guards. They may still be hoisted, which keeps the check
+  // ahead of the access and is what lets SimplifyGraphPass contract anything
+  // at all here.
   return MAIROptimizationConfig(/*ReadLevel=*/1, /*WriteLevel=*/1,
                                 /*ReadWriteLevel=*/1,
                                 /*IgnoreAtomic=*/true,
                                 /*DomCoverageOnly=*/true,
-                                /*AllowRelocation=*/false);
+                                /*AllowRelocation=*/false,
+                                /*AllowHoist=*/true);
 }
 
 MAIROptimizationConfig MAIROptimizationConfig::forThreadSanitizer() {
@@ -862,7 +869,8 @@ MAIROptimizationConfig MAIROptimizationConfig::forThreadSanitizer() {
                                 /*ReadWriteLevel=*/3,
                                 /*IgnoreAtomic=*/false,
                                 /*DomCoverageOnly=*/false,
-                                /*AllowRelocation=*/true);
+                                /*AllowRelocation=*/true,
+                                /*AllowHoist=*/false);
 }
 
 bool MAIROptimizationConfig::allowsCoverageAlong(PPEdgeKind Kind) const {
@@ -922,6 +930,32 @@ bool Observation::hasConcreteRange() const {
   const AbstractAccess *Location = getContiguousRegion();
   return Location && Location->getOffset().isConstant() &&
          Location->getSize().isConstant();
+}
+
+namespace {
+
+bool isValueDefinedAt(const Value *Value, const Instruction &At,
+                      const DominatorTree &DT) {
+  const auto *Def = dyn_cast_or_null<Instruction>(Value);
+  if (!Def)
+    return true;
+  return Def != &At && DT.dominates(Def, &At);
+}
+
+} // namespace
+
+bool Observation::isAvailableAt(const Instruction &At,
+                                const DominatorTree &DT) const {
+  const AbstractAccess *Location = getContiguousRegion();
+  if (!Location)
+    return false;
+  if (!isValueDefinedAt(Location->getBase(), At, DT))
+    return false;
+  if (Location->getOffset().isSymbol() &&
+      !isValueDefinedAt(Location->getOffset().getSymbol(), At, DT))
+    return false;
+  return !Location->getSize().isSymbol() ||
+         isValueDefinedAt(Location->getSize().getSymbol(), At, DT);
 }
 
 bool Observation::covers(const Observation &Other) const {
