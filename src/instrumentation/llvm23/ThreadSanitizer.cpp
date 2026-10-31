@@ -1060,19 +1060,105 @@ bool XsanThreadSanitizer::instrumentMAIRObservation(
     return true;
   }
 
+  // A merged observation covers a contiguous region whose width is the sum of
+  // the merged accesses. That sum is usually not a power of two -- three 4-byte
+  // fields make 12 bytes -- and there is no __tsan_readN for such a width.
+  // Rounding up to the next power of two would report bytes the program never
+  // touches, so a nonstandard width has to be described by the range entry
+  // point, which takes the region exactly as it is. The same entry point is the
+  // only safe choice when the width is standard but the region is not provably
+  // aligned to it, because __tsan_readN on a misaligned address is wrong while
+  // the range call is not.
+  auto *Size = dyn_cast_or_null<ConstantInt>(Obs.AccessSize);
+  if (SelectedSources.size() > 1) {
+    if (!Obs.Address || !Size)
+      return false;
+    __xsan::InstrumentationIRBuilder IRB(Builder);
+
+    int Idx = -1;
+    switch (Size->getZExtValue()) {
+    case 1:
+      Idx = 0;
+      break;
+    case 2:
+      Idx = 1;
+      break;
+    case 4:
+      Idx = 2;
+      break;
+    case 8:
+      Idx = 3;
+      break;
+    case 16:
+      Idx = 4;
+      break;
+    default:
+      break;
+    }
+
+    // Every source is checked before merging, so the smallest declared
+    // alignment bounds the alignment of the region it starts at. Only a
+    // standard width has an entry point to pick, hence the guard.
+    bool Aligned = false;
+    if (Idx >= 0) {
+      Aligned = true;
+      const uint64_t Width = 1ull << Idx;
+      for (Instruction *Selected : SelectedSources) {
+        Align A =
+            isa<LoadInst>(Selected)
+                ? cast<LoadInst>(Selected)->getAlign()
+                : cast<StoreInst>(Selected)->getAlign();
+        if (A.value() < Width) {
+          Aligned = false;
+          break;
+        }
+      }
+    }
+
+    // __tsan_read_writeN is declared but not exported by the runtime, so a
+    // merged region that both reads and writes is described as a write
+    // followed by a read, the way the intrinsics above already are.
+    if (Idx >= 0 && Obs.Kind != mair::AccessKind::ReadWrite) {
+      const bool IsWrite = Obs.Kind != mair::AccessKind::Read;
+      FunctionCallee OnAccessFunc =
+          Aligned ? (IsWrite ? TsanWrite[Idx] : TsanRead[Idx])
+                  : (IsWrite ? TsanUnalignedWrite[Idx]
+                             : TsanUnalignedRead[Idx]);
+      IRB.CreateCall(OnAccessFunc, Obs.Address);
+      if (IsWrite)
+        NumInstrumentedWrites++;
+      else
+        NumInstrumentedReads++;
+      return true;
+    }
+
+    Value *RangeSize = Size;
+    if (RangeSize->getType() != IntptrTy)
+      RangeSize = IRB.CreateIntCast(RangeSize, IntptrTy, /*isSigned=*/false);
+    const bool IsWrite = Obs.Kind != mair::AccessKind::Read;
+    IRB.CreateCall(IsWrite ? TsanWriteRange : TsanReadRange,
+                   {Obs.Address, RangeSize});
+    if (Obs.Kind == mair::AccessKind::ReadWrite)
+      IRB.CreateCall(TsanReadRange, {Obs.Address, RangeSize});
+    if (IsWrite)
+      NumInstrumentedWrites++;
+    if (Obs.Kind != mair::AccessKind::Write)
+      NumInstrumentedReads++;
+    return true;
+  }
+
   Type *SourceType =
       isa<LoadInst>(Source)
           ? cast<LoadInst>(Source)->getType()
           : cast<StoreInst>(Source)->getValueOperand()->getType();
-  const auto *Size = dyn_cast_or_null<ConstantInt>(Obs.AccessSize);
   bool IsVolatile = isa<LoadInst>(Source)
                         ? cast<LoadInst>(Source)->isVolatile()
                         : cast<StoreInst>(Source)->isVolatile();
   TypeSize SourceSize = DL.getTypeStoreSize(SourceType);
+  // Merged observations returned above, so this site describes one access.
   bool CanUseOptimizedSite =
-      SelectedSources.size() == 1 &&
-      Obs.Source->getInstructions().size() == 1 && Obs.Source->isContiguous() &&
-      !SourceType->isVectorTy() && !SourceSize.isScalable() && Size &&
+      Obs.Source->isContiguous() && !SourceType->isVectorTy() &&
+      !SourceSize.isScalable() && Size &&
       Size->getValue().getActiveBits() < 32 &&
       Size->getZExtValue() == SourceSize.getFixedValue() &&
       !isVtableAccess(Source) && !IsVolatile;
@@ -1135,9 +1221,16 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
   std::unique_ptr<mair::MAOpt<TsanMAIRBarrierTrait>> Opt;
 
   if (ClInstrumentMemoryAccesses && SanitizeFunction) {
+    // KeepFullDebug= true would select the Og pipeline, which has no
+    // LocationMergePass: TSan would then see one observation per access and
+    // never a merged region, so the per-access checks below could not be
+    // folded into one range check. The O1 pipeline merges contiguous accesses
+    // into a single observation whose check still runs on every path that
+    // reaches any of them. Debug info is not lost by this: the merged check
+    // carries the location of its first source, as AddressSanitizer does.
     Opt = std::make_unique<mair::MAOpt<TsanMAIRBarrierTrait>>(
         F, FAM, nullptr,
-        /*KeepFullDebug=*/true,
+        /*KeepFullDebug=*/false,
         mair::MAIROptimizationConfig::forThreadSanitizer());
     Opt->build();
     Res |= Opt->hasModifiedIR();
@@ -1164,8 +1257,11 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
     };
 
     auto CanInstrumentViaMAIR = [&](const mair::Observation &Obs) {
+      // A merged observation stands for several contiguous accesses and is
+      // materialized as one check over the whole region, so every test below
+      // has to hold for every source, not just for the first one.
       if (!Obs.isContiguous() || Obs.isVolatile() || Obs.isAtomic() ||
-          Obs.getInstructions().size() != 1)
+          Obs.getInstructions().empty())
         return false;
 
       Instruction *Source = Obs.getInstructions().front();
@@ -1173,6 +1269,10 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
       // one range write. MAIR already creates those observations, and the
       // length may be symbolic.
       const bool IsRangeIntrinsic = isa<AnyMemIntrinsic>(Source);
+      // A range intrinsic describes its own region; it never stands for a
+      // group of accesses, so a merged observation cannot start with one.
+      if (IsRangeIntrinsic && Obs.getInstructions().size() != 1)
+        return false;
       if ((Obs.isCallLike() && !IsRangeIntrinsic) ||
           (!IsRangeIntrinsic && !Obs.hasConcreteRange()))
         return false;
@@ -1191,25 +1291,30 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
                PointerMayBeCaptured(AI, /*ReturnCaptures=*/true);
       }
 
-      auto *LI = dyn_cast<LoadInst>(Source);
-      auto *SI = dyn_cast<StoreInst>(Source);
-      if ((!LI && !SI) || __xsan::DelegateToXSan::is(*Source) ||
-          isTsanAtomic(Source) || isVtableAccess(Source) ||
-          (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
-        return false;
+      for (Instruction *Selected : Obs.getInstructions()) {
+        auto *LI = dyn_cast<LoadInst>(Selected);
+        auto *SI = dyn_cast<StoreInst>(Selected);
+        if ((!LI && !SI) || __xsan::DelegateToXSan::is(*Selected) ||
+            isTsanAtomic(Selected) || isVtableAccess(Selected) ||
+            (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
+          return false;
 
-      Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
-      if (AccessTy->isVectorTy() || AccessTy->isScalableTy())
-        return false;
+        Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
+        if (AccessTy->isVectorTy() || AccessTy->isScalableTy())
+          return false;
 
-      Value *Addr = LI ? LI->getPointerOperand() : SI->getPointerOperand();
-      if (!shouldInstrumentReadWriteFromAddress(Source->getModule(), Addr) ||
-          (LI && PointsToConstantData(Addr)))
-        return false;
+        Value *Addr = LI ? LI->getPointerOperand() : SI->getPointerOperand();
+        if (!shouldInstrumentReadWriteFromAddress(Selected->getModule(),
+                                                  Addr) ||
+            (LI && PointsToConstantData(Addr)))
+          return false;
 
-      const AllocaInst *AI = findAllocaForValue(Addr);
-      return !AI || !ClOmitNonCaptured ||
-             PointerMayBeCaptured(AI, /*ReturnCaptures=*/true);
+        const AllocaInst *AI = findAllocaForValue(Addr);
+        if (AI && ClOmitNonCaptured &&
+            !PointerMayBeCaptured(AI, /*ReturnCaptures=*/true))
+          return false;
+      }
+      return true;
     };
 
     SmallVector<const mair::Observation *, 32> MAIRCandidates;
