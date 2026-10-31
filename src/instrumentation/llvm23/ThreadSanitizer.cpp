@@ -1040,24 +1040,33 @@ bool XsanThreadSanitizer::instrumentMAIRObservation(
     return instrumentLoadOrStore(InstructionInfo(&Source), DL);
   };
 
-  Instruction *Source = SelectedSources.front();
-  if (isa<AnyMemIntrinsic>(Source)) {
+  // __tsan_read_range / __tsan_write_range take an address and a size, so they
+  // describe a region of any width, aligned or not. Every shape that cannot
+  // name a __tsan_{read,write}N entry point lowers through here: a memory
+  // intrinsic whose length is symbolic, a merged region whose width is not a
+  // power of two, and a single access whose width has no entry point.
+  auto EmitRangeCheck = [&](IRBuilderBase &IRB) -> bool {
     if (!Obs.Address || !Obs.AccessSize)
       return false;
-    __xsan::InstrumentationIRBuilder IRB(Builder);
-    Value *Size = Obs.AccessSize;
-    if (Size->getType() != IntptrTy)
-      Size = IRB.CreateIntCast(Size, IntptrTy, /*isSigned=*/false);
+    Value *RangeSize = Obs.AccessSize;
+    if (RangeSize->getType() != IntptrTy)
+      RangeSize = IRB.CreateIntCast(RangeSize, IntptrTy, /*isSigned=*/false);
     const bool IsWrite = Obs.Kind != mair::AccessKind::Read;
     IRB.CreateCall(IsWrite ? TsanWriteRange : TsanReadRange,
-                   {Obs.Address, Size});
+                   {Obs.Address, RangeSize});
     if (Obs.Kind == mair::AccessKind::ReadWrite)
-      IRB.CreateCall(TsanReadRange, {Obs.Address, Size});
+      IRB.CreateCall(TsanReadRange, {Obs.Address, RangeSize});
     if (IsWrite)
       NumInstrumentedWrites++;
     if (Obs.Kind != mair::AccessKind::Write)
       NumInstrumentedReads++;
     return true;
+  };
+
+  Instruction *Source = SelectedSources.front();
+  if (isa<AnyMemIntrinsic>(Source)) {
+    __xsan::InstrumentationIRBuilder IRB(Builder);
+    return EmitRangeCheck(IRB);
   }
 
   // A merged observation covers a contiguous region whose width is the sum of
@@ -1132,19 +1141,7 @@ bool XsanThreadSanitizer::instrumentMAIRObservation(
       return true;
     }
 
-    Value *RangeSize = Size;
-    if (RangeSize->getType() != IntptrTy)
-      RangeSize = IRB.CreateIntCast(RangeSize, IntptrTy, /*isSigned=*/false);
-    const bool IsWrite = Obs.Kind != mair::AccessKind::Read;
-    IRB.CreateCall(IsWrite ? TsanWriteRange : TsanReadRange,
-                   {Obs.Address, RangeSize});
-    if (Obs.Kind == mair::AccessKind::ReadWrite)
-      IRB.CreateCall(TsanReadRange, {Obs.Address, RangeSize});
-    if (IsWrite)
-      NumInstrumentedWrites++;
-    if (Obs.Kind != mair::AccessKind::Write)
-      NumInstrumentedReads++;
-    return true;
+    return EmitRangeCheck(IRB);
   }
 
   Type *SourceType =
@@ -1172,12 +1169,18 @@ bool XsanThreadSanitizer::instrumentMAIRObservation(
   if (Obs.Address->isSwiftError())
     return false;
   int Idx = getMemoryAccessFuncIndex(SourceType, Obs.Address, DL);
-  // TODO: TSan MAIR lowering does not yet support a nonstandard width, such
-  // as an i24 store. Returning here drops that access. If an earlier pass used
-  // it to cover a smaller standard access, that smaller access is not
-  // instrumented either.
-  if (Idx < 0)
-    return false;
+  if (Idx < 0) {
+    // The runtime has one entry point per 1/2/4/8/16 bytes and none for any
+    // other width, so a 24-bit bitfield store or load has no __tsan_writeN to
+    // name. The legacy path ignores such an access outright (see the -1 return
+    // in getMemoryAccessFuncIndex), so the access is never checked at all;
+    // dropping it here as well would keep that hole and add a dead
+    // mair.observation.gep next to it. The region is small and its size is
+    // known, so describe it with the range entry point, exactly the way the
+    // merged path above describes a region whose width is not a power of two.
+    __xsan::InstrumentationIRBuilder IRB(Builder);
+    return EmitRangeCheck(IRB);
+  }
 
   Align Alignment = isa<LoadInst>(Source) ? cast<LoadInst>(Source)->getAlign()
                                           : cast<StoreInst>(Source)->getAlign();
