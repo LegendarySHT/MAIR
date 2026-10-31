@@ -4179,50 +4179,71 @@ bool XsanAddressSanitizer::instrumentMAIRObservation(
   };
 
   Instruction *Source = SelectedSources.front();
-  Type *SourceType =
-      isa<LoadInst>(Source)
-          ? cast<LoadInst>(Source)->getType()
-          : cast<StoreInst>(Source)->getValueOperand()->getType();
   const auto *Size = dyn_cast_or_null<ConstantInt>(Obs.AccessSize);
-  bool CanUseOptimizedSite = SelectedSources.size() == 1 &&
-                             Obs.Source->getInstructions().size() == 1 &&
-                             Obs.Source->isContiguous() &&
-                             !SourceType->isVectorTy() && Size &&
-                             Size->getValue().getActiveBits() < 32;
+  const bool IsMerged = SelectedSources.size() > 1;
+  // A merged observation may cover several scalar accesses at once. The vector
+  // and masked paths still work one source instruction at a time, so an
+  // observation holding one of those falls back to per-source instrumentation.
+  bool CanUseOptimizedSite =
+      Obs.Source->isContiguous() && Size &&
+      Size->getValue().getActiveBits() < 32 &&
+      llvm::all_of(SelectedSources, [](Instruction *Selected) {
+        Type *AccessTy =
+            isa<LoadInst>(Selected)
+                ? cast<LoadInst>(Selected)->getType()
+                : cast<StoreInst>(Selected)->getValueOperand()->getType();
+        return !AccessTy->isVectorTy() && !AccessTy->isScalableTy();
+      });
   if (!CanUseOptimizedSite) {
     for (Instruction *Selected : SelectedSources)
       InstrumentAtSource(*Selected);
     return true;
   }
 
-  Value *SourceAddr = isa<LoadInst>(Source)
-                          ? cast<LoadInst>(Source)->getPointerOperand()
-                          : cast<StoreInst>(Source)->getPointerOperand();
-  TypeSize SourceStoreSize =
-      Source->getDataLayout().getTypeStoreSize(SourceType);
-  if (ClOpt && ClOptGlobals) {
-    GlobalVariable *G =
-        dyn_cast<GlobalVariable>(getUnderlyingObject(SourceAddr));
-    if (G && (!ClInitializers || GlobalIsLinkerInitialized(G)) &&
-        isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
-      NumOptimizedAccessesToGlobalVar++;
-      return false;
+  // The global and stack shortcuts reason about a single access at a single
+  // address, so they only hold while the observation maps to one source.
+  if (!IsMerged) {
+    Type *SourceType =
+        isa<LoadInst>(Source)
+            ? cast<LoadInst>(Source)->getType()
+            : cast<StoreInst>(Source)->getValueOperand()->getType();
+    Value *SourceAddr = isa<LoadInst>(Source)
+                            ? cast<LoadInst>(Source)->getPointerOperand()
+                            : cast<StoreInst>(Source)->getPointerOperand();
+    TypeSize SourceStoreSize =
+        Source->getDataLayout().getTypeStoreSize(SourceType);
+    if (ClOpt && ClOptGlobals) {
+      GlobalVariable *G =
+          dyn_cast<GlobalVariable>(getUnderlyingObject(SourceAddr));
+      if (G && (!ClInitializers || GlobalIsLinkerInitialized(G)) &&
+          isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
+        NumOptimizedAccessesToGlobalVar++;
+        return false;
+      }
     }
-  }
-  if (ClOpt && ClOptStack) {
-    if (isa<AllocaInst>(getUnderlyingObject(SourceAddr)) &&
-        isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
-      NumOptimizedAccessesToStackVar++;
-      return false;
+    if (ClOpt && ClOptStack) {
+      if (isa<AllocaInst>(getUnderlyingObject(SourceAddr)) &&
+          isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
+        NumOptimizedAccessesToStackVar++;
+        return false;
+      }
     }
   }
 
   assert(Builder.GetInsertBlock() &&
          Builder.GetInsertPoint() != Builder.GetInsertBlock()->end());
   Instruction *InsertBefore = &*Builder.GetInsertPoint();
-  MaybeAlign Alignment = isa<LoadInst>(Source)
-                             ? MaybeAlign(cast<LoadInst>(Source)->getAlign())
-                             : MaybeAlign(cast<StoreInst>(Source)->getAlign());
+  // A merged range is no better aligned than its weakest source, so take the
+  // minimum rather than trusting the first source. The value only steers the
+  // aligned fast path; claiming too much alignment would skip a real check.
+  MaybeAlign Alignment;
+  for (Instruction *Selected : SelectedSources) {
+    Align SourceAlign = isa<LoadInst>(Selected)
+                            ? cast<LoadInst>(Selected)->getAlign()
+                            : cast<StoreInst>(Selected)->getAlign();
+    if (!Alignment || SourceAlign.value() < Alignment->value())
+      Alignment = SourceAlign;
+  }
   TypeSize SizeInBits = TypeSize::getFixed(Size->getZExtValue() * 8);
   bool IsWrite = Obs.Kind != mair::AccessKind::Read;
   doInstrumentAddress(this, Source, InsertBefore, Obs.Address, Alignment,
@@ -4333,23 +4354,32 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
   auto CanInstrumentViaMAIR = [&](const mair::Observation &Obs) {
     if ((ClDebugMin >= 0 && ClDebugMax >= 0) || !Obs.isContiguous() ||
         Obs.isVolatile() || Obs.isCallLike() ||
-        Obs.getInstructions().size() != 1 || !Obs.hasConcreteRange())
+        Obs.getInstructions().empty() || !Obs.hasConcreteRange())
       return false;
 
-    Instruction *Source = Obs.getInstructions().front();
-    auto *LI = dyn_cast<LoadInst>(Source);
-    auto *SI = dyn_cast<StoreInst>(Source);
-    if ((!LI && !SI) || (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
-      return false;
+    // A merged observation stands for several original accesses. Each of them
+    // must still be instrumentable on its own terms; one ineligible source
+    // rejects the whole observation and sends it back to per-source
+    // instrumentation.
+    for (Instruction *Source : Obs.getInstructions()) {
+      auto *LI = dyn_cast<LoadInst>(Source);
+      auto *SI = dyn_cast<StoreInst>(Source);
+      if ((!LI && !SI) || (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
+        return false;
 
-    SmallVector<InterestingMemoryOperand, 1> InterestingOperands;
-    getInterestingMemoryOperands(Source, InterestingOperands, TTI);
-    if (InterestingOperands.size() != 1)
-      return false;
+      SmallVector<InterestingMemoryOperand, 1> InterestingOperands;
+      getInterestingMemoryOperands(Source, InterestingOperands, TTI);
+      if (InterestingOperands.size() != 1)
+        return false;
 
-    Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
-    return !AccessTy->isVectorTy() && !AccessTy->isScalableTy() &&
-           !IsElidedByNativeAsanOpt(*Source);
+      Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
+      if (AccessTy->isVectorTy() || AccessTy->isScalableTy())
+        return false;
+
+      if (IsElidedByNativeAsanOpt(*Source))
+        return false;
+    }
+    return true;
   };
 
   SmallVector<const mair::Observation *, 32> MAIRCandidates;
