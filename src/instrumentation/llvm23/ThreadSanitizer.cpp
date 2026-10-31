@@ -96,6 +96,15 @@ static cl::opt<bool>
     ClOmitNonCaptured("ts-omit-by-pointer-capturing", cl::init(true),
                       cl::desc("Omit accesses due to pointer capturing"),
                       cl::Hidden);
+// The ASan counterpart of this switch is -mair-force-fallback. The spelling
+// differs because XSanInstPass links AddressSanitizer.cpp and this file into one
+// module, and cl::opt aborts with "Option registered more than once" when the
+// same name is registered twice in one process. A separate name keeps both
+// recovery paths testable without renaming A4's switch.
+static cl::opt<bool> ClMAIRForceFallback(
+    "mair-force-tsan-fallback", cl::Hidden, cl::init(false),
+    cl::desc("Testing only: pretend MAIR cannot materialize any function and "
+             "instrument every access with the legacy path"));
 
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
 STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
@@ -108,6 +117,9 @@ STATISTIC(NumOmittedReadsFromConstantGlobals,
           "Number of reads from constant globals");
 STATISTIC(NumOmittedReadsFromVtable, "Number of vtable reads");
 STATISTIC(NumOmittedNonCaptured, "Number of accesses ignored due to capturing");
+STATISTIC(NumMAIRFunctionsFellBack,
+          "Number of functions instrumented one access at a time because MAIR "
+          "could not materialize its graph");
 
 const char kTsanModuleCtorName[] = "tsan.module_ctor";
 const char kTsanInitName[] = "__tsan_init";
@@ -1223,6 +1235,15 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
   SmallPtrSet<const mair::Observation *, 32> MAIRTargets;
   std::unique_ptr<mair::MAOpt<TsanMAIRBarrierTrait>> Opt;
 
+  // MAIR is an optimization layered on top of the legacy instrumentation,
+  // never a correctness requirement. Whatever stops the graph from being
+  // materialized -- a pass that leaves a graph preflight refuses, or a shape the
+  // backend cannot lower -- has to cost optimization only. Both failure points
+  // below record a reason and clear UseMAIR, which drops every MAIR decision so
+  // the legacy loop at the end of this function instruments all accesses again.
+  std::string MAIRFallbackReason;
+  bool UseMAIR = true;
+
   if (ClInstrumentMemoryAccesses && SanitizeFunction) {
     // KeepFullDebug= true would select the Og pipeline, which has no
     // LocationMergePass: TSan would then see one observation per access and
@@ -1246,103 +1267,111 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
           MAIRModeledSources.insert(Source);
     }
 
-    if (Error Err = Opt->optimize())
-      report_fatal_error(Twine(toString(std::move(Err))));
+    if (Error Err = Opt->optimize()) {
+      MAIRFallbackReason = toString(std::move(Err));
+      UseMAIR = false;
+    }
 
-    auto PointsToConstantData = [](Value *Addr) {
-      if (auto *GEP = dyn_cast<GetElementPtrInst>(Addr))
-        Addr = GEP->getPointerOperand();
-      if (auto *GV = dyn_cast<GlobalVariable>(Addr))
-        return GV->isConstant();
-      if (auto *LI = dyn_cast<LoadInst>(Addr))
-        return isVtableAccess(LI);
-      return false;
-    };
-
-    auto CanInstrumentViaMAIR = [&](const mair::Observation &Obs) {
-      // A merged observation stands for several contiguous accesses and is
-      // materialized as one check over the whole region, so every test below
-      // has to hold for every source, not just for the first one.
-      if (!Obs.isContiguous() || Obs.isVolatile() || Obs.isAtomic() ||
-          Obs.getInstructions().empty())
+    if (UseMAIR) {
+      auto PointsToConstantData = [](Value *Addr) {
+        if (auto *GEP = dyn_cast<GetElementPtrInst>(Addr))
+          Addr = GEP->getPointerOperand();
+        if (auto *GV = dyn_cast<GlobalVariable>(Addr))
+          return GV->isConstant();
+        if (auto *LI = dyn_cast<LoadInst>(Addr))
+          return isVtableAccess(LI);
         return false;
+      };
 
-      Instruction *Source = Obs.getInstructions().front();
-      // memcpy and memmove are one range read plus one range write. memset is
-      // one range write. MAIR already creates those observations, and the
-      // length may be symbolic.
-      const bool IsRangeIntrinsic = isa<AnyMemIntrinsic>(Source);
-      // A range intrinsic describes its own region; it never stands for a
-      // group of accesses, so a merged observation cannot start with one.
-      if (IsRangeIntrinsic && Obs.getInstructions().size() != 1)
-        return false;
-      if ((Obs.isCallLike() && !IsRangeIntrinsic) ||
-          (!IsRangeIntrinsic && !Obs.hasConcreteRange()))
-        return false;
-      if (IsRangeIntrinsic) {
-        Value *Addr = nullptr;
-        if (auto *Transfer = dyn_cast<AnyMemTransferInst>(Source))
-          Addr = Obs.getKind() == mair::AccessKind::Read
-                     ? Transfer->getRawSource()
-                     : Transfer->getRawDest();
-        else
-          Addr = cast<AnyMemSetInst>(Source)->getRawDest();
-        if (!shouldInstrumentReadWriteFromAddress(Source->getModule(), Addr))
-          return false;
-        const AllocaInst *AI = findAllocaForValue(Addr);
-        return !AI || !ClOmitNonCaptured ||
-               PointerMayBeCaptured(AI, /*ReturnCaptures=*/true);
-      }
-
-      for (Instruction *Selected : Obs.getInstructions()) {
-        auto *LI = dyn_cast<LoadInst>(Selected);
-        auto *SI = dyn_cast<StoreInst>(Selected);
-        if ((!LI && !SI) || __xsan::DelegateToXSan::is(*Selected) ||
-            isTsanAtomic(Selected) || isVtableAccess(Selected) ||
-            (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
+      auto CanInstrumentViaMAIR = [&](const mair::Observation &Obs) {
+        // A merged observation stands for several contiguous accesses and is
+        // materialized as one check over the whole region, so every test below
+        // has to hold for every source, not just for the first one.
+        if (!Obs.isContiguous() || Obs.isVolatile() || Obs.isAtomic() ||
+            Obs.getInstructions().empty())
           return false;
 
-        Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
-        if (AccessTy->isVectorTy() || AccessTy->isScalableTy())
+        Instruction *Source = Obs.getInstructions().front();
+        // memcpy and memmove are one range read plus one range write. memset is
+        // one range write. MAIR already creates those observations, and the
+        // length may be symbolic.
+        const bool IsRangeIntrinsic = isa<AnyMemIntrinsic>(Source);
+        // A range intrinsic describes its own region; it never stands for a
+        // group of accesses, so a merged observation cannot start with one.
+        if (IsRangeIntrinsic && Obs.getInstructions().size() != 1)
           return false;
-
-        Value *Addr = LI ? LI->getPointerOperand() : SI->getPointerOperand();
-        if (!shouldInstrumentReadWriteFromAddress(Selected->getModule(),
-                                                  Addr) ||
-            (LI && PointsToConstantData(Addr)))
+        if ((Obs.isCallLike() && !IsRangeIntrinsic) ||
+            (!IsRangeIntrinsic && !Obs.hasConcreteRange()))
           return false;
-
-        const AllocaInst *AI = findAllocaForValue(Addr);
-        if (AI && ClOmitNonCaptured &&
-            !PointerMayBeCaptured(AI, /*ReturnCaptures=*/true))
-          return false;
-      }
-      return true;
-    };
-
-    SmallVector<const mair::Observation *, 32> MAIRCandidates;
-    SmallPtrSet<const Instruction *, 32> MAIRFallbackSources;
-    for (const auto &[PP, Observations] : Opt->getProgramPointObservations()) {
-      (void)PP;
-      for (const mair::Observation *Obs : Observations) {
-        if (CanInstrumentViaMAIR(*Obs)) {
-          MAIRCandidates.push_back(Obs);
-          continue;
+        if (IsRangeIntrinsic) {
+          Value *Addr = nullptr;
+          if (auto *Transfer = dyn_cast<AnyMemTransferInst>(Source))
+            Addr = Obs.getKind() == mair::AccessKind::Read
+                       ? Transfer->getRawSource()
+                       : Transfer->getRawDest();
+          else
+            Addr = cast<AnyMemSetInst>(Source)->getRawDest();
+          if (!shouldInstrumentReadWriteFromAddress(Source->getModule(), Addr))
+            return false;
+          const AllocaInst *AI = findAllocaForValue(Addr);
+          return !AI || !ClOmitNonCaptured ||
+                 PointerMayBeCaptured(AI, /*ReturnCaptures=*/true);
         }
-        for (const Instruction *Source : Obs->getInstructions())
-          MAIRFallbackSources.insert(Source);
-      }
-    }
-    for (const mair::Observation *Obs : MAIRCandidates) {
-      const Instruction *Source = Obs->getInstructions().front();
-      if (!MAIRFallbackSources.contains(Source))
-        MAIRTargets.insert(Obs);
-    }
 
-    MAIRHandledSources = MAIRModeledSources;
-    for (const Instruction *Source : MAIRFallbackSources)
-      MAIRHandledSources.erase(Source);
-    Opt->retainObservations(MAIRTargets);
+        for (Instruction *Selected : Obs.getInstructions()) {
+          auto *LI = dyn_cast<LoadInst>(Selected);
+          auto *SI = dyn_cast<StoreInst>(Selected);
+          if ((!LI && !SI) || __xsan::DelegateToXSan::is(*Selected) ||
+              isTsanAtomic(Selected) || isVtableAccess(Selected) ||
+              (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
+            return false;
+
+          Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
+          if (AccessTy->isVectorTy() || AccessTy->isScalableTy())
+            return false;
+
+          Value *Addr = LI ? LI->getPointerOperand() : SI->getPointerOperand();
+          if (!shouldInstrumentReadWriteFromAddress(Selected->getModule(),
+                                                    Addr) ||
+              (LI && PointsToConstantData(Addr)))
+            return false;
+
+          const AllocaInst *AI = findAllocaForValue(Addr);
+          if (AI && ClOmitNonCaptured &&
+              !PointerMayBeCaptured(AI, /*ReturnCaptures=*/true))
+            return false;
+        }
+        return true;
+      };
+
+      SmallVector<const mair::Observation *, 32> MAIRCandidates;
+      SmallPtrSet<const Instruction *, 32> MAIRFallbackSources;
+      for (const auto &[PP, Observations] : Opt->getProgramPointObservations()) {
+        (void)PP;
+        for (const mair::Observation *Obs : Observations) {
+          if (CanInstrumentViaMAIR(*Obs)) {
+            MAIRCandidates.push_back(Obs);
+            continue;
+          }
+          for (const Instruction *Source : Obs->getInstructions())
+            MAIRFallbackSources.insert(Source);
+        }
+      }
+      for (const mair::Observation *Obs : MAIRCandidates) {
+        const Instruction *Source = Obs->getInstructions().front();
+        if (!MAIRFallbackSources.contains(Source))
+          MAIRTargets.insert(Obs);
+      }
+
+      MAIRHandledSources = MAIRModeledSources;
+      for (const Instruction *Source : MAIRFallbackSources)
+        MAIRHandledSources.erase(Source);
+      Opt->retainObservations(MAIRTargets);
+    } else {
+      ++NumMAIRFunctionsFellBack;
+      LLVM_DEBUG(dbgs() << "TSAN: MAIR fell back for " << F.getName()
+                        << ": " << MAIRFallbackReason << "\n");
+    }
   }
 
   __xsan::TsanToInstrument Targets;
@@ -1378,11 +1407,44 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
         bool changed() const { return Changed; }
       } Backend(*this, DL);
 
+      // -mair-force-tsan-fallback makes the backend refuse a graph it could
+      // have lowered, so the recovery path can be tested without hunting for an
+      // input shape the backend genuinely cannot handle; see
+      // mair-materialize-fallback.cpp.
       Expected<mair::MAIRInstantiationResult> Result =
-          Opt->instantiate(Backend);
-      if (!Result)
-        report_fatal_error(Twine(toString(Result.takeError())));
-      Res |= Backend.changed();
+          ClMAIRForceFallback
+              ? Expected<mair::MAIRInstantiationResult>(createStringError(
+                    inconvertibleErrorCode(),
+                    "MAIR materialization forced to fail for testing"))
+              : Opt->instantiate(Backend);
+      if (Result) {
+        Res |= Backend.changed();
+      } else {
+        MAIRFallbackReason = toString(Result.takeError());
+        // A failed instantiate() can leave split edges behind, so the function
+        // counts as modified even when no check was emitted.
+        Res = true;
+        if (Backend.changed()) {
+          // The legacy loop cannot undo a check that is already in: the
+          // per-source path inside instrumentMAIRObservation inserts at the
+          // source instruction, not at a cursor this frame owns, so "falling
+          // back" would put a second check in front of every access MAIR
+          // already covered. Preflight validates every split and every region
+          // before the first instruction is emitted, so being here means a
+          // MAIR codegen bug rather than an input shape it does not model.
+          // Keep that loud instead of hiding it behind a doubled check count.
+          report_fatal_error(Twine(MAIRFallbackReason));
+        }
+        MAIRTargets.clear();
+        // This set is exactly what the legacy loop below skips, so leaving it
+        // populated after a failed materialization would leave every source
+        // the graph modeled without a check -- the silent-miss shape the old
+        // code never reached only because it aborted first.
+        MAIRHandledSources.clear();
+        ++NumMAIRFunctionsFellBack;
+        LLVM_DEBUG(dbgs() << "TSAN: MAIR fell back for " << F.getName()
+                          << ": " << MAIRFallbackReason << "\n");
+      }
     }
 
     for (const auto &II : AllLoadsAndStores)
