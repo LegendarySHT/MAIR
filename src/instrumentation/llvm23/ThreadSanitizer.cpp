@@ -1255,7 +1255,8 @@ bool XsanThreadSanitizer::sanitizeFunctionViaMAIR(
     Opt = std::make_unique<mair::MAOpt<TsanMAIRBarrierTrait>>(
         F, FAM, nullptr,
         /*KeepFullDebug=*/false,
-        mair::MAIROptimizationConfig::forThreadSanitizer());
+        mair::MAIROptimizationConfig::forThreadSanitizer(),
+        mair::getMAIRLevel());
     Opt->build();
     Res |= Opt->hasModifiedIR();
 

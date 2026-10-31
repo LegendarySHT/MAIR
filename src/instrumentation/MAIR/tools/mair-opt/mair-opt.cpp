@@ -55,6 +55,12 @@ static cl::opt<std::string> PassPipeline("passes",
                                          cl::desc("MAIRGraph pass pipeline"),
                                          cl::value_desc("pipeline"),
                                          cl::cat(MAIROptions));
+static cl::opt<std::string> MAIRLevel(
+    "mair-level",
+    cl::desc("Pipeline level: 'build' keeps the graph as constructed, "
+             "'optimize' runs the standard O1 pipeline"),
+    cl::value_desc("build|optimize"), cl::init("build"),
+    cl::cat(MAIROptions));
 static cl::extrahelp MAIRGraphPassHelp(R"(
 MAIRGraph pass names for -passes:
   com                           - Common Observation Motion
@@ -105,6 +111,14 @@ int main(int argc, char **argv) {
     errs() << "-Og cannot be combined with -O1\n";
     return 1;
   }
+  if (MAIRLevel != "build" && MAIRLevel != "optimize") {
+    errs() << "-mair-level expects 'build' or 'optimize', not '" << MAIRLevel
+           << "'\n";
+    return 1;
+  }
+  // -passes, -Og and -O1 name the pipeline explicitly, so they outrank
+  // -mair-level; the level only supplies the default.
+  bool RunLevelPipeline = MAIRLevel == "optimize";
   if (Og) {
     buildMAIRGraphOgPipeline(GPM);
   } else if (O1) {
@@ -114,6 +128,8 @@ int main(int argc, char **argv) {
       errs() << toString(std::move(Err)) << "\n";
       return 1;
     }
+  } else if (RunLevelPipeline) {
+    buildMAIRGraphO1Pipeline(GPM);
   }
 
   if (EmitDOT) {
@@ -161,7 +177,7 @@ int main(int argc, char **argv) {
       return 1;
     }
 
-    if (Og || O1 || !PassPipeline.empty()) {
+    if (Og || O1 || !PassPipeline.empty() || RunLevelPipeline) {
       GPM.run(Graph, GAM);
       if (!Graph.verify(&errs())) {
         errs() << "invalid MAIRGraph after pass pipeline for function "

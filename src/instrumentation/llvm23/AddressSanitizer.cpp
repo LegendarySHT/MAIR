@@ -4321,7 +4321,8 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
   mair::MAOpt<AsanMAIRBarrierTrait> Opt(
       F, FAM, nullptr,
       /*KeepFullDebug=*/false,
-      mair::MAIROptimizationConfig::forAddressSanitizer());
+      mair::MAIROptimizationConfig::forAddressSanitizer(),
+      mair::getMAIRLevel());
   Opt.build();
   FunctionModified |= Opt.hasModifiedIR();
 
