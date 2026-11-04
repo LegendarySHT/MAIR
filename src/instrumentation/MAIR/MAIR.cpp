@@ -17,6 +17,10 @@
 #include "llvm/Support/ErrorHandling.h"
 #include <optional>
 
+// LLVM_DEBUG expands to nothing unless NDEBUG is off, so a missing DEBUG_TYPE
+// only breaks Debug builds -- which is exactly the configuration CI builds.
+#define DEBUG_TYPE "mair"
+
 using namespace llvm;
 
 namespace mair {
@@ -1835,9 +1839,19 @@ void MAIRGraph::contractProgramPoint(ProgramPoint &Into, ProgramPoint &From) {
     report_fatal_error("cannot contract a MAIR loop boundary");
   assert(Into.hasCompatibleMergeSemantics(From) &&
          "contracted program points have incompatible semantics");
-  assert(Into.hasChild(From, PPEdgeKind::PostDom) &&
-         From.hasChild(Into, PPEdgeKind::Dom) &&
-         "contraction requires mutual Dom/PostDom edges");
+  // A contraction is only legal between points that always execute together,
+  // which this graph records as a mutual Dom/PostDom pair. The pair arrives in
+  // either orientation: SimplifyGraphPass sinks into the post-dominating point
+  // by default, and hoists into the dominating one when an observation is
+  // pinned (AddressSanitizer pins every check ahead of its access). The old
+  // check only accepted the sink order, so the hoist path tripped it -- and
+  // only in builds with assertions, because NDEBUG erases the whole thing.
+  [[maybe_unused]] const bool MutualDomPostDom =
+      (Into.hasChild(From, PPEdgeKind::PostDom) &&
+       From.hasChild(Into, PPEdgeKind::Dom)) ||
+      (Into.hasChild(From, PPEdgeKind::Dom) &&
+       From.hasChild(Into, PPEdgeKind::PostDom));
+  assert(MutualDomPostDom && "contraction requires mutual Dom/PostDom edges");
 
   Into.prependObservationsFrom(From);
   SmallVector<ProgramPointEdge, 2> Incoming(From.parents());

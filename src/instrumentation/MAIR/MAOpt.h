@@ -70,8 +70,11 @@ public:
     // CFG, and a function that MAIR refuses has to come out untouched so the
     // legacy sanitizer sees exactly the IR it would have seen without MAIR.
     if (MAIRGraph::hasUnrepresentableCycle(F, FAM)) {
-      LLVM_DEBUG(dbgs() << "MAIR: skipping " << F.getName()
-                        << " (irreducible or unrepresented cycle)\n");
+      // DEBUG_WITH_TYPE instead of LLVM_DEBUG: this is a header, so it cannot
+      // define DEBUG_TYPE without leaking that macro into every includer.
+      DEBUG_WITH_TYPE("mair", llvm::dbgs()
+                                  << "MAIR: skipping " << F.getName()
+                                  << " (irreducible or unrepresented cycle)\n");
       Skipped = true;
       Graph = std::make_unique<MAIRGraph>(F, Config);
       return *Graph;
