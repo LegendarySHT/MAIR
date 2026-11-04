@@ -73,8 +73,17 @@ clang_asan_static_cflags = (
     + config.debug_info_flags
     + target_cflags
 )
+# "-asan" is XSan's ASan driver flag (upstream's -fsanitize=address is commented
+# out above), so this suite always links XSan's runtime and the "xsan" feature is
+# always available. It used to be added only when "-xsan" appeared in the flag
+# list, which never happens -- that left every "XFAIL: ... && !xsan" exemption in
+# the TestCases inert. The difference is invisible in optimized builds, where
+# "compiler-rt-optimized" is present and those XFAIL lines do not apply, but a
+# Debug build drops that feature and the markers start firing on tests that pass
+# (reported as "Unexpectedly Passed", which fails the suite).
+config.available_features.add("xsan")
+
 if "-xsan" in clang_asan_static_cflags or "-xsan-only" in clang_asan_static_cflags:
-    config.available_features.add("xsan")
     # Disable TSan's report in ASan's test pipeline.
     config.environment['TSAN_OPTIONS'] = "report_bugs=0"
     # Disable MSan's report in ASan's test pipeline.
