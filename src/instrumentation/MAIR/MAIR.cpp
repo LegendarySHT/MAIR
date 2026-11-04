@@ -1145,6 +1145,25 @@ Observation Observation::fromInstruction(const Instruction &I,
   return makeObservation(I, *Ptr, std::move(Size), Kind, DL);
 }
 
+void Observation::getContributingDebugLocs(SmallVectorImpl<DebugLoc> &Locs,
+                                           unsigned Limit) const {
+  Locs.clear();
+  if (Limit == 0)
+    return;
+  for (const Instruction *I : Insts) {
+    const DebugLoc &Loc = I->getDebugLoc();
+    if (!Loc)
+      continue;
+    // DILocation is uniqued, so comparing the handles compares the locations:
+    // instructions merged from one source line literally share the node.
+    if (is_contained(Locs, Loc))
+      continue;
+    Locs.push_back(Loc);
+    if (Locs.size() == Limit)
+      return;
+  }
+}
+
 void Observation::print(raw_ostream &OS) const {
   OS << "o: ";
   printAccessKind(OS, Kind);
@@ -1161,15 +1180,25 @@ void Observation::print(raw_ostream &OS) const {
     Obs->print(OS);
     OS << ", ";
     printAbstractValue(OS, Obs->getSize());
-    return;
-  }
-  if (const MaskedRegion *Masked = getMaskedRegion()) {
+  } else if (const MaskedRegion *Masked = getMaskedRegion()) {
     OS << " ";
     Masked->print(OS);
-    return;
+  } else {
+    OS << " ";
+    getPeriodicRegion()->print(OS);
   }
-  OS << " ";
-  getPeriodicRegion()->print(OS);
+
+  // Only a merge collects a second location, and only then is the suffix worth
+  // the noise: a single-source observation prints exactly what it always did,
+  // which keeps every existing dump and its checks stable.
+  SmallVector<DebugLoc, MaxContributingLocations> Locs;
+  getContributingDebugLocs(Locs);
+  if (Locs.size() < 2)
+    return;
+  OS << " [loc";
+  for (const DebugLoc &Loc : Locs)
+    OS << " " << Loc.getLine() << ":" << Loc.getCol();
+  OS << "]";
 }
 
 ProgramPoint::ProgramPoint(StringRef N, const Instruction &Anchor, SiteKind K)

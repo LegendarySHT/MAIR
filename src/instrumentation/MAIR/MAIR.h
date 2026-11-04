@@ -19,6 +19,7 @@
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
@@ -48,6 +49,7 @@ using llvm::ArrayRef;
 using llvm::BasicBlock;
 using llvm::cast;
 using llvm::DataLayout;
+using llvm::DebugLoc;
 using llvm::DenseMap;
 using llvm::DominatorTree;
 using llvm::DominatorTreeAnalysis;
@@ -71,6 +73,7 @@ using llvm::simple_ilist;
 using llvm::SmallBitVector;
 using llvm::SmallPtrSet;
 using llvm::SmallVector;
+using llvm::SmallVectorImpl;
 using llvm::SpecificBumpPtrAllocator;
 using llvm::StringRef;
 using llvm::Type;
@@ -687,6 +690,28 @@ public:
 
   std::string toString() const;
   void print(raw_ostream &OS) const;
+
+  /// Upper bound on the locations reported for one observation.
+  ///
+  /// A merged observation can stand for any number of source accesses, and the
+  /// list grows with the merge tree. Four is where a report stops telling a
+  /// reader anything new: past it the check is "a wide access over there", and
+  /// naming the remaining lines costs metadata without adding information.
+  static constexpr unsigned MaxContributingLocations = 4;
+
+  /// The source locations this observation stands for, in the order its
+  /// contributing instructions were collected.
+  ///
+  /// A merged observation already keeps every contributing instruction, so the
+  /// locations are derived rather than stored: a per-observation cache would be
+  /// paid for by every observation the graph builds, including the many that
+  /// never merge, while \c Insts covers the merged ones exactly. Duplicates are
+  /// dropped -- merged instructions usually share one DILocation -- and the
+  /// list stops at \p Limit. Instructions without a location contribute
+  /// nothing, so a build without -g answers with an empty list.
+  void getContributingDebugLocs(
+      SmallVectorImpl<DebugLoc> &Locs,
+      unsigned Limit = MaxContributingLocations) const;
 
 private:
   friend class MAIRGraph;
