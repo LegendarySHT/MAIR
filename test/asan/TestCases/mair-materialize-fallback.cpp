@@ -5,7 +5,7 @@
 //
 // RUN: env MAIR=1 %clangxx -asan -O1 -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s --check-prefix=MAIR
 // RUN: env MAIR=1 %clangxx -asan -O1 -mllvm -asan-opt=false -mllvm -mair-force-fallback -S -emit-llvm %s -o - | FileCheck %s --check-prefix=LEGACY
-// RUN: %clangxx -asan -O1 -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s --check-prefix=LEGACY
+// RUN: env -u MAIR %clangxx -asan -O1 -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s --check-prefix=LEGACY
 //
 // The last two RUN lines share one prefix on purpose: "MAIR gave up" and "MAIR
 // was never asked" have to be the same instrumentation, otherwise the fallback
@@ -43,3 +43,6 @@ int read3(S *s) { return s->a + s->b + s->c; }
 // LEGACY: call void @__asan_report_load4
 // LEGACY: load i32
 // LEGACY-NOT: call void @__asan_report_load
+
+// The last line unsets MAIR rather than merely not setting it: a suite-wide
+// MAIR=1 would otherwise run the baseline through MAIR as well.

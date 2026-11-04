@@ -1,5 +1,5 @@
 // RUN: env MAIR=1 %clangxx -asan -O1 -g -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s --check-prefix=MAIR
-// RUN: %clangxx -asan -O1 -g -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s --check-prefix=LEGACY
+// RUN: env -u MAIR %clangxx -asan -O1 -g -mllvm -asan-opt=false -S -emit-llvm %s -o - | FileCheck %s --check-prefix=LEGACY
 
 struct S { int a, b, c; };
 
@@ -37,3 +37,8 @@ int read3(S *s) { return s->a + s->b + s->c; }
 // LEGACY-COUNT-2: call void @__asan_report_load4({{.*}}) #{{[0-9]+}}, !dbg
 // LEGACY-NOT: call void @__asan_report_load_n
 // LEGACY: ![[L1]] = !DILocation(line: 6, column: 29, scope:
+
+// The legacy line unsets MAIR rather than merely not setting it: a suite-wide
+// MAIR=1 would otherwise run both prefixes through MAIR, and the baseline would
+// stop being a baseline. Note that the expected line numbers below are tied to
+// this file, so comments here stay at the bottom.
