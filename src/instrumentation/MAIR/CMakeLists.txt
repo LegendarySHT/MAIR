@@ -1,5 +1,6 @@
 set(MAIR_SOURCES
   Analysis/LoopAnalysis.cpp
+  Analysis/MAIRAliasAnalysis.cpp
   Analysis/MAIRStatAnalysis.cpp
   Analysis/RedundantObservationAnalysis.cpp
   Transforms/CommonObservationMotionPass.cpp

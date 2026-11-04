@@ -1525,6 +1525,21 @@ MemoryObject &MAIRGraph::getOrCreateMemoryObject(const Value &Base) {
   return *Object;
 }
 
+bool MAIRGraph::rebaseObservation(Observation &Obs, const Value &NewBase) {
+  assertLive("rebase an observation of");
+  const AbstractAccess *Current = Obs.getContiguousRegion();
+  if (!Current || Current->getBase() == &NewBase)
+    return false;
+  // Both values name the same address, so the offset from one is the offset
+  // from the other. The region is the only thing that has to move; the access
+  // kind, level and instruction list describe what is being checked, not where.
+  const AbstractValue Offset = Current->getOffset();
+  const AbstractValue Size = Current->getSize();
+  Obs.Region = AbstractAccess(&NewBase, Offset, Size);
+  Obs.setMemoryObject(&getOrCreateMemoryObject(NewBase));
+  return true;
+}
+
 void MAIRGraph::registerObservation(Observation &Obs) {
   const Value *Base = Obs.getBase();
   assert(Base && "cannot add a base-less observation to a MAIRGraph");

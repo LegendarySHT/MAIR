@@ -1067,6 +1067,13 @@ public:
   MemoryObject *getMemoryObject(const Value &Base);
   const MemoryObject *getMemoryObject(const Value &Base) const;
 
+  /// Re-express \p Obs against \p NewBase, which the caller has proved to name
+  /// the same address. Only a contiguous region qualifies: its offset is
+  /// measured from the base, so it carries over unchanged, whereas a masked or
+  /// periodic region measures its offsets from something else. Returns whether
+  /// the observation changed.
+  bool rebaseObservation(Observation &Obs, const Value &NewBase);
+
   bool verify(raw_ostream *OS = nullptr) const;
   std::string toString() const;
   void print(raw_ostream &OS) const;
