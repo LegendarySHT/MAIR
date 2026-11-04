@@ -1,4 +1,4 @@
-# A workflow to release XSan by manually trigger by repo/Actions.
+# A workflow to run the LIT suites on pull requests.
 
 name: LIT Test on PR
 
@@ -12,10 +12,17 @@ on:
 
 jobs:
   lit-test:
-    timeout-minutes: 30
-    # If the PR has the NFC label, do not run the following actions
+    # Job level timeout is the outer bound; each step below has its own, so a
+    # hang is reported against the step that hung instead of just "job cancelled".
+    timeout-minutes: 90
+    # If the PR has the NFC label, do not run the following actions.
+    #
+    # This used to also require github.repository == 'Camsyn/XSan'. On a fork
+    # that expression is false for every PR, so a fork never got CI at all --
+    # which is the opposite of what a "does main still build" gate is for.
+    # Whether CI runs in a given repository is a repository setting (Actions
+    # enabled or not), not something to hard-code here.
     if: |
-      github.repository == 'Camsyn/XSan' &&
       !contains(github.event.pull_request.labels.*.name, 'NFC')
     strategy:
       fail-fast: false
@@ -24,7 +31,14 @@ jobs:
         # Do not check Release build to save the CI budget
         build_type: [Debug]
         # build_type: [Debug, Release]
-        version: [15]
+        # 15 is the legacy backend. Everything MAIR needs lives in the "llvm23"
+        # backend directory, which src/cmake/ConfigLLVMCompiler.cmake selects for
+        # LLVM 22+ -- the directory name is one major ahead of the LLVM it is
+        # built against, so the new leg is 22, not 23: a clean Debug build with
+        # -DLLVM_DIR=/usr/lib/llvm-23 dies on 22-only APIs that 23 dropped
+        # (IRBuilder::CollectMetadataToCopy, Driver::isUsingLTO, the current
+        # SanitizerArgs constructor). See the E1 delivery note before bumping it.
+        version: ['15', '22']
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}-${{ matrix.os_type }}-${{ matrix.build_type }}-${{ matrix.version }}
       cancel-in-progress: true
@@ -35,6 +49,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Build XSan
+        timeout-minutes: 60
         uses: ./.github/workflows/build
         with:
           build_type: ${{ matrix.build_type }}
@@ -49,29 +64,48 @@ jobs:
       - name: Run ASan LIT tests
         id: check-asan
         if: always()
+        timeout-minutes: 20
         run: |
           cmake --build build --target check-asan
 
       - name: Run TSan LIT tests
         id: check-tsan
         if: always()
+        timeout-minutes: 20
         run: |
           cmake --build build --target check-tsan
 
       - name: Run MSan LIT tests
         id: check-msan
         if: always()
+        timeout-minutes: 20
         run: |
           cmake --build build --target check-msan
 
       - name: Run UBSan LIT tests
         id: check-ubsan-only
         if: always()
+        timeout-minutes: 20
         run: |
           cmake --build build --target check-ubsan-only
 
       - name: Run XSan LIT tests
         id: check-xsan
         if: always()
+        timeout-minutes: 20
         run: |
           cmake --build build --target check-xsan
+
+      # check-mair also runs the graph unit tests (test/MAIR/CMakeLists.txt
+      # depends on check-mair-unit), so this one step covers gtest + lit.
+      - name: Run MAIR LIT and unit tests
+        id: check-mair
+        # MAIR is part of the LLVM 22+ backend only: neither
+        # src/instrumentation/llvm15/AddressSanitizer.cpp nor its TSan
+        # counterpart contains a single reference to mair::. Running mair-opt
+        # built against the frozen LLVM 15 leg would only test a code path no
+        # user of that backend can reach.
+        if: always() && matrix.version != '15'
+        timeout-minutes: 20
+        run: |
+          cmake --build build --target check-mair

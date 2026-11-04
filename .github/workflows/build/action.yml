@@ -28,7 +28,10 @@ runs:
       run: |
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
         sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy main"
-        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-15 main"
+        # The versioned channel is what actually publishes the clang-N /
+        # llvm-N-dev packages installed below; pinning it to 15 meant any other
+        # llvm_version failed at apt-get install.
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${{ inputs.llvm_version }} main"
         # Workaround for issue https://github.com/llvm/llvm-project/issues/133861
         sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/lib /usr/lib/lib
         sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/include /usr/lib/include
