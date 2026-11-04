@@ -32,9 +32,13 @@ MAIRAliasAnalysis::Result MAIRAliasAnalysis::run(MAIRGraph &G,
                                                  MAIRGraphAnalysisManager &) {
   if (!G.isLive())
     report_fatal_error("MAIR MAIRAliasAnalysis cannot run on a consumed graph");
+  // An analysis manager built by hand -- the unit tests, a pass pipeline
+  // assembled outside PassBuilder -- has no function level to borrow AA from.
+  // That is not an error: LocationMergePass already treats an unavailable
+  // result as "keep the bases you have", which is the pre-AA behaviour, and a
+  // fatal here turns a degraded merge into a crash of the whole pipeline.
   if (!FAM)
-    report_fatal_error(
-        "MAIR MAIRAliasAnalysis requires a FunctionAnalysisManager bridge");
+    return MAIRAliasInfo();
   if (Function *F = G.getMutableFunction())
     return MAIRAliasInfo(*F, *FAM);
   return MAIRAliasInfo();

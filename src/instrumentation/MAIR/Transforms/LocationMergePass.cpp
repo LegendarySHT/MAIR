@@ -264,6 +264,10 @@ PreservedAnalyses LocationMergePass::run(MAIRGraph &G,
 #if LLVM_ENABLE_STATS
   NumInputObservations += MAIRStat::compute(G).getNumObservations();
 #endif
+  // The result is unavailable when the manager was assembled without the
+  // function-level bridge -- a hand-built manager, or registerMAIRGraphAnalyses
+  // without a FunctionAnalysisManager. Merging then works on the bases it has,
+  // exactly as it did before alias analysis was wired in.
   const MAIRAliasInfo &Aliases = AM.getResult<MAIRAliasAnalysis>(G);
 
   bool Changed = false;

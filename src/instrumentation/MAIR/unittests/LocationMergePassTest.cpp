@@ -41,7 +41,9 @@ entry:
   First->addObservation(*Read->begin());
   Read->erase(Read->begin());
 
+  llvm::PassInstrumentationCallbacks PIC;
   MAIRGraphAnalysisManager AM;
+  registerMAIRGraphAnalyses(AM, &PIC);
   EXPECT_FALSE(LocationMergePass().run(Graph, AM).areAllPreserved());
   ASSERT_EQ(First->size(), 1u);
   const AbstractAccess *Merged = First->begin()->getContiguousRegion();
@@ -76,7 +78,9 @@ entry:
   Read->addObservation(*Write->begin());
   Write->erase(Write->begin());
 
+  llvm::PassInstrumentationCallbacks PIC;
   MAIRGraphAnalysisManager AM;
+  registerMAIRGraphAnalyses(AM, &PIC);
   EXPECT_TRUE(LocationMergePass().run(Graph, AM).areAllPreserved());
   EXPECT_EQ(Read->size(), 2u);
   EXPECT_TRUE(Graph.verify());
@@ -106,7 +110,9 @@ entry:
   First->addObservation(*Second->begin());
   Second->erase(Second->begin());
 
+  llvm::PassInstrumentationCallbacks PIC;
   MAIRGraphAnalysisManager AM;
+  registerMAIRGraphAnalyses(AM, &PIC);
   EXPECT_TRUE(LocationMergePass().run(Graph, AM).areAllPreserved());
   EXPECT_EQ(First->size(), 2u);
   EXPECT_TRUE(Graph.verify());
