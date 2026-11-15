@@ -47,6 +47,12 @@ docker build -t xsan:mair-22 .
 docker run --rm xsan:mair-22 bash -lc 'mair-opt --help | head -5'
 ```
 
+镜像约 3.1 GB（Debug 全量 + 工具链），构建约 5 分钟。测试也能在镜像里直接跑，不用回宿主装东西：
+
+```bash
+docker run --rm xsan:mair-22 bash -lc 'ninja -C build check-mair'   # 178 gtest + 26 lit
+```
+
 `LLVM_VERSION` 是唯一需要传的参数，但它不是"随便挑一个版本"——和上表同一个道理，只是坑更硬：
 
 | 值 | 结果 |
