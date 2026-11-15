@@ -303,3 +303,19 @@ Note: Our wrappers follow the default behavior of the underlying compilers:
 - `xclang` statically links the XSan runtime by default.
 - `xgcc` dynamically links the XSan runtime by default.
 - It is not possible to dynamically link an XSan runtime with MSan support, as MSan itself does not support dynamic linking.
+
+## MAIR
+
+MAIR is an optimization layer inside the ASan/TSan instrumentation: it builds a
+graph of the memory accesses of a function and then merges, hoists and
+eliminates their checks. It is enabled with the `MAIR` environment variable of
+the **compiler process**, and it never changes which bytes are checked -- when a
+graph cannot be materialized, the instrumentation falls back to one check per
+access.
+
+```shell
+MAIR=1 xclang++ -asan -O1 -mllvm -asan-opt=false foo.cpp
+```
+
+See [docs/MAIR.md](docs/MAIR.md) for the three levels, the `mair-opt` utility,
+what is not covered yet, and how to run its tests.
