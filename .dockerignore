@@ -1,0 +1,19 @@
+# 构建上下文里不该出现的东西。
+#
+# build*           本机 build-e1 + build-llvm22 约 10 GB
+# evaluation       评测用的第三方包与结果（1 GB）。除了体积，里面的 libtool
+#                  产物还带相对符号链接（evaluation/libpng/temp/libpng-config 等），
+#                  buildkit 传上下文时会报 "invalid file request" 直接失败
+# test-e2e/re2     D4/D5 用到的 re2 构建树（700 MB）
+#
+# 这些都不参与编译器构建，镜像里也不需要：要用评测脚本时把仓库 checkout 挂进来即可。
+.git
+build*
+**/build
+**/build-*
+test/**/Output
+evaluation
+test-e2e/re2
+test-e2e/**/build
+*.pyc
+__pycache__
