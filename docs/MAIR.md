@@ -15,6 +15,8 @@ MAIR 没有自己的构建开关——`src/instrumentation/CMakeLists.txt` 无�
 | 15 | `llvm15/` | 否 |
 | ≥ 22 | `llvm23/` | 是 |
 
+15 这一档现在只是名义上存在：`MAIR/` 被无条件加进构建，而它的源码依赖 LLVM 22 的 API，所以 15 会在编译 MAIR 时直接失败（细节见本节末尾的 Docker 小节）。
+
 所以要用 LLVM 22+ 配置（其余步骤见 README 的 *Build From Source*）。注意**宿主编译器也必须是 clang-22**，否则 `ConfigLLVMCompiler.cmake` 会直接报错让你改：
 
 ```bash
@@ -35,6 +37,35 @@ ninja
 ls build-llvm22/mair-opt build-llvm22/pass/ASanInstPass.so
 ninja -C build-llvm22 check-mair     # 178 gtest + 26 lit
 ```
+
+### 不想装 LLVM：用 Docker
+
+仓库根的 `Dockerfile` 能直接出一个编好的镜像，默认 LLVM 22 + Debug，`mair-opt` 在 `/workspace/build`：
+
+```bash
+docker build -t xsan:mair-22 .
+docker run --rm xsan:mair-22 bash -lc 'mair-opt --help | head -5'
+```
+
+`LLVM_VERSION` 是唯一需要传的参数，但它不是"随便挑一个版本"——和上表同一个道理，只是坑更硬：
+
+| 值 | 结果 |
+|---|---|
+| `22`（默认） | 正常，走 `llvm23/` 后端，有 MAIR |
+| `15` | **编译失败**，见下 |
+| `23` | 配置能过，编译失败：`llvm23/` 目录实际对齐的是 LLVM 22 的 API（见 §4） |
+| `16`–`21` | 配置阶段就 FATAL，`ConfigLLVMCompiler.cmake` 只接受 15 或 22+ |
+
+`15` 失败的原因不在镜像：`src/instrumentation/CMakeLists.txt:17` 是无条件的 `add_subdirectory(MAIR)`，而 `MAIR.h` 用了 LLVM 15 里没有的 `llvm::ilist_parent`（`SmallVector` 的 range 构造也没有），所以 llvm15 那条后端在 MAIR 落地之后就编不过了。换句话说 **"LLVM 15 仍可用" 在当前源码里已经不成立**，要恢复得先给 MAIR 加一个按后端屏蔽的构建开关。
+
+```bash
+docker build --build-arg BUILD_TYPE=RelWithDebInfo -t xsan:mair-22 .     # 要跑起来快一点
+```
+
+两个常见卡点：
+
+- **拉包慢**：基础镜像可换，`--build-arg UBUNTU_IMAGE=docker.1panel.live/library/ubuntu:22.04`。
+- **apt.llvm.org 慢**：给构建过程传代理，`--build-arg HTTPS_PROXY=http://host.docker.internal:7890`（Docker Desktop 下容器内用 `host.docker.internal` 指向宿主）。
 
 ## 1. 它做什么
 
