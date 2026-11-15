@@ -36,9 +36,10 @@ Samples are `test/asan/TestCases/mair-*.cpp` and `test/tsan/TestCases/mair-*.c`,
 `mair-*.cpp`: the accent of MAIR-specific shapes that already live in the lit
 suite. Compile flags mirror the lit tests (`-asan`/`-tsan`, `-O1`; ASan also
 gets `-mllvm -asan-opt=false` on both sides so native ASan optimization cannot
-skew one side only). `MAIR` is disabled with `env -u MAIR`, because
-`isMAIROptEnabled()` tests variable **existence**; an empty value does not turn
-MAIR off.
+skew one side only). `MAIR` is disabled with `env -u MAIR` rather than an
+empty value: since the three-level knob (`getMAIRLevel()`) an empty value also
+means off, but `-u` stays correct on a tree built before it, and it cannot be
+mistaken for a variable that was set and ignored.
 
 ## Output
 
