@@ -4,10 +4,12 @@ name: LIT Test on PR
 
 on:
   workflow_dispatch:
+  # No branch filter. It used to list dev-xsan and 'users/**', which on this
+  # fork matches nothing: the integration branch is mair-trunk, so every PR
+  # skipped the gate and "CI is green" meant "CI never ran". Which branches
+  # exist is a property of the repository, not of this file -- the same reason
+  # the github.repository check below is gone. Default is all branches.
   pull_request:
-    branches:
-      - dev-xsan
-      - 'users/**'
     types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
