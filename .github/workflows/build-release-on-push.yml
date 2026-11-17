@@ -4,9 +4,11 @@ name: Build on Push
 on:
   workflow_dispatch:
   push:
+    # dev-xsan / 'users/**' match nothing on this fork: the integration branch
+    # is mair-trunk, so a push never started a build here either. mair-trunk is
+    # the branch whose "does it still build" answer anyone actually wants.
     branches:
-      - dev-xsan
-      - 'users/**'
+      - mair-trunk
 
 jobs:
   # Add a conditional check task to ensure that the release is only triggered when a bump PR is merged
@@ -30,7 +32,11 @@ jobs:
           fi
   build:
     needs: [gatekeeper]
-    if: github.repository_owner == 'Camsyn' && needs.gatekeeper.outputs.triggered == 'false'
+    # The owner check used to be part of this condition. It is false on any
+    # fork, which silently disabled the fork's own trunk builds -- the same
+    # reason it was dropped from build-test-on-pr.yml. Whether Actions run is a
+    # repository setting, not something to hard-code in a workflow.
+    if: needs.gatekeeper.outputs.triggered == 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -58,4 +64,9 @@ jobs:
     concurrency:
       group: release-${{ github.ref }}
       cancel-in-progress: false
-    uses: Camsyn/XSan/.github/workflows/release.yml@dev-xsan
+    # Was Camsyn/XSan/.github/workflows/release.yml@dev-xsan. A reusable
+    # workflow is addressed by repository, so on this fork that points at a repo
+    # it cannot read (404), and the ref dev-xsan does not exist here either --
+    # the release leg would have failed on the first real bump commit.
+    # release.yml sits in this repo and already declares workflow_call.
+    uses: ./.github/workflows/release.yml
