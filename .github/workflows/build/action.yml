@@ -36,7 +36,15 @@ runs:
         sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/lib /usr/lib/lib
         sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/include /usr/lib/include
         sudo apt-get update
-        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev
+        # lld-N is not pulled in by clang-N / llvm-N-dev on these channels, and
+        # its absence is silent at build time: CMake's probe just falls back to
+        # the system linker. The LIT suites are a different story -- lit adds
+        # -fuse-ld=lld whenever COMPILER_RT_HAS_LLD is set, so every single test
+        # dies at link time with "invalid linker name in argument
+        # '-fuse-ld=lld'". The ubuntu-22.04 runner image happens to ship
+        # ld.lld-15, which is why only the 22 leg went red and the 15 leg looked
+        # healthy.
+        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev lld-${{ inputs.llvm_version }}
 
     - name: Build XSan
       shell: bash
