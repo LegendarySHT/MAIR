@@ -40,6 +40,20 @@ set(XSAN_INSTRUMENTATION_VARIANT "${XSAN_INSTRUMENTATION_VARIANT}" CACHE INTERNA
 set(XSAN_LIVEPATCH_VARIANT "${XSAN_LIVEPATCH_VARIANT}" CACHE INTERNAL
     "Clang livepatch backend selected from LLVM version")
 
+# MAIR itself is not tied to a backend directory, but its sources use LLVM 22
+# APIs (ilist_parent, the SmallVector iterator_range constructor) and the two
+# backends that drive it live in llvm23/. Building it against an older SDK
+# would fail on those headers, so tie its availability to the LLVM version
+# rather than to the directory name.
+if(XSAN_LLVM_MAJOR GREATER_EQUAL 22)
+  set(XSAN_HAS_MAIR TRUE)
+else()
+  set(XSAN_HAS_MAIR FALSE)
+endif()
+set(XSAN_HAS_MAIR "${XSAN_HAS_MAIR}" CACHE INTERNAL
+    "Whether MAIR can be built against the selected LLVM (needs 22+)")
+message_green("Building MAIR: ${XSAN_HAS_MAIR}")
+
 # -------------------------------------------------------------------
 # 2. Ensure the build compiler matches the selected LLVM major
 # -------------------------------------------------------------------

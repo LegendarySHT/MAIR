@@ -14,7 +14,17 @@ if(NOT DEFINED XSAN_INSTRUMENTATION_VARIANT)
 endif()
 
 add_subdirectory(livepatch)
-add_subdirectory(MAIR)
+
+# MAIR needs an LLVM 22+ SDK. Both backends that call into it (llvm23/) also
+# live behind the same version check, so an older build simply gets the
+# compiler without the optimization instead of failing in MAIR's headers.
+if(XSAN_HAS_MAIR)
+  add_subdirectory(MAIR)
+  set(XSAN_MAIR_OBJECTS $<TARGET_OBJECTS:MAIRCore>)
+else()
+  message(STATUS "Skipping MAIR: ${XSAN_INSTRUMENTATION_VARIANT} backend is built without it")
+  set(XSAN_MAIR_OBJECTS "")
+endif()
 
 set(XSAN_PASS_COMMON
   AttributeTaggingPass.cpp
@@ -29,7 +39,7 @@ set(XSAN_PASS_COMMON
   Utils/MetaDataUtils.cpp
   Utils/Options.cpp
   Utils/UbsanUtils.cpp
-  $<TARGET_OBJECTS:MAIRCore>
+  ${XSAN_MAIR_OBJECTS}
 )
 
 set(XSAN_PASS_VERSIONED_DIR ${XSAN_INSTRUMENTATION_VARIANT})
