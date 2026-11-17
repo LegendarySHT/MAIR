@@ -10,3 +10,6 @@ int f(std::atomic<int> *p) {
 // CHECK-LABEL: define {{.*}} @_Z1f
 // CHECK-COUNT-1: call void @__asan_report_load4
 // CHECK-COUNT-2: load atomic i32
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

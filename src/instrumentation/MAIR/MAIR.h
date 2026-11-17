@@ -19,6 +19,7 @@
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
@@ -48,6 +49,7 @@ using llvm::ArrayRef;
 using llvm::BasicBlock;
 using llvm::cast;
 using llvm::DataLayout;
+using llvm::DebugLoc;
 using llvm::DenseMap;
 using llvm::DominatorTree;
 using llvm::DominatorTreeAnalysis;
@@ -71,6 +73,7 @@ using llvm::simple_ilist;
 using llvm::SmallBitVector;
 using llvm::SmallPtrSet;
 using llvm::SmallVector;
+using llvm::SmallVectorImpl;
 using llvm::SpecificBumpPtrAllocator;
 using llvm::StringRef;
 using llvm::Type;
@@ -116,13 +119,16 @@ class MAIROptimizationConfig {
   bool IgnoreAtomic = false;
   bool DomCoverageOnly = false;
   bool AllowRelocation = true;
+  bool AllowHoist = false;
 
   explicit MAIROptimizationConfig(uint8_t ReadLevel, uint8_t WriteLevel,
                                   uint8_t ReadWriteLevel, bool IgnoreAtomic,
-                                  bool DomCoverageOnly, bool AllowRelocation)
+                                  bool DomCoverageOnly, bool AllowRelocation,
+                                  bool AllowHoist)
       : ReadLevel(ReadLevel), WriteLevel(WriteLevel),
         ReadWriteLevel(ReadWriteLevel), IgnoreAtomic(IgnoreAtomic),
-        DomCoverageOnly(DomCoverageOnly), AllowRelocation(AllowRelocation) {}
+        DomCoverageOnly(DomCoverageOnly), AllowRelocation(AllowRelocation),
+        AllowHoist(AllowHoist) {}
 
 public:
   MAIROptimizationConfig() = default;
@@ -133,6 +139,11 @@ public:
 
   bool allowsCoverageAlong(PPEdgeKind Kind) const;
   uint8_t getLevel(AccessKind Kind) const;
+  /// Whether an observation that may not be relocated freely can still be moved
+  /// to a program point that dominates it. Hoisting a check only makes it run
+  /// earlier, never on a path that does not reach the access, so a sanitizer
+  /// that pins observations for ordering reasons can still allow this direction.
+  bool allowsHoist() const { return AllowHoist; }
   void initializeObservation(Observation &Obs) const;
 };
 
@@ -670,11 +681,37 @@ public:
   void eraseFromParent();
 
   bool hasConcreteRange() const;
+  /// Whether every value this observation needs is already defined at \p At,
+  /// i.e. whether the observation can be materialized there. A region that is
+  /// not contiguous cannot be checked here and counts as unavailable.
+  bool isAvailableAt(const Instruction &At, const DominatorTree &DT) const;
   static Observation fromInstruction(const Instruction &I,
                                      const DataLayout &DL);
 
   std::string toString() const;
   void print(raw_ostream &OS) const;
+
+  /// Upper bound on the locations reported for one observation.
+  ///
+  /// A merged observation can stand for any number of source accesses, and the
+  /// list grows with the merge tree. Four is where a report stops telling a
+  /// reader anything new: past it the check is "a wide access over there", and
+  /// naming the remaining lines costs metadata without adding information.
+  static constexpr unsigned MaxContributingLocations = 4;
+
+  /// The source locations this observation stands for, in the order its
+  /// contributing instructions were collected.
+  ///
+  /// A merged observation already keeps every contributing instruction, so the
+  /// locations are derived rather than stored: a per-observation cache would be
+  /// paid for by every observation the graph builds, including the many that
+  /// never merge, while \c Insts covers the merged ones exactly. Duplicates are
+  /// dropped -- merged instructions usually share one DILocation -- and the
+  /// list stops at \p Limit. Instructions without a location contribute
+  /// nothing, so a build without -g answers with an empty list.
+  void getContributingDebugLocs(
+      SmallVectorImpl<DebugLoc> &Locs,
+      unsigned Limit = MaxContributingLocations) const;
 
 private:
   friend class MAIRGraph;
@@ -962,6 +999,13 @@ public:
     return NumProgramPoints;
   }
 
+  /// Whether \p F contains a cycle that LoopInfo cannot represent as a loop.
+  ///
+  /// Such a function cannot be placed in the MAIR hierarchy. Callers skip it
+  /// entirely instead of aborting the compilation; see MAIRGraph::build.
+  static bool hasUnrepresentableCycle(Function &F,
+                                      FunctionAnalysisManager &FAM);
+
   /// Build a MAIR graph for \p F using DT/PDT/LI results owned by \p FAM.
   ///
   /// The graph borrows the exact FAM results. They must remain valid, and the
@@ -1047,6 +1091,13 @@ public:
                   PPEdgeKind Kind) const;
   MemoryObject *getMemoryObject(const Value &Base);
   const MemoryObject *getMemoryObject(const Value &Base) const;
+
+  /// Re-express \p Obs against \p NewBase, which the caller has proved to name
+  /// the same address. Only a contiguous region qualifies: its offset is
+  /// measured from the base, so it carries over unchanged, whereas a masked or
+  /// periodic region measures its offsets from something else. Returns whether
+  /// the observation changed.
+  bool rebaseObservation(Observation &Obs, const Value &NewBase);
 
   bool verify(raw_ostream *OS = nullptr) const;
   std::string toString() const;

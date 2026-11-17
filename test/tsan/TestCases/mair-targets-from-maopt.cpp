@@ -10,3 +10,6 @@ int update_value(int *p) {
 // CHECK: call void @__tsan_write4
 // CHECK-NOT: call void @__tsan_read4
 // CHECK-NOT: call void @__tsan_read_write4
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

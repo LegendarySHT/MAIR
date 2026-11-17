@@ -19,9 +19,14 @@
 #     - xsan-asan-msan-tsan       : XSan with ASan + MSan + TSan
 #     - xsan-asan-msan-ubsan      : XSan with ASan + MSan + UBSan
 #     - xsan-asan-msan-tsan-ubsan : XSan with ASan + TSan + MSan + UBSan
+#     - asan-mair-build           : ASan (fork `-asan`) with MAIR engaged but no
+#                                   MAIR transform (sets MAIR=build)
+#     - asan-mair-opt             : ASan (fork `-asan`) with the full MAIR
+#                                   pipeline (sets MAIR=1)
 #
 #   is_cxx values:
-#     - "true"   : C++ project; append -stdlib=libc++ to CXXFLAGS/LDFLAGS
+#     - "true"   : C++ project; append -stdlib=libc++ to CXXFLAGS/LDFLAGS,
+#                   unless the probe below finds no libc++ on this machine
 #     - "false"  : C project
 #
 # Usage: meant to be sourced by compile.sh
@@ -55,6 +60,17 @@ fi
 # export CC=clang
 # export CXX=clang++
 
+# For sanitizer headers: this MAIR build tree ships include/{sanitizer,fuzzer,profile}
+# while the system LLVM kit's resource directory has no sanitizer/ at all, and
+# abseil includes <sanitizer/lsan_interface.h> directly. Add the tree next to
+# xclang with -isystem instead of -resource-dir: the directory holds no clang
+# builtin headers, and replacing the resource directory would lose stddef.h.
+MAIR_INCLUDE_GUARD=$(dirname "$(command -v xclang 2>/dev/null || echo /nonexistent)")
+if [ -d "${MAIR_INCLUDE_GUARD}/include/sanitizer" ]; then
+    export CFLAGS="${CFLAGS} -isystem ${MAIR_INCLUDE_GUARD}/include"
+    export CXXFLAGS="${CXXFLAGS} -isystem ${MAIR_INCLUDE_GUARD}/include"
+fi
+
 # Always append -g by default
 export CFLAGS="${CFLAGS:+$CFLAGS }-g"
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-g"
@@ -72,10 +88,26 @@ if [ ! -f "${SCRIPTS_DIR}/libAFL.a" ]; then
     ${SCRIPTS_DIR}/fetch-gen-driver.sh
 fi
 
-# When is_cxx = true, append -stdlib=libc++ to CXXFLAGS and LDFLAGS
+# libc++ is not installed on every machine. Probe it and record the result in
+# MAIR_LIBCXX_FLAG so package scripts that append -stdlib=libc++ by hand can use
+# the same decision instead of failing at link time.
+# The probe has to link, not just compile: an empty main compiles without -lc++
+# and only the link reports the missing library.
+if printf 'int main(){}\n' | xclang++ -x c++ -stdlib=libc++ - -o /tmp/xsan-libcxx-probe 2>/dev/null; then
+    MAIR_LIBCXX_FLAG=-stdlib=libc++
+else
+    MAIR_LIBCXX_FLAG=
+    if [ -z "${XSAN_LIBCXX_NOTED:-}" ]; then
+        echo "note: libc++ is unavailable for xclang++, using the default C++ library" >&2
+        export XSAN_LIBCXX_NOTED=1
+    fi
+fi
+export MAIR_LIBCXX_FLAG
+
+# When is_cxx = true, append the libc++ flag (empty when the probe failed)
 if [ "$is_cxx" = "true" ]; then
-    export CXXFLAGS="${CXXFLAGS} -stdlib=libc++"
-    export LDFLAGS="${LDFLAGS} -stdlib=libc++"
+    export CXXFLAGS="${CXXFLAGS} ${MAIR_LIBCXX_FLAG}"
+    export LDFLAGS="${LDFLAGS} ${MAIR_LIBCXX_FLAG}"
 fi
 
 # Handle optimization level based on mode (dbg vs non-dbg)
@@ -191,12 +223,28 @@ case "$mode" in
         export CXXFLAGS="${CXXFLAGS} -xsan-only -fsanitize=address,memory,thread,undefined"
         export LDFLAGS="${LDFLAGS} -xsan-only -fsanitize=address,memory,thread,undefined"
         ;;
+    asan-mair-build|asan-mair-opt)
+        # The MAIR-enabled ASan pass is the one behind the fork's own `-asan`
+        # flag (the same flag evaluation calls `asan-new`); the stock
+        # `-fsanitize=address` path ignores MAIR entirely (measured: 0
+        # mair.observation GEPs even with MAIR=1).
+        # MAIR itself is read from the compiler's process environment, not from
+        # CFLAGS: the pass calls getenv("MAIR"), a driver flag would not reach it.
+        export CFLAGS="${CFLAGS} -asan"
+        export CXXFLAGS="${CXXFLAGS} -asan"
+        export LDFLAGS="${LDFLAGS} -asan"
+        if [ "$mode" = "asan-mair-build" ]; then
+            export MAIR=build
+        else
+            export MAIR=1
+        fi
+        ;;
     raw|'')
         # Do not modify flags for raw mode
         ;;
     *)
         echo "Warning: unrecognized compile mode: $1" >&2
-        echo "Supported modes include: raw, asan, tsan, ubsan, msan, xsan-asan, xsan-asan-tsan, xsan-asan-msan, xsan-asan-ubsan, xsan-asan-tsan-ubsan, xsan-asan-msan-tsan, xsan-asan-msan-ubsan, xsan-asan-msan-tsan-ubsan" >&2
+        echo "Supported modes include: raw, asan, tsan, ubsan, msan, xsan-asan, xsan-asan-tsan, xsan-asan-msan, xsan-asan-ubsan, xsan-asan-tsan-ubsan, xsan-asan-msan-tsan, xsan-asan-msan-ubsan, xsan-asan-msan-tsan-ubsan, asan-mair-build, asan-mair-opt" >&2
         ;;
 esac
 

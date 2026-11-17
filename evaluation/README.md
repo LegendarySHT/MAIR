@@ -158,4 +158,68 @@ Example:
 ├── ...
 └── README.md
 
+```## MAIR ablation modes
+
+The compiler can be built with MAIR (the `MAIR` environment variable, see
+`src/instrumentation/MAIR/MAOpt.h`). `evaluation/` exposes the three tiers as
+ordinary build modes, so the package-local `compile.sh` and `run.sh` keep
+working unchanged:
+
+| mode | flags | compiler environment | meaning |
+|---|---|---|---|
+| `asan-new` | `-asan` | `MAIR` unset | the fork's ASan, legacy instrumentation |
+| `asan-mair-build` | `-asan` | `MAIR=build` | ASan through MAIR, but with no MAIR transform |
+| `asan-mair-opt` | `-asan` | `MAIR=1` | ASan with the full MAIR pipeline |
+
+Two things make these tiers different from the stock `asan` mode:
+
+* **`-asan`, not `-fsanitize=address`.** MAIR lives in the fork's own ASan pass,
+  which is what `-asan` selects; `-fsanitize=address` takes the stock upstream
+  pass, where MAIR is never consulted (measured: `MAIR=1` still yields zero
+  `mair.observation` GEPs, versus two with `-asan`). On this machine
+  `-fsanitize=address` cannot even link, because the installed clang-22 has no
+  `libclang_rt.asan*.a`; the fork's runtimes are built into `build-llvm22/lib/`.
+* **`MAIR` as a process environment variable.** `activate_compile_flags.sh`
+  exports it instead of appending to `CFLAGS`: the pass reads `getenv("MAIR")`
+  itself, so a driver flag would never reach it. `MAIR=` (empty) disables MAIR,
+  exactly like an unset variable.
+
+Use `asan-new` as the baseline tier, so all three tiers differ only in MAIR.
+
+Building:
+
+```bash
+# one package, three tiers, with compile-time tracing
+PATH=~/mair/build-llvm22:$PATH ./compile-all.sh ./cJSON -t asan-new asan-mair-build asan-mair-opt
 ```
+
+Artefacts land in `cJSON/artefacts/<program>/<program>.<mode>`, and the runtime
+side needs no change because `run.sh` selects the binary by mode name. The two
+MAIR tiers are commented out of the default mode list in `compile-all.sh`
+because they require a MAIR-enabled compiler.
+
+`benchmarking.py` knows the two tiers (`SANITIZERS`; `INIT_TIMES` reuses the
+ASan initialization cost) and skips a tier when a package has no artefact for
+it, so a partially built package does not abort a whole benchmark run.
+
+### Compile-time phases
+
+`compile-all.sh -t` exports `-ftime-trace`, collects the `.json` files into
+`<package>/.compiled/data-time-trace/<mode>/`, and writes the `ExecuteCompiler`
+total to `<package>/.compiled/<mode>`. `analyze_compile_time.py` reads both: in
+addition to the existing XSan figure it prints
+
+```
+===== MAIR compile-time phases in seconds (-ftime-trace) =====
+package         mode                  Frontend   Optimizer   Backend   CodeGenPasses   Total AddressSanitizerPass   ExecuteCompiler
+```
+
+Granularity note: `-ftime-trace` emits `Frontend` / `Optimizer` / `Backend` /
+`CodeGenPasses` plus per-pass `Total <Pass>` entries. Everything MAIR does --
+graph construction (`extract`), its analyses, the graph `pass`es and the
+`lower`ing back to instrumentation -- happens inside the ASan module pass, so it
+is visible only as `Total AddressSanitizerPass`; the four MAIR-internal stages
+are not traced separately (verifying this is what D3 checked: with `MAIR=build`
+and `MAIR=1` the trace contains no MAIR-named events). Adding `TimeTraceScope`s
+for them would have to happen in `src/instrumentation/MAIR/` (lane C), not here.
+Note that `Backend` contains `CodeGenPasses`, so those two columns overlap.

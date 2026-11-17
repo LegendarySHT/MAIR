@@ -11,6 +11,7 @@ Usage:
    python3 gen_bench_config.py
 '''
 
+import argparse
 from pathlib import Path
 
 
@@ -97,5 +98,46 @@ def generate_bench_configs(lazy: bool = False):
         f.write(config)
 
 
+def list_modes() -> None:
+    '''
+    Print the modes that each (package, program) pair has been built for.
+
+    Modes are the last dot-separated component of an artefact name, so this
+    reflects what is on disk instead of duplicating the mode list that
+    activate_compile_flags.sh and benchmarking.py own.
+    '''
+    rows = []
+    for package in sorted(EVAL_ROOT.iterdir()):
+        if not package.is_dir() or package.name.startswith("."):
+            continue
+        artefacts_dir = package / "artefacts"
+        if not artefacts_dir.exists():
+            continue
+        for program in sorted(artefacts_dir.iterdir()):
+            if not program.is_dir() or program.name.startswith("."):
+                continue
+            modes = sorted(f.name[len(program.name) + 1:]
+                           for f in program.iterdir()
+                           if f.is_file() and f.name.startswith(program.name + "."))
+            if modes:
+                rows.append(f"{package.name}\t{program.name}\t{' '.join(modes)}")
+    if not rows:
+        print("No artefacts found under any package")
+        return
+    print("package\tprogram\tmodes")
+    for row in rows:
+        print(row)
+
+
 if __name__ == '__main__':
-    generate_bench_configs()
+    parser = argparse.ArgumentParser(
+        description="Generate benchmarks.py from the artefacts on disk.")
+    parser.add_argument(
+        "--list-modes", action="store_true",
+        help="print the build modes each package/program was built for, "
+             "instead of generating the configuration")
+    args = parser.parse_args()
+    if args.list_modes:
+        list_modes()
+    else:
+        generate_bench_configs()

@@ -71,6 +71,15 @@ if "-xsan" in clang_tsan_cflags or "-xsan-only" in clang_tsan_cflags:
     # Forbids some ASan's options to pass TSan's testcases
     config.environment['ASAN_OPTIONS'] = 'alloc_dealloc_mismatch=0:detect_leaks=0:detect_odr_violation=0'
     config.environment['MSAN_OPTIONS'] = "exit_code_unchanged=1"
+
+# MAIR only exists in the LLVM 22+ backend (XSAN_HAS_MAIR in
+# src/cmake/ConfigLLVMCompiler.cmake). The mair-* TestCases drive the -mair-*
+# pipeline through MAIR=1 and check what it does to the instrumented IR, which
+# on the llvm15 backend is a no-op -- they would all fail on a pipeline that is
+# not there to begin with. They carry "REQUIRES: mair" so this stays visible
+# from the test file instead of being a silent directory filter.
+if config.xsan_has_mair:
+    config.available_features.add("mair")
 clang_tsan_cxxflags = (
     config.cxx_mode_flags + clang_tsan_cflags + ["-std=c++11"] + ["-I%s" % tsan_incdir]
 )

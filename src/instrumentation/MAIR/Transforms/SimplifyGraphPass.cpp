@@ -27,8 +27,9 @@ bool hasPinnedObservation(const ProgramPoint &PP) {
 }
 
 MergeCandidate findMergeCandidate(MAIRGraph &G) {
+  const MAIROptimizationConfig &Config = G.getOptimizationConfig();
   for (ProgramPoint &PP1 : G) {
-    if (isa<LoopProgramPoint>(PP1) || hasPinnedObservation(PP1))
+    if (isa<LoopProgramPoint>(PP1))
       continue;
     for (const ProgramPointEdge &Edge : PP1.children()) {
       if (!Edge.isDom())
@@ -53,8 +54,24 @@ MergeCandidate findMergeCandidate(MAIRGraph &G) {
         if (Loops.getLoopFor(PP1Block) != Loops.getLoopFor(PP2Block))
           continue;
       }
-      // Retain the post-dominating site so contraction sinks observations.
-      return {&PP2, &PP1};
+      // Sinking keeps an observation as late as the region both points share
+      // allows, which is the default: contract into the post-dominating site.
+      if (!hasPinnedObservation(PP1))
+        return {&PP2, &PP1};
+      // The earlier point holds an observation that must not move later, so the
+      // only direction left is to hoist PP2's observations into PP1. Hoisting a
+      // check is sound here because the edge tests above already guarantee
+      // PP1 dom PP2 and PP2 postdom PP1: the two points run on exactly the same
+      // executions, so a check moved from PP2 to PP1 cannot end up on a path
+      // that never reaches the access it guards. It stays ahead of the access
+      // too, which is the property AddressSanitizer pins its observations for.
+      if (!Config.allowsHoist())
+        continue;
+      if (!llvm::all_of(PP2, [&](const Observation &Obs) {
+            return Obs.isAvailableAt(PP1.getAnchor(), G.getDominatorTree());
+          }))
+        continue;
+      return {&PP1, &PP2};
     }
   }
   return {};

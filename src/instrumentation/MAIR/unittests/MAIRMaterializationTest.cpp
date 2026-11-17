@@ -843,3 +843,48 @@ exit:
 }
 
 } // namespace
+
+// A backend that corrupts the function instead of lowering the observation. A
+// real one only gets here through a bug, but that is the case instantiate() has
+// to survive: it must report the invalid IR, not abort the compiler.
+class CorruptingBackend final : public MAIRObservationBackend {
+public:
+  Error prepare(const MAIRMaterializationPlan &) override {
+    return Error::success();
+  }
+
+  void emit(const MaterializedProgramPoint &, IRBuilderBase &Builder) override {
+    // A terminator in the middle of a block is never valid IR.
+    Builder.CreateRetVoid();
+  }
+};
+
+TEST(MAIRMaterialization, ReturnsInvalidIRAsAnErrorInsteadOfAborting) {
+  LLVMContext Ctx;
+  auto M = parseMaterializationModule(R"IR(
+define void @f(ptr %p) {
+entry:
+  %v = load i32, ptr %p, align 4
+  ret void
+}
+)IR",
+                                      Ctx);
+  ASSERT_TRUE(M);
+  Function &F = *M->getFunction("f");
+  MAIRGraph Graph = buildMaterializationGraph(F);
+  ASSERT_TRUE(Graph.verify());
+
+  PassInstrumentationCallbacks PIC;
+  FunctionAnalysisManager FAM;
+  registerMaterializationAnalyses(FAM, PIC);
+  CorruptingBackend Backend;
+
+  auto Result = Graph.instantiate(FAM, Backend);
+  ASSERT_FALSE(Result);
+  EXPECT_NE(
+      toString(Result.takeError()).find("Patch C produced invalid LLVM IR"),
+      std::string::npos);
+  // The graph is only consumed on success, so a caller that decides to bail out
+  // can still inspect it.
+  EXPECT_TRUE(Graph.isLive());
+}

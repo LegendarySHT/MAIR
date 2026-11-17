@@ -13,3 +13,6 @@ void set(char *dst, long n) { __builtin_memset(dst, 0, n); }
 // CHECK: call void @__tsan_write_range
 // CHECK-NOT: call {{.*}} @__tsan_memset
 // CHECK-NOT: call void @__tsan_read_range
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

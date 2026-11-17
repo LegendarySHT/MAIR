@@ -110,7 +110,11 @@ add_subdirectory(tsan)
 add_subdirectory(ubsan)
 add_subdirectory(msan)
 add_subdirectory(xsan)
-add_subdirectory(MAIR)
+# check-mair drives mair-opt and the MAIR unit tests, neither of which exists
+# when the build has no MAIR (see XSAN_HAS_MAIR in ConfigLLVMCompiler.cmake).
+if(XSAN_HAS_MAIR)
+  add_subdirectory(MAIR)
+endif()
 
 
 

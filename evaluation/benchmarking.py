@@ -62,6 +62,10 @@ XSan initialization time is generally smaller than the sum of selected sanitizer
 '''
 INIT_TIMES = {
     'asan': 1.798,
+    # The MAIR tiers are ASan builds with a different compile-time pipeline,
+    # so their runtime initialization cost is the ASan one.
+    'asan-mair-build': 1.798,
+    'asan-mair-opt': 1.798,
     'msan': 1.918,
     'tsan': 6.373,
     'ubsan': 0.281,
@@ -79,6 +83,8 @@ INIT_TIMES = {
 SANITIZERS = [
     "raw",
     "asan",
+    "asan-mair-build",
+    "asan-mair-opt",
     "msan",
     "tsan",
     "ubsan",
@@ -382,6 +388,13 @@ class Benchmarker:
         '''
         benchmarking the specified executable on the specified corpus
         '''
+        # Packages are not necessarily built for every mode; a missing
+        # artefact means "no data for this tier", not a crashed benchmark run.
+        binary = self.bench.directory / f"{self.bench.program}.{sanitizer}"
+        if not binary.exists():
+            print(f"\t{sanitizer:12s} for {self.bench.program:15s}: not built")
+            return None, None
+
         env = os.environ.copy()
         if env_str is not None:
             kv_split_idx = env_str.find('=')
@@ -418,13 +431,13 @@ class Benchmarker:
                     sanitizer, self.data[idx], self.data_rss[idx], skip=True)
                 continue
             time_2d, rss_2d = self._benchmarking_one_sanitizer(sanitizer)
-            if sanitizer == 'raw':
-                self.base = time_2d
-                self.base_rss = rss_2d
             if time_2d is None:
                 print(
                     f"\t{sanitizer:12s} for {self.bench.program:15s}: not found")
                 continue
+            if sanitizer == 'raw':
+                self.base = time_2d
+                self.base_rss = rss_2d
             self.done.add(sanitizer)
             self.data[idx] = time_2d
             self.data_rss[idx] = rss_2d

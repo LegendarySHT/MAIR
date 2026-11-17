@@ -11,6 +11,7 @@
 #include "clang/Driver/ToolChain.h"
 #include "clang/Options/Options.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Path.h"
@@ -437,8 +438,11 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
                    options::OPT_fno_sanitize_handler_preserve_all_regs,
                    HandlerPreserveAllRegs) &&
       MinimalRuntime && (Triple.isAArch64() || Triple.isX86_64());
+  // -fsanitize-trap-loop 是 clang 23 新增的选项，LLVM 22 的 clang 里没有。
+#if LLVM_VERSION_MAJOR >= 23
   TrapLoop = Args.hasFlag(options::OPT_fsanitize_trap_loop,
                           options::OPT_fno_sanitize_trap_loop, false);
+#endif
 
   // The object size sanitizer should not be enabled at -O0.
   Arg *OptLevel = Args.getLastArg(options::OPT_O_Group);
@@ -622,12 +626,15 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
       Arg->claim();
       SanitizerMask Remove = parseArgValues(D, Arg, DiagnoseErrors);
       AllRemove |= expandSanitizerGroups(Remove);
-    } else if (Arg->getOption().matches(
-                   options::OPT_fsanitize_ignore_for_ubsan_feature_EQ)) {
+    }
+#if LLVM_VERSION_MAJOR >= 23
+    else if (Arg->getOption().matches(
+                 options::OPT_fsanitize_ignore_for_ubsan_feature_EQ)) {
       Arg->claim();
       IgnoreForUbsanFeature |=
           expandSanitizerGroups(parseArgValues(D, Arg, DiagnoseErrors));
     }
+#endif
   }
 
   std::pair<SanitizerMask, SanitizerMask> IncompatibleGroups[] = {
@@ -1231,7 +1238,9 @@ SanitizerArgs::SanitizerArgs(const ToolChain &TC,
   MergeHandlers.Mask |= MergeKinds;
 
   AnnotateDebugInfo.Mask |= AnnotateDebugInfoKinds;
+#if LLVM_VERSION_MAJOR >= 23
   SuppressUBSanFeature.Mask |= IgnoreForUbsanFeature;
+#endif
 
   // Zero out SkipHotCutoffs for unused sanitizers
   SkipHotCutoffs.clear(~Sanitizers.Mask);
@@ -1412,10 +1421,12 @@ void SanitizerArgs::addArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
     return;
   CmdArgs.push_back(Args.MakeArgString("-fsanitize=" + toString(Sanitizers)));
 
+#if LLVM_VERSION_MAJOR >= 23
   if (!SuppressUBSanFeature.empty())
     CmdArgs.push_back(
         Args.MakeArgString("-fsanitize-ignore-for-ubsan-feature=" +
                            toString(SuppressUBSanFeature)));
+#endif
 
   if (!RecoverableSanitizers.empty())
     CmdArgs.push_back(Args.MakeArgString("-fsanitize-recover=" +
@@ -1506,8 +1517,10 @@ void SanitizerArgs::addArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
   if (MinimalRuntime)
     CmdArgs.push_back("-fsanitize-minimal-runtime");
 
+#if LLVM_VERSION_MAJOR >= 23
   if (TrapLoop)
     CmdArgs.push_back("-fsanitize-trap-loop");
+#endif
 
   if (HandlerPreserveAllRegs)
     CmdArgs.push_back("-fsanitize-handler-preserve-all-regs");
@@ -1642,10 +1655,12 @@ SanitizerMask parseArgValues(const Driver &D, const llvm::opt::Arg *A,
        A->getOption().matches(options::OPT_fsanitize_merge_handlers_EQ) ||
        A->getOption().matches(options::OPT_fno_sanitize_merge_handlers_EQ) ||
        A->getOption().matches(options::OPT_fsanitize_annotate_debug_info_EQ) ||
-       A->getOption().matches(
-           options::OPT_fno_sanitize_annotate_debug_info_EQ) ||
-       A->getOption().matches(
-           options::OPT_fsanitize_ignore_for_ubsan_feature_EQ)) &&
+       A->getOption().matches(options::OPT_fno_sanitize_annotate_debug_info_EQ)
+#if LLVM_VERSION_MAJOR >= 23
+       || A->getOption().matches(
+              options::OPT_fsanitize_ignore_for_ubsan_feature_EQ)
+#endif
+       ) &&
       "Invalid argument in parseArgValues!");
   SanitizerMask Kinds;
   for (int i = 0, n = A->getNumValues(); i != n; ++i) {

@@ -128,6 +128,60 @@ TEST(MAOpt, BuildsOptimizesAndExposesProgramPointObservations) {
   EXPECT_TRUE(O1.getGraph().verify());
 }
 
+TEST(MAOpt, SkipsFunctionWithIrreducibleCycle) {
+  llvm::LLVMContext Ctx;
+  std::unique_ptr<llvm::Module> M = parseModule(R"IR(
+define void @f(ptr %p, i1 %entry.sel, i1 %cycle.sel, i1 %again) {
+entry:
+  br label %header
+header:
+  %i = phi i64 [ 0, %entry ], [ %next, %latch ]
+  br i1 %again, label %dispatch, label %exit
+dispatch:
+  br i1 %entry.sel, label %a, label %b
+a:
+  br i1 %cycle.sel, label %b, label %latch
+b:
+  br i1 %cycle.sel, label %a, label %latch
+latch:
+  %pi = getelementptr i8, ptr %p, i64 %i
+  %v = load i8, ptr %pi, align 1
+  %next = add i64 %i, 1
+  br label %header
+exit:
+  ret void
+}
+)IR",
+                                                Ctx);
+  ASSERT_NE(M, nullptr);
+  llvm::Function &F = *M->getFunction("f");
+
+  llvm::PassInstrumentationCallbacks PIC;
+  llvm::FunctionAnalysisManager FAM;
+  FAM.registerPass([&] { return llvm::PassInstrumentationAnalysis(&PIC); });
+  FAM.registerPass([] { return llvm::TargetLibraryAnalysis(); });
+  FAM.registerPass([] { return llvm::TargetIRAnalysis(); });
+  FAM.registerPass([] { return llvm::AssumptionAnalysis(); });
+  FAM.registerPass([] { return llvm::DominatorTreeAnalysis(); });
+  FAM.registerPass([] { return llvm::PostDominatorTreeAnalysis(); });
+  FAM.registerPass([] { return llvm::LoopAnalysis(); });
+  FAM.registerPass([] { return llvm::ScalarEvolutionAnalysis(); });
+
+  MAOpt<> Opt(F, FAM, &PIC, /*KeepFullDebug=*/false);
+  EXPECT_FALSE(Opt.hasModifiedIR());
+  MAIRGraph &Graph = Opt.build();
+  // Skipping has to be total: no program points, no observations, no IR
+  // rewrite, and optimize() refuses the empty graph so the sanitizer falls
+  // back to the legacy path.
+  EXPECT_TRUE(Graph.empty());
+  EXPECT_TRUE(Graph.verify());
+  EXPECT_TRUE(Opt.getProgramPointObservations().empty());
+  EXPECT_FALSE(Opt.hasModifiedIR());
+  llvm::Error Err = Opt.optimize();
+  EXPECT_TRUE(static_cast<bool>(Err));
+  llvm::consumeError(std::move(Err));
+}
+
 TEST(MAOpt, RetainsSelectedObservations) {
   llvm::LLVMContext Ctx;
   std::unique_ptr<llvm::Module> M = parseModule(R"(
@@ -1383,6 +1437,80 @@ entry:
   EXPECT_FALSE(hasSuccessor(Graph, *Store, *Atomic));
 }
 
+TEST(MAIRGraph, PropagatesChildBarriersAcrossMoreGraphsThanInlineCapacity) {
+  llvm::LLVMContext Ctx;
+  auto M = parseModule(R"IR(
+declare void @clobber(ptr)
+
+define void @f(ptr %p, i32 %n) {
+entry:
+  br label %loop0
+loop0:
+  %i0 = phi i32 [ 0, %entry ], [ %i0.n, %loop0 ]
+  %i0.n = add i32 %i0, 1
+  %c0 = icmp slt i32 %i0.n, %n
+  br i1 %c0, label %loop0, label %loop1
+loop1:
+  %i1 = phi i32 [ 0, %loop0 ], [ %i1.n, %loop1 ]
+  %i1.n = add i32 %i1, 1
+  %c1 = icmp slt i32 %i1.n, %n
+  br i1 %c1, label %loop1, label %loop2
+loop2:
+  %i2 = phi i32 [ 0, %loop1 ], [ %i2.n, %loop2 ]
+  %i2.n = add i32 %i2, 1
+  %c2 = icmp slt i32 %i2.n, %n
+  br i1 %c2, label %loop2, label %loop3
+loop3:
+  %i3 = phi i32 [ 0, %loop2 ], [ %i3.n, %loop3 ]
+  %i3.n = add i32 %i3, 1
+  %c3 = icmp slt i32 %i3.n, %n
+  br i1 %c3, label %loop3, label %loop4
+loop4:
+  %i4 = phi i32 [ 0, %loop3 ], [ %i4.n, %loop4 ]
+  %i4.n = add i32 %i4, 1
+  %c4 = icmp slt i32 %i4.n, %n
+  br i1 %c4, label %loop4, label %loop5
+loop5:
+  %i5 = phi i32 [ 0, %loop4 ], [ %i5.n, %loop5 ]
+  %i5.n = add i32 %i5, 1
+  %c5 = icmp slt i32 %i5.n, %n
+  br i1 %c5, label %loop5, label %loop6
+loop6:
+  %i6 = phi i32 [ 0, %loop5 ], [ %i6.n, %loop6 ]
+  %i6.n = add i32 %i6, 1
+  %c6 = icmp slt i32 %i6.n, %n
+  br i1 %c6, label %loop6, label %loop7
+loop7:
+  %i7 = phi i32 [ 0, %loop6 ], [ %i7.n, %loop7 ]
+  %v7 = load i32, ptr %p
+  call void @clobber(ptr %p)
+  %i7.n = add i32 %i7, 1
+  %c7 = icmp slt i32 %i7.n, %n
+  br i1 %c7, label %loop7, label %exit
+exit:
+  ret void
+}
+)IR",
+                       Ctx);
+  ASSERT_TRUE(M);
+
+  llvm::Function &F = *M->getFunction("f");
+  MAIRGraph Graph = createGraphWithExplicitAnalyses<CallBarrierTrait>(F);
+  ASSERT_TRUE(Graph.verify());
+
+  // Root plus one graph per loop: nine entries, one past the inline capacity of
+  // MAIRGraph::graphs(). Reversing that list is only safe on a named local.
+  ASSERT_EQ(Graph.graphs().size(), 9u);
+  ASSERT_EQ(Graph.children().size(), 8u);
+
+  // The call sits in the last loop only, so the root can pick the barrier up
+  // only by visiting children before their parent.
+  EXPECT_FALSE(Graph.children()[0]->hasForwardBarrier());
+  EXPECT_TRUE(Graph.children()[7]->hasForwardBarrier());
+  EXPECT_TRUE(Graph.hasForwardBarrier());
+  EXPECT_TRUE(Graph.hasBackwardBarrier());
+}
+
 TEST(MAIRGraphPass, SpecialObservationsRemainAtTheirOriginalProgramPoint) {
   llvm::LLVMContext Ctx;
   auto M = parseModule(R"IR(
@@ -1772,7 +1900,7 @@ exit:
   EXPECT_EQ(BodyConstant->getAPInt(), llvm::APInt(65, 4));
 }
 
-TEST(MAIRLoopAnalysis, RejectsIrreducibleRepeatedSiteBeforeBuilding) {
+TEST(MAIRLoopAnalysis, SkipsIrreducibleRepeatedSiteBeforeBuilding) {
   llvm::LLVMContext Ctx;
   auto M = parseModule(R"IR(
 define void @f(i1 %entry.sel, i1 %cycle.sel, i1 %again) {
@@ -1799,8 +1927,10 @@ exit:
   llvm::PassInstrumentationCallbacks PIC;
   llvm::FunctionAnalysisManager FAM;
   registerLoopTestAnalyses(FAM, PIC);
-  EXPECT_DEATH_IF_SUPPORTED((void)createGraphWithFunctionAnalyses(F, FAM),
-                            "irreducible");
+  MAIRGraph Graph = createGraphWithFunctionAnalyses(F, FAM);
+  EXPECT_TRUE(Graph.empty());
+  EXPECT_TRUE(Graph.verify());
+  EXPECT_TRUE(Graph.children().empty());
 }
 
 TEST(MAIRLoopAnalysis, WidensMaximumBackedgeCountWithoutWrapping) {

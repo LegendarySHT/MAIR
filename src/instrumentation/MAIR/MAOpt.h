@@ -4,9 +4,11 @@
 #include "MAIR/Materialization/MAIRMaterialization.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/PassInstrumentation.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Error.h"
 
 #include <cassert>
@@ -15,8 +17,28 @@
 
 namespace mair {
 
-/// Whether sanitizer-side MAIR optimization was explicitly enabled.
-inline bool isMAIROptEnabled() { return std::getenv("MAIR") != nullptr; }
+/// How much of the MAIR pipeline the sanitizer should run.
+///
+/// `MAIR=0` (or an empty value) turns MAIR off, `MAIR=build` builds and
+/// materializes the graph without running any graph transform, and `MAIR=1`
+/// (or any other non-empty value) runs the full pipeline. BuildOnly is what
+/// makes an ablation possible: it measures the framework's cost separately
+/// from the optimization's benefit.
+enum class Level { Off, BuildOnly, Optimize };
+
+inline Level getMAIRLevel() {
+  const char *Value = std::getenv("MAIR");
+  if (!Value || Value[0] == '\0')
+    return Level::Off;
+  if (llvm::StringRef(Value) == "0")
+    return Level::Off;
+  if (llvm::StringRef(Value) == "build")
+    return Level::BuildOnly;
+  return Level::Optimize;
+}
+
+/// Whether sanitizer-side MAIR is engaged at all.
+inline bool isMAIROptEnabled() { return getMAIRLevel() != Level::Off; }
 
 /// Owns the complete MAIR lifecycle for one mutable LLVM function.
 ///
@@ -32,8 +54,10 @@ public:
 
   MAOpt(llvm::Function &F, llvm::FunctionAnalysisManager &FAM,
         llvm::PassInstrumentationCallbacks *PIC, bool KeepFullDebug,
-        MAIROptimizationConfig Config = MAIROptimizationConfig::generic())
-      : F(F), FAM(FAM), KeepFullDebug(KeepFullDebug), Config(Config) {
+        MAIROptimizationConfig Config = MAIROptimizationConfig::generic(),
+        Level PipelineLevel = Level::Optimize)
+      : F(F), FAM(FAM), KeepFullDebug(KeepFullDebug), Config(Config),
+        PipelineLevel(PipelineLevel) {
     registerMAIRGraphAnalyses(GAM, PIC, &FAM);
   }
 
@@ -42,6 +66,19 @@ public:
 
   MAIRGraph &build() {
     assert(!Graph && "MAOpt graph has already been built");
+    // Skipping before normalization matters: normalizeMAIRLoops rewrites the
+    // CFG, and a function that MAIR refuses has to come out untouched so the
+    // legacy sanitizer sees exactly the IR it would have seen without MAIR.
+    if (MAIRGraph::hasUnrepresentableCycle(F, FAM)) {
+      // DEBUG_WITH_TYPE instead of LLVM_DEBUG: this is a header, so it cannot
+      // define DEBUG_TYPE without leaking that macro into every includer.
+      DEBUG_WITH_TYPE("mair", llvm::dbgs()
+                                  << "MAIR: skipping " << F.getName()
+                                  << " (irreducible or unrepresented cycle)\n");
+      Skipped = true;
+      Graph = std::make_unique<MAIRGraph>(F, Config);
+      return *Graph;
+    }
     ModifiedIR = normalizeMAIRLoops(F, FAM);
     Graph = std::make_unique<MAIRGraph>(
         MAIRGraph::template build<BarrierTrait>(F, FAM, Config));
@@ -66,12 +103,25 @@ public:
   }
 
   llvm::Error optimize() {
+    if (Skipped)
+      return llvm::createStringError(
+          llvm::inconvertibleErrorCode(),
+          "MAIR skipped a function with irreducible or unrepresented cycles");
     if (!Graph)
       return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                      "MAOpt graph has not been built");
     if (Optimized)
       return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                      "MAOpt graph has already been optimized");
+
+    // BuildOnly materializes the graph exactly as constructed: no pass runs,
+    // so every access keeps its own observation. That is the ablation level
+    // that isolates MAIR's framework cost from its transformations.
+    if (PipelineLevel == Level::BuildOnly) {
+      Optimized = true;
+      rebuildProgramPointObservations();
+      return llvm::Error::success();
+    }
 
     if (KeepFullDebug)
       buildMAIRGraphOgPipeline(PM);
@@ -90,6 +140,10 @@ public:
 
   llvm::Expected<MAIRInstantiationResult>
   instantiate(MAIRObservationBackend &Backend) {
+    if (Skipped)
+      return llvm::createStringError(
+          llvm::inconvertibleErrorCode(),
+          "MAIR skipped a function with irreducible or unrepresented cycles");
     if (!Graph)
       return llvm::createStringError(llvm::inconvertibleErrorCode(),
                                      "MAOpt graph has not been built");
@@ -144,6 +198,8 @@ private:
   bool KeepFullDebug;
   MAIROptimizationConfig Config;
   bool Optimized = false;
+  bool Skipped = false;
+  Level PipelineLevel = Level::Optimize;
   bool ModifiedIR = false;
   std::unique_ptr<MAIRGraph> Graph;
   MAIRGraphAnalysisManager GAM;

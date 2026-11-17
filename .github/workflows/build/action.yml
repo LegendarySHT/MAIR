@@ -28,12 +28,28 @@ runs:
       run: |
         wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
         sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy main"
-        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-15 main"
+        # The versioned channel is what actually publishes the clang-N /
+        # llvm-N-dev packages installed below; pinning it to 15 meant any other
+        # llvm_version failed at apt-get install.
+        sudo add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-${{ inputs.llvm_version }} main"
         # Workaround for issue https://github.com/llvm/llvm-project/issues/133861
         sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/lib /usr/lib/lib
         sudo ln -s /usr/lib/llvm-${{ inputs.llvm_version }}/include /usr/lib/include
         sudo apt-get update
-        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev
+        # lld-N is not pulled in by clang-N / llvm-N-dev on these channels, and
+        # its absence is silent at build time: CMake's probe just falls back to
+        # the system linker. The LIT suites are a different story -- lit adds
+        # -fuse-ld=lld whenever COMPILER_RT_HAS_LLD is set, so every single test
+        # dies at link time with "invalid linker name in argument
+        # '-fuse-ld=lld'". The ubuntu-22.04 runner image happens to ship
+        # ld.lld-15, which is why only the 22 leg went red and the 15 leg looked
+        # healthy.
+        #
+        # libgtest-dev: the MAIR unit tests used to pick gtest up from
+        # llvm-project/third-party, which is not part of this repo. Against an
+        # installed LLVM there is no such directory, so they need a system GTest
+        # (see src/instrumentation/MAIR/unittests/CMakeLists.txt).
+        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev lld-${{ inputs.llvm_version }} libgtest-dev
 
     - name: Build XSan
       shell: bash

@@ -9,6 +9,9 @@ config.apple_platform = "@TSAN_TEST_APPLE_PLATFORM@"
 config.apple_platform_min_deployment_target_flag = "@TSAN_TEST_MIN_DEPLOYMENT_TARGET_FLAG@"
 config.deflake_threshold = "@TSAN_TEST_DEFLAKE_THRESHOLD@"
 config.target_arch = "@TSAN_TEST_TARGET_ARCH@"
+# Whether the selected backend has MAIR at all (LLVM 22+). The mair-* TestCases
+# are gated on the resulting "mair" feature; see src/cmake/ConfigLLVMCompiler.cmake.
+config.xsan_has_mair = ("@XSAN_HAS_MAIR@" == "TRUE")
 
 # Load common config for all compiler-rt lit tests.
 lit_config.load_config(config, "@XSAN_COMMON_LIT_CONFIGURE_PATH@")

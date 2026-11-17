@@ -91,7 +91,7 @@ static cl::opt<bool>
     ClMsanParamRetval("sanitize-memory-param-retval",
                       cl::desc("Simulates -fsanitize-memory-param-retval"),
                       cl::Hidden,
-#if LLVM_VERSION_MAJOR >= 23
+#if LLVM_VERSION_MAJOR >= 22
                       cl::init(true)
 #else
                       cl::init(false)
@@ -256,7 +256,7 @@ void addAsanToMPM(ModulePassManager &MPM, OptimizationLevel Level) {
   (void)Level;
 
   const auto &Opts = obtainAsanPassArgs();
-#if LLVM_VERSION_MAJOR >= 23
+#if LLVM_VERSION_MAJOR >= 22
   MPM.addPass(AddressSanitizerPass(Opts.Opts, Opts.UseGlobalGC,
                                    Opts.UseOdrIndicator, Opts.DestructorKind));
 #else
@@ -276,7 +276,7 @@ void addTsanToMPM(ModulePassManager &MPM, OptimizationLevel Level) {
 
 void addMsanToMPM(ModulePassManager &MPM, llvm::OptimizationLevel Level) {
   const auto &Opts = obtainMsanPassArgs();
-#if LLVM_VERSION_MAJOR >= 23
+#if LLVM_VERSION_MAJOR >= 22
   MPM.addPass(MemorySanitizerPass(Opts.Opts));
   // XSan records sanitizer instrumentation effects only. Post-MSan optimizer
   // rewrites are pure optimization semantics, so keep them out of XSAN_PASS

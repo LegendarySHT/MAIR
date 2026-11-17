@@ -1,6 +1,7 @@
 #include "MAIR/MAIRPasses.h"
 
 #include "MAIR/Analysis/LoopAnalysis.h"
+#include "MAIR/Analysis/MAIRAliasAnalysis.h"
 #include "MAIR/Analysis/MAIRStatAnalysis.h"
 #include "MAIR/Analysis/RedundantObservationAnalysis.h"
 #include "MAIR/Transforms/CommonObservationMotionPass.h"
@@ -11,6 +12,7 @@
 #include "MAIR/Transforms/SimplifyGraphPass.h"
 
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Analysis/BasicAliasAnalysis.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/Function.h"
@@ -84,6 +86,22 @@ void registerMAIRGraphAnalyses(MAIRGraphAnalysisManager &AM,
                                FunctionAnalysisManager *FAM) {
   AM.registerPass([PIC] { return PassInstrumentationAnalysis(PIC); });
   AM.registerPass([FAM] { return LoopAnalysis(FAM); });
+  AM.registerPass([FAM] { return MAIRAliasAnalysis(FAM); });
+  if (FAM) {
+    // The alias bridge reads AAManager out of the function analysis manager.
+    // A manager built by PassBuilder already has one, and registerPass refuses
+    // to replace a registered pass, so this only fires for a tool that
+    // assembles its own manager (mair-opt) -- which otherwise could not answer
+    // the MustAlias questions at all. BasicAA is the only result registered:
+    // the questions asked here are about two pointer values being one address,
+    // and the other AAResults mostly answer NoAlias, which never merges.
+    FAM->registerPass([] { return BasicAA(); });
+    FAM->registerPass([] {
+      AAManager AA;
+      AA.registerFunctionAnalysis<BasicAA>();
+      return AA;
+    });
+  }
 #define MAIR_GRAPH_ANALYSIS(NAME, CREATE_PASS)                                 \
   AM.registerPass([] { return CREATE_PASS; });
 #include "MAIR/PassRegistry.def"

@@ -26,28 +26,10 @@ namespace mair {
 
 namespace {
 
-bool isValueAvailableAt(const Value *Value, const Instruction &Anchor,
-                        const DominatorTree &DT) {
-  const auto *Def = dyn_cast_or_null<Instruction>(Value);
-  if (!Def)
-    return true;
-  return Def != &Anchor && DT.dominates(Def, &Anchor);
-}
-
 bool isObservationAvailableAt(const Observation &Obs,
                               const ProgramPoint &Target,
                               const DominatorTree &DT) {
-  const Instruction &Anchor = Target.getAnchor();
-  const AbstractAccess *Location = Obs.getContiguousRegion();
-  if (!Location)
-    return false;
-  if (!isValueAvailableAt(Location->getBase(), Anchor, DT))
-    return false;
-  if (Location->getOffset().isSymbol() &&
-      !isValueAvailableAt(Location->getOffset().getSymbol(), Anchor, DT))
-    return false;
-  return !Location->getSize().isSymbol() ||
-         isValueAvailableAt(Location->getSize().getSymbol(), Anchor, DT);
+  return Obs.isAvailableAt(Target.getAnchor(), DT);
 }
 
 enum class MotionDirection { Hoist, Sink };

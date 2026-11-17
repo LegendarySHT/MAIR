@@ -281,7 +281,7 @@ TEST(MAIRLoopHierarchy, RetainingAnInnerObservationUpdatesTheWholeTree) {
   EXPECT_TRUE(Graph.verify());
 }
 
-TEST(MAIRLoopHierarchy, IrreducibleCyclesFailBeforeGraphConstruction) {
+TEST(MAIRLoopHierarchy, IrreducibleCyclesAreSkippedBeforeGraphConstruction) {
   llvm::LLVMContext Ctx;
   auto Module = parseModule(R"IR(
 define void @f(i1 %entry.side, i1 %again) {
@@ -298,7 +298,10 @@ exit:
                             Ctx);
   ASSERT_TRUE(Module);
   llvm::Function &Function = *Module->getFunction("f");
-  EXPECT_DEATH_IF_SUPPORTED((void)buildGraph(Function), "irreducible");
+  MAIRGraph Graph = buildGraph(Function);
+  EXPECT_TRUE(Graph.empty());
+  EXPECT_TRUE(Graph.verify());
+  EXPECT_TRUE(Graph.children().empty());
 }
 
 } // namespace

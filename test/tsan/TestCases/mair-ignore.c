@@ -19,3 +19,6 @@ entry:
 ; CHECK: invoke void @callee
 ; CHECK: call void @__tsan_ignore_thread_end
 ; CHECK: call void @__tsan_func_exit
+
+; MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+; REQUIRES: mair

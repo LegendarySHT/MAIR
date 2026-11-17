@@ -10,3 +10,6 @@ v4i f(int *p, v4b mask, v4i passthru) {
 // CHECK-LABEL: define {{.*}} @_Z1f
 // CHECK: call void @__asan_report_load4
 // CHECK: call <4 x i32> @llvm.masked.load
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

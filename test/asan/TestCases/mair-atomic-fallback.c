@@ -7,3 +7,6 @@ int f(int *p) {
 // CHECK-LABEL: define {{.*}} @f(
 // CHECK: call void @__asan_report_store4
 // CHECK: atomicrmw add
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

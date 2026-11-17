@@ -476,12 +476,20 @@ static cl::opt<int> ClDebugMin("as-debug-min", cl::desc("Debug min inst"),
 static cl::opt<int> ClDebugMax("as-debug-max", cl::desc("Debug max inst"),
                                cl::Hidden, cl::init(-1));
 
+static cl::opt<bool> ClMAIRForceFallback(
+    "mair-force-fallback", cl::Hidden, cl::init(false),
+    cl::desc("Testing only: pretend MAIR cannot materialize any function and "
+             "instrument every access with the legacy path"));
+
 STATISTIC(NumInstrumentedReads, "Number of instrumented reads");
 STATISTIC(NumInstrumentedWrites, "Number of instrumented writes");
 STATISTIC(NumOptimizedAccessesToGlobalVar,
           "Number of optimized accesses to global vars");
 STATISTIC(NumOptimizedAccessesToStackVar,
           "Number of optimized accesses to stack vars");
+STATISTIC(NumMAIRFunctionsFellBack,
+          "Number of functions instrumented one access at a time because MAIR "
+          "could not materialize its graph");
 
 namespace {
 
@@ -3923,7 +3931,16 @@ void FunctionStackPoisoner::handleDynamicAllocaCall(AllocaInst *AI) {
   // redzones, and OldSize is number of allocated blocks with
   // ElementSize size, get allocated memory size in bytes by
   // OldSize * ElementSize.
-  Value *OldSize = IRB.CreateAllocationSize(IntptrTy, AI);
+  // LLVM 22 removed IRBuilder::CreateAllocationSize(). Do not use
+  // AllocaInst::getAllocationSize() here: this is the *dynamic* alloca path, and
+  // getAllocationSize() returns std::nullopt unless the size is statically
+  // known. Compute sizeof(*AI) = arraySize * allocSize(allocatedType) instead,
+  // which is exactly what CreateAllocationSize() used to do.
+  const DataLayout &DL = AI->getDataLayout();
+  Value *ArraySize = IRB.CreateZExtOrTrunc(AI->getArraySize(), IntptrTy);
+  Value *ElementSize = ConstantInt::get(
+      IntptrTy, DL.getTypeAllocSize(AI->getAllocatedType()).getFixedValue());
+  Value *OldSize = IRB.CreateMul(ArraySize, ElementSize);
 
   // PartialSize = OldSize % 32
   Value *PartialSize = IRB.CreateAnd(OldSize, AllocaRzMask);
@@ -4170,52 +4187,89 @@ bool XsanAddressSanitizer::instrumentMAIRObservation(
   };
 
   Instruction *Source = SelectedSources.front();
-  Type *SourceType =
-      isa<LoadInst>(Source)
-          ? cast<LoadInst>(Source)->getType()
-          : cast<StoreInst>(Source)->getValueOperand()->getType();
   const auto *Size = dyn_cast_or_null<ConstantInt>(Obs.AccessSize);
-  bool CanUseOptimizedSite = SelectedSources.size() == 1 &&
-                             Obs.Source->getInstructions().size() == 1 &&
-                             Obs.Source->isContiguous() &&
-                             !SourceType->isVectorTy() && Size &&
-                             Size->getValue().getActiveBits() < 32;
+  const bool IsMerged = SelectedSources.size() > 1;
+  // A merged observation may cover several scalar accesses at once. The vector
+  // and masked paths still work one source instruction at a time, so an
+  // observation holding one of those falls back to per-source instrumentation.
+  bool CanUseOptimizedSite =
+      Obs.Source->isContiguous() && Size &&
+      Size->getValue().getActiveBits() < 32 &&
+      llvm::all_of(SelectedSources, [](Instruction *Selected) {
+        Type *AccessTy =
+            isa<LoadInst>(Selected)
+                ? cast<LoadInst>(Selected)->getType()
+                : cast<StoreInst>(Selected)->getValueOperand()->getType();
+        return !AccessTy->isVectorTy() && !AccessTy->isScalableTy();
+      });
   if (!CanUseOptimizedSite) {
     for (Instruction *Selected : SelectedSources)
       InstrumentAtSource(*Selected);
     return true;
   }
 
-  Value *SourceAddr = isa<LoadInst>(Source)
-                          ? cast<LoadInst>(Source)->getPointerOperand()
-                          : cast<StoreInst>(Source)->getPointerOperand();
-  TypeSize SourceStoreSize =
-      Source->getDataLayout().getTypeStoreSize(SourceType);
-  if (ClOpt && ClOptGlobals) {
-    GlobalVariable *G =
-        dyn_cast<GlobalVariable>(getUnderlyingObject(SourceAddr));
-    if (G && (!ClInitializers || GlobalIsLinkerInitialized(G)) &&
-        isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
-      NumOptimizedAccessesToGlobalVar++;
-      return false;
+  // The global and stack shortcuts reason about a single access at a single
+  // address, so they only hold while the observation maps to one source.
+  if (!IsMerged) {
+    Type *SourceType =
+        isa<LoadInst>(Source)
+            ? cast<LoadInst>(Source)->getType()
+            : cast<StoreInst>(Source)->getValueOperand()->getType();
+    Value *SourceAddr = isa<LoadInst>(Source)
+                            ? cast<LoadInst>(Source)->getPointerOperand()
+                            : cast<StoreInst>(Source)->getPointerOperand();
+    TypeSize SourceStoreSize =
+        Source->getDataLayout().getTypeStoreSize(SourceType);
+    if (ClOpt && ClOptGlobals) {
+      GlobalVariable *G =
+          dyn_cast<GlobalVariable>(getUnderlyingObject(SourceAddr));
+      if (G && (!ClInitializers || GlobalIsLinkerInitialized(G)) &&
+          isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
+        NumOptimizedAccessesToGlobalVar++;
+        return false;
+      }
     }
-  }
-  if (ClOpt && ClOptStack) {
-    if (isa<AllocaInst>(getUnderlyingObject(SourceAddr)) &&
-        isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
-      NumOptimizedAccessesToStackVar++;
-      return false;
+    if (ClOpt && ClOptStack) {
+      if (isa<AllocaInst>(getUnderlyingObject(SourceAddr)) &&
+          isSafeAccess(ObjSizeVis, SourceAddr, SourceStoreSize)) {
+        NumOptimizedAccessesToStackVar++;
+        return false;
+      }
     }
   }
 
   assert(Builder.GetInsertBlock() &&
          Builder.GetInsertPoint() != Builder.GetInsertBlock()->end());
   Instruction *InsertBefore = &*Builder.GetInsertPoint();
-  MaybeAlign Alignment = isa<LoadInst>(Source)
-                             ? MaybeAlign(cast<LoadInst>(Source)->getAlign())
-                             : MaybeAlign(cast<StoreInst>(Source)->getAlign());
+  // A merged range is no better aligned than its weakest source, so take the
+  // minimum rather than trusting the first source. The value only steers the
+  // aligned fast path; claiming too much alignment would skip a real check.
+  // mair-merged-range-rw.cpp is the case that watches this: an 8-byte read/write
+  // range whose sources are 4-byte aligned must keep taking the two-probe path.
+  MaybeAlign Alignment;
+  for (Instruction *Selected : SelectedSources) {
+    Align SourceAlign = isa<LoadInst>(Selected)
+                            ? cast<LoadInst>(Selected)->getAlign()
+                            : cast<StoreInst>(Selected)->getAlign();
+    if (!Alignment || SourceAlign.value() < Alignment->value())
+      Alignment = SourceAlign;
+  }
   TypeSize SizeInBits = TypeSize::getFixed(Size->getZExtValue() * 8);
+  // A ReadWrite observation reports as a write. The load and store entry points
+  // run the same shadow check and differ only in how they describe the access,
+  // so this is not a detection gap; it also matches what the legacy path does
+  // for the one instruction that is intrinsically ReadWrite, an atomicrmw or a
+  // cmpxchg, which it classifies as a write as well.
   bool IsWrite = Obs.Kind != mair::AccessKind::Read;
+  // The check carries the location of the access it guards, and OrigIns is what
+  // carries it: instrumentAddress copies OrigIns' DebugLoc onto the reporting
+  // call, while the shadow load, the compare and the branch of the same check
+  // come from one IRBuilder seeded at InsertBefore. Passing Source is therefore
+  // what keeps a merged range's report on the first source's line -- the builder
+  // cannot do it, because the slow path's report call is emitted after
+  // SetInsertPoint() has moved the builder onto a branch it just created, which
+  // has no location at all. Setting a location here instead would be redundant;
+  // mair-debugloc.cpp pins the property from the outside.
   doInstrumentAddress(this, Source, InsertBefore, Obs.Address, Alignment,
                       1U << Mapping.Scale, SizeInBits, IsWrite, nullptr,
                       UseCalls, ClForceExperiment, RTCI);
@@ -4267,13 +4321,19 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
   mair::MAOpt<AsanMAIRBarrierTrait> Opt(
       F, FAM, nullptr,
       /*KeepFullDebug=*/false,
-      mair::MAIROptimizationConfig::forAddressSanitizer());
+      mair::MAIROptimizationConfig::forAddressSanitizer(),
+      mair::getMAIRLevel());
   Opt.build();
   FunctionModified |= Opt.hasModifiedIR();
 
   // Reads or writes disabled by the instrumentation flags are not sanitizer
   // observations. Drop them before optimization so a disabled access cannot
   // cover a later one and then disappear, taking that check with it.
+  //
+  // The order also keeps the flags honest for merged ranges: locationmerge only
+  // runs inside optimize(), so filtering first means a disabled read never
+  // becomes half of a ReadWrite observation that the flag can no longer remove.
+  // Moving this block below optimize() would reintroduce exactly that case.
   if (!ClInstrumentReads || !ClInstrumentWrites) {
     SmallPtrSet<const mair::Observation *, 32> Kept;
     for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
@@ -4290,6 +4350,14 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
     Opt.retainObservations(Kept);
   }
 
+  // Snapshot the sources the graph models before optimize(). Optimization
+  // erases observations that a dominating check provably covers -- two loads of
+  // the same address collapse into one, as in mair-atomic.cpp -- and the
+  // instructions behind those erased observations must stay out of the legacy
+  // loop below, or the merge buys nothing. Taking the snapshot afterwards would
+  // look safer but would re-instrument every erased source one by one; the
+  // safety of doing it here rests on redundant-observation elimination only
+  // dropping an observation when a dominating one covers it.
   SmallPtrSet<const Instruction *, 32> MAIRModeledSources;
   for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
     (void)PP;
@@ -4298,8 +4366,19 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
         MAIRModeledSources.insert(Source);
   }
 
-  if (Error Err = Opt.optimize())
-    report_fatal_error(Twine(toString(std::move(Err))));
+  // MAIR is an optimization layered on top of the legacy instrumentation,
+  // never a correctness requirement. Whatever stops the graph from being
+  // materialized -- a pass that leaves a graph preflight refuses, or a shape the
+  // backend cannot lower -- has to cost optimization only. Both failure points
+  // below record a reason and clear UseMAIR, which drops every MAIR decision so
+  // the legacy loop at the end of this function instruments all accesses again.
+  std::string MAIRFallbackReason;
+  bool UseMAIR = true;
+
+  if (Error Err = Opt.optimize()) {
+    MAIRFallbackReason = toString(std::move(Err));
+    UseMAIR = false;
+  }
 
   auto IsElidedByNativeAsanOpt = [&](Instruction &Source) {
     auto *LI = dyn_cast<LoadInst>(&Source);
@@ -4324,49 +4403,67 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
   auto CanInstrumentViaMAIR = [&](const mair::Observation &Obs) {
     if ((ClDebugMin >= 0 && ClDebugMax >= 0) || !Obs.isContiguous() ||
         Obs.isVolatile() || Obs.isCallLike() ||
-        Obs.getInstructions().size() != 1 || !Obs.hasConcreteRange())
+        Obs.getInstructions().empty() || !Obs.hasConcreteRange())
       return false;
 
-    Instruction *Source = Obs.getInstructions().front();
-    auto *LI = dyn_cast<LoadInst>(Source);
-    auto *SI = dyn_cast<StoreInst>(Source);
-    if ((!LI && !SI) || (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
-      return false;
+    // A merged observation stands for several original accesses. Each of them
+    // must still be instrumentable on its own terms; one ineligible source
+    // rejects the whole observation and sends it back to per-source
+    // instrumentation.
+    for (Instruction *Source : Obs.getInstructions()) {
+      auto *LI = dyn_cast<LoadInst>(Source);
+      auto *SI = dyn_cast<StoreInst>(Source);
+      if ((!LI && !SI) || (LI && LI->isVolatile()) || (SI && SI->isVolatile()))
+        return false;
 
-    SmallVector<InterestingMemoryOperand, 1> InterestingOperands;
-    getInterestingMemoryOperands(Source, InterestingOperands, TTI);
-    if (InterestingOperands.size() != 1)
-      return false;
+      SmallVector<InterestingMemoryOperand, 1> InterestingOperands;
+      getInterestingMemoryOperands(Source, InterestingOperands, TTI);
+      if (InterestingOperands.size() != 1)
+        return false;
 
-    Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
-    return !AccessTy->isVectorTy() && !AccessTy->isScalableTy() &&
-           !IsElidedByNativeAsanOpt(*Source);
+      Type *AccessTy = LI ? LI->getType() : SI->getValueOperand()->getType();
+      if (AccessTy->isVectorTy() || AccessTy->isScalableTy())
+        return false;
+
+      if (IsElidedByNativeAsanOpt(*Source))
+        return false;
+    }
+    return true;
   };
 
-  SmallVector<const mair::Observation *, 32> MAIRCandidates;
   SmallPtrSet<const mair::Observation *, 32> MAIRTargets;
-  SmallPtrSet<const Instruction *, 32> MAIRFallbackSources;
-  for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
-    (void)PP;
-    for (const mair::Observation *Obs : Observations) {
-      if (CanInstrumentViaMAIR(*Obs)) {
-        MAIRCandidates.push_back(Obs);
-        continue;
+  // Sources the MAIR path is responsible for. Empty means "MAIR is not used for
+  // this function", which is exactly what the legacy loop below needs to see.
+  SmallPtrSet<const Instruction *, 32> MAIRHandledSources;
+  if (UseMAIR) {
+    SmallVector<const mair::Observation *, 32> MAIRCandidates;
+    SmallPtrSet<const Instruction *, 32> MAIRFallbackSources;
+    for (const auto &[PP, Observations] : Opt.getProgramPointObservations()) {
+      (void)PP;
+      for (const mair::Observation *Obs : Observations) {
+        if (CanInstrumentViaMAIR(*Obs)) {
+          MAIRCandidates.push_back(Obs);
+          continue;
+        }
+        for (const Instruction *Source : Obs->getInstructions())
+          MAIRFallbackSources.insert(Source);
       }
-      for (const Instruction *Source : Obs->getInstructions())
-        MAIRFallbackSources.insert(Source);
     }
-  }
-  for (const mair::Observation *Obs : MAIRCandidates) {
-    const Instruction *Source = Obs->getInstructions().front();
-    if (!MAIRFallbackSources.contains(Source))
-      MAIRTargets.insert(Obs);
-  }
+    for (const mair::Observation *Obs : MAIRCandidates) {
+      const Instruction *Source = Obs->getInstructions().front();
+      if (!MAIRFallbackSources.contains(Source))
+        MAIRTargets.insert(Obs);
+    }
 
-  SmallPtrSet<const Instruction *, 32> MAIRHandledSources = MAIRModeledSources;
-  for (const Instruction *Source : MAIRFallbackSources)
-    MAIRHandledSources.erase(Source);
-  Opt.retainObservations(MAIRTargets);
+    MAIRHandledSources = MAIRModeledSources;
+    for (const Instruction *Source : MAIRFallbackSources)
+      MAIRHandledSources.erase(Source);
+    Opt.retainObservations(MAIRTargets);
+  } else {
+    ++NumMAIRFunctionsFellBack;
+    LLVM_DEBUG(dbgs() << "ASAN: MAIR fell back for " << F.getName() << ": "
+                      << MAIRFallbackReason << "\n");
+  }
 
   AsanToInstrument Targets;
   if (!collectTargetsToIntrument(F, TLI, TTI, Targets))
@@ -4417,10 +4514,41 @@ bool XsanAddressSanitizer::instrumentFunctionViaMAIR(
       bool changed() const { return Changed; }
     } Backend(*this, UseCalls, ObjSizeVis, RTCI);
 
-    Expected<mair::MAIRInstantiationResult> Result = Opt.instantiate(Backend);
-    if (!Result)
-      report_fatal_error(Twine(toString(Result.takeError())));
-    FunctionModified |= Backend.changed();
+    // -mair-force-fallback makes the backend refuse a graph it could have
+    // lowered, so the recovery path can be tested without hunting for an input
+    // shape the backend genuinely cannot handle; see
+    // mair-materialize-fallback.cpp.
+    Expected<mair::MAIRInstantiationResult> Result =
+        ClMAIRForceFallback
+            ? Expected<mair::MAIRInstantiationResult>(createStringError(
+                  inconvertibleErrorCode(),
+                  "MAIR materialization forced to fail for testing"))
+            : Opt.instantiate(Backend);
+    if (Result) {
+      FunctionModified |= Backend.changed();
+    } else {
+      MAIRFallbackReason = toString(Result.takeError());
+      // A failed instantiate() can leave split edges behind, so the function is
+      // reported as modified even when no check was emitted.
+      FunctionModified = true;
+      UseMAIR = false;
+      if (Backend.changed()) {
+        // Some checks are already in. The legacy loop cannot undo them: the
+        // per-source path inside instrumentMAIRObservation inserts at the
+        // source instruction, not at a cursor this frame owns, so "falling
+        // back" here would put a second check in front of every access MAIR
+        // already covered. Preflight validates every split and every region
+        // before the first instruction is emitted, so being here means a MAIR
+        // codegen bug rather than an input shape it does not model. Keep that
+        // loud instead of hiding it behind a doubled check count.
+        report_fatal_error(Twine(MAIRFallbackReason));
+      }
+      MAIRTargets.clear();
+      MAIRHandledSources.clear();
+      ++NumMAIRFunctionsFellBack;
+      LLVM_DEBUG(dbgs() << "ASAN: MAIR fell back for " << F.getName() << ": "
+                        << MAIRFallbackReason << "\n");
+    }
   }
 
   for (auto &Operand : OperandsToInstrument) {

@@ -249,7 +249,7 @@ void insertXSanLifetime(IntrinsicInst &II) {
                             : kXsanLifetimeEndName;
   Value *BundleInput = II.getArgOperand(0);
   OperandBundleDef Bundle(BundleTag.str(), ArrayRef<Value *>(BundleInput));
-#if LLVM_VERSION_MAJOR >= 23
+#if LLVM_VERSION_MAJOR >= 22
   Function *DoNothing =
       Intrinsic::getOrInsertDeclaration(II.getModule(), Intrinsic::donothing);
 #else

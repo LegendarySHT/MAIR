@@ -25,6 +25,7 @@
 #   ../compile-all.sh -f asan msan
 #   ./compile-all.sh ./binutils asan -f
 #   ./compile-all.sh ./binutils -t
+#   ./compile-all.sh ./cJSON -t asan asan-mair-build asan-mair-opt
 #   ../compile-all.sh -f -t asan msan
 #
 # Typical use:
@@ -39,6 +40,10 @@ modes=(
     ubsan
     tsan
     msan
+    # MAIR ablation tiers (D2/D3). Off by default because they need a compiler
+    # built with MAIR; pass them explicitly after the package path.
+    # asan-mair-build
+    # asan-mair-opt
     # dbg
     # xsan-asan
     # xsan-asan-tsan

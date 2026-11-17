@@ -13,8 +13,13 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Value.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <optional>
+
+// LLVM_DEBUG expands to nothing unless NDEBUG is off, so a missing DEBUG_TYPE
+// only breaks Debug builds -- which is exactly the configuration CI builds.
+#define DEBUG_TYPE "mair"
 
 using namespace llvm;
 
@@ -75,16 +80,14 @@ bool isInterestingMop(const Instruction &I) {
          isMaskedMemoryIntrinsic(I);
 }
 
-void verifyLoopStructure(const Function &F, const DominatorTree &DT,
-                         const LoopInfo &LI) {
-  for (const Loop *Loop : LI.getLoopsInPreorder()) {
-    if (!Loop->getLoopPreheader())
-      report_fatal_error(
-          "MAIR requires a loop preheader before graph building");
-    if (!Loop->hasDedicatedExits())
-      report_fatal_error(
-          "MAIR requires dedicated loop exits before graph building");
-  }
+// A cycle that LoopInfo does not expose as a loop cannot be placed in the MAIR
+// hierarchy. Aborting the compilation over one is not acceptable because
+// `goto`-built irreducible cycles are common in real code, so the function is
+// skipped instead: it gets an empty graph, the sanitizer falls back to its
+// legacy per-access instrumentation, and the result is exactly what a build
+// with MAIR turned off produces.
+bool containsUnrepresentableCycle(const Function &F, const DominatorTree &DT,
+                                  const LoopInfo &LI) {
   SmallPtrSet<const BasicBlock *, 32> Visited;
   SmallPtrSet<const BasicBlock *, 32> Active;
   SmallVector<std::pair<const BasicBlock *, const_succ_iterator>, 16> Stack;
@@ -106,13 +109,24 @@ void verifyLoopStructure(const Function &F, const DominatorTree &DT,
         const Loop *Loop = LI.getLoopFor(Successor);
         if (!DT.dominates(Successor, Block) || !Loop ||
             Loop->getHeader() != Successor || !Loop->contains(Block))
-          report_fatal_error(
-              "MAIR does not support irreducible or unrepresented cycles");
+          return true;
       } else if (Visited.insert(Successor).second) {
         Active.insert(Successor);
         Stack.emplace_back(Successor, succ_begin(Successor));
       }
     }
+  }
+  return false;
+}
+
+void verifyLoopStructure(const LoopInfo &LI) {
+  for (const Loop *Loop : LI.getLoopsInPreorder()) {
+    if (!Loop->getLoopPreheader())
+      report_fatal_error(
+          "MAIR requires a loop preheader before graph building");
+    if (!Loop->hasDedicatedExits())
+      report_fatal_error(
+          "MAIR requires dedicated loop exits before graph building");
   }
 }
 
@@ -130,7 +144,12 @@ MAIRGraph MAIRGraph::build(Function &F, const DominatorTree &DT,
                            const PostDominatorTree &PDT, const LoopInfo &LI,
                            MAIRBarrierAnalysisCore &BA,
                            MAIROptimizationConfig Config) {
-  verifyLoopStructure(F, DT, LI);
+  if (containsUnrepresentableCycle(F, DT, LI)) {
+    LLVM_DEBUG(dbgs() << "MAIR: skipping " << F.getName()
+                      << " (irreducible or unrepresented cycle)\n");
+    return MAIRGraph(F, Config);
+  }
+  verifyLoopStructure(LI);
   MAIRGraph Graph(F, Config);
   Graph.Analyses.bind(DT, PDT, LI);
   DenseMap<const Loop *, MAIRGraph *> LoopGraphs;
@@ -190,7 +209,12 @@ MAIRGraph MAIRGraph::build(Function &F, const DominatorTree &DT,
       Points.insert(Points.begin(), &Boundary);
     }
   }
-  for (MAIRGraph *Scope : llvm::reverse(Graph.graphs()))
+  // Graphs must be visited children-first, and `graphs()` hands back the list
+  // by value: reversing the temporary would make llvm::reverse hold iterators
+  // into storage that dies before the first iteration (the inline buffer for
+  // eight graphs, freed heap beyond that). Bind it to a local first.
+  SmallVector<MAIRGraph *, 8> AllGraphs = Graph.graphs();
+  for (MAIRGraph *Scope : llvm::reverse(AllGraphs))
     for (const auto &Child : Scope->ChildGraphs) {
       Scope->ForwardBarrier |= Child->ForwardBarrier;
       Scope->BackwardBarrier |= Child->BackwardBarrier;
@@ -846,15 +870,22 @@ MAIROptimizationConfig MAIROptimizationConfig::generic() {
                                 /*ReadWriteLevel=*/3,
                                 /*IgnoreAtomic=*/false,
                                 /*DomCoverageOnly=*/false,
-                                /*AllowRelocation=*/true);
+                                /*AllowRelocation=*/true,
+                                /*AllowHoist=*/false);
 }
 
 MAIROptimizationConfig MAIROptimizationConfig::forAddressSanitizer() {
+  // AddressSanitizer must report a violation before the access executes, so
+  // its observations are pinned: sinking one would put the check behind the
+  // load or store it guards. They may still be hoisted, which keeps the check
+  // ahead of the access and is what lets SimplifyGraphPass contract anything
+  // at all here.
   return MAIROptimizationConfig(/*ReadLevel=*/1, /*WriteLevel=*/1,
                                 /*ReadWriteLevel=*/1,
                                 /*IgnoreAtomic=*/true,
                                 /*DomCoverageOnly=*/true,
-                                /*AllowRelocation=*/false);
+                                /*AllowRelocation=*/false,
+                                /*AllowHoist=*/true);
 }
 
 MAIROptimizationConfig MAIROptimizationConfig::forThreadSanitizer() {
@@ -862,7 +893,8 @@ MAIROptimizationConfig MAIROptimizationConfig::forThreadSanitizer() {
                                 /*ReadWriteLevel=*/3,
                                 /*IgnoreAtomic=*/false,
                                 /*DomCoverageOnly=*/false,
-                                /*AllowRelocation=*/true);
+                                /*AllowRelocation=*/true,
+                                /*AllowHoist=*/false);
 }
 
 bool MAIROptimizationConfig::allowsCoverageAlong(PPEdgeKind Kind) const {
@@ -922,6 +954,32 @@ bool Observation::hasConcreteRange() const {
   const AbstractAccess *Location = getContiguousRegion();
   return Location && Location->getOffset().isConstant() &&
          Location->getSize().isConstant();
+}
+
+namespace {
+
+bool isValueDefinedAt(const Value *Value, const Instruction &At,
+                      const DominatorTree &DT) {
+  const auto *Def = dyn_cast_or_null<Instruction>(Value);
+  if (!Def)
+    return true;
+  return Def != &At && DT.dominates(Def, &At);
+}
+
+} // namespace
+
+bool Observation::isAvailableAt(const Instruction &At,
+                                const DominatorTree &DT) const {
+  const AbstractAccess *Location = getContiguousRegion();
+  if (!Location)
+    return false;
+  if (!isValueDefinedAt(Location->getBase(), At, DT))
+    return false;
+  if (Location->getOffset().isSymbol() &&
+      !isValueDefinedAt(Location->getOffset().getSymbol(), At, DT))
+    return false;
+  return !Location->getSize().isSymbol() ||
+         isValueDefinedAt(Location->getSize().getSymbol(), At, DT);
 }
 
 bool Observation::covers(const Observation &Other) const {
@@ -1091,6 +1149,25 @@ Observation Observation::fromInstruction(const Instruction &I,
   return makeObservation(I, *Ptr, std::move(Size), Kind, DL);
 }
 
+void Observation::getContributingDebugLocs(SmallVectorImpl<DebugLoc> &Locs,
+                                           unsigned Limit) const {
+  Locs.clear();
+  if (Limit == 0)
+    return;
+  for (const Instruction *I : Insts) {
+    const DebugLoc &Loc = I->getDebugLoc();
+    if (!Loc)
+      continue;
+    // DILocation is uniqued, so comparing the handles compares the locations:
+    // instructions merged from one source line literally share the node.
+    if (is_contained(Locs, Loc))
+      continue;
+    Locs.push_back(Loc);
+    if (Locs.size() == Limit)
+      return;
+  }
+}
+
 void Observation::print(raw_ostream &OS) const {
   OS << "o: ";
   printAccessKind(OS, Kind);
@@ -1107,15 +1184,25 @@ void Observation::print(raw_ostream &OS) const {
     Obs->print(OS);
     OS << ", ";
     printAbstractValue(OS, Obs->getSize());
-    return;
-  }
-  if (const MaskedRegion *Masked = getMaskedRegion()) {
+  } else if (const MaskedRegion *Masked = getMaskedRegion()) {
     OS << " ";
     Masked->print(OS);
-    return;
+  } else {
+    OS << " ";
+    getPeriodicRegion()->print(OS);
   }
-  OS << " ";
-  getPeriodicRegion()->print(OS);
+
+  // Only a merge collects a second location, and only then is the suffix worth
+  // the noise: a single-source observation prints exactly what it always did,
+  // which keeps every existing dump and its checks stable.
+  SmallVector<DebugLoc, MaxContributingLocations> Locs;
+  getContributingDebugLocs(Locs);
+  if (Locs.size() < 2)
+    return;
+  OS << " [loc";
+  for (const DebugLoc &Loc : Locs)
+    OS << " " << Loc.getLine() << ":" << Loc.getCol();
+  OS << "]";
 }
 
 ProgramPoint::ProgramPoint(StringRef N, const Instruction &Anchor, SiteKind K)
@@ -1471,6 +1558,21 @@ MemoryObject &MAIRGraph::getOrCreateMemoryObject(const Value &Base) {
   return *Object;
 }
 
+bool MAIRGraph::rebaseObservation(Observation &Obs, const Value &NewBase) {
+  assertLive("rebase an observation of");
+  const AbstractAccess *Current = Obs.getContiguousRegion();
+  if (!Current || Current->getBase() == &NewBase)
+    return false;
+  // Both values name the same address, so the offset from one is the offset
+  // from the other. The region is the only thing that has to move; the access
+  // kind, level and instruction list describe what is being checked, not where.
+  const AbstractValue Offset = Current->getOffset();
+  const AbstractValue Size = Current->getSize();
+  Obs.Region = AbstractAccess(&NewBase, Offset, Size);
+  Obs.setMemoryObject(&getOrCreateMemoryObject(NewBase));
+  return true;
+}
+
 void MAIRGraph::registerObservation(Observation &Obs) {
   const Value *Base = Obs.getBase();
   assert(Base && "cannot add a base-less observation to a MAIRGraph");
@@ -1737,9 +1839,19 @@ void MAIRGraph::contractProgramPoint(ProgramPoint &Into, ProgramPoint &From) {
     report_fatal_error("cannot contract a MAIR loop boundary");
   assert(Into.hasCompatibleMergeSemantics(From) &&
          "contracted program points have incompatible semantics");
-  assert(Into.hasChild(From, PPEdgeKind::PostDom) &&
-         From.hasChild(Into, PPEdgeKind::Dom) &&
-         "contraction requires mutual Dom/PostDom edges");
+  // A contraction is only legal between points that always execute together,
+  // which this graph records as a mutual Dom/PostDom pair. The pair arrives in
+  // either orientation: SimplifyGraphPass sinks into the post-dominating point
+  // by default, and hoists into the dominating one when an observation is
+  // pinned (AddressSanitizer pins every check ahead of its access). The old
+  // check only accepted the sink order, so the hoist path tripped it -- and
+  // only in builds with assertions, because NDEBUG erases the whole thing.
+  [[maybe_unused]] const bool MutualDomPostDom =
+      (Into.hasChild(From, PPEdgeKind::PostDom) &&
+       From.hasChild(Into, PPEdgeKind::Dom)) ||
+      (Into.hasChild(From, PPEdgeKind::Dom) &&
+       From.hasChild(Into, PPEdgeKind::PostDom));
+  assert(MutualDomPostDom && "contraction requires mutual Dom/PostDom edges");
 
   Into.prependObservationsFrom(From);
   SmallVector<ProgramPointEdge, 2> Incoming(From.parents());
@@ -1864,6 +1976,13 @@ void MAIRGraph::print(raw_ostream &OS) const {
   OS << "}\n\n";
   for (const auto &Child : ChildGraphs)
     Child->print(OS);
+}
+
+bool MAIRGraph::hasUnrepresentableCycle(Function &F,
+                                        FunctionAnalysisManager &FAM) {
+  auto &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  auto &LI = FAM.getResult<llvm::LoopAnalysis>(F);
+  return containsUnrepresentableCycle(F, DT, LI);
 }
 
 } // namespace mair
