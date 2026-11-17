@@ -12,37 +12,56 @@ set(LLVM_LINK_COMPONENTS
 )
 
 set(MAIR_GTEST_DIR ${LLVM_MAIN_SRC_DIR}/../third-party/unittest/googletest)
+
+set(MAIR_TEST_SOURCES
+  MAIRGraphTest.cpp
+  MAIRLoopHierarchyTest.cpp
+  MAIRMaterializationTest.cpp
+  CommonObservationMotionPassTest.cpp
+  LocationMergePassTest.cpp
+  LoopInvariantObservationMotionPassTest.cpp
+  LoopPeriodicObservationCombinePassTest.cpp
+  RedundantObservationEliminationPassTest.cpp
+  SimplifyGraphPassTest.cpp
+)
+
 if(EXISTS ${MAIR_GTEST_DIR}/src/gtest-all.cc)
   add_llvm_executable(MAIRGraphTest
-    MAIRGraphTest.cpp
-    MAIRLoopHierarchyTest.cpp
-    MAIRMaterializationTest.cpp
-    CommonObservationMotionPassTest.cpp
-    LocationMergePassTest.cpp
-    LoopInvariantObservationMotionPassTest.cpp
-    LoopPeriodicObservationCombinePassTest.cpp
-    RedundantObservationEliminationPassTest.cpp
-    SimplifyGraphPassTest.cpp
+    ${MAIR_TEST_SOURCES}
     ${MAIR_GTEST_DIR}/src/gtest-all.cc
     ${MAIR_GTEST_DIR}/src/gtest_main.cc
     $<TARGET_OBJECTS:MAIRCore>
   )
   target_link_libraries(MAIRGraphTest PRIVATE ${LLVM_PTHREAD_LIB})
-  add_dependencies(MAIRUnitTests MAIRGraphTest)
 else()
-  add_unittest(MAIRUnitTests MAIRGraphTest
-    MAIRGraphTest.cpp
-    MAIRLoopHierarchyTest.cpp
-    MAIRMaterializationTest.cpp
-    CommonObservationMotionPassTest.cpp
-    LocationMergePassTest.cpp
-    LoopInvariantObservationMotionPassTest.cpp
-    LoopPeriodicObservationCombinePassTest.cpp
-    RedundantObservationEliminationPassTest.cpp
-    SimplifyGraphPassTest.cpp
-    $<TARGET_OBJECTS:MAIRCore>
-  )
+  # No LLVM source tree next to the installed LLVM -- which is the case for a
+  # CI build against /usr/lib/llvm-N, where ${LLVM_MAIN_SRC_DIR} points at a
+  # directory that does not exist. The gtest sources used to come from
+  # llvm-project/third-party, so this fell through to add_unittest and died on
+  # 'gtest/gtest.h' file not found. Prefer a system GTest instead.
+  #
+  # CONFIG mode on purpose: Debian/Ubuntu ship GTestConfig.cmake, which sets
+  # GTest_FOUND and creates GTest::gtest / GTest::gtest_main. A bare
+  # find_package tries CMake's FindGTest module first, which only sets
+  # GTEST_FOUND (and GTest::GTest / GTest::Main), so the check below would miss
+  # a perfectly usable install and fall through to add_unittest.
+  find_package(GTest CONFIG QUIET)
+  if(GTest_FOUND AND TARGET GTest::gtest_main)
+    message_green("MAIR unit tests: using the system GTest")
+    add_llvm_executable(MAIRGraphTest
+      ${MAIR_TEST_SOURCES}
+      $<TARGET_OBJECTS:MAIRCore>
+    )
+    target_link_libraries(MAIRGraphTest PRIVATE GTest::gtest GTest::gtest_main)
+  else()
+    add_unittest(MAIRUnitTests MAIRGraphTest
+      ${MAIR_TEST_SOURCES}
+      $<TARGET_OBJECTS:MAIRCore>
+    )
+  endif()
 endif()
+
+add_dependencies(MAIRUnitTests MAIRGraphTest)
 
 target_include_directories(MAIRGraphTest BEFORE PRIVATE
   ${CMAKE_SOURCE_DIR}/src/instrumentation

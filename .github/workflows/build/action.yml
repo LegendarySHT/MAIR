@@ -44,7 +44,12 @@ runs:
         # '-fuse-ld=lld'". The ubuntu-22.04 runner image happens to ship
         # ld.lld-15, which is why only the 22 leg went red and the 15 leg looked
         # healthy.
-        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev lld-${{ inputs.llvm_version }}
+        #
+        # libgtest-dev: the MAIR unit tests used to pick gtest up from
+        # llvm-project/third-party, which is not part of this repo. Against an
+        # installed LLVM there is no such directory, so they need a system GTest
+        # (see src/instrumentation/MAIR/unittests/CMakeLists.txt).
+        sudo apt-get install ninja-build clang-${{ inputs.llvm_version }} llvm-${{ inputs.llvm_version }}-dev libclang-${{ inputs.llvm_version }}-dev lld-${{ inputs.llvm_version }} libgtest-dev
 
     - name: Build XSan
       shell: bash
