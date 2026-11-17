@@ -35,3 +35,6 @@ void store2(int *p) { p[0] = 1; p[1] = 2; }
 // CHECK-NOT: call void @__tsan_write
 // CHECK: call void @__tsan_unaligned_write8
 // CHECK-NOT: call void @__tsan_write
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

@@ -83,6 +83,15 @@ clang_asan_static_cflags = (
 # (reported as "Unexpectedly Passed", which fails the suite).
 config.available_features.add("xsan")
 
+# MAIR only exists in the LLVM 22+ backend (XSAN_HAS_MAIR in
+# src/cmake/ConfigLLVMCompiler.cmake). The mair-* TestCases drive the -mair-*
+# pipeline through MAIR=1 and check what it does to the instrumented IR, which
+# on the llvm15 backend is a no-op -- they would all fail on a pipeline that is
+# not there to begin with. They carry "REQUIRES: mair" so this stays visible
+# from the test file instead of being a silent directory filter.
+if config.xsan_has_mair:
+    config.available_features.add("mair")
+
 if "-xsan" in clang_asan_static_cflags or "-xsan-only" in clang_asan_static_cflags:
     # Disable TSan's report in ASan's test pipeline.
     config.environment['TSAN_OPTIONS'] = "report_bugs=0"

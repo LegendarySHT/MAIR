@@ -40,3 +40,6 @@ unsigned get_val(struct S *s) { return s->val; }
 // LEGACY-NOT: call void @__tsan_write
 // LEGACY-LABEL: define {{.*}} @get_val
 // LEGACY-NOT: call void @__tsan_read
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

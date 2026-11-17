@@ -45,3 +45,6 @@ void store_only(int *p) { *p = 4; }
 // NO-WRITE-LABEL: define {{.*}} @_Z10store_onlyPi
 // NO-WRITE-NOT: call void @__asan_report_store4
 
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

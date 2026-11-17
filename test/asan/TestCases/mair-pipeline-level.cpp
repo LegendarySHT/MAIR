@@ -34,3 +34,6 @@ int read4(S *s) { return s->a + s->b + s->c + s->d; }
 // OFF-LABEL: define {{.*}} @_Z5read4P1S
 // OFF-NOT: mair.observation
 // OFF-COUNT-4: call void @__asan_report_load4
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

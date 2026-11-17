@@ -32,3 +32,6 @@ cycle:
 // CHECK: load i32
 // CHECK-NOT: call void @__asan_report_load
 // CHECK: ret i32
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

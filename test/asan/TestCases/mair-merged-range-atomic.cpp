@@ -21,3 +21,6 @@ int read3(A *p) {
          p->b.load(std::memory_order_relaxed) +
          p->c.load(std::memory_order_relaxed);
 }
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

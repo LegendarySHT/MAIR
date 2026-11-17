@@ -42,3 +42,6 @@ int read3(S *s) { return s->a + s->b + s->c; }
 // MAIR=1 would otherwise run both prefixes through MAIR, and the baseline would
 // stop being a baseline. Note that the expected line numbers below are tied to
 // this file, so comments here stay at the bottom.
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

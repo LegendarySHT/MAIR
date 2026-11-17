@@ -18,3 +18,6 @@ long asan_tail(char *a, char *b) {
 // CHECK: call void @__sanitizer_ptr_cmp
 // CHECK: call void @__asan_handle_no_return
 // CHECK: call void @__sanitizer_ptr_sub
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

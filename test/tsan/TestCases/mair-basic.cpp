@@ -9,3 +9,6 @@ void f(int *p) {
 // CHECK-LABEL: define {{.*}} @_Z1f
 // CHECK: call void @__tsan_write4
 // CHECK: call void @__tsan_read4
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

@@ -46,3 +46,6 @@ int read3(S *s) { return s->a + s->b + s->c; }
 
 // The last line unsets MAIR rather than merely not setting it: a suite-wide
 // MAIR=1 would otherwise run the baseline through MAIR as well.
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

@@ -13,3 +13,6 @@ int f(int *p, int *q) { return *p + *q; }
 // CHECK-NOT: load i32
 // CHECK-COUNT-2: call void @__asan_report_load4
 // CHECK-COUNT-2: load i32
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

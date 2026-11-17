@@ -21,3 +21,6 @@ int read3(S *s) { return s->a + s->b + s->c; }
 // CHECK-COUNT-2: call void @__asan_report_load_n({{.*}}, i64 12)
 // CHECK-NOT: call void @__asan_report_load4
 // CHECK-COUNT-3: load i32
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

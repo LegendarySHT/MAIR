@@ -41,3 +41,6 @@ void copy2(S *s) {
 // CHECK: atomicrmw add
 
 int add(int *p) { return __atomic_fetch_add(p, 1, __ATOMIC_SEQ_CST); }
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

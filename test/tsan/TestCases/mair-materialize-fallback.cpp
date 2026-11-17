@@ -63,3 +63,6 @@ void store2(int *p) { p[0] = 1; p[1] = 2; }
 // LEGACY: call void @__tsan_write4
 // LEGACY: store i32
 // LEGACY-NOT: call void @__tsan_write_range
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

@@ -28,3 +28,6 @@ int sum2(int *a, int *b) { return *a + *b; }
 // LEGACY-LABEL: define {{.*}}@_Z4sum2PiS_(
 // LEGACY-COUNT-2: call void @__asan_report_load4
 // LEGACY-NOT: call void @__asan_report_load8
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

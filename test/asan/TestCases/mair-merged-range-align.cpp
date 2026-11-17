@@ -23,3 +23,6 @@ struct S {
 // CHECK-COUNT-2: load i32
 
 int read2(S *s) { return s->a + s->b; }
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair

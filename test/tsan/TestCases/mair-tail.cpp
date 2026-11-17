@@ -18,3 +18,6 @@ int tsan_tail(int *p, int *dst) {
 // CHECK-NOT: call ptr @__tsan_memcpy
 // CHECK: call void @__tsan_write4
 // CHECK: call void @__tsan_func_exit
+
+// MAIR needs the LLVM 22+ backend; the "mair" feature is set in lit.cfg.py.
+// REQUIRES: mair
