@@ -8,14 +8,14 @@ MAIR 是接在 sanitizer 插桩里的一层优化：把同一个函数里多条�
 
 ## 0. 先决：构建目录得选对 LLVM
 
-MAIR 没有自己的构建开关——`src/instrumentation/CMakeLists.txt` 无条件 `add_subdirectory(MAIR)`。它是否**生效**取决于构建选了哪份插桩后端（`src/cmake/ConfigLLVMCompiler.cmake`）：
+MAIR 有没有被编进来、以及是否**生效**，都取决于构建用的 LLVM 版本（`src/cmake/ConfigLLVMCompiler.cmake` 里的 `XSAN_HAS_MAIR` 与后端选择）：
 
 | `LLVM_VERSION_MAJOR` | 后端目录 | 有 MAIR |
 |---|---|---|
 | 15 | `llvm15/` | 否 |
 | ≥ 22 | `llvm23/` | 是 |
 
-15 这一档不含 MAIR：MAIR 的源码依赖 LLVM 22 的 API，所以它按 `XSAN_HAS_MAIR`（`ConfigLLVMCompiler.cmake` 里按 LLVM 主版本判定）在配置阶段整个跳过，15 只建出 `llvm15/` 那条后端，编译器照常可用、`mair-opt` 和 `check-mair` 不存在。
+15 这一档不含 MAIR：MAIR 的源码依赖 LLVM 22 的 API，所以它在配置阶段就被整个跳过——`add_subdirectory(MAIR)`、`XSAN_PASS_COMMON` 里的 `MAIRCore` 对象、`test/MAIR` 一起消失，只建出 `llvm15/` 那条后端。编译器照常可用，`mair-opt` 和 `check-mair` 不存在。
 
 所以要用 LLVM 22+ 配置（其余步骤见 README 的 *Build From Source*）。注意**宿主编译器也必须是 clang-22**，否则 `ConfigLLVMCompiler.cmake` 会直接报错让你改：
 
