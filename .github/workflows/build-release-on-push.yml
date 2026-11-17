@@ -3,15 +3,18 @@ name: Build on Push
 
 on:
   workflow_dispatch:
-  push:
-    # dev-xsan / 'users/**' match nothing on this fork: the integration branch
-    # is mair-trunk, so a push never started a build here either. mair-trunk is
-    # the branch whose "does it still build" answer anyone actually wants.
-    branches:
-      - mair-trunk
+  # No push trigger. It used to list dev-xsan and 'users/**', neither of which
+  # exists on this fork, so a push never built anything here. Pointing it at
+  # mair-trunk would work, but it only duplicates the PR gate: every merge into
+  # trunk is already built and lit-tested on both LLVM legs by
+  # build-test-on-pr.yml, at roughly ten minutes per merge. Dispatch-only, which
+  # is also how releases happen here: dispatch the Release workflow directly.
 
 jobs:
   # Add a conditional check task to ensure that the release is only triggered when a bump PR is merged
+  # With the push trigger gone there is no head_commit to inspect on a dispatch,
+  # so this can no longer report triggered=true and the release leg below is
+  # unreachable from this workflow -- dispatch Release directly instead.
   gatekeeper:
     runs-on: ubuntu-22.04
     outputs:
